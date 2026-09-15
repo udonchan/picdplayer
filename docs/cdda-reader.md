@@ -1,4 +1,4 @@
-# CDDA reader 第1段階: direct
+# CDDA reader: direct / optional paranoia
 
 既存のLinux media/TOC → DiscToc経路は維持する。
 CddaReaderはseek後に連続PCMを取得する。PlayerState・ALSA・threadは追加しない。
@@ -12,8 +12,8 @@ ctest --test-dir build-direct --output-on-failure
 python3 tests/smoke.py build-direct/cdplayerd
 ```
 
-OFFではlibcdioやpkg-configは不要。ONはこの段階では未実装の説明付きエラー。
-paranoia実装と依存検出は次の変更単位。production defaultは未選定。
+OFFではlibcdioやpkg-configは不要。ONではpkg-configのlibcdio_paranoiaを検出し、
+不足時には必要パッケージ名を含むconfigureエラー。production defaultは未選定。
 
 ## 契約
 
@@ -113,3 +113,73 @@ PCM保存のhardware不要テストでは既知の符号付きサンプルのバ
 既存のcdparanoia CLIで作成した音声のaplay/HDMI再生は別途確認済み。
 この区別を保ったままparanoia backendの実装へ進む。
 CTest 5件と既存の停止smoke testは成功済み。
+
+## paranoia backend
+
+導入済みlibcdio-paranoia 10.2+2.0.2を使用。
+
+```sh
+cmake -S . -B build-paranoia -DENABLE_PARANOIA=ON
+cmake --build build-paranoia -j2
+ctest --test-dir build-paranoia --output-on-failure
+```
+
+ONのbinaryからdirect/paranoia両方を選べる。paranoiaはinit時に独自のTOCを
+内部利用するが、アプリのmedia/TOC/DiscTocの経路は既存Linux ioctlのまま。
+read_cd_tocで範囲を決めた後にreaderを生成し、open時間にlibraryの準備時間を含める。
+
+- cdio_cddap_identify/open → paranoia_init。RAIIでfree → closeの順に解放。
+- mode=FULL & ~NEVERSKIP、read_limitedのmax_retries=20を明示。
+- 連続readは同じparanoia contextを保持。seekのみ状態を移動。
+- 対象版sourceでseekはセクター単位、成功戻り値は旧cursor、-1は失敗と確認。
+  headerの「byte offset」という説明とは異なるので注意。
+- b_swap_bytes=trueでhost-endian PCMを取得し、次のlibrary read前にコピー。
+- callbackのSKIPはread_errorとしてそのセクターを破棄。前の成功フレームのみ有効。
+- NULL返却もread_error。errnoが提供されない場合native_error=0でも成功ではない。
+- directの追加retry設定はparanoiaへ適用しない（非ゼロ指定はエラー）。
+
+paranoia_eventsは各read内のREAD、VERIFY、FIXUP群、SKIP、READERR、CACHEERR、
+その他のcallback件数。実際のretry回数・訂正されたセクター数ではない。
+callbackにはuser-data引数がないため、同期呼び出し中だけthread_localで記録先を渡す。
+threadの生成は行わない。callback内でI/Oや例外送出はしない。
+
+有限retry設定はwall-clock timeoutではなく、library/driver内で長時間blockし得る。
+NEVERSKIPは使わない。skipを検出してもlibrary呼び出しが戻るまでは停止できない。
+現在のCECループへ統合せず診断モードに留める。
+
+### ユーザーによる次の実機試験
+
+今回はこちらではCD読み取り・再生を実行していない。
+まず音楽CDを入れた状態で1秒分の取得だけ確認する（音は出ない）。
+
+```sh
+./build-paranoia/cdplayerd --probe-cdda /dev/sr0 \
+  --cdda-reader paranoia --track 1 --frames 75
+```
+
+期待: backend=paranoia、status=ok、completed frames=75。
+errorやskipがあればそのままログを共有し、試聴・傷CDの評価は別途行う。
+同じbinaryで--cdda-reader directに替えれば同じ診断経路で比較できる。
+ドライブの温まり・キャッシュ・実行順序で値が変わるため、1回だけで優劣を決めない。
+PCM保存は両backend共通の--pcm-outputを使用できる。
+
+参照source: Debian配布libcdio-paranoia_10.2+2.0.2.orig.tar.gzの
+lib/paranoia/paranoia.c（seek、read_limited）と、実機/usr/include/cdio/paranoia/。
+
+### paranoiaの実機結果（ユーザー実行）
+
+track 1、LBA 0から75フレーム取得成功。全要求status=ok。
+open=6120638us、seek=28us、初回15フレーム=5501810us、
+first_block=5502460us、読み取り全体=5502906us。
+初回callbackはREAD=98、VERIFY=1、FIXUP/SKIP/READERR/CACHEERR=0。
+残り4要求は72/62/64/53usでcallbackなし。
+初回に取得・検証したlibrary内部バッファから後続要求を満たしたと考えられるが、
+callback件数を物理I/O回数・取得セクター数・retry回数とは同一視しない。
+共通ログのretries=0はdirect用の追加retry欄であり、paranoia内部retryなしを示さない。
+openと最初のブロック取得の合計は約11.62秒（既存TOC取得時間を含まない）。
+以前のdirect試験とは実行時の回転・キャッシュ条件が揃っておらず、優劣は未判断。
+ユーザーが後続の保存PCMを再生し、問題なく聞こえることを確認済み。
+長時間連続読み取り、seek後の取得、ALSA underrunは未検証。
+今回のparanoia出力をPi→HDMI→NR1200で試聴したかは未確認。
+正常試聴だけでbit-perfectや傷CDへの優位性を保証しない。
+ON構成のCTest 6件、OFF構成の5件、既存停止smoke testは成功済み。

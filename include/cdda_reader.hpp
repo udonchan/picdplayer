@@ -11,13 +11,18 @@ CddaBackend parse_cdda_backend(std::string_view name);
 void require_cdda_backend(CddaBackend backend);
 
 enum class ReadStatus { ok, read_error };
+struct ParanoiaEvents {
+    unsigned reads = 0, verifies = 0, fixups = 0, skips = 0;
+    unsigned read_errors = 0, cache_errors = 0, other = 0;
+};
 struct ReadResult {
     std::int32_t start_lba;
     std::size_t frames_requested;
     std::size_t frames_read;
     ReadStatus status;
     int native_error; // Diagnostic only; callers use status for control flow.
-    unsigned retries;
+    unsigned retries; // direct application retries only
+    ParanoiaEvents paranoia{}; // callback counts, not sector/retry counts
 };
 
 class CddaReader {

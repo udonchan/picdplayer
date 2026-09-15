@@ -6,7 +6,7 @@ for args, expected in [
     (['--pcm-output', '-'], 'file path'),
     (['--pcm-output'], 'Usage:'),
     (['--probe-cdda', '/nonexistent', '--cdda-reader', 'typo'], 'unknown CDDA'),
-    (['--probe-cdda', '/nonexistent', '--cdda-reader', 'paranoia'], 'not built'),
+
     (['--probe-cdda', '/nonexistent'], 'explicit'),
     (['--cdda-reader', 'direct'], 'require --probe-cdda'),
     (['--probe-cdda', '/nonexistent', '--probe-drives'], 'one diagnostic'),
@@ -18,3 +18,9 @@ for args, expected in [
     result = subprocess.run([sys.argv[1], *args], capture_output=True, text=True, timeout=3)
     assert result.returncode == 2 and expected in result.stderr, result
 print('PASS: CDDA CLI validation')
+
+result = subprocess.run([sys.argv[1], '--probe-cdda', '/nonexistent', '--cdda-reader', 'paranoia'], capture_output=True, text=True, timeout=3)
+if sys.argv[2] == 'ON':
+    assert result.returncode == 1 and 'open /nonexistent' in result.stderr, result
+else:
+    assert result.returncode == 2 and 'not built' in result.stderr, result

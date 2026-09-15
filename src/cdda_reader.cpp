@@ -14,14 +14,23 @@
 #include <unistd.h>
 #include <utility>
 
+#ifdef ENABLE_PARANOIA
+std::unique_ptr<CddaReader> make_paranoia_reader(const std::string& device);
+#endif
+
 CddaBackend parse_cdda_backend(std::string_view name) {
     if (name == "direct") return CddaBackend::direct;
     if (name == "paranoia") return CddaBackend::paranoia;
     throw std::invalid_argument("unknown CDDA backend: " + std::string(name));
 }
 void require_cdda_backend(CddaBackend backend) {
-    if (backend == CddaBackend::paranoia)
+    if (backend == CddaBackend::paranoia) {
+#ifdef ENABLE_PARANOIA
+        return;
+#else
         throw std::invalid_argument("paranoia backend is not built (ENABLE_PARANOIA=OFF)");
+#endif
+    }
     if (backend != CddaBackend::direct) throw std::invalid_argument("invalid CDDA backend");
 }
 LinuxIoctlReader::LinuxIoctlReader(AudioRead transport, DirectOptions options)
@@ -83,6 +92,12 @@ std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     const std::string& device, DirectOptions options) {
     require_cdda_backend(backend);
     if (options.retries > 10) throw std::invalid_argument("direct retries must be 0..10");
+#ifdef ENABLE_PARANOIA
+    if (backend == CddaBackend::paranoia) {
+        if (options.retries != 0) throw std::invalid_argument("direct retries cannot be used with paranoia");
+        return make_paranoia_reader(device);
+    }
+#endif
     auto fd = std::make_shared<DeviceFd>(device);
     return std::make_unique<LinuxIoctlReader>([fd](std::int32_t lba, std::span<std::int16_t> pcm) {
         cdrom_read_audio request{};

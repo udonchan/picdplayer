@@ -10,6 +10,8 @@
 void probe_cdda(const std::string& device, CddaBackend backend, int number, int frames, unsigned retries, const std::string& output) {
     require_cdda_backend(backend);
     if (frames < 1 || frames > 750) throw std::invalid_argument("frames must be 1..750");
+    if (backend == CddaBackend::paranoia && retries != 0)
+        throw std::invalid_argument("direct retries cannot be used with paranoia");
     const auto toc = read_cd_toc(device);
     const auto track = std::find_if(toc.tracks.begin(), toc.tracks.end(),
         [number](const Track& t) { return t.number == number; });
@@ -21,8 +23,12 @@ void probe_cdda(const std::string& device, CddaBackend backend, int number, int 
     const auto micros = [](auto start) {
         return std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - start).count();
     };
-    std::cout << "cdda: backend=direct device=" << device << " open_us=" << micros(begin)
-              << " retries_limit=" << retries << " input_byte_order=little (unverified on device)\n";
+    std::cout << "cdda: backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia") << " device=" << device << " open_us=" << micros(begin)
+              << '\n';
+    if (backend == CddaBackend::direct)
+        std::cout << "cdda: direct_retries_limit=" << retries << " input_byte_order=little\n";
+    else
+        std::cout << "cdda: paranoia_mode=FULL_without_NEVERSKIP max_retries=20 skip_policy=fail\n";
     begin = Clock::now();
     reader->seek(track->start_lba);
     std::cout << "cdda: seek_lba=" << track->start_lba << " seek_us=" << micros(begin) << '\n';
@@ -39,6 +45,12 @@ void probe_cdda(const std::string& device, CddaBackend backend, int number, int 
                   << " read=" << result.frames_read << " read_us=" << micros(begin)
                   << " retries=" << result.retries << " errno=" << result.native_error
                   << " status=" << (result.status == ReadStatus::ok ? "ok" : "read_error") << '\n' << std::flush;
+        if (backend == CddaBackend::paranoia) {
+            const auto& e = result.paranoia;
+            std::cout << "cdda: paranoia_events reads=" << e.reads << " verifies=" << e.verifies
+                      << " fixups=" << e.fixups << " skips=" << e.skips << " read_errors=" << e.read_errors
+                      << " cache_errors=" << e.cache_errors << " other=" << e.other << '\n' << std::flush;
+        }
         if (result.status != ReadStatus::ok) throw std::runtime_error("CDDA read failed; PCM discarded");
         if (remaining == frames) std::cout << "cdda: first_block_us=" << micros(start) << '\n';
         if (!output.empty()) captured.insert(captured.end(), pcm.begin(),

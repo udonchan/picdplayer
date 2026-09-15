@@ -208,4 +208,6 @@ ctest --test-dir build --output-on-failure
 
 交換可能なCddaReader、Linux CDROMREADAUDIO backend、読み取り専用診断を追加。
 [設計・build・実機試験手順](docs/cdda-reader.md)を参照。
-paranoia backendは次段階で、現時点では選択すると明示的なエラーになる。
+ENABLE_PARANOIA=ONでlibcdio-paranoia backendを有効化し、runtimeで選択可能。
+OFFではlibcdio依存なし。paranoiaの実機読み取り・保存PCMの正常再生は確認済み。
+両backendの条件を揃えた性能比較・連続再生比較は未実施。
