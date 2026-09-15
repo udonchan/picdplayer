@@ -203,3 +203,9 @@ ctest --test-dir build --output-on-failure
 ## CD-DA / HDMIのCLI PoC
 
 再現手順と実測のALSA設定は[CD-DA PoC記録](docs/cdda-poc.md)を参照。
+
+## CDDA reader（directの実装段階）
+
+交換可能なCddaReader、Linux CDROMREADAUDIO backend、読み取り専用診断を追加。
+[設計・build・実機試験手順](docs/cdda-reader.md)を参照。
+paranoia backendは次段階で、現時点では選択すると明示的なエラーになる。
