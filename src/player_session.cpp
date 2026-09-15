@@ -1,0 +1,173 @@
+#include "player_session.hpp"
+#include "playback_engine.hpp"
+#include "cd_device.hpp"
+#include "cec_device.hpp"
+#include <charconv>
+#include <chrono>
+#include <csignal>
+#include <iostream>
+#include <poll.h>
+#include <stdexcept>
+#include <sys/signalfd.h>
+#include <system_error>
+#include <unistd.h>
+
+namespace {
+struct Signals {
+    sigset_t previous{};
+    int fd = -1;
+    Signals() {
+        sigset_t mask;
+        sigemptyset(&mask); sigaddset(&mask, SIGINT); sigaddset(&mask, SIGTERM);
+        if (sigprocmask(SIG_BLOCK, &mask, &previous) < 0)
+            throw std::system_error(errno, std::generic_category(), "block signals");
+        fd = signalfd(-1, &mask, SFD_CLOEXEC | SFD_NONBLOCK);
+        if (fd < 0) {
+            const auto error = errno;
+            sigprocmask(SIG_SETMASK, &previous, nullptr);
+            throw std::system_error(error, std::generic_category(), "signalfd");
+        }
+    }
+    ~Signals() { close(fd); sigprocmask(SIG_SETMASK, &previous, nullptr); }
+};
+void print_state(const PlayerController& controller) {
+    const auto state = controller.state();
+    const char* name = "NO_DISC";
+    switch (state.playback) {
+    case PlaybackState::playing: name = "PLAYING"; break;
+    case PlaybackState::paused: name = "PAUSED"; break;
+    case PlaybackState::stopped: name = "STOPPED"; break;
+    case PlaybackState::no_disc: break;
+    }
+    std::cout << "player: state=" << name << " track=" << state.track.value_or(0)
+              << " lba=" << state.position_lba.value_or(0) << '\n' << std::flush;
+}
+
+bool apply_cec_command(PlayerController& controller, CecCommand command) {
+    constexpr auto cec_seek_frames = 10 * cd_frames_per_second;
+    const auto before = controller.state();
+    switch (command) {
+    case CecCommand::play: controller.play(); break;
+    case CecCommand::pause: controller.pause(); break;
+    case CecCommand::stop: controller.stop(); break;
+    case CecCommand::next: controller.next(); break;
+    case CecCommand::previous: controller.previous(); break;
+    case CecCommand::seek_forward: controller.seek_relative(cec_seek_frames); break;
+    case CecCommand::seek_backward: controller.seek_relative(-cec_seek_frames); break;
+    }
+    const auto after = controller.state();
+    return before.playback != after.playback || before.track != after.track ||
+           before.position_lba != after.position_lba;
+}
+}
+void run_player_session(const std::string& device, CddaBackend backend,
+                        const std::string& audio_device, bool use_cec, const std::string& cec_device,
+                        bool cec_diagnostics) {
+    Signals signals; // Worker inherits the blocked signal mask.
+    const auto toc = read_cd_toc(device);
+    PlayerController controller;
+    controller.load_disc(toc);
+    auto audio = make_alsa_output(audio_device);
+    PcmWorker worker([=] { return make_cdda_reader(backend, device); });
+    PlaybackEngine engine(controller, worker, *audio, toc.leadout_lba);
+    struct StopOnExit {
+        PlayerController& controller; PcmWorker& worker; AudioOutput& output;
+        ~StopOnExit() {
+            controller.stop(); worker.cancel();
+            try { output.reset(); } catch (...) {}
+        }
+    } stop_on_exit{controller, worker, *audio};
+    CecDevice cec(cec_device, cec_diagnostics);
+    std::cout << "player: backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
+              << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native\n"
+              << "Commands: play pause stop next previous track N seek SECONDS state quit\n";
+    print_state(controller);
+    std::string input;
+    auto next_cec = std::chrono::steady_clock::now();
+    bool quitting = false;
+    while (!quitting) {
+        const auto now = std::chrono::steady_clock::now();
+        if (use_cec && now >= next_cec) {
+            const auto update_started = std::chrono::steady_clock::now();
+            cec.update();
+            const auto update_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - update_started).count();
+            if (cec_diagnostics && update_us >= 10'000)
+                std::cout << "cec: update_us=" << update_us << '\n' << std::flush;
+            next_cec = now + std::chrono::milliseconds(250);
+        }
+        try { engine.tick(); }
+        catch (const std::exception& error) {
+            std::cerr << "player: playback stopped: " << error.what() << '\n';
+            print_state(controller);
+        }
+        pollfd fds[]{{signals.fd, POLLIN, 0}, {STDIN_FILENO, POLLIN, 0},
+                     {use_cec ? cec.poll_fd() : -1, POLLIN, 0}};
+        const auto result = poll(fds, 3, 10);
+        if (result < 0) {
+            if (errno == EINTR) continue;
+            throw std::system_error(errno, std::generic_category(), "player poll");
+        }
+        if (fds[0].revents & POLLIN) {
+            signalfd_siginfo info{};
+            (void)read(signals.fd, &info, sizeof(info));
+            std::cout << "player: shutdown signal=" << info.ssi_signo << '\n';
+            break;
+        }
+        if (fds[2].revents & (POLLERR | POLLHUP | POLLNVAL))
+            throw std::runtime_error("CEC poll failure");
+        if (fds[2].revents & POLLIN) {
+            // Drain every queued message now. Processing only one per poll
+            // iteration could make a key wait behind unrelated CEC traffic.
+            for (;;) {
+                const auto received = cec.receive();
+                if (!received.dequeued) break;
+                if (received.command && apply_cec_command(controller, *received.command)) {
+                    engine.synchronize();
+                    print_state(controller);
+                }
+            }
+        }
+        if (fds[1].revents & (POLLERR | POLLNVAL)) throw std::runtime_error("stdin poll failure");
+        if (!(fds[1].revents & (POLLIN | POLLHUP))) continue;
+        char buffer[512];
+        const auto n = read(STDIN_FILENO, buffer, sizeof(buffer));
+        if (n == 0) break;
+        if (n < 0) { if (errno == EINTR || errno == EAGAIN) continue; throw std::runtime_error("stdin read failed"); }
+        input.append(buffer, static_cast<std::size_t>(n));
+        if (input.size() > 4096) { input.clear(); std::cerr << "player: input too long\n"; continue; }
+        std::size_t newline;
+        while ((newline = input.find('\n')) != std::string::npos) {
+            auto command = input.substr(0, newline); input.erase(0, newline + 1);
+            if (!command.empty() && command.back() == '\r') command.pop_back();
+            bool changed = true;
+            if (command == "quit") { quitting = true; break; }
+            if (command == "state") { print_state(controller); continue; }
+            if (command == "play") {
+                if (controller.state().playback == PlaybackState::playing) changed = false;
+                else controller.play();
+            } else if (command == "pause") {
+                if (controller.state().playback != PlaybackState::playing) changed = false;
+                else controller.pause();
+            } else if (command == "stop") controller.stop();
+            else if (command == "next") controller.next();
+            else if (command == "previous") controller.previous();
+            else if (command.starts_with("track ") || command.starts_with("seek ")) {
+                const auto space = command.find(' ');
+                const auto value = std::string_view(command).substr(space + 1);
+                int number = 0;
+                const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), number);
+                if (error != std::errc{} || end != value.data() + value.size()) changed = false;
+                else if (command.starts_with("track ")) changed = controller.select_track(number);
+                else controller.seek_relative(std::int64_t(number) * cd_frames_per_second);
+                if (!changed) std::cerr << "player: invalid argument\n";
+            } else { changed = false; std::cerr << "player: unknown command\n"; }
+            if (changed) engine.synchronize();
+            print_state(controller);
+        }
+    }
+    controller.stop();
+    engine.synchronize();
+    std::cout << "player: output stopped; waiting for outstanding CD I/O\n" << std::flush;
+    // worker joins before audio/signals destruction. No detached hardware access.
+}

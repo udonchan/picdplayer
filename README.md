@@ -1,12 +1,13 @@
 # PiCDPlayer
 
-Raspberry Piで物理CDを再生する家電型プレイヤー。現在はdaemon skeleton・CEC登録・CD状態/TOC診断・内部トラックモデルまで。
-CD-DA読み取りとHDMI再生は、外部CLIを使った10秒のPoCとして実機・試聴確認済み。
+Raspberry Piで物理CDを再生する家電型プレイヤー。Linux CD-ROM ioctlでTOCと
+CD-DA PCMを読み、ALSA経由でHDMIへ連続再生する。REGZAのCECリモコンによる
+再生・停止・曲移動・シークと、CEC Playback Deviceとしての登録・応答を実機確認済み。
 
 ## Build / run
 
 Linux、C++20コンパイラ、CMake 3.20以上、Linux CEC UAPI headersが必要。
-外部runtime library、Node.js、root権限は不要。
+native再生にlibasound（開発時はlibasound2-dev）が必要。Node.js、root権限は不要。
 
 ```sh
 cmake -S . -B build
@@ -21,6 +22,7 @@ foregroundで動作し、標準出力・標準エラーにログを出す。Ctrl
 ```sh
 ./build/cdplayerd --no-cec
 ./build/cdplayerd --cec-device /dev/cec0
+./build/cdplayerd --cec-diagnostics
 python3 tests/smoke.py build/cdplayerd
 cec-ctl -d /dev/cec0 --show-topology
 ```
@@ -29,8 +31,9 @@ cec-ctl -d /dev/cec0 --show-topology
 
 ## 現段階の設計
 
-- 単一process・単一thread。signalfd + pollで停止を通常のイベントとして扱う。
-- CecDeviceにLinux ioctlを隔離。状態確認とPlayback Device登録のみを担当する。
+- 単一process。既存daemonモードは単一thread、--playerはCD読み取りworkerを1本追加。
+  signalfd + pollで停止を通常のイベントとして扱う。
+- CecDeviceにLinux ioctlを隔離。Playback Device登録、CEC応答、リモコン入力を担当する。
 - デバイス未出現・Physical Address未確定なら250ms間隔で再確認する。
   固定sleep後に準備完了と仮定せず実際の状態を判定する。待機中も停止可能。
 - claimはO_NONBLOCKで開始し、後続の読み取りでLogical Addressを確認する。
@@ -40,10 +43,16 @@ cec-ctl -d /dev/cec0 --show-topology
   登録状態はdaemonの生存を示すものではなく、再起動後の維持も保証しない。
 - 権限不足・ioctl失敗はエラー終了。デバイス消失後の再openやclaim失敗時の
   timeout/retry、排他的所有、CECイベントによる待機は今後の課題。
-- Power Status、Active Source、SET_STREAM_PATH、リモコン処理は未実装。
-  kernelの標準応答だけでは完全なPlayback Deviceにはならない。
-- PlayerState、CD、ALSA再生、API、UI、systemd unitはまだ実装しない。
-  PlayerState導入時にはdaemonを唯一のauthoritative ownerにする。
+- `GIVE_DEVICE_POWER_STATUS`にはdaemon稼働中のONを返す。TVがPiのPhysical Addressを
+  指定する`SET_STREAM_PATH`を送ったときだけ`ACTIVE_SOURCE`をbroadcastし、他機器の
+  `ACTIVE_SOURCE`を受けると非activeへ戻す。`REQUEST_ACTIVE_SOURCE`にはactive中だけ
+  応答する。起動時に入力を勝手に切り替えない。kernelの標準応答だけでは完全な
+  Playback Deviceにはならない。
+- PlayerController/PlayerStateはhardware非依存の状態遷移を実装済み。
+  native連続再生は端末操作モードでPlay/Stopと正常再生を実機確認済み。CECの
+  Play/Pause/Stop/Skip Forward/Skip Backward/Fast Forward/Rewindを
+  PlayerControllerへ接続済み。
+  API・UI・systemd unitは未実装。
 
 詳細は[実機検証記録](docs/milestone-1.md)。
 
@@ -191,7 +200,7 @@ Linuxの構造体はデバイス読み取り内で使用し、検証済みのDis
 lead-outは最終トラック開始より後であることを検証する。
 長さは64bit整数のCDフレーム単位（1秒=75）で保持し、表示時だけ時間へ変換する。
 モデルは単純な値構造体で、生成後の直接変更を型で禁止してはいない。
-PlayerStateや再生位置はまだ導入しない。
+PlayerStateの位置は、--playerモードではALSAの未再生量を差し引いて更新する。
 
 `disc_toc_test`は実測14トラックの変換、長さの合計、非ゼロ開始位置、
 トラック99、空・不正番号・位置逆転・不正lead-out等をhardwareなしで確認する。
@@ -211,3 +220,10 @@ ctest --test-dir build --output-on-failure
 ENABLE_PARANOIA=ONでlibcdio-paranoia backendを有効化し、runtimeで選択可能。
 OFFではlibcdio依存なし。paranoiaの実機読み取り・保存PCMの正常再生は確認済み。
 両backendの条件を揃えた性能比較・連続再生比較は未実施。
+
+## プレイヤー実装の進行
+
+backendの採用判断・性能比較は保留中。
+[PlayerControllerの状態と操作仕様](docs/player-controller.md)と、native音声engine、
+CECリモコン操作、Playback Device応答を実装・実機確認済み。
+[再生の構成と実機試験手順](docs/playback-engine.md)を参照。

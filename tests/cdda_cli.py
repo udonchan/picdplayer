@@ -2,6 +2,10 @@
 import subprocess
 import sys
 for args, expected in [
+    (['--player', '/nonexistent'], 'explicit'),
+    (['--player', '/nonexistent', '--cdda-reader', 'typo'], 'unknown CDDA'),
+    (['--player', '/nonexistent', '--cdda-reader', 'direct', '--frames', '75'], 'Player accepts'),
+    (['--audio-device', 'null'], 'Player accepts'),
     (['--pcm-output', 'sample.pcm'], 'require --probe-cdda'),
     (['--pcm-output', '-'], 'file path'),
     (['--pcm-output'], 'Usage:'),
