@@ -1,4 +1,5 @@
 #include "cd_device.hpp"
+#include <chrono>
 #include <cerrno>
 #include <climits>
 #include <fcntl.h>
@@ -11,6 +12,7 @@
 #include <linux/cdrom.h>
 #include <sys/ioctl.h>
 #include <system_error>
+#include <thread>
 #include <unistd.h>
 
 namespace {
@@ -129,12 +131,29 @@ void eject_cd(const std::string& device) {
     const ScopedFd guard(fd);
     if (ioctl(fd, CDROM_LOCKDOOR, 0) < 0)
         throw std::system_error(errno, std::generic_category(), "CDROM_LOCKDOOR unlock " + device);
-    if (ioctl(fd, CDROMEJECT, 0) < 0) {
-        const auto error = errno;
-        // Restore the appliance-style lock when the tray did not open.
-        (void)ioctl(fd, CDROM_LOCKDOOR, 1);
-        throw std::system_error(error, std::generic_category(), "CDROMEJECT " + device);
+    constexpr int maximum_attempts = 2;
+    constexpr int status_checks_per_attempt = 20;
+    int last_status = CDS_NO_INFO;
+    for (int attempt = 1; attempt <= maximum_attempts; ++attempt) {
+        if (ioctl(fd, CDROMEJECT, 0) < 0) {
+            const auto error = errno;
+            // Restore the appliance-style lock when the tray did not open.
+            (void)ioctl(fd, CDROM_LOCKDOOR, 1);
+            throw std::system_error(error, std::generic_category(),
+                                    "CDROMEJECT attempt=" + std::to_string(attempt) + ' ' + device);
+        }
+        for (int check = 0; check < status_checks_per_attempt; ++check) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            last_status = ioctl(fd, CDROM_DRIVE_STATUS, CDSL_CURRENT);
+            if (last_status < 0)
+                throw std::system_error(errno, std::generic_category(),
+                                        "CDROM_DRIVE_STATUS after eject " + device);
+            if (last_status == CDS_TRAY_OPEN) return;
+        }
     }
+    throw std::runtime_error("eject did not open tray after " +
+                             std::to_string(maximum_attempts) + " attempts; drive_status=" +
+                             std::to_string(last_status));
 }
 
 void probe_cd_toc(const std::string& device) {

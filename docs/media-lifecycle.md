@@ -201,3 +201,8 @@ MediaWorkerが`CDROMEJECT`を実行する。成功時は即座に`NO_DISC`へ遷
 ASUS SDRW-08D2S-Uでは、先にdoor lockを解除しない`CDROMEJECT`に対してkernelがSCSI sense
 `ILLEGAL REQUEST asc=0x53 ascq=0x2`（medium removal prevented）を記録した。eject処理は
 `CDROM_LOCKDOOR(0)`の後に`CDROMEJECT`を実行し、eject失敗時は再lockしてplayer状態を保持する。
+
+このUSB driveでは`CDROMEJECT`が0を返しても、最初の要求が媒体のunloadだけで物理トレイを開かない
+場合が実機で確認された。ioctl成功を完了条件にせず、100 ms周期で最大2秒
+`CDROM_DRIVE_STATUS == CDS_TRAY_OPEN`を確認する。開かなければ`CDROMEJECT`をもう一度だけ実行し、
+再度最大2秒確認する。2回でもtray openを確認できなければ`EJECT_ERROR`とし、無制限retryは行わない。
