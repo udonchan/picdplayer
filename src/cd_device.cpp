@@ -127,8 +127,14 @@ void eject_cd(const std::string& device) {
     const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) throw std::system_error(errno, std::generic_category(), "open " + device);
     const ScopedFd guard(fd);
-    if (ioctl(fd, CDROMEJECT, 0) < 0)
-        throw std::system_error(errno, std::generic_category(), "CDROMEJECT " + device);
+    if (ioctl(fd, CDROM_LOCKDOOR, 0) < 0)
+        throw std::system_error(errno, std::generic_category(), "CDROM_LOCKDOOR unlock " + device);
+    if (ioctl(fd, CDROMEJECT, 0) < 0) {
+        const auto error = errno;
+        // Restore the appliance-style lock when the tray did not open.
+        (void)ioctl(fd, CDROM_LOCKDOOR, 1);
+        throw std::system_error(error, std::generic_category(), "CDROMEJECT " + device);
+    }
 }
 
 void probe_cd_toc(const std::string& device) {

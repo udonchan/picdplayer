@@ -305,6 +305,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 }
                 toc_needs_refresh = false;
             } else {
+                std::cout << "media: eject=completed\n" << std::flush;
                 const auto before = media_state.state();
                 const auto after = media_state.observe(MediaObservation::tray_open);
                 if (after != before)
