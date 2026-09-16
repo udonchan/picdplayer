@@ -273,9 +273,15 @@ curl --fail --show-error http://127.0.0.1:8080/api/state
 
 WebSocketは接続時に現在のstateを1件送り、その後は公開snapshotが変わった時だけ同じJSON schemaを
 送る。ブラウザでは`new WebSocket("ws://127.0.0.1:8080/api/events")`で接続できる。
+loopback listen時はbodyなしの`POST /api/play`、`pause`、`stop`、`next`、`previous`も利用できる。
+
+```sh
+curl --fail --show-error -X POST http://127.0.0.1:8080/api/play
+```
 
 別PCから診断する場合だけ、信頼できる開発用LAN上で明示的に外部listenを有効にする。
-認証とTLSはまだないため、インターネットへ公開しない。
+認証とTLSはまだないため、インターネットへ公開しない。外部listenでは状態取得とevent配信だけを
+許可し、操作POSTは403にする。
 
 ```sh
 ./build-api/cdplayerd --player /dev/sr0 --cdda-reader direct \
@@ -285,7 +291,7 @@ WebSocketは接続時に現在のstateを1件送り、その後は公開snapshot
 curl --fail --show-error http://PI_ADDRESS:8080/api/state
 ```
 
-依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。状態変更POSTは次段階で追加する。
+依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。値を伴うseek/track選択とejectは未実装。
 JSON schemaとthread境界は[設計記録](docs/daemon-state.md)を参照。
 
 ## メディアライフサイクル

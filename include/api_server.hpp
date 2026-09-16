@@ -5,14 +5,18 @@
 #include <string_view>
 
 struct ApiResponse { int status; std::string content_type; std::string body; };
+enum class ApiCommand { play, pause, stop, next, previous };
 using ApiStateProvider = std::function<std::string()>;
+using ApiCommandHandler = std::function<bool(ApiCommand)>;
 
 ApiResponse route_api_request(std::string_view method, std::string_view path,
-                              const ApiStateProvider& state_provider);
+                              const ApiStateProvider& state_provider,
+                              const ApiCommandHandler& command_handler = {});
 
 class ApiServer {
 public:
-    ApiServer(std::string listen_address, int port, ApiStateProvider state_provider);
+    ApiServer(std::string listen_address, int port, ApiStateProvider state_provider,
+              ApiCommandHandler command_handler = {});
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;

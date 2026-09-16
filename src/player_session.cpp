@@ -171,14 +171,36 @@ void run_player_session(const std::string& device, CddaBackend backend,
     publish_api_snapshot();
     std::unique_ptr<ApiServer> api_server;
     if (api_port) {
+        ApiCommandHandler command_handler;
+        if (api_listen == "127.0.0.1" || api_listen == "::1") {
+            command_handler = [&](ApiCommand command) {
+                if (controller.state().playback == PlaybackState::no_disc) return false;
+                CecCommand player_command = CecCommand::play;
+                switch (command) {
+                case ApiCommand::play: player_command = CecCommand::play; break;
+                case ApiCommand::pause: player_command = CecCommand::pause; break;
+                case ApiCommand::stop: player_command = CecCommand::stop; break;
+                case ApiCommand::next: player_command = CecCommand::next; break;
+                case ApiCommand::previous: player_command = CecCommand::previous; break;
+                }
+                if (apply_cec_command(controller, player_command)) {
+                    engine.synchronize();
+                    print_state(controller);
+                }
+                return true;
+            };
+        }
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
-                                                 [&] { return api_state_json; });
+                                                 [&] { return api_state_json; },
+                                                 std::move(command_handler));
         std::cout << "api: listening=http://";
         if (api_listen.find(':') != std::string::npos) std::cout << '[' << api_listen << ']';
         else std::cout << api_listen;
         std::cout << ':' << api_port;
         if (api_listen != "127.0.0.1" && api_listen != "::1")
-            std::cout << " access=external-debug";
+            std::cout << " access=external-debug commands=disabled";
+        else
+            std::cout << " commands=enabled";
         std::cout << '\n' << std::flush;
     }
     auto next_api_snapshot = std::chrono::steady_clock::now();

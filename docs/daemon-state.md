@@ -39,6 +39,12 @@ libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0
 送信頻度は最大4 Hzとし、より細かい位置更新でclientを圧迫しない。clientからのmessageは受け付けず、
 操作APIとauthoritative stateの境界を混在させない。
 
+loopbackではbodyなしの`POST /api/play|pause|stop|next|previous`を受け付ける。HTTP callbackもmain
+thread上で動くため、handlerはPlayerControllerへ直接commandを適用し、変更時にPlaybackEngineを
+synchronizeする。discがなければ409、成功は204を返す。外部debug listenではcommand handler自体を
+渡さず403とし、認証がない状態でLAN上から操作できないようにする。seek、track選択、ejectはrequest
+bodyとmedia worker連携の仕様を決めてから追加する。
+
 routeのmethod/path/size上限をhardwareなしで試験し、実loopback socketへHTTP/1.1 GETを送って
 200とJSON bodyを確認した。sandboxではsocket作成が制限されるため、この統合テストはloopbackを
 許可した環境で実行する必要がある。

@@ -2,27 +2,47 @@
 #include <array>
 #include <cstring>
 #include <libwebsockets.h>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 ApiResponse route_api_request(std::string_view method, std::string_view path,
-                              const ApiStateProvider& state_provider) {
-    if (path != "/api/state")
+                              const ApiStateProvider& state_provider,
+                              const ApiCommandHandler& command_handler) {
+    if (path == "/api/state") {
+        if (method != "GET")
+            return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
+        auto body = state_provider();
+        constexpr std::size_t maximum_state_bytes = 1024 * 1024;
+        if (body.size() > maximum_state_bytes)
+            return {HTTP_STATUS_INTERNAL_SERVER_ERROR, "application/json", R"({"error":"state_too_large"})"};
+        return {HTTP_STATUS_OK, "application/json", std::move(body)};
+    }
+    const auto command = [&]() -> std::optional<ApiCommand> {
+        if (path == "/api/play") return ApiCommand::play;
+        if (path == "/api/pause") return ApiCommand::pause;
+        if (path == "/api/stop") return ApiCommand::stop;
+        if (path == "/api/next") return ApiCommand::next;
+        if (path == "/api/previous") return ApiCommand::previous;
+        return std::nullopt;
+    }();
+    if (!command)
         return {HTTP_STATUS_NOT_FOUND, "application/json", R"({"error":"not_found"})"};
-    if (method != "GET")
+    if (method != "POST")
         return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
-    auto body = state_provider();
-    constexpr std::size_t maximum_state_bytes = 1024 * 1024;
-    if (body.size() > maximum_state_bytes)
-        return {HTTP_STATUS_INTERNAL_SERVER_ERROR, "application/json", R"({"error":"state_too_large"})"};
-    return {HTTP_STATUS_OK, "application/json", std::move(body)};
+    if (!command_handler)
+        return {HTTP_STATUS_FORBIDDEN, "application/json", R"({"error":"commands_disabled"})"};
+    if (!command_handler(*command))
+        return {HTTP_STATUS_CONFLICT, "application/json", R"({"error":"command_rejected"})"};
+    return {HTTP_STATUS_NO_CONTENT, "application/json", {}};
 }
 
 struct ApiServer::Implementation {
     std::string address;
     int port;
     ApiStateProvider state_provider;
+    ApiCommandHandler command_handler;
     std::string websocket_state;
     std::array<lws_protocols, 2> protocols{};
     lws_context* context = nullptr;
@@ -64,7 +84,8 @@ struct ApiServer::Implementation {
             std::string_view path;
             if (uri && uri_length >= 0) path = {uri, static_cast<std::size_t>(uri_length)};
             else if (in) path = {static_cast<const char*>(in), length};
-            const auto response = route_api_request(method_name, path, self->state_provider);
+            const auto response = route_api_request(method_name, path, self->state_provider,
+                                                     self->command_handler);
 
             std::array<unsigned char, LWS_PRE + 512> headers{};
             auto* start = headers.data() + LWS_PRE;
@@ -82,8 +103,10 @@ struct ApiServer::Implementation {
         }
     }
 
-    Implementation(std::string listen_address, int listen_port, ApiStateProvider provider)
-        : address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)) {
+    Implementation(std::string listen_address, int listen_port, ApiStateProvider provider,
+                   ApiCommandHandler handler)
+        : address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
+          command_handler(std::move(handler)) {
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
         websocket_state = state_provider();
         if (port < 0 || port > 65535) throw std::invalid_argument("API port is outside 0..65535");
@@ -108,8 +131,10 @@ struct ApiServer::Implementation {
     ~Implementation() { if (context) lws_context_destroy(context); }
 };
 
-ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider)
-    : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider))) {}
+ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
+                     ApiCommandHandler handler)
+    : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
+                                                        std::move(handler))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

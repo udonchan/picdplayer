@@ -21,6 +21,18 @@ int main() {
         check(response.status == 405 && calls == 1);
         response = route_api_request("GET", "/missing", provider);
         check(response.status == 404 && calls == 1);
+        ApiCommand received_command = ApiCommand::play;
+        int command_calls = 0;
+        const ApiCommandHandler commands = [&](ApiCommand command) {
+            received_command = command; ++command_calls; return true;
+        };
+        response = route_api_request("POST", "/api/next", provider, commands);
+        check(response.status == 204 && response.body.empty());
+        check(command_calls == 1 && received_command == ApiCommand::next);
+        check(route_api_request("GET", "/api/next", provider, commands).status == 405);
+        check(route_api_request("POST", "/api/play", provider).status == 403);
+        const ApiCommandHandler rejecting = [](ApiCommand) { return false; };
+        check(route_api_request("POST", "/api/stop", provider, rejecting).status == 409);
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
         check(route_api_request("GET", "/api/state", huge).status == 500);
 
