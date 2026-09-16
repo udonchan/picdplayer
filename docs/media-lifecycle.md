@@ -206,3 +206,7 @@ ASUS SDRW-08D2S-Uでは、先にdoor lockを解除しない`CDROMEJECT`に対し
 場合が実機で確認された。ioctl成功を完了条件にせず、100 ms周期で最大2秒
 `CDROM_DRIVE_STATUS == CDS_TRAY_OPEN`を確認する。開かなければ`CDROMEJECT`をもう一度だけ実行し、
 再度最大2秒確認する。2回でもtray openを確認できなければ`EJECT_ERROR`とし、無制限retryは行わない。
+
+診断ログは要求からdevice worker開始までを`eject=started wait_ms=...`、物理tray確認までを
+`eject=completed elapsed_ms=...`として記録する。EJECTING中の再送は新しいhardware操作を作らず、
+`eject=already_pending`を記録して同じ要求の202を返す。

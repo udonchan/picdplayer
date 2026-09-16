@@ -159,6 +159,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::uint64_t api_revision = 0;
     bool api_eject_pending = false;
     bool api_eject_inflight = false;
+    std::chrono::steady_clock::time_point api_eject_requested_at{};
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
 #ifdef ENABLE_METADATA
@@ -179,12 +180,16 @@ void run_player_session(const std::string& device, CddaBackend backend,
     if (api_port) {
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
                 if (command.type == ApiCommandType::eject) {
-                    if (media_state.state() == MediaLifecycleState::ejecting) return true;
+                    if (media_state.state() == MediaLifecycleState::ejecting) {
+                        std::cout << "media: eject=already_pending\n" << std::flush;
+                        return true;
+                    }
                     controller.stop();
                     engine.synchronize();
                     worker.discard_reader();
                     api_eject_pending = true;
                     api_eject_inflight = false;
+                    api_eject_requested_at = std::chrono::steady_clock::now();
                     media_state.begin_eject();
                     toc_pending = false;
 #ifdef ENABLE_METADATA
@@ -243,6 +248,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (api_eject_pending && worker.device_released() && media_worker.request(MediaWork::eject)) {
             api_eject_pending = false;
             api_eject_inflight = true;
+            const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - api_eject_requested_at).count();
+            std::cout << "media: eject=started wait_ms=" << wait_ms << '\n' << std::flush;
         }
 #endif
         if (now >= next_media) {
@@ -273,7 +281,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (media_result.work == MediaWork::eject) {
                     api_eject_inflight = false;
                     media_state.eject_failed(media_result.error);
-                    std::cout << "media: state=EJECT_ERROR\n" << std::flush;
+                    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - api_eject_requested_at).count();
+                    std::cout << "media: state=EJECT_ERROR elapsed_ms=" << elapsed_ms << '\n'
+                              << std::flush;
                 }
 #endif
                 continue;
@@ -337,8 +348,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
             } else {
 #ifdef ENABLE_API
                 api_eject_inflight = false;
+                const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - api_eject_requested_at).count();
 #endif
-                std::cout << "media: eject=completed\n" << std::flush;
+                std::cout << "media: eject=completed";
+#ifdef ENABLE_API
+                std::cout << " elapsed_ms=" << elapsed_ms;
+#endif
+                std::cout << '\n' << std::flush;
                 const auto before = media_state.state();
                 const auto after = media_state.observe(MediaObservation::tray_open);
                 if (after != before)
