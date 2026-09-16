@@ -5,13 +5,15 @@
 #include <string_view>
 
 struct ApiResponse { int status; std::string content_type; std::string body; };
-enum class ApiCommand { play, pause, stop, next, previous };
+enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track };
+struct ApiCommand { ApiCommandType type; int value = 0; };
 using ApiStateProvider = std::function<std::string()>;
-using ApiCommandHandler = std::function<bool(ApiCommand)>;
+using ApiCommandHandler = std::function<bool(const ApiCommand&)>;
 
 ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
-                              const ApiCommandHandler& command_handler = {});
+                              const ApiCommandHandler& command_handler = {},
+                              std::string_view body = {});
 
 class ApiServer {
 public:

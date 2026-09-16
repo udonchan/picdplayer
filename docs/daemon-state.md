@@ -42,8 +42,13 @@ libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0
 loopbackではbodyなしの`POST /api/play|pause|stop|next|previous`を受け付ける。HTTP callbackもmain
 thread上で動くため、handlerはPlayerControllerへ直接commandを適用し、変更時にPlaybackEngineを
 synchronizeする。discがなければ409、成功は204を返す。外部debug listenではcommand handler自体を
-渡さず403とし、認証がない状態でLAN上から操作できないようにする。seek、track選択、ejectはrequest
-bodyとmedia worker連携の仕様を決めてから追加する。
+渡さず403とし、認証がない状態でLAN上から操作できないようにする。
+
+`POST /api/seek`は`{"offset_seconds": N}`による相対seek、`POST /api/track`は`{"track": N}`を
+受け付ける。JSON objectは指定field 1個だけ、bodyは4 KiB以下、seekは±86400秒、trackは1〜99に
+制限する。実際のdisc範囲外のtrackはPlayerControllerが拒否して409を返す。bodyはlibwebsocketsの
+HTTP body callbackでmain thread内に収集し、完成後にcommand handlerへ渡す。ejectはdrive accessを
+MediaWorkerへ直列化する必要があるため未実装。
 
 routeのmethod/path/size上限をhardwareなしで試験し、実loopback socketへHTTP/1.1 GETを送って
 200とJSON bodyを確認した。sandboxではsocket作成が制限されるため、この統合テストはloopbackを

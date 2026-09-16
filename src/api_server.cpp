@@ -1,15 +1,19 @@
 #include "api_server.hpp"
 #include <array>
+#include <algorithm>
 #include <cstring>
 #include <libwebsockets.h>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
-                              const ApiCommandHandler& command_handler) {
+                              const ApiCommandHandler& command_handler,
+                              std::string_view body) {
     if (path == "/api/state") {
         if (method != "GET")
             return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
@@ -19,12 +23,14 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
             return {HTTP_STATUS_INTERNAL_SERVER_ERROR, "application/json", R"({"error":"state_too_large"})"};
         return {HTTP_STATUS_OK, "application/json", std::move(body)};
     }
-    const auto command = [&]() -> std::optional<ApiCommand> {
-        if (path == "/api/play") return ApiCommand::play;
-        if (path == "/api/pause") return ApiCommand::pause;
-        if (path == "/api/stop") return ApiCommand::stop;
-        if (path == "/api/next") return ApiCommand::next;
-        if (path == "/api/previous") return ApiCommand::previous;
+    auto command = [&]() -> std::optional<ApiCommand> {
+        if (path == "/api/play") return ApiCommand{ApiCommandType::play};
+        if (path == "/api/pause") return ApiCommand{ApiCommandType::pause};
+        if (path == "/api/stop") return ApiCommand{ApiCommandType::stop};
+        if (path == "/api/next") return ApiCommand{ApiCommandType::next};
+        if (path == "/api/previous") return ApiCommand{ApiCommandType::previous};
+        if (path == "/api/seek") return ApiCommand{ApiCommandType::seek_relative};
+        if (path == "/api/track") return ApiCommand{ApiCommandType::select_track};
         return std::nullopt;
     }();
     if (!command)
@@ -33,6 +39,27 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
     if (!command_handler)
         return {HTTP_STATUS_FORBIDDEN, "application/json", R"({"error":"commands_disabled"})"};
+    if (command->type == ApiCommandType::seek_relative || command->type == ApiCommandType::select_track) {
+        constexpr std::size_t maximum_command_bytes = 4096;
+        if (body.size() > maximum_command_bytes)
+            return {HTTP_STATUS_REQ_ENTITY_TOO_LARGE, "application/json", R"({"error":"body_too_large"})"};
+        try {
+            const auto json = nlohmann::json::parse(body);
+            const char* field = command->type == ApiCommandType::seek_relative ? "offset_seconds" : "track";
+            if (!json.is_object() || json.size() != 1 || !json.contains(field) || !json[field].is_number_integer())
+                return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+            const auto value = json[field].get<long long>();
+            const auto minimum = command->type == ApiCommandType::seek_relative ? -86'400LL : 1LL;
+            const auto maximum = command->type == ApiCommandType::seek_relative ? 86'400LL : 99LL;
+            if (value < minimum || value > maximum)
+                return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+            command->value = static_cast<int>(value);
+        } catch (const nlohmann::json::exception&) {
+            return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+        }
+    } else if (!body.empty()) {
+        return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"unexpected_body"})"};
+    }
     if (!command_handler(*command))
         return {HTTP_STATUS_CONFLICT, "application/json", R"({"error":"command_rejected"})"};
     return {HTTP_STATUS_NO_CONTENT, "application/json", {}};
@@ -46,6 +73,21 @@ struct ApiServer::Implementation {
     std::string websocket_state;
     std::array<lws_protocols, 2> protocols{};
     lws_context* context = nullptr;
+    struct PendingRequest { std::string method; std::string path; std::string body; };
+    std::unordered_map<lws*, PendingRequest> pending_requests;
+
+    static int send_response(lws* wsi, const ApiResponse& response) {
+        std::array<unsigned char, LWS_PRE + 512> headers{};
+        auto* start = headers.data() + LWS_PRE;
+        auto* cursor = start;
+        auto* end = headers.data() + headers.size();
+        if (lws_add_http_common_headers(wsi, static_cast<unsigned int>(response.status),
+                response.content_type.c_str(), response.body.size(), &cursor, end) ||
+            lws_finalize_write_http_header(wsi, start, &cursor, end)) return -1;
+        if (!response.body.empty() &&
+            lws_write_http(wsi, response.body.data(), response.body.size()) < 0) return -1;
+        return lws_http_transaction_completed(wsi) ? -1 : 0;
+    }
 
     static int callback(lws* wsi, lws_callback_reasons reason, void*, void* in, std::size_t length) noexcept {
         try {
@@ -72,6 +114,28 @@ struct ApiServer::Implementation {
                     ? 0 : -1;
             }
             if (reason == LWS_CALLBACK_RECEIVE) return -1;
+            if (reason == LWS_CALLBACK_HTTP_BODY) {
+                auto found = self->pending_requests.find(wsi);
+                if (found == self->pending_requests.end()) return -1;
+                constexpr std::size_t maximum_command_bytes = 4096;
+                if (length > maximum_command_bytes - std::min(found->second.body.size(), maximum_command_bytes))
+                    found->second.body.resize(maximum_command_bytes + 1);
+                else
+                    found->second.body.append(static_cast<const char*>(in), length);
+                return 0;
+            }
+            if (reason == LWS_CALLBACK_HTTP_BODY_COMPLETION) {
+                auto found = self->pending_requests.find(wsi);
+                if (found == self->pending_requests.end()) return -1;
+                auto request = std::move(found->second);
+                self->pending_requests.erase(found);
+                return send_response(wsi, route_api_request(request.method, request.path,
+                                     self->state_provider, self->command_handler, request.body));
+            }
+            if (reason == LWS_CALLBACK_CLOSED_HTTP) {
+                self->pending_requests.erase(wsi);
+                return 0;
+            }
             if (reason != LWS_CALLBACK_HTTP) return 0;
             char* uri = nullptr; int uri_length = 0;
             const auto method = lws_http_get_uri_and_method(wsi, &uri, &uri_length);
@@ -84,19 +148,19 @@ struct ApiServer::Implementation {
             std::string_view path;
             if (uri && uri_length >= 0) path = {uri, static_cast<std::size_t>(uri_length)};
             else if (in) path = {static_cast<const char*>(in), length};
-            const auto response = route_api_request(method_name, path, self->state_provider,
-                                                     self->command_handler);
-
-            std::array<unsigned char, LWS_PRE + 512> headers{};
-            auto* start = headers.data() + LWS_PRE;
-            auto* cursor = start;
-            auto* end = headers.data() + headers.size();
-            if (lws_add_http_common_headers(wsi, static_cast<unsigned int>(response.status),
-                    response.content_type.c_str(), response.body.size(), &cursor, end) ||
-                lws_finalize_write_http_header(wsi, start, &cursor, end)) return -1;
-            if (!response.body.empty() &&
-                lws_write_http(wsi, response.body.data(), response.body.size()) < 0) return -1;
-            return lws_http_transaction_completed(wsi) ? -1 : 0;
+            std::array<char, 32> content_length{};
+            const auto content_length_size = lws_hdr_copy(wsi, content_length.data(),
+                                                           content_length.size(),
+                                                           WSI_TOKEN_HTTP_CONTENT_LENGTH);
+            const auto content_length_value = content_length_size > 0
+                ? std::string_view(content_length.data(), static_cast<std::size_t>(content_length_size))
+                : std::string_view{};
+            if (method_name == "POST" && !content_length_value.empty() && content_length_value != "0") {
+                self->pending_requests[wsi] = {std::string(method_name), std::string(path), {}};
+                return 0;
+            }
+            return send_response(wsi, route_api_request(method_name, path, self->state_provider,
+                                 self->command_handler));
         } catch (...) {
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;

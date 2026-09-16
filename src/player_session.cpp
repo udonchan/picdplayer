@@ -173,15 +173,21 @@ void run_player_session(const std::string& device, CddaBackend backend,
     if (api_port) {
         ApiCommandHandler command_handler;
         if (api_listen == "127.0.0.1" || api_listen == "::1") {
-            command_handler = [&](ApiCommand command) {
+            command_handler = [&](const ApiCommand& command) {
                 if (controller.state().playback == PlaybackState::no_disc) return false;
                 CecCommand player_command = CecCommand::play;
-                switch (command) {
-                case ApiCommand::play: player_command = CecCommand::play; break;
-                case ApiCommand::pause: player_command = CecCommand::pause; break;
-                case ApiCommand::stop: player_command = CecCommand::stop; break;
-                case ApiCommand::next: player_command = CecCommand::next; break;
-                case ApiCommand::previous: player_command = CecCommand::previous; break;
+                switch (command.type) {
+                case ApiCommandType::play: player_command = CecCommand::play; break;
+                case ApiCommandType::pause: player_command = CecCommand::pause; break;
+                case ApiCommandType::stop: player_command = CecCommand::stop; break;
+                case ApiCommandType::next: player_command = CecCommand::next; break;
+                case ApiCommandType::previous: player_command = CecCommand::previous; break;
+                case ApiCommandType::seek_relative:
+                    controller.seek_relative(std::int64_t(command.value) * cd_frames_per_second);
+                    engine.synchronize(); print_state(controller); return true;
+                case ApiCommandType::select_track:
+                    if (!controller.select_track(command.value)) return false;
+                    engine.synchronize(); print_state(controller); return true;
                 }
                 if (apply_cec_command(controller, player_command)) {
                     engine.synchronize();
