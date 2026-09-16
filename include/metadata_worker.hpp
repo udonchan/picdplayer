@@ -2,6 +2,7 @@
 #include "disc_toc.hpp"
 #include "metadata_model.hpp"
 #include <condition_variable>
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <mutex>
@@ -13,7 +14,8 @@ struct MetadataWorkerResult { std::uint64_t generation; DiscToc toc; MetadataRes
 
 class MetadataWorker {
 public:
-    using Lookup = std::function<MetadataResult(const DiscToc&)>;
+    using Cancelled = std::function<bool()>;
+    using Lookup = std::function<MetadataResult(const DiscToc&, const Cancelled&)>;
     explicit MetadataWorker(Lookup lookup);
     ~MetadataWorker();
     MetadataWorker(const MetadataWorker&) = delete;
@@ -28,6 +30,6 @@ private:
     std::condition_variable changed_;
     std::optional<MetadataRequest> pending_;
     std::optional<MetadataWorkerResult> result_;
-    bool closing_ = false;
+    std::atomic<bool> closing_ = false;
     std::thread thread_;
 };

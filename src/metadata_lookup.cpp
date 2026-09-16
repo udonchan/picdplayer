@@ -40,16 +40,30 @@ void write_cache(const std::filesystem::path& path, std::string_view body) {
     std::filesystem::rename(temporary, path, ec);
     if (ec) std::filesystem::remove(temporary, ec);
 }
-std::string fetch_musicbrainz(const std::string& id) {
+bool cancelled(const MetadataOptions& options) { return options.cancelled && options.cancelled(); }
+void wait_until(const MetadataOptions& options, std::chrono::steady_clock::time_point deadline) {
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (cancelled(options)) throw std::runtime_error("metadata lookup cancelled");
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+}
+std::string fetch_musicbrainz(const std::string& id, const MetadataOptions& options) {
     HttpClient client;
     const auto url = "https://musicbrainz.org/ws/2/discid/" + HttpClient::escape(id) +
         "?fmt=json&cdstubs=no&inc=recordings%2Bartist-credits%2Brelease-groups";
     for (int attempt = 0; attempt < 3; ++attempt) {
-        std::unique_lock lock(rate_mutex);
-        const auto allowed = last_musicbrainz_request + std::chrono::milliseconds(1100);
-        if (const auto now = std::chrono::steady_clock::now(); now < allowed) std::this_thread::sleep_until(allowed);
-        last_musicbrainz_request = std::chrono::steady_clock::now(); lock.unlock();
-        const auto response = client.get(url, metadata_limit);
+        if (cancelled(options)) throw std::runtime_error("metadata lookup cancelled");
+        for (;;) {
+            std::unique_lock lock(rate_mutex);
+            const auto allowed = last_musicbrainz_request + std::chrono::milliseconds(1100);
+            if (std::chrono::steady_clock::now() >= allowed) {
+                last_musicbrainz_request = std::chrono::steady_clock::now();
+                break;
+            }
+            lock.unlock();
+            wait_until(options, allowed);
+        }
+        const auto response = client.get(url, metadata_limit, options.cancelled);
         if (response.status == 404) return R"({"releases":[]})";
         if (response.status == 200) {
             if (!response.content_type.starts_with("application/json")) throw std::runtime_error("MusicBrainz returned non-JSON content");
@@ -68,7 +82,8 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
     if (options.use_cache && !options.cache_directory.empty()) { body = read_cache(path, artwork_json_limit); cache_hit = body.has_value(); }
     if (!body) {
         HttpClient client;
-        const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/", artwork_json_limit);
+        const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
+                                         artwork_json_limit, options.cancelled);
         if (response.status == 404) { ArtworkInfo result; result.status = ArtworkStatus::unavailable; return result; }
         if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
         if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");
@@ -121,7 +136,7 @@ MetadataResult lookup_musicbrainz_id(const std::string& disc_id, const MetadataO
     bool cache_hit = false;
     if (options.use_cache && !options.cache_directory.empty()) { body = read_cache(path, metadata_limit); cache_hit = body.has_value(); }
     if (!body) {
-        body = fetch_musicbrainz(disc_id);
+        body = fetch_musicbrainz(disc_id, options);
         if (options.use_cache && !options.cache_directory.empty()) write_cache(path, *body);
     }
     auto result = parse_musicbrainz_response(*body, disc_id); result.from_cache = cache_hit;

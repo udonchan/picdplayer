@@ -13,11 +13,17 @@ size_t write_body(char* data, size_t size, size_t count, void* opaque) noexcept 
     if (bytes > target.maximum - target.body.size()) { target.exceeded = true; return 0; }
     target.body.append(data, bytes); return bytes;
 }
+int transfer_progress(void* opaque, curl_off_t, curl_off_t, curl_off_t, curl_off_t) noexcept {
+    const auto* cancelled = static_cast<const std::function<bool()>*>(opaque);
+    try { return cancelled && *cancelled && (*cancelled)() ? 1 : 0; }
+    catch (...) { return 1; }
+}
 }
 HttpClient::HttpClient() {
     std::call_once(curl_once, [] { if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) throw std::runtime_error("curl initialization failed"); });
 }
-HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes) const {
+HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
+                             const std::function<bool()>& cancelled) const {
     if (!url.starts_with("https://")) throw std::invalid_argument("HTTP URL must use HTTPS");
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
     if (!curl) throw std::runtime_error("curl allocation failed");
@@ -33,9 +39,18 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes) co
     curl_easy_setopt(curl.get(), CURLOPT_PROTOCOLS_STR, "https");
     curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_body);
     curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &target);
+    if (cancelled) {
+        curl_easy_setopt(curl.get(), CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl.get(), CURLOPT_XFERINFOFUNCTION, transfer_progress);
+        curl_easy_setopt(curl.get(), CURLOPT_XFERINFODATA, &cancelled);
+    }
     const auto code = curl_easy_perform(curl.get());
     if (target.exceeded) throw std::runtime_error("HTTP response exceeds size limit");
-    if (code != CURLE_OK) throw std::runtime_error(std::string("HTTP request failed: ") + curl_easy_strerror(code));
+    if (code != CURLE_OK) {
+        if (code == CURLE_ABORTED_BY_CALLBACK && cancelled && cancelled())
+            throw std::runtime_error("HTTP request cancelled");
+        throw std::runtime_error(std::string("HTTP request failed: ") + curl_easy_strerror(code));
+    }
     HttpResponse response; response.body = std::move(target.body);
     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &response.status);
     char* content_type = nullptr; curl_easy_getinfo(curl.get(), CURLINFO_CONTENT_TYPE, &content_type);

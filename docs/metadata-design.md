@@ -273,3 +273,7 @@ Disc IDは`6JTbUgqHL29gzUyOH5ir60K3hz0-`、候補は1件。metadata取得中もC
 未確認なのは、lookup中のディスク交換、ネットワーク切断、MusicBrainzの長時間障害、複数候補CD、
 CAA 404を伴う実機運転。これらは再生を止めない異常系試験として残す。現在の429/503 retryは
 1.1秒間隔の最大3回で、`Retry-After` headerの解釈は未実装。
+
+shutdown時はMetadataWorkerの終了要求をlibcurl progress callbackとrate-limit待機へ伝える。
+HTTP timeout/retryの完了までjoinしてsystemdの停止期限を超えることを避ける。CDDAとmediaの
+kernel ioctl自体は安全に強制cancelできないため、終了時に進行中ioctlが返るまで待つ設計を維持する。

@@ -116,9 +116,16 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #ifdef ENABLE_METADATA
     std::unique_ptr<MetadataWorker> metadata_worker;
     if (metadata_enabled) {
-        MetadataOptions options{metadata_cache, true};
+        MetadataOptions options{
+            .cache_directory = metadata_cache,
+            .use_cache = true,
+            .cancelled = {},
+        };
         metadata_worker = std::make_unique<MetadataWorker>(
-            [options](const DiscToc& toc) { return lookup_musicbrainz_disc(toc, options); });
+            [options](const DiscToc& toc, const MetadataWorker::Cancelled& cancelled) mutable {
+                options.cancelled = cancelled;
+                return lookup_musicbrainz_disc(toc, options);
+            });
     }
 #endif
     PlaybackEngine engine(controller, worker, *audio, 0);

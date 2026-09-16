@@ -162,7 +162,11 @@ int main(int argc, char** argv) {
     }
     try {
 #ifdef ENABLE_METADATA
-        MetadataOptions metadata_options{metadata_cache, true};
+        MetadataOptions metadata_options{
+            .cache_directory = metadata_cache,
+            .use_cache = true,
+            .cancelled = {},
+        };
         if (!metadata_device.empty()) { probe_metadata_device(metadata_device, metadata_options); return 0; }
         if (!lookup_disc.empty()) { probe_metadata_id(lookup_disc, metadata_options); return 0; }
         if (!disc_id_device.empty()) {
