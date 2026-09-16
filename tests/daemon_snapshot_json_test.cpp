@@ -24,6 +24,12 @@ int main() {
         check(json["metadata"]["status"] == "AVAILABLE" && json["metadata"]["selected"] == 0);
         check(json["metadata"]["candidates"][0]["tracks"][0]["title"] == "Song");
         check(json["metadata"]["cover_art"]["status"] == "AVAILABLE");
+        const auto eject_error = nlohmann::json::parse(serialize_daemon_snapshot(
+            make_daemon_snapshot(43, {PlaybackState::playing, 1, 75},
+                                 MediaLifecycleState::eject_error, toc, metadata,
+                                 "tray jammed")));
+        check(eject_error["media"]["state"] == "EJECT_ERROR");
+        check(eject_error["media"]["error"] == "tray jammed");
         const auto empty = nlohmann::json::parse(serialize_daemon_snapshot(
             make_daemon_snapshot(1, {}, MediaLifecycleState::no_disc, std::nullopt, {})));
         check(empty["disc"].is_null() && empty["player"]["track"].is_null());

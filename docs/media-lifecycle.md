@@ -195,7 +195,8 @@ Ejectでは、進行中のCD readが返るまで一時的に`PLAYING`のままbu
 
 APIからのejectは再生を停止した後、PcmWorkerがCDDA readerを閉じるまで非同期に待つ。device解放後に
 MediaWorkerが`CDROMEJECT`を実行する。成功時は即座に`NO_DISC`へ遷移し、失敗時はdiscを保持して
-pollingを再開する。CDROMREADAUDIOとCDROMEJECTを別threadから同時実行しないことを優先する。
+`EJECT_ERROR`と理由を保持する。CDROMREADAUDIOとCDROMEJECTを別threadから同時実行しないことを
+優先する。LOADING中も要求を`EJECTING`として保持し、完了が遅いioctlの後に一度だけ実行する。
 
 ASUS SDRW-08D2S-Uでは、先にdoor lockを解除しない`CDROMEJECT`に対してkernelがSCSI sense
 `ILLEGAL REQUEST asc=0x53 ascq=0x2`（medium removal prevented）を記録した。eject処理は

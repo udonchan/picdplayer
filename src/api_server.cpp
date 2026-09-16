@@ -63,6 +63,8 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
     }
     if (!command_handler(*command))
         return {HTTP_STATUS_CONFLICT, "application/json", R"({"error":"command_rejected"})"};
+    if (command->type == ApiCommandType::eject)
+        return {202, "application/json", {}};
     return {HTTP_STATUS_NO_CONTENT, "application/json", {}};
 }
 

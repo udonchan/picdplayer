@@ -18,6 +18,8 @@ const char* media_name(MediaLifecycleState state) {
     case MediaLifecycleState::loading: return "LOADING";
     case MediaLifecycleState::audio_ready: return "AUDIO_READY";
     case MediaLifecycleState::unsupported: return "UNSUPPORTED";
+    case MediaLifecycleState::ejecting: return "EJECTING";
+    case MediaLifecycleState::eject_error: return "EJECT_ERROR";
     }
     return "NO_DISC";
 }
@@ -67,7 +69,7 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                       {"position_lba", optional(snapshot.player.position_lba)},
                       {"position_in_track_frames", optional(snapshot.position_in_track_frames)},
                       {"current_track_length_frames", optional(snapshot.current_track_length_frames)}};
-    root["media"] = {{"state", media_name(snapshot.media)}};
+    root["media"] = {{"state", media_name(snapshot.media)}, {"error", snapshot.media_error}};
     if (snapshot.disc) {
         Json tracks = Json::array();
         for (const auto& track : snapshot.disc->tracks)

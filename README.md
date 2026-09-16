@@ -284,6 +284,10 @@ curl --fail --show-error -X POST -H 'Content-Type: application/json' \
 curl --fail --show-error -X POST http://127.0.0.1:8080/api/eject
 ```
 
+ejectはmedia準備中でも`202 Accepted`で受理し、daemonが要求を保持する。WebSocket上の
+`media.state`は`EJECTING`から`NO_DISC`へ進み、hardware失敗時は`EJECT_ERROR`と`media.error`を返す。
+同じ要求の再送は進行中のejectを重複実行しない。
+
 別PCから診断する場合だけ、信頼できる開発用LAN上で明示的に外部listenを有効にする。
 認証とTLSはまだないため、インターネットへ公開しない。外部listenでは状態取得とevent配信だけを
 許可し、操作POSTは実際の接続元がloopbackの場合だけ許可する。LAN側からのPOSTは403にする。

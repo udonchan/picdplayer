@@ -41,7 +41,7 @@ libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0
 
 loopbackではbodyなしの`POST /api/play|pause|stop|next|previous`を受け付ける。HTTP callbackもmain
 thread上で動くため、handlerはPlayerControllerへ直接commandを適用し、変更時にPlaybackEngineを
-synchronizeする。discがなければ409、成功は204を返す。外部debug listenでも実際のpeer addressが
+synchronizeする。通常操作はdiscがなければ409、成功は204を返す。外部debug listenでも実際のpeer addressが
 loopbackの場合だけhandlerを利用し、LAN上のpeerには403を返す。bind addressだけで判定すると
 `0.0.0.0`でlisten中のPi自身からの操作も拒否するため、接続単位で判定する。
 
@@ -55,7 +55,12 @@ MediaWorkerへ直列化する。
 要求する。進行中のCDROMREADAUDIOが返ってreaderのdevice handleが閉じたことをmain loopから確認後、
 MediaWorkerへCDROMEJECTを投入する。これにより2つのworkerが同じdriveへ同時にioctlを発行せず、
 遅いreadの完了待ちでもCEC・HTTP処理をblockしない。eject成功後はmedia、TOC、metadata、playerを
-NO_DISCへ更新する。ioctl失敗時はSTOPPEDのdisc状態を維持し、通常のmedia pollingを再開する。
+NO_DISCへ更新する。
+
+ejectはPlayerStateがNO_DISCまたはmediaがLOADINGでも202で受理し、`EJECTING`としてdaemonが要求を
+保持する。その間に完了した古いobserve/TOC結果は適用しない。重複要求は冪等に202を返す。
+ioctl失敗時は`EJECT_ERROR`と`media.error`をsnapshotへ公開し、Audio Discの観測だけではerrorを
+消さない。再度ejectするか、実際の取り出しを観測するとerrorを解消する。
 
 routeのmethod/path/size上限をhardwareなしで試験し、実loopback socketへHTTP/1.1 GETを送って
 200とJSON bodyを確認した。sandboxではsocket作成が制限されるため、この統合テストはloopbackを

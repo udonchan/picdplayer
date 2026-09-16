@@ -1,12 +1,15 @@
 #include "daemon_snapshot.hpp"
 #include <stdexcept>
+#include <utility>
 
 DaemonSnapshot make_daemon_snapshot(std::uint64_t revision,
                                     const PlayerState& player,
                                     MediaLifecycleState media,
                                     const std::optional<DiscToc>& disc,
-                                    const MetadataResult& metadata) {
-    DaemonSnapshot snapshot{revision, player, media, disc, metadata, std::nullopt, std::nullopt};
+                                    const MetadataResult& metadata,
+                                    std::string media_error) {
+    DaemonSnapshot snapshot{revision, player, media, disc, metadata, std::move(media_error),
+                            std::nullopt, std::nullopt};
     if (player.playback == PlaybackState::no_disc) {
         if (player.track || player.position_lba)
             throw std::invalid_argument("NO_DISC player snapshot contains a position");

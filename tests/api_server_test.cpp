@@ -44,7 +44,7 @@ int main() {
         check(route_api_request("POST", "/api/track", provider, commands,
                                 R"({"track":0})").status == 400);
         response = route_api_request("POST", "/api/eject", provider, commands);
-        check(response.status == 204 && received_command.type == ApiCommandType::eject);
+        check(response.status == 202 && received_command.type == ApiCommandType::eject);
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
         check(route_api_request("GET", "/api/state", huge).status == 500);
 

@@ -62,6 +62,8 @@ const char* media_state_name(MediaLifecycleState state) {
     case MediaLifecycleState::loading: return "LOADING";
     case MediaLifecycleState::audio_ready: return "AUDIO_READY";
     case MediaLifecycleState::unsupported: return "UNSUPPORTED";
+    case MediaLifecycleState::ejecting: return "EJECTING";
+    case MediaLifecycleState::eject_error: return "EJECT_ERROR";
     }
     return "UNKNOWN";
 }
@@ -156,6 +158,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::string api_semantic_json;
     std::uint64_t api_revision = 0;
     bool api_eject_pending = false;
+    bool api_eject_inflight = false;
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
 #ifdef ENABLE_METADATA
@@ -163,17 +166,35 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
         const auto state = controller.state();
         auto semantic = serialize_daemon_snapshot(make_daemon_snapshot(
-            0, state, media_state.state(), loaded_toc, metadata));
+            0, state, media_state.state(), loaded_toc, metadata, media_state.error()));
         if (semantic == api_semantic_json) return false;
         api_semantic_json = std::move(semantic);
         api_state_json = serialize_daemon_snapshot(make_daemon_snapshot(
-            ++api_revision, state, media_state.state(), loaded_toc, metadata));
+            ++api_revision, state, media_state.state(), loaded_toc, metadata,
+            media_state.error()));
         return true;
     };
     publish_api_snapshot();
     std::unique_ptr<ApiServer> api_server;
     if (api_port) {
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
+                if (command.type == ApiCommandType::eject) {
+                    if (media_state.state() == MediaLifecycleState::ejecting) return true;
+                    controller.stop();
+                    engine.synchronize();
+                    worker.discard_reader();
+                    api_eject_pending = true;
+                    api_eject_inflight = false;
+                    media_state.begin_eject();
+                    toc_pending = false;
+#ifdef ENABLE_METADATA
+                    if (metadata_worker) metadata_worker->cancel_pending();
+                    metadata_session.invalidate();
+#endif
+                    std::cout << "media: state=EJECTING\n" << std::flush;
+                    print_state(controller);
+                    return true;
+                }
                 if (controller.state().playback == PlaybackState::no_disc) return false;
                 CecCommand player_command = CecCommand::play;
                 switch (command.type) {
@@ -188,13 +209,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 case ApiCommandType::select_track:
                     if (!controller.select_track(command.value)) return false;
                     engine.synchronize(); print_state(controller); return true;
-                case ApiCommandType::eject:
-                    controller.stop();
-                    engine.synchronize();
-                    worker.discard_reader();
-                    api_eject_pending = true;
-                    print_state(controller);
-                    return true;
+                case ApiCommandType::eject: break;
                 }
                 if (apply_cec_command(controller, player_command)) {
                     engine.synchronize();
@@ -225,8 +240,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
     while (!quitting) {
         const auto now = std::chrono::steady_clock::now();
 #ifdef ENABLE_API
-        if (api_eject_pending && worker.device_released() && media_worker.request(MediaWork::eject))
+        if (api_eject_pending && worker.device_released() && media_worker.request(MediaWork::eject)) {
             api_eject_pending = false;
+            api_eject_inflight = true;
+        }
 #endif
         if (now >= next_media) {
             // Keep status ioctls off the drive while CD-DA reads are active.
@@ -234,7 +251,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             // an opened tray or removed disc.
             bool may_poll_media = controller.state().playback != PlaybackState::playing;
 #ifdef ENABLE_API
-            may_poll_media = may_poll_media && !api_eject_pending;
+            may_poll_media = may_poll_media && !api_eject_pending && !api_eject_inflight;
 #endif
             if (may_poll_media)
                 (void)media_worker.request(MediaWork::observe);
@@ -242,11 +259,23 @@ void run_player_session(const std::string& device, CddaBackend backend,
         }
         MediaWorkerResult media_result{};
         while (media_worker.pop(media_result)) {
+            if (media_state.state() == MediaLifecycleState::ejecting &&
+                media_result.work != MediaWork::eject) {
+                if (media_result.work == MediaWork::read_toc) toc_pending = false;
+                continue;
+            }
             if (!media_result.error.empty()) {
                 if (media_result.error != last_media_error)
                     std::cerr << "media: " << media_result.error << '\n';
                 last_media_error = media_result.error;
                 if (media_result.work == MediaWork::read_toc) toc_pending = false;
+#ifdef ENABLE_API
+                if (media_result.work == MediaWork::eject) {
+                    api_eject_inflight = false;
+                    media_state.eject_failed(media_result.error);
+                    std::cout << "media: state=EJECT_ERROR\n" << std::flush;
+                }
+#endif
                 continue;
             }
             last_media_error.clear();
@@ -278,7 +307,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         worker.discard_reader();
                         print_state(controller);
                     }
-                } else if (!toc_pending && (toc_needs_refresh || !loaded_toc ||
+                } else if (after == MediaLifecycleState::audio_ready && !toc_pending &&
+                           (toc_needs_refresh || !loaded_toc ||
                            controller.state().playback == PlaybackState::no_disc)) {
                     toc_pending = media_worker.request(MediaWork::read_toc);
                 }
@@ -305,6 +335,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 }
                 toc_needs_refresh = false;
             } else {
+#ifdef ENABLE_API
+                api_eject_inflight = false;
+#endif
                 std::cout << "media: eject=completed\n" << std::flush;
                 const auto before = media_state.state();
                 const auto after = media_state.observe(MediaObservation::tray_open);

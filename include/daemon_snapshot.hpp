@@ -6,6 +6,7 @@
 #include "player_controller.hpp"
 #include <cstdint>
 #include <optional>
+#include <string>
 
 // Read-only projection for future API/UI consumers. PlayerController,
 // MediaStateTracker and MetadataSession remain the authoritative owners.
@@ -15,6 +16,7 @@ struct DaemonSnapshot {
     MediaLifecycleState media = MediaLifecycleState::no_disc;
     std::optional<DiscToc> disc;
     MetadataResult metadata;
+    std::string media_error;
     std::optional<std::int64_t> position_in_track_frames;
     std::optional<std::int64_t> current_track_length_frames;
 };
@@ -25,4 +27,5 @@ DaemonSnapshot make_daemon_snapshot(std::uint64_t revision,
                                     const PlayerState& player,
                                     MediaLifecycleState media,
                                     const std::optional<DiscToc>& disc,
-                                    const MetadataResult& metadata);
+                                    const MetadataResult& metadata,
+                                    std::string media_error = {});
