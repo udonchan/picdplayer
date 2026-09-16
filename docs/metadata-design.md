@@ -261,3 +261,15 @@ parserをHTTPより先に作ることでlive serviceなしで正規化と曖昧�
 HTTP timeout、429/503、404、巨大body、深いJSON、invalid UTF-8、redirect拒否もfixture/fakeで試験。
 live lookupと再生中ネットワーク障害の実機試験はユーザーにコマンド・期待結果を提示して行う。
 装置の正常再生をネットワーク障害で停止させないことを完了条件に含める。
+
+## 実機確認（2026-09-16）
+
+ASUS SDRW-08D2S-Uの14曲Audio CDでmetadata有効playerを起動した。media認識とTOC取得後、
+PlayerControllerが先に`STOPPED`となり、その後metadataが`LOADING`から`AVAILABLE`へ遷移した。
+Disc IDは`6JTbUgqHL29gzUyOH5ir60K3hz0-`、候補は1件。metadata取得中もCECのpower status応答を
+継続し、取得後にREGZAリモコンからPlay/Pauseでき、再生状態とmetadata状態が独立していることを
+確認した。初回は`cache=miss`。診断CLIでは同じraw JSONを使った`cache=hit`と14曲の再解析も確認済み。
+
+未確認なのは、lookup中のディスク交換、ネットワーク切断、MusicBrainzの長時間障害、複数候補CD、
+CAA 404を伴う実機運転。これらは再生を止めない異常系試験として残す。現在の429/503 retryは
+1.1秒間隔の最大3回で、`Retry-After` headerの解釈は未実装。
