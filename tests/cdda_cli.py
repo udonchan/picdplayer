@@ -17,6 +17,12 @@ for args, expected in [
     (['--probe-cdda', '/nonexistent', '--probe-drives'], 'one diagnostic'),
     (['--probe-disc-id', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
     (['--probe-disc-id'], 'Usage:'),
+    (['--probe-metadata'], 'Usage:'),
+    (['--lookup-disc'], 'Usage:'),
+    (['--metadata', 'typo'], 'Unknown metadata backend'),
+    (['--metadata', 'musicbrainz'], 'requires --player'),
+    (['--metadata-cache', '/tmp/cache'], 'requires a metadata diagnostic'),
+    (['--probe-metadata', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
     (['--frames', '751'], 'Invalid'),
     (['--frames', '0'], 'Invalid'),
     (['--frames', '12x'], 'Invalid'),
@@ -35,5 +41,11 @@ else:
 result = subprocess.run([sys.argv[1], '--probe-disc-id', '/nonexistent'], capture_output=True, text=True, timeout=3)
 if sys.argv[3] == 'ON':
     assert result.returncode == 1 and 'open /nonexistent' in result.stderr, result
+else:
+    assert result.returncode == 2 and 'metadata support is not built' in result.stderr, result
+
+result = subprocess.run([sys.argv[1], '--lookup-disc', 'bad/id'], capture_output=True, text=True, timeout=3)
+if sys.argv[3] == 'ON':
+    assert result.returncode == 1 and 'invalid MusicBrainz Disc ID' in result.stderr, result
 else:
     assert result.returncode == 2 and 'metadata support is not built' in result.stderr, result

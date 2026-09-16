@@ -25,6 +25,8 @@ StandardInput=null
 StandardOutput=journal
 StandardError=journal
 NoNewPrivileges=true
+CacheDirectory=picdplayer
+CacheDirectoryMode=0750
 
 [Install]
 WantedBy=multi-user.target

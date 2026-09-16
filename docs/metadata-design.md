@@ -1,6 +1,7 @@
 # Metadata subsystem設計案
 
-状態: Phase 1（DiscTocからDisc ID/TOC表現の計算）を実装済み。
+状態: Phase 1〜6の最小実装を完了。実CDのDisc IDでMusicBrainzとCover Art Archiveの
+live lookup、14曲の内部model変換、raw JSON cache hitを確認済み。
 2026-09-16にrepositoryと公式資料を調査。Phase 2以降の型・上限・dependencyは提案。
 
 ## 現状と維持する境界
@@ -179,9 +180,8 @@ reference countをRAIIで包むコードが必要。さらに軽量化が必要�
 両者MIT。nlohmannのCMake targetは`nlohmann_json::nlohmann_json`。
 [nlohmann CMake](https://json.nlohmann.me/integration/cmake/)、[license](https://json.nlohmann.me/home/license/)、[json-c](https://github.com/json-c/json-c)
 
-初回調査ではlibcurl/json-c runtimeのみだった。Phase 1開始時に`libdiscid-dev` 0.6.4の
-導入を確認した。一方、同時点のdpkg/header/pkg-config確認では`libcurl4-openssl-dev`と
-`nlohmann-json3-dev`を検出できていないため、HTTP実装前に再確認する。
+初回調査ではlibcurl/json-c runtimeのみだった。実装開始時に`libdiscid-dev` 0.6.4、
+`libcurl4-openssl-dev` 8.14.1、`nlohmann-json3-dev` 3.11.3の導入を確認した。
 apt cache上のlibdiscid0 0.6.4はInstalled-Size 86 KiB、libcurl4t64は1017 KiB、
 json-c runtimeは168 KiB。これはpackage配置量で、追加RAMや最終image差分の実測ではない。
 必要候補: `libdiscid-dev libcurl4-openssl-dev nlohmann-json3-dev`とCA証明書。
@@ -232,9 +232,10 @@ release-group画像へのfallbackは異なる盤の画像になり得るため�
 ## Cache境界
 
 純粋なJSON変換とHTTP transportを分離し、workerが行うlookupの前後へcacheを挿入可能にする。
-初期実装はcacheなし。将来は`/var/cache/picdplayer/metadata`と`cover-art`を設定可能にし、
+初期実装はraw JSONを`/var/cache/picdplayer/metadata`と`cover-art`へ保存可能にし、
 read-only rootでは別の書き込み可能mountへ置く。cache書き込み失敗でもnetwork結果は利用する。
-disc IDだけでなくTOC identityとschema versionを検証する。候補と選択結果を区別し、
+現在はraw responseをDisc ID/release IDでkey化し、読み出し時に同じparserと上限を適用する。
+期限、schema version、TOC identityを含むcache manifestは今後追加する。候補と選択結果を区別し、
 ユーザーの選択は消去可能cacheではなく`/var/lib/picdplayer`等の永続stateへ置く。
 一時file+rename、容量/期限上限、短いnegative cacheを段階的に追加する。DBは不要。
 
@@ -246,14 +247,14 @@ configure中のdownload/FetchContentは行わない。metadata library target内
 runtimeは`--metadata off|musicbrainz`等で無効化できる案とする。
 
 1. TOC変換+Disc ID、`--probe-disc-id /dev/sr0`、公式vectorとfirst!=1/overflow試験。実装済み。
-2. JSON fixtureから内部候補modelへ変換。0/1/複数、box set、joinphrase、欠落、不正型を試験。
-3. HTTP clientと`--probe-metadata /dev/sr0`、`--lookup-disc ID`を追加。
+2. JSON fixtureから内部候補modelへ変換。0/1/複数、joinphrase、欠落、不正型を試験。実装済み。
+3. HTTP clientと`--probe-metadata /dev/sr0`、`--lookup-disc ID`を追加。実装済み。
    前者は既存TOC取得、後者はhardware不要で候補を診断する。後者だけではTOC整合を保証しない。
    raw responseは明示指定で保存する診断機能に留め、通常ログへ全量表示しない。
-4. MetadataWorkerとmedia lifecycleへ統合。遅延・失敗・取消をfake HTTPで検証。
+4. MetadataWorkerとmedia lifecycleへ統合。世代とTOCを再照合し古い結果を破棄。最小実装済み。
    A→B、A→取り出し→A、LOADING、旧error、旧artwork、終了中を含む世代試験。
-5. 選択releaseのCAA JSON lookup、続いて上限付きimage取得。選択は将来UIも使えるdaemon commandにする。
-6. 必要になった時点でcacheを追加。
+5. 単一候補releaseのCAA JSON lookupとHTTPS画像reference取得を実装。画像binary保存と候補選択UIは未実装。
+6. Disc ID/release ID単位の上限付きraw JSON cache、mkdir、temporary file+renameを実装。
 
 parserをHTTPより先に作ることでlive serviceなしで正規化と曖昧性を確認できる。
 全phaseでmetadata OFF/ON、paranoia OFF/ONと既存CTestを適切に確認する。

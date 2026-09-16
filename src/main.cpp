@@ -4,6 +4,9 @@
 #include "cdda_probe.hpp"
 #include "player_session.hpp"
 #include "metadata_probe.hpp"
+#ifdef ENABLE_METADATA
+#include "metadata_lookup.hpp"
+#endif
 #include <charconv>
 #include <poll.h>
 #include <string_view>
@@ -28,6 +31,9 @@ int main(int argc, char** argv) {
     std::string media_device;
     std::string toc_device;
     std::string disc_id_device;
+    std::string metadata_device, lookup_disc, metadata_mode = "off";
+    std::string metadata_cache = "/var/cache/picdplayer";
+    bool metadata_option = false, metadata_cache_option = false;
     std::string device = "/dev/cec0";
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
@@ -35,6 +41,10 @@ int main(int argc, char** argv) {
         else if (arg == "--probe-media" && i + 1 < argc) media_device = argv[++i];
         else if (arg == "--probe-toc" && i + 1 < argc) toc_device = argv[++i];
         else if (arg == "--probe-disc-id" && i + 1 < argc) disc_id_device = argv[++i];
+        else if (arg == "--probe-metadata" && i + 1 < argc) metadata_device = argv[++i];
+        else if (arg == "--lookup-disc" && i + 1 < argc) lookup_disc = argv[++i];
+        else if (arg == "--metadata" && i + 1 < argc) { metadata_mode = argv[++i]; metadata_option = true; }
+        else if (arg == "--metadata-cache" && i + 1 < argc) { metadata_cache = argv[++i]; metadata_cache_option = true; }
         else if (arg == "--player" && i + 1 < argc) player_device = argv[++i];
         else if (arg == "--audio-device" && i + 1 < argc) { audio_device = argv[++i]; audio_option = true; }
         else if (arg == "--probe-cdda" && i + 1 < argc) cdda_device = argv[++i];
@@ -69,12 +79,13 @@ int main(int argc, char** argv) {
         else if (arg == "--interactive") interactive = true;
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
-            std::cerr << "Usage: cdplayerd [--no-cec] [--cec-device PATH] [--cec-diagnostics] [--probe-drives | --probe-media PATH | --probe-toc PATH | --probe-disc-id PATH | --probe-cdda PATH --cdda-reader direct|paranoia [--track N] [--frames 1..750] [--direct-retries 0..10] [--pcm-output PATH] | --player PATH --cdda-reader direct|paranoia [--audio-device PCM] [--interactive]]\n";
+            std::cerr << "Usage: cdplayerd [--probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] | other modes]\n";
             return arg == "--help" ? 0 : 2;
         }
     }
     if (int(probe_drives) + int(!media_device.empty()) + int(!toc_device.empty()) +
-        int(!disc_id_device.empty()) + int(!cdda_device.empty()) + int(!player_device.empty()) > 1) {
+        int(!disc_id_device.empty()) + int(!metadata_device.empty()) + int(!lookup_disc.empty()) +
+        int(!cdda_device.empty()) + int(!player_device.empty()) > 1) {
         std::cerr << "Choose only one diagnostic mode\n";
         return 2;
     }
@@ -97,6 +108,20 @@ int main(int argc, char** argv) {
     if (!player_device.empty() && backend_name.empty()) {
         std::cerr << "--player requires explicit --cdda-reader\n"; return 2;
     }
+    if (metadata_mode != "off" && metadata_mode != "musicbrainz") {
+        std::cerr << "Unknown metadata backend: " << metadata_mode << '\n'; return 2;
+    }
+    if (metadata_option && player_device.empty()) {
+        std::cerr << "--metadata requires --player\n"; return 2;
+    }
+    if (metadata_cache_option && player_device.empty() && metadata_device.empty() && lookup_disc.empty()) {
+        std::cerr << "--metadata-cache requires a metadata diagnostic or --player\n"; return 2;
+    }
+#ifndef ENABLE_METADATA
+    if (metadata_mode != "off" || !metadata_device.empty() || !lookup_disc.empty()) {
+        std::cerr << "metadata support is not built (ENABLE_METADATA=OFF)\n"; return 2;
+    }
+#endif
     CddaBackend backend = CddaBackend::direct;
     if (!cdda_device.empty() || !player_device.empty()) {
         try {
@@ -109,6 +134,9 @@ int main(int argc, char** argv) {
     }
     try {
 #ifdef ENABLE_METADATA
+        MetadataOptions metadata_options{metadata_cache, true};
+        if (!metadata_device.empty()) { probe_metadata_device(metadata_device, metadata_options); return 0; }
+        if (!lookup_disc.empty()) { probe_metadata_id(lookup_disc, metadata_options); return 0; }
         if (!disc_id_device.empty()) {
             probe_musicbrainz_disc_id(disc_id_device);
             return 0;
@@ -121,7 +149,7 @@ int main(int argc, char** argv) {
 #endif
         if (!player_device.empty()) {
             run_player_session(player_device, backend, audio_device, cec_enabled, device,
-                               cec_diagnostics, interactive);
+                               cec_diagnostics, interactive, metadata_mode == "musicbrainz", metadata_cache);
             return 0;
         }
         if (!cdda_device.empty()) {

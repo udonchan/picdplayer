@@ -4,10 +4,16 @@
 #include "cec_device.hpp"
 #include "media_state.hpp"
 #include "media_worker.hpp"
+#ifdef ENABLE_METADATA
+#include "metadata_lookup.hpp"
+#include "metadata_worker.hpp"
+#include "metadata_session.hpp"
+#endif
 #include <charconv>
 #include <chrono>
 #include <csignal>
 #include <iostream>
+#include <memory>
 #include <poll.h>
 #include <stdexcept>
 #include <sys/signalfd.h>
@@ -86,7 +92,11 @@ bool apply_cec_command(PlayerController& controller, CecCommand command) {
 }
 void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& audio_device, bool use_cec, const std::string& cec_device,
-                        bool cec_diagnostics, bool interactive) {
+                        bool cec_diagnostics, bool interactive, bool metadata_enabled,
+                        const std::string& metadata_cache) {
+#ifndef ENABLE_METADATA
+    (void)metadata_enabled; (void)metadata_cache;
+#endif
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
     auto audio = make_alsa_output(audio_device);
@@ -94,6 +104,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
     MediaWorker media_worker(
         [device] { return read_cd_media(device).observation; },
         [device] { return read_cd_toc(device); });
+#ifdef ENABLE_METADATA
+    std::unique_ptr<MetadataWorker> metadata_worker;
+    if (metadata_enabled) {
+        MetadataOptions options{metadata_cache, true};
+        metadata_worker = std::make_unique<MetadataWorker>(
+            [options](const DiscToc& toc) { return lookup_musicbrainz_disc(toc, options); });
+    }
+#endif
     PlaybackEngine engine(controller, worker, *audio, 0);
     struct StopOnExit {
         PlayerController& controller; PcmWorker& worker; AudioOutput& output;
@@ -113,6 +131,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::optional<DiscToc> loaded_toc;
     bool toc_pending = false;
     bool toc_needs_refresh = true;
+#ifdef ENABLE_METADATA
+    MetadataSession metadata_session;
+#endif
     std::string last_media_error;
     std::string input;
     auto next_cec = std::chrono::steady_clock::now();
@@ -144,6 +165,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (after != before)
                     std::cout << "media: state=" << media_state_name(after) << '\n' << std::flush;
                 if (after == MediaLifecycleState::loading) {
+#ifdef ENABLE_METADATA
+                    if (metadata_worker) metadata_worker->cancel_pending();
+                    metadata_session.invalidate();
+#endif
                     toc_pending = false;
                     toc_needs_refresh = true;
                 } else if (after == MediaLifecycleState::no_disc ||
@@ -151,6 +176,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     toc_pending = false;
                     toc_needs_refresh = true;
                     loaded_toc.reset();
+#ifdef ENABLE_METADATA
+                    if (metadata_worker) metadata_worker->cancel_pending();
+                    metadata_session.invalidate();
+#endif
                     if (controller.state().playback != PlaybackState::no_disc) {
                         controller.remove_disc();
                         engine.set_disc_end(0);
@@ -175,10 +204,36 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     std::cout << "media: audio_disc tracks=" << loaded_toc->tracks.size()
                               << " leadout_lba=" << loaded_toc->leadout_lba << '\n' << std::flush;
                     print_state(controller);
+#ifdef ENABLE_METADATA
+                    if (metadata_worker) {
+                        const auto request = metadata_session.begin(*loaded_toc);
+                        std::cout << "metadata: status=LOADING generation=" << request.generation << '\n' << std::flush;
+                        metadata_worker->request(request);
+                    }
+#endif
                 }
                 toc_needs_refresh = false;
             }
         }
+#ifdef ENABLE_METADATA
+        if (metadata_worker) {
+            MetadataWorkerResult result{};
+            while (metadata_worker->pop(result)) {
+                const auto result_generation = result.generation;
+                if (!metadata_session.apply(std::move(result))) {
+                    std::cout << "metadata: stale_result_discarded generation=" << result_generation << '\n' << std::flush;
+                    continue;
+                }
+                const auto& metadata = metadata_session.snapshot();
+                std::cout << "metadata: status=" << metadata_status_name(metadata.status)
+                          << " candidates=" << metadata.candidates.size()
+                          << " disc_id=" << metadata.disc_id
+                          << " cache=" << (metadata.from_cache ? "hit" : "miss");
+                if (!metadata.error.empty()) std::cout << " error=\"" << metadata.error << '"';
+                std::cout << '\n' << std::flush;
+            }
+        }
+#endif
         if (use_cec && now >= next_cec) {
             const auto update_started = std::chrono::steady_clock::now();
             cec.update();

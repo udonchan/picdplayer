@@ -225,19 +225,28 @@ OFFではlibcdio依存なし。paranoiaの実機読み取り・保存PCMの正�
 
 ## Metadata
 
-Phase 1として、既存の`DiscToc`をlibdiscidへ渡してMusicBrainz Disc IDとTOC query表現を
-計算する診断を追加した。libdiscidにドライブを読ませず、既存のLinux ioctlによるTOC経路を
-維持する。MusicBrainzへのHTTP lookup、metadata model、playerへの非同期統合は未実装。
+既存の`DiscToc`からDisc IDを計算し、MusicBrainz lookup、内部候補model、Cover Art
+reference取得、非同期worker、世代による古い結果の破棄、raw JSON cacheを実装した。
+metadataは明示的に有効化し、失敗しても再生状態を変更しない。
 
 ```sh
 cmake -S . -B build-metadata -DENABLE_METADATA=ON
 cmake --build build-metadata -j1
 ctest --test-dir build-metadata --output-on-failure
 ./build-metadata/cdplayerd --probe-disc-id /dev/sr0
+./build-metadata/cdplayerd --probe-metadata /dev/sr0 --metadata-cache /tmp/picdplayer-cache
+./build-metadata/cdplayerd --lookup-disc DISC_ID --metadata-cache /tmp/picdplayer-cache
+./build-metadata/cdplayerd --player /dev/sr0 --cdda-reader direct \
+  --metadata musicbrainz --metadata-cache /var/cache/picdplayer
 ```
 
-依存パッケージは`libdiscid-dev`。詳細と後続phaseは
+依存パッケージは`libdiscid-dev libcurl4-openssl-dev nlohmann-json3-dev`。複数releaseは
+`AMBIGUOUS`のまま保持し、自動選択しない。単一候補だけCover Art Archiveを問い合わせる。
+cacheは書き込み失敗をlookup失敗にせず、DBを使わない。詳細は
 [metadata subsystem設計案](docs/metadata-design.md)を参照。
+systemd unitは`CacheDirectory=picdplayer`でservice userが書ける
+`/var/cache/picdplayer`を作成する。metadataを常駐運転で使う場合は
+`/etc/default/picdplayer`の`PICDPLAYER_EXTRA_ARGS`へ上記の`--metadata`引数を設定する。
 
 ## プレイヤー実装の進行
 
