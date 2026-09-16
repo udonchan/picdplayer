@@ -223,6 +223,22 @@ ENABLE_PARANOIA=ONでlibcdio-paranoia backendを有効化し、runtimeで選択�
 OFFではlibcdio依存なし。paranoiaの実機読み取り・保存PCMの正常再生は確認済み。
 両backendの条件を揃えた性能比較・連続再生比較は未実施。
 
+## Metadata
+
+Phase 1として、既存の`DiscToc`をlibdiscidへ渡してMusicBrainz Disc IDとTOC query表現を
+計算する診断を追加した。libdiscidにドライブを読ませず、既存のLinux ioctlによるTOC経路を
+維持する。MusicBrainzへのHTTP lookup、metadata model、playerへの非同期統合は未実装。
+
+```sh
+cmake -S . -B build-metadata -DENABLE_METADATA=ON
+cmake --build build-metadata -j1
+ctest --test-dir build-metadata --output-on-failure
+./build-metadata/cdplayerd --probe-disc-id /dev/sr0
+```
+
+依存パッケージは`libdiscid-dev`。詳細と後続phaseは
+[metadata subsystem設計案](docs/metadata-design.md)を参照。
+
 ## プレイヤー実装の進行
 
 backendの採用判断・性能比較は保留中。

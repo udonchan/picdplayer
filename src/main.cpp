@@ -3,6 +3,7 @@
 #include "cd_device.hpp"
 #include "cdda_probe.hpp"
 #include "player_session.hpp"
+#include "metadata_probe.hpp"
 #include <charconv>
 #include <poll.h>
 #include <string_view>
@@ -26,12 +27,14 @@ int main(int argc, char** argv) {
     bool cdda_options = false;
     std::string media_device;
     std::string toc_device;
+    std::string disc_id_device;
     std::string device = "/dev/cec0";
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
         if (arg == "--probe-drives") probe_drives = true;
         else if (arg == "--probe-media" && i + 1 < argc) media_device = argv[++i];
         else if (arg == "--probe-toc" && i + 1 < argc) toc_device = argv[++i];
+        else if (arg == "--probe-disc-id" && i + 1 < argc) disc_id_device = argv[++i];
         else if (arg == "--player" && i + 1 < argc) player_device = argv[++i];
         else if (arg == "--audio-device" && i + 1 < argc) { audio_device = argv[++i]; audio_option = true; }
         else if (arg == "--probe-cdda" && i + 1 < argc) cdda_device = argv[++i];
@@ -66,11 +69,12 @@ int main(int argc, char** argv) {
         else if (arg == "--interactive") interactive = true;
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
-            std::cerr << "Usage: cdplayerd [--no-cec] [--cec-device PATH] [--cec-diagnostics] [--probe-drives | --probe-media PATH | --probe-toc PATH | --probe-cdda PATH --cdda-reader direct|paranoia [--track N] [--frames 1..750] [--direct-retries 0..10] [--pcm-output PATH] | --player PATH --cdda-reader direct|paranoia [--audio-device PCM] [--interactive]]\n";
+            std::cerr << "Usage: cdplayerd [--no-cec] [--cec-device PATH] [--cec-diagnostics] [--probe-drives | --probe-media PATH | --probe-toc PATH | --probe-disc-id PATH | --probe-cdda PATH --cdda-reader direct|paranoia [--track N] [--frames 1..750] [--direct-retries 0..10] [--pcm-output PATH] | --player PATH --cdda-reader direct|paranoia [--audio-device PCM] [--interactive]]\n";
             return arg == "--help" ? 0 : 2;
         }
     }
-    if (int(probe_drives) + int(!media_device.empty()) + int(!toc_device.empty()) + int(!cdda_device.empty()) + int(!player_device.empty()) > 1) {
+    if (int(probe_drives) + int(!media_device.empty()) + int(!toc_device.empty()) +
+        int(!disc_id_device.empty()) + int(!cdda_device.empty()) + int(!player_device.empty()) > 1) {
         std::cerr << "Choose only one diagnostic mode\n";
         return 2;
     }
@@ -104,6 +108,17 @@ int main(int argc, char** argv) {
         }
     }
     try {
+#ifdef ENABLE_METADATA
+        if (!disc_id_device.empty()) {
+            probe_musicbrainz_disc_id(disc_id_device);
+            return 0;
+        }
+#else
+        if (!disc_id_device.empty()) {
+            std::cerr << "metadata support is not built (ENABLE_METADATA=OFF)\n";
+            return 2;
+        }
+#endif
         if (!player_device.empty()) {
             run_player_session(player_device, backend, audio_device, cec_enabled, device,
                                cec_diagnostics, interactive);

@@ -15,6 +15,8 @@ for args, expected in [
     (['--probe-cdda', '/nonexistent'], 'explicit'),
     (['--cdda-reader', 'direct'], 'require --probe-cdda'),
     (['--probe-cdda', '/nonexistent', '--probe-drives'], 'one diagnostic'),
+    (['--probe-disc-id', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
+    (['--probe-disc-id'], 'Usage:'),
     (['--frames', '751'], 'Invalid'),
     (['--frames', '0'], 'Invalid'),
     (['--frames', '12x'], 'Invalid'),
@@ -29,3 +31,9 @@ if sys.argv[2] == 'ON':
     assert result.returncode == 1 and 'open /nonexistent' in result.stderr, result
 else:
     assert result.returncode == 2 and 'not built' in result.stderr, result
+
+result = subprocess.run([sys.argv[1], '--probe-disc-id', '/nonexistent'], capture_output=True, text=True, timeout=3)
+if sys.argv[3] == 'ON':
+    assert result.returncode == 1 and 'open /nonexistent' in result.stderr, result
+else:
+    assert result.returncode == 2 and 'metadata support is not built' in result.stderr, result

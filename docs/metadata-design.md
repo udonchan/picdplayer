@@ -1,7 +1,7 @@
 # Metadata subsystem設計案
 
-状態: 実装前・ユーザー確認待ち。2026-09-16にrepositoryと公式資料を調査。
-この文書の型・上限・CLI・dependencyは提案であり、実装済みではない。
+状態: Phase 1（DiscTocからDisc ID/TOC表現の計算）を実装済み。
+2026-09-16にrepositoryと公式資料を調査。Phase 2以降の型・上限・dependencyは提案。
 
 ## 現状と維持する境界
 
@@ -179,11 +179,12 @@ reference countをRAIIで包むコードが必要。さらに軽量化が必要�
 両者MIT。nlohmannのCMake targetは`nlohmann_json::nlohmann_json`。
 [nlohmann CMake](https://json.nlohmann.me/integration/cmake/)、[license](https://json.nlohmann.me/home/license/)、[json-c](https://github.com/json-c/json-c)
 
-ローカルpackage調査ではlibcurl/json-c runtimeのみ導入済みで、推奨する3つの開発packageは未導入。
+初回調査ではlibcurl/json-c runtimeのみだった。Phase 1開始時に`libdiscid-dev` 0.6.4の
+導入を確認した。一方、同時点のdpkg/header/pkg-config確認では`libcurl4-openssl-dev`と
+`nlohmann-json3-dev`を検出できていないため、HTTP実装前に再確認する。
 apt cache上のlibdiscid0 0.6.4はInstalled-Size 86 KiB、libcurl4t64は1017 KiB、
 json-c runtimeは168 KiB。これはpackage配置量で、追加RAMや最終image差分の実測ではない。
 必要候補: `libdiscid-dev libcurl4-openssl-dev nlohmann-json3-dev`とCA証明書。
-今回installは行っていない。
 
 Buildroot調査revision: `22540e0d41382a8085af110462e2aea6508da4d5`。
 libcurl、json-for-modern-cpp、json-cはpackageあり。libdiscidは完全なtree一覧で未収録を確認。
@@ -244,7 +245,7 @@ ONでlibdiscid/pkg-config、CURL、nlohmann_jsonをREQUIRED検出し、不足pac
 configure中のdownload/FetchContentは行わない。metadata library target内だけへ依存を閉じる。
 runtimeは`--metadata off|musicbrainz`等で無効化できる案とする。
 
-1. TOC変換+Disc ID、`--probe-disc-id /dev/sr0`、公式vectorとfirst!=1/overflow試験。
+1. TOC変換+Disc ID、`--probe-disc-id /dev/sr0`、公式vectorとfirst!=1/overflow試験。実装済み。
 2. JSON fixtureから内部候補modelへ変換。0/1/複数、box set、joinphrase、欠落、不正型を試験。
 3. HTTP clientと`--probe-metadata /dev/sr0`、`--lookup-disc ID`を追加。
    前者は既存TOC取得、後者はhardware不要で候補を診断する。後者だけではTOC整合を保証しない。
