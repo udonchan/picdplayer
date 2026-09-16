@@ -254,6 +254,8 @@ backendの採用判断・性能比較は保留中。
 [PlayerControllerの状態と操作仕様](docs/player-controller.md)と、native音声engine、
 CECリモコン操作、Playback Device応答を実装・実機確認済み。
 [再生の構成と実機試験手順](docs/playback-engine.md)を参照。
+将来のREST/WebSocket/UIが参照する読み取り用の統一値モデルは
+[Daemon state snapshot](docs/daemon-state.md)を参照。
 
 ## メディアライフサイクル
 
