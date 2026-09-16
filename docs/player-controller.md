@@ -6,7 +6,7 @@ backendの性能比較・採用判断は保留し、CECリモコン操作を目�
 
 PlayerControllerがDiscTocのコピーとPlayerStateを所有し、state()は値のsnapshotを返す。
 外部からsnapshotを書き換えてもcontrollerの状態は変わらない。
-将来daemonのmain threadだけがcontrollerを操作し、CECやUIはコマンドを渡す。
+daemonのmain threadだけがcontrollerを操作し、CECや将来のUIはコマンドを渡す。
 workerはPlayerStateを所有・変更しない。
 
 |操作|動作|
@@ -30,7 +30,8 @@ TOCは公開構造体なのでload時に再検証し、不正なTOCでは既存�
 PLAYINGは現在は再生要求の状態で、hardwareでの発音を保証しない。
 位置は操作と音声エンジンのplayback_position通知で変わる。
 読み取りcursorを再生位置として流用しない。finished通知で最初のトラックを選択してSTOPPED。
-エラー時は音声エンジンがstopを呼ぶ。古いPCMの除外はengine/workerの世代番号で行う。
+ALSA underrunはPLAYINGを維持して再bufferする。その他の再生エラー時は音声エンジンが
+stopを呼ぶ。古いPCMの除外はengine/workerの世代番号で行う。
 
 hardware不要のCTestで状態遷移、NO_DISC、番号3開始、曲境界、巨大なseek値、
 不正TOC、media交換、snapshotの独立性を検証する。

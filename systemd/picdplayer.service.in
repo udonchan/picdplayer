@@ -1,0 +1,30 @@
+[Unit]
+Description=PiCDPlayer appliance CD player
+After=local-fs.target sound.target
+Wants=sound.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=@PICDPLAYER_SERVICE_USER@
+Group=@PICDPLAYER_SERVICE_USER@
+SupplementaryGroups=video cdrom audio
+Environment=PICDPLAYER_CD_DEVICE=/dev/sr0
+Environment=PICDPLAYER_CDDA_READER=direct
+Environment=PICDPLAYER_AUDIO_DEVICE=plughw:CARD=vc4hdmi,DEV=0
+Environment=PICDPLAYER_CEC_DEVICE=/dev/cec0
+Environment=PICDPLAYER_EXTRA_ARGS=
+EnvironmentFile=-/etc/default/picdplayer
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/cdplayerd --player ${PICDPLAYER_CD_DEVICE} --cdda-reader ${PICDPLAYER_CDDA_READER} --audio-device ${PICDPLAYER_AUDIO_DEVICE} --cec-device ${PICDPLAYER_CEC_DEVICE} $PICDPLAYER_EXTRA_ARGS
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+KillMode=control-group
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

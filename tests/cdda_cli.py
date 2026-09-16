@@ -6,6 +6,7 @@ for args, expected in [
     (['--player', '/nonexistent', '--cdda-reader', 'typo'], 'unknown CDDA'),
     (['--player', '/nonexistent', '--cdda-reader', 'direct', '--frames', '75'], 'Player accepts'),
     (['--audio-device', 'null'], 'Player accepts'),
+    (['--interactive'], 'requires --player'),
     (['--pcm-output', 'sample.pcm'], 'require --probe-cdda'),
     (['--pcm-output', '-'], 'file path'),
     (['--pcm-output'], 'Usage:'),

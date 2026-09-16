@@ -1,5 +1,8 @@
 # CD-DA / HDMI CLI PoC
 
+以下はnative再生実装前のCLI PoC記録。現在の連続再生・seekは
+[再生engine](playback-engine.md)を参照。再実行時は常駐serviceを停止してから行う。
+
 ## 目的と境界
 
 CD読み取りと音声出力を別々に確認する。今回だけ既存CLIを使用し、

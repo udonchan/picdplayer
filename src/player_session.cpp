@@ -86,7 +86,7 @@ bool apply_cec_command(PlayerController& controller, CecCommand command) {
 }
 void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& audio_device, bool use_cec, const std::string& cec_device,
-                        bool cec_diagnostics) {
+                        bool cec_diagnostics, bool interactive) {
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
     auto audio = make_alsa_output(audio_device);
@@ -104,8 +104,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
     } stop_on_exit{controller, worker, *audio};
     CecDevice cec(cec_device, cec_diagnostics);
     std::cout << "player: backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
-              << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native\n"
-              << "Commands: play pause stop next previous track N seek SECONDS state quit\n";
+              << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native"
+              << " stdin_commands=" << (interactive ? "enabled" : "disabled") << '\n';
+    if (interactive)
+        std::cout << "Commands: play pause stop next previous track N seek SECONDS state quit\n";
     print_state(controller);
     MediaStateTracker media_state;
     std::optional<DiscToc> loaded_toc;
@@ -191,7 +193,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             std::cerr << "player: playback stopped: " << error.what() << '\n';
             print_state(controller);
         }
-        pollfd fds[]{{signals.fd, POLLIN, 0}, {STDIN_FILENO, POLLIN, 0},
+        pollfd fds[]{{signals.fd, POLLIN, 0}, {interactive ? STDIN_FILENO : -1, POLLIN, 0},
                      {use_cec ? cec.poll_fd() : -1, POLLIN, 0}};
         const auto result = poll(fds, 3, 10);
         if (result < 0) {

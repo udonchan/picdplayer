@@ -17,6 +17,7 @@
 int main(int argc, char** argv) {
     bool cec_enabled = true;
     bool cec_diagnostics = false;
+    bool interactive = false;
     bool probe_drives = false;
     std::string cdda_device, backend_name, pcm_output, player_device;
     std::string audio_device = "plughw:CARD=vc4hdmi,DEV=0";
@@ -62,9 +63,10 @@ int main(int argc, char** argv) {
         }
         else if (arg == "--no-cec") cec_enabled = false;
         else if (arg == "--cec-diagnostics") cec_diagnostics = true;
+        else if (arg == "--interactive") interactive = true;
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
-            std::cerr << "Usage: cdplayerd [--no-cec] [--cec-device PATH] [--cec-diagnostics] [--probe-drives | --probe-media PATH | --probe-toc PATH | --probe-cdda PATH --cdda-reader direct|paranoia [--track N] [--frames 1..750] [--direct-retries 0..10] [--pcm-output PATH] | --player PATH --cdda-reader direct|paranoia [--audio-device PCM]]\n";
+            std::cerr << "Usage: cdplayerd [--no-cec] [--cec-device PATH] [--cec-diagnostics] [--probe-drives | --probe-media PATH | --probe-toc PATH | --probe-cdda PATH --cdda-reader direct|paranoia [--track N] [--frames 1..750] [--direct-retries 0..10] [--pcm-output PATH] | --player PATH --cdda-reader direct|paranoia [--audio-device PCM] [--interactive]]\n";
             return arg == "--help" ? 0 : 2;
         }
     }
@@ -81,7 +83,11 @@ int main(int argc, char** argv) {
         return 2;
     }
     if ((!player_device.empty() && probe_only_options) || (audio_option && player_device.empty())) {
-        std::cerr << "Player accepts --cdda-reader, --audio-device and CEC options only\n";
+        std::cerr << "Player accepts --cdda-reader, --audio-device, --interactive and CEC options only\n";
+        return 2;
+    }
+    if (interactive && player_device.empty()) {
+        std::cerr << "--interactive requires --player\n";
         return 2;
     }
     if (!player_device.empty() && backend_name.empty()) {
@@ -99,7 +105,8 @@ int main(int argc, char** argv) {
     }
     try {
         if (!player_device.empty()) {
-            run_player_session(player_device, backend, audio_device, cec_enabled, device, cec_diagnostics);
+            run_player_session(player_device, backend, audio_device, cec_enabled, device,
+                               cec_diagnostics, interactive);
             return 0;
         }
         if (!cdda_device.empty()) {

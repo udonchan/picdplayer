@@ -42,7 +42,7 @@ ctest --test-dir build-direct --output-on-failure
 音楽CDを入れ、TV/アンプの音量を控えめにする。
 
 ```sh
-./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct
+./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct --interactive
 ```
 
 起動直後は`NO_DISC`で、ALSAをopen/configureしてmedia確認を開始する。
@@ -50,7 +50,8 @@ Audio CDが既にあれば非同期にTOCを取得し、Track 1の`STOPPED`に�
 デフォルト出力はplughw:CARD=vc4hdmi,DEV=0。
 変更には--audio-device、CEC登録確認を省くには--no-cecを指定する。
 
-端末でコマンドを1行ずつ入力しEnter:
+`--player`は常駐動作が既定で標準入力を監視しない。手動試験では`--interactive`を
+指定し、端末でコマンドを1行ずつ入力してEnter:
 
 |コマンド|動作|
 |---|---|
@@ -66,7 +67,7 @@ Audio CDが既にあれば非同期にTOCを取得し、Track 1の`STOPPED`に�
 
 最初の試験は起動→play→数秒試聴→stop→state→quit。
 正常なら次にPause/Play、Seek、曲変更を一つずつ確認する。
-入力EOFでも終了する。stderrにエラーが出た場合はログを共有する。
+`--interactive`では入力EOFでも終了する。stderrにエラーが出た場合はログを共有する。
 
 ## CEC入力: キーコード観測
 
@@ -74,8 +75,8 @@ TVが送る`USER_CONTROL_PRESSED`を受信し、PlayerControllerへコマンド�
 Play、Pause、Stop、Skip Forward、Skip Backwardをそれぞれ`play`、`pause`、
 `stop`、`next`、`previous`へ対応付ける。Fast ForwardとRewindは押下ごとに
 10秒（750 CDフレーム）の前後シークとして扱う。
-それ以外のUIコードは16進数で`ignored`として記録する。releaseイベントや
-他のCECメッセージは無視する。
+それ以外のUIコードは16進数で`ignored`として記録する。releaseイベントは無視する。
+再生操作以外のCECメッセージは、後述の電源状態・Active Source関連処理へ渡す。
 
 TVリモコンで誤操作による再生を避けるため、この観測段階はCDを入れなくてもよい。
 CEC登録済みで次を実行し、リモコンの再生系キーを一度ずつ押す。

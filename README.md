@@ -17,7 +17,8 @@ cmake --build build -j1
 
 `/dev/cec0`への読み書き権限（この実機ではvideo group）が必要。
 foregroundで動作し、標準出力・標準エラーにログを出す。Ctrl-C/SIGTERMで終了コード0。
-将来systemd Type=simpleから起動し、journalへログを渡せる構成。
+systemd Type=simpleからの起動とjournalへのログ出力も実装済み。
+上の引数なし起動はCEC確認用で、CD再生には`--player`を使う。
 
 ```sh
 ./build/cdplayerd --no-cec
@@ -53,7 +54,7 @@ cec-ctl -d /dev/cec0 --show-topology
   native連続再生は端末操作モードでPlay/Stopと正常再生を実機確認済み。CECの
   Play/Pause/Stop/Skip Forward/Skip Backward/Fast Forward/Rewindを
   PlayerControllerへ接続済み。
-  API・UI・systemd unitは未実装。
+  systemd unitは実装・自動起動確認済み。API・UIは未実装。
 
 詳細は[実機検証記録](docs/milestone-1.md)。
 
@@ -98,7 +99,7 @@ udonchanはcdrom groupに所属している。診断自体はsysfsの読み取�
 CDROM_DRIVE_STATUSを読み、DISC_OKの場合だけCDROM_DISC_STATUSで種別を調べる。
 fdは正常終了時・例外時とも閉じる。CEC処理は開始しない。
 O_RDONLY | O_NONBLOCKで開くため、ディスクがない状態でも問い合わせできる。
-O_NONBLOCKはioctlの完了時間を保証しないので、現段階ではdaemonループに組み込まない。
+O_NONBLOCKはioctlの完了時間を保証しないため、`--player`ではmedia workerで実行する。
 トレイ操作やロック設定の変更は行わない。cdrom groupの読み取り権限が必要。
 
 |出力|意味|
@@ -124,9 +125,8 @@ ASUS SDRW-08D2S-U（/dev/sr0）で、ユーザーによる操作後に毎回診�
 |CDを取り出し、空で閉じる|NO_DISC|1|
 
 このドライブではトレイ開・空・メディア準備完了を区別でき、取り出し後に
-NO_DISCへ戻ることを確認できた。一回実行の観測であり、自動挿入検出や
-一回実行診断では操作直後のNOT_READY遷移は未検証。音楽CDであることはユーザーの操作情報で、
-診断コードによる判定ではない。
+NO_DISCへ戻ることを確認できた。この一回実行の試験では操作直後のNOT_READY遷移は未検証。
+上の表のDISC_OKだけでは音楽CDと判定できない。種別判定の結果は次節を参照。
 `--player`の常時監視と自動TOC取得は実装済み。TOCの一回実行診断は次節を参照。
 参照: [Linux CD-ROM ioctl](https://docs.kernel.org/userspace-api/ioctl/cdrom.html)。
 
@@ -239,3 +239,12 @@ CECリモコン操作、Playback Device応答を実装・実機確認済み。
 PCMは2秒先読みする。ALSA underrunの自動復旧はhardware非依存テスト済みだが、
 実機では異常を再現できていないため、傷ディスク等での評価を今後行う。
 [状態、設計判断、実機試験手順](docs/media-lifecycle.md)を参照。
+
+## 常駐運転とsystemd
+
+`--player`は標準入力を監視せず、CEC・media・signal eventで常駐する。
+端末からコマンドを入力する開発試験では`--interactive`を追加する。
+専用ユーザー、起動設定、install、unit検証手順は
+[systemd常駐運転](docs/systemd.md)を参照。
+Raspberry Pi実機でsystemdのboot時自動起動、Audio CD認識、CEC操作によるHDMI再生まで
+確認済み。
