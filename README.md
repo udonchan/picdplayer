@@ -286,7 +286,7 @@ curl --fail --show-error -X POST http://127.0.0.1:8080/api/eject
 
 別PCから診断する場合だけ、信頼できる開発用LAN上で明示的に外部listenを有効にする。
 認証とTLSはまだないため、インターネットへ公開しない。外部listenでは状態取得とevent配信だけを
-許可し、操作POSTは403にする。
+許可し、操作POSTは実際の接続元がloopbackの場合だけ許可する。LAN側からのPOSTは403にする。
 
 ```sh
 ./build-api/cdplayerd --player /dev/sr0 --cdda-reader direct \

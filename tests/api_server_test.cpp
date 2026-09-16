@@ -48,7 +48,8 @@ int main() {
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
         check(route_api_request("GET", "/api/state", huge).status == 500);
 
-        ApiServer server("127.0.0.1", 0, provider, commands);
+        // A wildcard listener must still allow commands from a loopback peer.
+        ApiServer server("0.0.0.0", 0, provider, commands);
         std::atomic<bool> done = false;
         std::string received;
         std::thread client([&] {

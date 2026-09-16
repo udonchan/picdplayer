@@ -77,6 +77,18 @@ struct ApiServer::Implementation {
     struct PendingRequest { std::string method; std::string path; std::string body; };
     std::unordered_map<lws*, PendingRequest> pending_requests;
 
+    static bool peer_is_loopback(lws* wsi) {
+        std::array<char, 64> address{};
+        if (!lws_get_peer_simple(wsi, address.data(), address.size())) return false;
+        const std::string_view peer(address.data());
+        return peer == "::1" || peer.starts_with("127.") || peer.starts_with("::ffff:127.");
+    }
+
+    const ApiCommandHandler& handler_for(lws* wsi) const {
+        static const ApiCommandHandler disabled;
+        return peer_is_loopback(wsi) ? command_handler : disabled;
+    }
+
     static int send_response(lws* wsi, const ApiResponse& response) {
         std::array<unsigned char, LWS_PRE + 512> headers{};
         auto* start = headers.data() + LWS_PRE;
@@ -131,7 +143,7 @@ struct ApiServer::Implementation {
                 auto request = std::move(found->second);
                 self->pending_requests.erase(found);
                 return send_response(wsi, route_api_request(request.method, request.path,
-                                     self->state_provider, self->command_handler, request.body));
+                                     self->state_provider, self->handler_for(wsi), request.body));
             }
             if (reason == LWS_CALLBACK_CLOSED_HTTP) {
                 self->pending_requests.erase(wsi);
@@ -161,7 +173,7 @@ struct ApiServer::Implementation {
                 return 0;
             }
             return send_response(wsi, route_api_request(method_name, path, self->state_provider,
-                                 self->command_handler));
+                                 self->handler_for(wsi)));
         } catch (...) {
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;

@@ -173,9 +173,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     publish_api_snapshot();
     std::unique_ptr<ApiServer> api_server;
     if (api_port) {
-        ApiCommandHandler command_handler;
-        if (api_listen == "127.0.0.1" || api_listen == "::1") {
-            command_handler = [&](const ApiCommand& command) {
+        ApiCommandHandler command_handler = [&](const ApiCommand& command) {
                 if (controller.state().playback == PlaybackState::no_disc) return false;
                 CecCommand player_command = CecCommand::play;
                 switch (command.type) {
@@ -204,7 +202,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 }
                 return true;
             };
-        }
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; },
                                                  std::move(command_handler));
@@ -213,7 +210,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         else std::cout << api_listen;
         std::cout << ':' << api_port;
         if (api_listen != "127.0.0.1" && api_listen != "::1")
-            std::cout << " access=external-debug commands=disabled";
+            std::cout << " access=external-debug commands=loopback-only";
         else
             std::cout << " commands=enabled";
         std::cout << '\n' << std::flush;

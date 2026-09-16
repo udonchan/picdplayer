@@ -41,8 +41,9 @@ libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0
 
 loopbackではbodyなしの`POST /api/play|pause|stop|next|previous`を受け付ける。HTTP callbackもmain
 thread上で動くため、handlerはPlayerControllerへ直接commandを適用し、変更時にPlaybackEngineを
-synchronizeする。discがなければ409、成功は204を返す。外部debug listenではcommand handler自体を
-渡さず403とし、認証がない状態でLAN上から操作できないようにする。
+synchronizeする。discがなければ409、成功は204を返す。外部debug listenでも実際のpeer addressが
+loopbackの場合だけhandlerを利用し、LAN上のpeerには403を返す。bind addressだけで判定すると
+`0.0.0.0`でlisten中のPi自身からの操作も拒否するため、接続単位で判定する。
 
 `POST /api/seek`は`{"offset_seconds": N}`による相対seek、`POST /api/track`は`{"track": N}`を
 受け付ける。JSON objectは指定field 1個だけ、bodyは4 KiB以下、seekは±86400秒、trackは1〜99に
