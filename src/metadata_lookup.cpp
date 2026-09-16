@@ -83,7 +83,8 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
     if (!body) {
         HttpClient client;
         const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
-                                         artwork_json_limit, options.cancelled);
+                                         artwork_json_limit, options.cancelled,
+                                         RedirectPolicy::follow_https);
         if (response.status == 404) { ArtworkInfo result; result.status = ArtworkStatus::unavailable; return result; }
         if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
         if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");

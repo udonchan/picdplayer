@@ -42,6 +42,9 @@ routeのmethod/path/size上限をhardwareなしで試験し、実loopback socket
 200とJSON bodyを確認した。sandboxではsocket作成が制限されるため、この統合テストはloopbackを
 許可した環境で実行する必要がある。
 
+2026-09-16にMacからPiのLAN address `192.168.1.2:8080`へ問い合わせ、disc、player、metadataを
+含むJSON responseを取得できることを実機確認した。外部listenは引き続き明示optionの場合だけ有効。
+
 ## HTTP server候補
 
 実機のRaspberry Pi OSでは2026-09-16時点でHTTP server開発libraryは未導入。

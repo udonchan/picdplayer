@@ -274,6 +274,11 @@ Disc IDは`6JTbUgqHL29gzUyOH5ir60K3hz0-`、候補は1件。metadata取得中もC
 CAA 404を伴う実機運転。これらは再生を止めない異常系試験として残す。現在の429/503 retryは
 1.1秒間隔の最大3回で、`Retry-After` headerの解釈は未実装。
 
+同日の外部API確認でCover Art ArchiveのJSON endpointが307を返し、artworkだけ`ERROR`になることを
+確認した。CAAが仕様としてredirectを利用するため、CAA requestに限り最大3回のHTTPS redirectを
+許可した。MusicBrainz requestはredirect拒否を維持する。修正後のartwork取得は次回の実機lookupで
+再確認する。
+
 shutdown時はMetadataWorkerの終了要求をlibcurl progress callbackとrate-limit待機へ伝える。
 HTTP timeout/retryの完了までjoinしてsystemdの停止期限を超えることを避ける。CDDAとmediaの
 kernel ioctl自体は安全に強制cancelできないため、終了時に進行中ioctlが返るまで待つ設計を維持する。
