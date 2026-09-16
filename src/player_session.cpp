@@ -98,12 +98,13 @@ bool apply_cec_command(PlayerController& controller, CecCommand command) {
 void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& audio_device, bool use_cec, const std::string& cec_device,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
-                        const std::string& metadata_cache, int api_port) {
+                        const std::string& metadata_cache, const std::string& api_listen,
+                        int api_port) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache;
 #endif
 #ifndef ENABLE_API
-    (void)api_port;
+    (void)api_listen; (void)api_port;
 #endif
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
@@ -156,9 +157,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
     publish_api_snapshot();
     std::unique_ptr<ApiServer> api_server;
     if (api_port) {
-        api_server = std::make_unique<ApiServer>("127.0.0.1", api_port,
+        api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; });
-        std::cout << "api: listening=http://127.0.0.1:" << api_port << '\n' << std::flush;
+        std::cout << "api: listening=http://";
+        if (api_listen.find(':') != std::string::npos) std::cout << '[' << api_listen << ']';
+        else std::cout << api_listen;
+        std::cout << ':' << api_port;
+        if (api_listen != "127.0.0.1" && api_listen != "::1")
+            std::cout << " access=external-debug";
+        std::cout << '\n' << std::flush;
     }
     auto next_api_snapshot = std::chrono::steady_clock::now();
 #endif

@@ -271,6 +271,17 @@ cmake --build build-api -j1
 curl --fail --show-error http://127.0.0.1:8080/api/state
 ```
 
+別PCから診断する場合だけ、信頼できる開発用LAN上で明示的に外部listenを有効にする。
+認証とTLSはまだないため、インターネットへ公開しない。
+
+```sh
+./build-api/cdplayerd --player /dev/sr0 --cdda-reader direct \
+  --metadata musicbrainz --api-listen 0.0.0.0 --api-port 8080
+
+# 別PCから。PI_ADDRESSはRaspberry PiのLANアドレス
+curl --fail --show-error http://PI_ADDRESS:8080/api/state
+```
+
 依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。状態変更POSTとWebSocket eventsは
 次段階で追加する。JSON schemaとthread境界は[設計記録](docs/daemon-state.md)を参照。
 

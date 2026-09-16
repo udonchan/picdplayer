@@ -29,6 +29,10 @@ libwebsockets 4.3.5をoptional dependencyとして追加した。`--api-port POR
 `127.0.0.1`へlistenする。既定ではsocketを作らない。headerは2 KiB、同時header poolは4、
 service bufferは4 KiB、state responseは1 MiBを上限とする。未知pathは404、GET以外は405。
 
+デバッグ時は`--api-listen 0.0.0.0`またはPiの数値LANアドレスを明示して外部から照会できる。
+hostnameは受け付けず、意図しない名前解決を行わない。認証・TLS・操作APIはまだないため、
+信頼できる開発用LANだけで使用し、port forwardingやインターネット公開は行わない。
+
 libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0)`を呼ぶ。JSONはmain threadで
 250 msごとに完成済み文字列へ更新し、HTTP callbackはその文字列を返すだけにする。`revision`は
 このsnapshot publicationごとに増える。将来WebSocketで送る際は内容が変化した場合だけ通知し、
