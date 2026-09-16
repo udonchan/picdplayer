@@ -36,7 +36,7 @@ int main() {
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
         check(route_api_request("GET", "/api/state", huge).status == 500);
 
-        ApiServer server("127.0.0.1", 0, provider);
+        ApiServer server("127.0.0.1", 0, provider, commands);
         std::atomic<bool> done = false;
         std::string received;
         std::thread client([&] {
@@ -61,6 +61,31 @@ int main() {
         client.join();
         check(received.find("200 OK") != std::string::npos);
         check(received.find(R"({"revision":7})") != std::string::npos);
+
+        done = false;
+        received.clear();
+        std::thread post_client([&] {
+            const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+            if (fd < 0) { done = true; return; }
+            timeval timeout{2, 0};
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+            sockaddr_in address{}; address.sin_family = AF_INET;
+            address.sin_port = htons(static_cast<std::uint16_t>(server.port()));
+            address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            if (connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0) {
+                constexpr char request[] = "POST /api/previous HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+                (void)send(fd, request, std::strlen(request), 0);
+                char buffer[2048];
+                for (;;) { const auto count = recv(fd, buffer, sizeof(buffer), 0); if (count <= 0) break; received.append(buffer, static_cast<std::size_t>(count)); }
+            }
+            close(fd); done = true;
+        });
+        for (int i = 0; i < 1000 && !done; ++i) {
+            server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        post_client.join();
+        check(received.find("HTTP/1.1 204") != std::string::npos);
+        check(command_calls == 2 && received_command == ApiCommand::previous);
 
         std::atomic<bool> got_initial_event = false;
         std::atomic<bool> websocket_done = false;
