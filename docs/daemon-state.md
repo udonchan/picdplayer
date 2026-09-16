@@ -18,6 +18,11 @@ UI向けには絶対LBAに加え、現在トラック内の`position_in_track_fr
 `revision`は将来main threadが状態更新ごとに増やし、WebSocket clientが更新順序を判定するための値。
 現段階では値型と純粋な生成処理だけを実装し、共有mutex、HTTP thread、event queueは導入しない。
 
+`ENABLE_API=ON`では`GET /api/state`用のJSON serializerもbuildする。JSONはrevision、player、
+media、TOC、metadata候補、選択release、Cover Art状態を含む。optional値は欠落させず`null`にし、
+UIがmedia状態によって型を推測する必要をなくす。serializer自体はsocketを持たず、fixture testで
+schemaとCD frame単位を確認する。
+
 ## HTTP server候補
 
 実機のRaspberry Pi OSでは2026-09-16時点でHTTP server開発libraryは未導入。
