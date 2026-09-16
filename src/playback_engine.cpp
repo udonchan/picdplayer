@@ -1,16 +1,25 @@
 #include "playback_engine.hpp"
 #include <algorithm>
 #include <stdexcept>
+#include <iostream>
 
 PlaybackEngine::PlaybackEngine(PlayerController& c, PcmWorker& w, AudioOutput& a, std::int32_t end)
-    : controller_(c), worker_(w), output_(a), end_(end) {}
+    : controller_(c), worker_(w), output_(a), end_(end) {
+    if (end < 0) throw std::invalid_argument("invalid disc end");
+}
+void PlaybackEngine::set_disc_end(std::int32_t end) {
+    if (end < 0) throw std::invalid_argument("invalid disc end");
+    end_ = end;
+}
 void PlaybackEngine::synchronize() {
+    last_tick_ = std::chrono::steady_clock::now();
     active_ = false;
     worker_.cancel();
     output_.reset();
     block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
     const auto state = controller_.state();
     if (state.playback == PlaybackState::playing) {
+        if (end_ <= *state.position_lba) throw std::runtime_error("disc end is unavailable");
         start_ = *state.position_lba;
         generation_ = worker_.start(start_, end_);
         active_ = true;
@@ -18,6 +27,9 @@ void PlaybackEngine::synchronize() {
 }
 void PlaybackEngine::tick() {
     if (!active_) return;
+    const auto now = std::chrono::steady_clock::now();
+    const auto gap_us = std::chrono::duration_cast<std::chrono::microseconds>(now - last_tick_).count();
+    last_tick_ = now;
     try {
         const auto status = worker_.status();
         if (!status.error.empty()) throw std::runtime_error(status.error);
@@ -26,7 +38,8 @@ void PlaybackEngine::tick() {
             return;
         }
         if (!primed_) {
-            if (status.queued < 5 && !status.done) return; // 1 sec prebuffer, shorter at disc end.
+            if (status.queued < prebuffer_blocks_ && !status.done)
+                return; // Adaptive prebuffer, shorter at disc end.
             primed_ = true;
         }
         // Bound work per main-loop iteration even for a sink that never blocks.
@@ -50,10 +63,58 @@ void PlaybackEngine::tick() {
             draining_ = true;
             if (output_.drain()) { controller_.finished(); synchronize(); }
         }
+    } catch (const AudioUnderrun& error) {
+        const auto status = worker_.status();
+        std::cerr << "player: failure_context tick_gap_us=" << gap_us
+                  << " queued_blocks=" << status.queued
+                  << " pending_samples=" << (block_.samples.size() - offset_)
+                  << " submitted_stereo_frames=" << submitted_
+                  << " last_read_us=" << status.last_read_us
+                  << " read_inflight_us=" << status.read_inflight_us << '\n';
+        try {
+            // At XRUN ALSA has consumed everything it accepted. Resume at the
+            // last whole CD frame submitted, avoiding a large audible repeat.
+            const auto resume = static_cast<std::int32_t>(std::min<std::int64_t>(
+                end_ - 1, start_ + submitted_ / 588));
+            controller_.playback_position(resume);
+            active_ = false;
+            worker_.discard_reader();
+            output_.reset();
+            block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
+            start_ = *controller_.state().position_lba;
+            prebuffer_blocks_ = std::min(pcm_queue_capacity_blocks,
+                                         prebuffer_blocks_ + std::size_t{5});
+            ++underrun_recoveries_;
+            generation_ = worker_.start(start_, end_);
+            active_ = true;
+            last_tick_ = std::chrono::steady_clock::now();
+            std::cerr << "player: underrun recovery=" << underrun_recoveries_
+                      << " resume_lba=" << start_
+                      << " prebuffer_blocks=" << prebuffer_blocks_
+                      << " reason=" << error.what() << '\n';
+            return;
+        } catch (...) {
+            controller_.stop();
+            active_ = false;
+            worker_.cancel();
+            worker_.discard_reader();
+            try { output_.reset(); } catch (...) {}
+            throw;
+        }
     } catch (...) {
+        const auto status = worker_.status();
+        std::cerr << "player: failure_context tick_gap_us=" << gap_us
+                  << " queued_blocks=" << status.queued
+                  << " pending_samples=" << (block_.samples.size() - offset_)
+                  << " submitted_stereo_frames=" << submitted_
+                  << " last_read_us=" << status.last_read_us
+                  << " read_inflight_us=" << status.read_inflight_us << '\n';
         controller_.stop();
         active_ = false;
         worker_.cancel();
+        // A USB reset or media change can leave the open drive handle unusable.
+        // Recreate it on the worker thread before a later Play command.
+        worker_.discard_reader();
         output_.reset();
         throw;
     }

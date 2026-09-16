@@ -7,7 +7,7 @@ CddaReaderはseek後に連続PCMを取得する。PlayerState・ALSA・threadは
 
 ```sh
 cmake -S . -B build-direct -DENABLE_PARANOIA=OFF
-cmake --build build-direct -j2
+cmake --build build-direct -j1
 ctest --test-dir build-direct --output-on-failure
 python3 tests/smoke.py build-direct/cdplayerd
 ```
@@ -54,7 +54,8 @@ first_block_usはseek後の最初の15フレーム取得まで。発音開始時
 O_NONBLOCKでもioctlの所要時間は制限できない。診断はCECループに入らず同期実行。
 SIGINT/SIGTERMの即時停止やkernel I/Oからの即時復帰は保証しない。
 単一診断の読み取り量上限もwall-clock timeoutではない。
-メディア交換によるTOCとPCMの不整合検出は未実装。
+playerは明示的な取り出しを観測するとreaderを破棄してTOCを再取得する。
+取り出し状態を一度も観測できないほど速い交換のdisc identity検証は未実装。
 
 hardwareなしのテストでは実際のLinuxIoctlReaderへ偽transportを注入し、
 共通interface経由の連続位置・seek・75フレーム分割・失敗バッファ隔離・
@@ -67,7 +68,7 @@ track 1、LBA 0から75フレーム取得成功。追加retry=0、全要求errno
 open=6474us、初回15フレーム=3122051us、次=105413us、
 残り3要求は約49ms、全体=3374594us。
 初回待ちの原因は未特定。seek=8usはcursor更新だけで物理seek時間ではない。
-後続の保存PCMはユーザーが正常再生を確認した。連続再生は未検証。
+後続の保存PCMと、direct backendの連続再生をユーザーが確認した。
 
 ## PCMファイル保存と試聴
 
@@ -120,7 +121,7 @@ CTest 5件と既存の停止smoke testは成功済み。
 
 ```sh
 cmake -S . -B build-paranoia -DENABLE_PARANOIA=ON
-cmake --build build-paranoia -j2
+cmake --build build-paranoia -j1
 ctest --test-dir build-paranoia --output-on-failure
 ```
 
@@ -145,7 +146,7 @@ threadの生成は行わない。callback内でI/Oや例外送出はしない。
 
 有限retry設定はwall-clock timeoutではなく、library/driver内で長時間blockし得る。
 NEVERSKIPは使わない。skipを検出してもlibrary呼び出しが戻るまでは停止できない。
-現在のCECループへ統合せず診断モードに留める。
+共通PlaybackEngineからruntime選択できる。paranoia backendの長時間連続再生は未試験。
 
 ### ユーザーによる次の実機試験
 
@@ -179,7 +180,7 @@ callback件数を物理I/O回数・取得セクター数・retry回数とは同�
 openと最初のブロック取得の合計は約11.62秒（既存TOC取得時間を含まない）。
 以前のdirect試験とは実行時の回転・キャッシュ条件が揃っておらず、優劣は未判断。
 ユーザーが後続の保存PCMを再生し、問題なく聞こえることを確認済み。
-長時間連続読み取り、seek後の取得、ALSA underrunは未検証。
+paranoia backendの長時間連続読み取り、seek後の取得、ALSA underrunは未検証。
 今回のparanoia出力をPi→HDMI→NR1200で試聴したかは未確認。
 正常試聴だけでbit-perfectや傷CDへの優位性を保証しない。
-ON構成のCTest 6件、OFF構成の5件、既存停止smoke testは成功済み。
+現在のON構成はCTest 12件、OFF構成は11件に成功している。

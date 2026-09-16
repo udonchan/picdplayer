@@ -26,17 +26,21 @@ public:
         if (samples.size() % 2) throw std::invalid_argument("ALSA requires stereo frames");
         const auto result = snd_pcm_writei(pcm_, samples.data(), samples.size() / 2);
         if (result == -EAGAIN || result == -EINTR) return 0;
-        checked(static_cast<int>(result), "ALSA write (underrun stops playback)");
+        if (result == -EPIPE) throw AudioUnderrun("ALSA write: underrun");
+        checked(static_cast<int>(result), "ALSA write");
         return static_cast<std::size_t>(result);
     }
     std::int64_t delay() override {
         snd_pcm_sframes_t value = 0;
-        checked(snd_pcm_delay(pcm_, &value), "ALSA delay");
+        const auto result = snd_pcm_delay(pcm_, &value);
+        if (result == -EPIPE) throw AudioUnderrun("ALSA delay: underrun");
+        checked(result, "ALSA delay");
         return std::max<snd_pcm_sframes_t>(0, value);
     }
     bool drain() override {
         const auto result = snd_pcm_drain(pcm_);
         if (result == -EAGAIN || result == -EINTR) return false;
+        if (result == -EPIPE) throw AudioUnderrun("ALSA drain: underrun");
         checked(result, "ALSA drain"); return true;
     }
 };

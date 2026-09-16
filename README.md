@@ -11,7 +11,7 @@ native再生にlibasound（開発時はlibasound2-dev）が必要。Node.js、ro
 
 ```sh
 cmake -S . -B build
-cmake --build build
+cmake --build build -j1
 ./build/cdplayerd
 ```
 
@@ -31,7 +31,8 @@ cec-ctl -d /dev/cec0 --show-topology
 
 ## 現段階の設計
 
-- 単一process。既存daemonモードは単一thread、--playerはCD読み取りworkerを1本追加。
+- 単一process。既存daemonモードは単一thread、--playerはCD読み取りとmedia確認の
+  workerを各1本追加。
   signalfd + pollで停止を通常のイベントとして扱う。
 - CecDeviceにLinux ioctlを隔離。Playback Device登録、CEC応答、リモコン入力を担当する。
 - デバイス未出現・Physical Address未確定なら250ms間隔で再確認する。
@@ -56,7 +57,7 @@ cec-ctl -d /dev/cec0 --show-topology
 
 詳細は[実機検証記録](docs/milestone-1.md)。
 
-## 光学ドライブ検出（次段階の最初のステップ）
+## 光学ドライブ検出
 
 ```sh
 ./build/cdplayerd --probe-drives
@@ -81,7 +82,8 @@ udonchanはcdrom groupに所属している。診断自体はsysfsの読み取�
 
 検出中に抜くと属性読み取りエラーになることがある。その場合は再実行する。
 今回の試験は空・複数・除外対象・除去後のsnapshot・属性欠落の疑似sysfsと、
-実機の接続状態で実施。実機のUSB抜き差しや常時監視は未実施。
+実機の接続状態で実施。USB device自体の抜き差しは未実施。
+`--player`ではdisc状態を常時監視する。
 この結果をもとにしたメディア状態の診断は次節を参照。
 
 参照: [Linux sysfs](https://cdn.kernel.org/doc/html/latest/filesystems/sysfs.html)、
@@ -123,9 +125,9 @@ ASUS SDRW-08D2S-U（/dev/sr0）で、ユーザーによる操作後に毎回診�
 
 このドライブではトレイ開・空・メディア準備完了を区別でき、取り出し後に
 NO_DISCへ戻ることを確認できた。一回実行の観測であり、自動挿入検出や
-操作直後のNOT_READY遷移は未検証。音楽CDであることはユーザーの操作情報で、
+一回実行診断では操作直後のNOT_READY遷移は未検証。音楽CDであることはユーザーの操作情報で、
 診断コードによる判定ではない。
-常時監視は未実装。TOCの一回実行診断は次節を参照。
+`--player`の常時監視と自動TOC取得は実装済み。TOCの一回実行診断は次節を参照。
 参照: [Linux CD-ROM ioctl](https://docs.kernel.org/userspace-api/ioctl/cdrom.html)。
 
 ### ディスク種別の診断
@@ -227,3 +229,13 @@ backendの採用判断・性能比較は保留中。
 [PlayerControllerの状態と操作仕様](docs/player-controller.md)と、native音声engine、
 CECリモコン操作、Playback Device応答を実装・実機確認済み。
 [再生の構成と実機試験手順](docs/playback-engine.md)を参照。
+
+## メディアライフサイクル
+
+空で起動してCDの挿入・取り出しを扱うため、hardware観測とapplication状態を
+分離した`MediaStateTracker`と、blocking ioctlをmain loop外で直列実行する
+`MediaWorker`を追加した。Audio CDを認識するとTOCを読み、`PlayerController`を
+`STOPPED`へ遷移させる。取り出しと非対応discでは`NO_DISC`へ戻る。
+PCMは2秒先読みする。ALSA underrunの自動復旧はhardware非依存テスト済みだが、
+実機では異常を再現できていないため、傷ディスク等での評価を今後行う。
+[状態、設計判断、実機試験手順](docs/media-lifecycle.md)を参照。

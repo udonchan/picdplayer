@@ -2,6 +2,8 @@
 #include "playback_engine.hpp"
 #include "cd_device.hpp"
 #include "cec_device.hpp"
+#include "media_state.hpp"
+#include "media_worker.hpp"
 #include <charconv>
 #include <chrono>
 #include <csignal>
@@ -43,6 +45,28 @@ void print_state(const PlayerController& controller) {
               << " lba=" << state.position_lba.value_or(0) << '\n' << std::flush;
 }
 
+const char* media_state_name(MediaLifecycleState state) {
+    switch (state) {
+    case MediaLifecycleState::no_disc: return "NO_DISC";
+    case MediaLifecycleState::loading: return "LOADING";
+    case MediaLifecycleState::audio_ready: return "AUDIO_READY";
+    case MediaLifecycleState::unsupported: return "UNSUPPORTED";
+    }
+    return "UNKNOWN";
+}
+
+bool same_toc(const DiscToc& left, const DiscToc& right) {
+    if (left.leadout_lba != right.leadout_lba || left.tracks.size() != right.tracks.size())
+        return false;
+    for (std::size_t i = 0; i < left.tracks.size(); ++i) {
+        const auto& a = left.tracks[i];
+        const auto& b = right.tracks[i];
+        if (a.number != b.number || a.start_lba != b.start_lba || a.length_frames != b.length_frames)
+            return false;
+    }
+    return true;
+}
+
 bool apply_cec_command(PlayerController& controller, CecCommand command) {
     constexpr auto cec_seek_frames = 10 * cd_frames_per_second;
     const auto before = controller.state();
@@ -64,12 +88,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& audio_device, bool use_cec, const std::string& cec_device,
                         bool cec_diagnostics) {
     Signals signals; // Worker inherits the blocked signal mask.
-    const auto toc = read_cd_toc(device);
     PlayerController controller;
-    controller.load_disc(toc);
     auto audio = make_alsa_output(audio_device);
     PcmWorker worker([=] { return make_cdda_reader(backend, device); });
-    PlaybackEngine engine(controller, worker, *audio, toc.leadout_lba);
+    MediaWorker media_worker(
+        [device] { return read_cd_media(device).observation; },
+        [device] { return read_cd_toc(device); });
+    PlaybackEngine engine(controller, worker, *audio, 0);
     struct StopOnExit {
         PlayerController& controller; PcmWorker& worker; AudioOutput& output;
         ~StopOnExit() {
@@ -82,11 +107,76 @@ void run_player_session(const std::string& device, CddaBackend backend,
               << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native\n"
               << "Commands: play pause stop next previous track N seek SECONDS state quit\n";
     print_state(controller);
+    MediaStateTracker media_state;
+    std::optional<DiscToc> loaded_toc;
+    bool toc_pending = false;
+    bool toc_needs_refresh = true;
+    std::string last_media_error;
     std::string input;
     auto next_cec = std::chrono::steady_clock::now();
+    auto next_media = std::chrono::steady_clock::now();
     bool quitting = false;
     while (!quitting) {
         const auto now = std::chrono::steady_clock::now();
+        if (now >= next_media) {
+            // Keep status ioctls off the drive while CD-DA reads are active.
+            // A read failure stops playback; polling then resumes and observes
+            // an opened tray or removed disc.
+            if (controller.state().playback != PlaybackState::playing)
+                (void)media_worker.request(MediaWork::observe);
+            next_media = now + std::chrono::milliseconds(500);
+        }
+        MediaWorkerResult media_result{};
+        while (media_worker.pop(media_result)) {
+            if (!media_result.error.empty()) {
+                if (media_result.error != last_media_error)
+                    std::cerr << "media: " << media_result.error << '\n';
+                last_media_error = media_result.error;
+                if (media_result.work == MediaWork::read_toc) toc_pending = false;
+                continue;
+            }
+            last_media_error.clear();
+            if (media_result.work == MediaWork::observe) {
+                const auto before = media_state.state();
+                const auto after = media_state.observe(*media_result.observation);
+                if (after != before)
+                    std::cout << "media: state=" << media_state_name(after) << '\n' << std::flush;
+                if (after == MediaLifecycleState::loading) {
+                    toc_pending = false;
+                    toc_needs_refresh = true;
+                } else if (after == MediaLifecycleState::no_disc ||
+                           after == MediaLifecycleState::unsupported) {
+                    toc_pending = false;
+                    toc_needs_refresh = true;
+                    loaded_toc.reset();
+                    if (controller.state().playback != PlaybackState::no_disc) {
+                        controller.remove_disc();
+                        engine.set_disc_end(0);
+                        engine.synchronize();
+                        worker.discard_reader();
+                        print_state(controller);
+                    }
+                } else if (!toc_pending && (toc_needs_refresh || !loaded_toc ||
+                           controller.state().playback == PlaybackState::no_disc)) {
+                    toc_pending = media_worker.request(MediaWork::read_toc);
+                }
+            } else {
+                toc_pending = false;
+                if (media_state.state() != MediaLifecycleState::audio_ready || !media_result.toc)
+                    continue;
+                if (!loaded_toc || !same_toc(*loaded_toc, *media_result.toc) ||
+                    controller.state().playback == PlaybackState::no_disc) {
+                    controller.load_disc(*media_result.toc);
+                    engine.set_disc_end(media_result.toc->leadout_lba);
+                    engine.synchronize();
+                    loaded_toc = *media_result.toc;
+                    std::cout << "media: audio_disc tracks=" << loaded_toc->tracks.size()
+                              << " leadout_lba=" << loaded_toc->leadout_lba << '\n' << std::flush;
+                    print_state(controller);
+                }
+                toc_needs_refresh = false;
+            }
+        }
         if (use_cec && now >= next_cec) {
             const auto update_started = std::chrono::steady_clock::now();
             cec.update();
@@ -168,6 +258,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
     }
     controller.stop();
     engine.synchronize();
-    std::cout << "player: output stopped; waiting for outstanding CD I/O\n" << std::flush;
+    std::cout << "player: output stopped; waiting for outstanding drive I/O\n" << std::flush;
     // worker joins before audio/signals destruction. No detached hardware access.
 }

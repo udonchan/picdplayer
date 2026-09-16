@@ -3,10 +3,12 @@
 ## 構成
 
 - main thread: PlayerController、ALSA output、コマンド受付、CEC登録の状態確認。
-- worker 1本: CddaReaderを生成・seek・read・破棄。PlayerStateにはアクセスしない。
-- queue: 15 CDフレーム（200ms）×最大10ブロック、約352800 bytes。
+- CD worker 1本: CddaReaderを生成・seek・read・破棄。PlayerStateにはアクセスしない。
+- media worker 1本: blockingし得るdrive statusとTOC取得を直列実行する。
+- queue: 15 CDフレーム（200ms）×最大20ブロック、約705600 bytes。
   別途workerの読み取り中ブロックとmainの送信中ブロック、ALSA bufferがある。
-- 再生開始前に5ブロック（1秒）を蓄積。ディスク終端が近ければ短くても開始。
+- 再生開始前に10ブロック（2秒）を蓄積。ディスク終端が近ければ短くても開始。
+- ALSA underrun後は5ブロック（1秒）ずつ先読みを増やし、20ブロックで上限とする。
 
 queueの上限はbackpressureとして働き、満杯ならworkerがcondition variableで待機する。
 Stop/Seekで世代番号を更新し、queue・main送信中PCM・ALSA bufferを破棄。
@@ -14,8 +16,10 @@ Stop/Seekで世代番号を更新し、queue・main送信中PCM・ALSA bufferを
 
 ALSAはS16 native-endian / stereo / 44100Hz、resampling無効、要求buffer時間200ms。
 plughwがHDMIの伝送形式へ変換する。writeはnonblockingで部分書き込みとEAGAINを処理。
-実hardwareのbuffer設定・安定性は未検証。underrunはログを出してSTOPPEDにする。
-自動復旧で失敗を隠さず、必要なら次の段階で回復方針を決める。
+direct backendの通常再生と固定bufferの安定性は実機確認済み。ALSA underrunでは
+送信済み位置からreaderを開き直し、再bufferして`PLAYING`を維持する。
+自動復旧経路はhardware非依存テスト済みだが、実機では異常を再現できていない。
+詳細と今後の傷ディスク試験は[メディアライフサイクル](media-lifecycle.md)を参照。
 
 再生位置はsubmitted PCM sample frames - ALSA delayからCDフレームへ切り下げる。
 TV/ARC/アンプ内部の遅延は含められない。read cursorは再生位置ではない。
@@ -29,7 +33,7 @@ paranoiaは引き続きoptional。
 
 ```sh
 cmake -S . -B build-direct -DENABLE_PARANOIA=OFF
-cmake --build build-direct -j2
+cmake --build build-direct -j1
 ctest --test-dir build-direct --output-on-failure
 ```
 
@@ -41,7 +45,8 @@ ctest --test-dir build-direct --output-on-failure
 ./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct
 ```
 
-起動時はTOC取得とALSAのopen/configure後、STOPPEDになる。
+起動直後は`NO_DISC`で、ALSAをopen/configureしてmedia確認を開始する。
+Audio CDが既にあれば非同期にTOCを取得し、Track 1の`STOPPED`になる。
 デフォルト出力はplughw:CARD=vc4hdmi,DEV=0。
 変更には--audio-device、CEC登録確認を省くには--no-cecを指定する。
 
@@ -113,12 +118,13 @@ main loopを止めている。これらの実機結果を得るまでは、待�
 - CECリモコンのPlay/Pause/Stop/Skip Forward/Skip Backward/Fast Forward/Rewindは
   接続済み。`GIVE_DEVICE_POWER_STATUS`にはONを返す。Fast Forward/Rewindの長押し・
   連続加速は未実装。
-- 起動時のTOC取得・ALSA設定は同期。装置準備中の応答性は今後改善する。
+- ALSA設定は起動時に同期実行する。media確認とTOC取得はmedia workerで実行する。
 - 既存の読み取り中I/Oが戻るまではworkerをjoinできず、process終了が待たされる。
   終了前にはALSAをdropするが、kernel/driverの停止時間は保証しない。
 - seek後の音が出るまでには旧readの終了と新しい読み取り・prebufferが必要。
 - main loopは10ms poll。CEC状態確認は250ms間隔。実測後にpoll descriptor統合を検討。
-- 自動media検出・途中交換の安全な再認識は未実装。操作中にCDを交換しない。
+- 自動media検出と途中交換後のTOC再取得を実装済み。PLAYING中はstatus pollingを
+  新規発行せず、読み取りエラー後に再開する。完全なdevice access直列化は未実装。
 - worker errorsはSTOPPEDにし、次のPlay時にreader再生成を試みる。
 - 状態のPLAYINGは要求状態で、prebuffer待ちも含む。
 - direct backendの実機連続再生は確認済み。paranoia backendの連続再生と比較は未試験。
@@ -126,7 +132,8 @@ main loopを止めている。これらの実機結果を得るまでは、待�
 ## hardware不要の確認
 
 偽reader/outputで世代切替・queue上限・partial write・進捗・Pause・自然終了・
-underrun相当の例外停止をテスト。ALSA null pluginでconfigure/write/drain/resetも確認。
+通常error停止・ALSA underrun後のreader再生成と再bufferをテスト。
+ALSA null pluginでconfigure/write/drain/resetも確認。
 
 ## 実機確認: Play / Stop
 
@@ -151,7 +158,7 @@ Seek・トラック変更・自然終了は引き続き実機未検証。
 
 ユーザーの体感でPause復帰から発音まで約0.5秒の待ち時間がある。
 現方式ではPauseでqueue/ALSA bufferを破棄し、再開時にseek・再読込・
-1秒分のprebuffer蓄積を行うため、これらとALSA開始待ちが原因候補。
+2秒分のprebuffer蓄積を行うため、これらとALSA開始待ちが原因候補。
 各処理と実際の発音までの時間内訳は未計測であり、原因は未確定。
 改善候補は未再生PCMの保持とALSA pause対応の確認（非対応時の代替処理を含む）。
 ユーザー合意により当面は現方式を維持し、Seek・トラック選択・CEC接続を優先する。

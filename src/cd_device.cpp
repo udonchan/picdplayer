@@ -45,7 +45,7 @@ const char* drive_status_name(int status) {
 }
 }
 
-void probe_cd_media(const std::string& device) {
+CdMediaSnapshot read_cd_media(const std::string& device) {
     // O_NONBLOCK permits opening an empty drive for status ioctls.
     // It does not guarantee that the ioctl itself completes without waiting.
     const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
@@ -55,15 +55,32 @@ void probe_cd_media(const std::string& device) {
     const int error = errno;
     if (status < 0)
         throw std::system_error(error, std::generic_category(), "CDROM_DRIVE_STATUS " + device);
-    std::cout << "cd: device=" << device << " drive_status=" << drive_status_name(status)
-              << " raw=" << status << '\n' << std::flush;
     if (status != CDS_DISC_OK) {
-        std::cout << "cd: disc_status=NOT_QUERIED (drive not ready)\n";
-        return;
+        MediaObservation observation = MediaObservation::unknown;
+        if (status == CDS_TRAY_OPEN) observation = MediaObservation::tray_open;
+        else if (status == CDS_NO_DISC) observation = MediaObservation::no_disc;
+        else if (status == CDS_DRIVE_NOT_READY) observation = MediaObservation::not_ready;
+        return {observation, status, std::nullopt};
     }
     const int disc = ioctl(fd, CDROM_DISC_STATUS, 0);
     if (disc < 0)
         throw std::system_error(errno, std::generic_category(), "CDROM_DISC_STATUS " + device);
+    MediaObservation observation = MediaObservation::unsupported_disc;
+    if (disc == CDS_AUDIO) observation = MediaObservation::audio_disc;
+    else if (disc == CDS_NO_INFO) observation = MediaObservation::unknown;
+    return {observation, status, disc};
+}
+
+void probe_cd_media(const std::string& device) {
+    const auto snapshot = read_cd_media(device);
+    std::cout << "cd: device=" << device << " drive_status="
+              << drive_status_name(snapshot.drive_status) << " raw=" << snapshot.drive_status
+              << '\n' << std::flush;
+    if (!snapshot.disc_status) {
+        std::cout << "cd: disc_status=NOT_QUERIED (drive not ready)\n";
+        return;
+    }
+    const int disc = *snapshot.disc_status;
     std::cout << "cd: disc_status=" << disc_status_name(disc) << " raw=" << disc << '\n';
 }
 

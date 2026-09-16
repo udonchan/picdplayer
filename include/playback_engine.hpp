@@ -2,10 +2,12 @@
 #include "audio_output.hpp"
 #include "pcm_worker.hpp"
 #include "player_controller.hpp"
+#include <chrono>
 
 class PlaybackEngine {
 public:
     PlaybackEngine(PlayerController& controller, PcmWorker& worker, AudioOutput& output, std::int32_t end);
+    void set_disc_end(std::int32_t end);
     // Call once after a position/state command; invalidates all old PCM.
     void synchronize();
     void tick();
@@ -19,4 +21,7 @@ private:
     PcmBlock block_;
     std::size_t offset_ = 0;
     bool active_ = false, primed_ = false, draining_ = false;
+    std::size_t prebuffer_blocks_ = pcm_prebuffer_blocks;
+    unsigned underrun_recoveries_ = 0;
+    std::chrono::steady_clock::time_point last_tick_{};
 };

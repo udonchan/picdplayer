@@ -1,5 +1,6 @@
 #include "playback_engine.hpp"
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
@@ -35,20 +36,41 @@ public:
 struct FakeOutput : AudioOutput {
     std::int64_t pending = 0;
     std::size_t total = 0;
-    bool blocked = false, fail = false, drain_allowed = false;
+    bool blocked = false, fail = false, underrun_delay = false, drain_allowed = false;
     int resets = 0;
     void reset() override { ++resets; pending = 0; }
     std::size_t write(std::span<const std::int16_t> samples) override {
-        if (fail) throw std::runtime_error("simulated underrun");
+        if (fail) throw std::runtime_error("simulated output failure");
         if (blocked) return 0;
         const auto accepted = std::min<std::size_t>(588, samples.size()/2);
         pending += accepted; total += accepted; return accepted;
     }
-    std::int64_t delay() override { return pending; }
+    std::int64_t delay() override {
+        if (underrun_delay) throw AudioUnderrun("simulated ALSA delay underrun");
+        return pending;
+    }
     bool drain() override { return drain_allowed; }
 };
 int main() {
     try {
+        // Removal must release the reader even if no further Play arrives.
+        std::atomic<int> destroyed{0};
+        struct ClosingReader : FakeReader {
+            std::atomic<int>& count;
+            explicit ClosingReader(std::atomic<int>& count) : count(count) {}
+            ~ClosingReader() override { ++count; }
+        };
+        {
+            PcmWorker idle([&] { return std::make_unique<ClosingReader>(destroyed); });
+            idle.start(0, 15);
+            wait_for([&] { return idle.status().done; });
+            idle.cancel();
+            idle.discard_reader();
+            wait_for([&] { return destroyed.load() == 1; });
+            idle.start(0, 15);
+            wait_for([&] { return idle.status().done; });
+        }
+        check(destroyed == 2);
         // An in-flight old read must not publish after a new range is requested.
         auto gate = std::make_shared<Gate>();
         {
@@ -69,15 +91,20 @@ int main() {
             check(w.pop(b) && b.generation == current && b.lba == 100 && b.samples[0] == 100);
             check(!w.pop(b));
             w.start(0, 1000);
-            wait_for([&] { return w.status().queued == 10; });
+            wait_for([&] { return w.status().queued == pcm_queue_capacity_blocks; });
             check(!w.status().done); w.cancel();
             check(w.status().queued == 0);
         }
         PlayerController c;
         c.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0,15}, 30));
-        PcmWorker w([] { return std::make_unique<FakeReader>(); });
+        int readers_created = 0;
+        PcmWorker w([&] { ++readers_created; return std::make_unique<FakeReader>(); });
         FakeOutput a;
-        PlaybackEngine engine(c,w,a,30);
+        PlaybackEngine engine(c,w,a,0); // Player sessions start before a disc is ready.
+        engine.set_disc_end(30);
+        bool invalid_end = false;
+        try { engine.set_disc_end(-1); } catch (const std::invalid_argument&) { invalid_end = true; }
+        check(invalid_end);
         c.play(); engine.synchronize();
         wait_for([&] { return w.status().done; });
         engine.tick();
@@ -99,6 +126,17 @@ int main() {
         bool failed = false;
         try { engine.tick(); } catch (const std::runtime_error&) { failed = true; }
         check(failed && c.state().playback == PlaybackState::stopped && w.status().queued == 0);
+        a.fail = false;
+        c.play(); engine.synchronize();
+        wait_for([&] { return w.status().done; });
+        check(readers_created == 2); // Playback error invalidated the old device handle.
+        a.underrun_delay = true;
+        engine.tick();
+        check(c.state().playback == PlaybackState::playing);
+        a.underrun_delay = false;
+        wait_for([&] { return w.status().done; });
+        engine.tick(); engine.tick(); engine.tick();
+        check(readers_created == 3 && c.state().playback == PlaybackState::stopped);
         std::cout << "PASS: generation cancellation, bounded queue, partial writes, position, pause, finish, error\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

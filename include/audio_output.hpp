@@ -2,7 +2,14 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
+
+class AudioUnderrun : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 class AudioOutput {
 public:
     virtual ~AudioOutput() = default;
