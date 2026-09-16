@@ -152,14 +152,21 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
 #ifdef ENABLE_API
     std::string api_state_json;
+    std::string api_semantic_json;
     std::uint64_t api_revision = 0;
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
 #ifdef ENABLE_METADATA
         if (metadata_enabled) metadata = metadata_session.snapshot();
 #endif
+        const auto state = controller.state();
+        auto semantic = serialize_daemon_snapshot(make_daemon_snapshot(
+            0, state, media_state.state(), loaded_toc, metadata));
+        if (semantic == api_semantic_json) return false;
+        api_semantic_json = std::move(semantic);
         api_state_json = serialize_daemon_snapshot(make_daemon_snapshot(
-            ++api_revision, controller.state(), media_state.state(), loaded_toc, metadata));
+            ++api_revision, state, media_state.state(), loaded_toc, metadata));
+        return true;
     };
     publish_api_snapshot();
     std::unique_ptr<ApiServer> api_server;
@@ -293,7 +300,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #ifdef ENABLE_API
         if (api_server) {
             if (now >= next_api_snapshot) {
-                publish_api_snapshot();
+                if (publish_api_snapshot()) api_server->publish_state(api_state_json);
                 next_api_snapshot = now + std::chrono::milliseconds(250);
             }
             api_server->service();

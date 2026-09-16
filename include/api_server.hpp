@@ -16,6 +16,7 @@ public:
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;
+    void publish_state(std::string_view state_json);
     void service();
     int port() const;
 private:

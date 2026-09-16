@@ -260,7 +260,7 @@ CECリモコン操作、Playback Device応答を実装・実機確認済み。
 ## Local API（読み取りPoC）
 
 `ENABLE_API=ON`でlibwebsocketsを使うloopback限定HTTP serverをbuildできる。
-playerへ`--api-port`を明示した場合だけlistenし、現在は`GET /api/state`だけを提供する。
+playerへ`--api-port`を明示した場合だけlistenし、`GET /api/state`と`WS /api/events`を提供する。
 callbackは既存main loopからserviceされ、別threadからPlayerControllerを操作しない。
 
 ```sh
@@ -270,6 +270,9 @@ cmake --build build-api -j1
   --metadata musicbrainz --metadata-cache /tmp/picdplayer-cache --api-port 8080
 curl --fail --show-error http://127.0.0.1:8080/api/state
 ```
+
+WebSocketは接続時に現在のstateを1件送り、その後は公開snapshotが変わった時だけ同じJSON schemaを
+送る。ブラウザでは`new WebSocket("ws://127.0.0.1:8080/api/events")`で接続できる。
 
 別PCから診断する場合だけ、信頼できる開発用LAN上で明示的に外部listenを有効にする。
 認証とTLSはまだないため、インターネットへ公開しない。
@@ -282,8 +285,8 @@ curl --fail --show-error http://127.0.0.1:8080/api/state
 curl --fail --show-error http://PI_ADDRESS:8080/api/state
 ```
 
-依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。状態変更POSTとWebSocket eventsは
-次段階で追加する。JSON schemaとthread境界は[設計記録](docs/daemon-state.md)を参照。
+依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。状態変更POSTは次段階で追加する。
+JSON schemaとthread境界は[設計記録](docs/daemon-state.md)を参照。
 
 ## メディアライフサイクル
 

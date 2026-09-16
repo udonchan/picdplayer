@@ -16,7 +16,7 @@ UI向けには絶対LBAに加え、現在トラック内の`position_in_track_fr
 `current_track_length_frames`を計算する。millisecondへの丸めは表示層で行う。
 
 `revision`は将来main threadが状態更新ごとに増やし、WebSocket clientが更新順序を判定するための値。
-現段階では値型と純粋な生成処理だけを実装し、共有mutex、HTTP thread、event queueは導入しない。
+公開内容が変化した時だけ増やし、同じsnapshotの定期配信では増やさない。
 
 `ENABLE_API=ON`では`GET /api/state`用のJSON serializerもbuildする。JSONはrevision、player、
 media、TOC、metadata候補、選択release、Cover Art状態を含む。optional値は欠落させず`null`にし、
@@ -34,9 +34,10 @@ hostnameは受け付けず、意図しない名前解決を行わない。認証
 信頼できる開発用LANだけで使用し、port forwardingやインターネット公開は行わない。
 
 libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0)`を呼ぶ。JSONはmain threadで
-250 msごとに完成済み文字列へ更新し、HTTP callbackはその文字列を返すだけにする。`revision`は
-このsnapshot publicationごとに増える。将来WebSocketで送る際は内容が変化した場合だけ通知し、
-250 msより細かい位置更新でclientを圧迫しないようにする。
+250 msごとに状態変化を確認し、HTTP callbackは完成済み文字列を返すだけにする。
+`WS /api/events`は接続直後と公開内容の変化時に同じstate JSONをtext messageで送る。
+送信頻度は最大4 Hzとし、より細かい位置更新でclientを圧迫しない。clientからのmessageは受け付けず、
+操作APIとauthoritative stateの境界を混在させない。
 
 routeのmethod/path/size上限をhardwareなしで試験し、実loopback socketへHTTP/1.1 GETを送って
 200とJSON bodyを確認した。sandboxではsocket作成が制限されるため、この統合テストはloopbackを
