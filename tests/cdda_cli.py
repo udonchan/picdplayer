@@ -22,6 +22,9 @@ for args, expected in [
     (['--metadata', 'typo'], 'Unknown metadata backend'),
     (['--metadata', 'musicbrainz'], 'requires --player'),
     (['--metadata-cache', '/tmp/cache'], 'requires a metadata diagnostic'),
+    (['--api-port', '0'], 'Invalid --api-port'),
+    (['--api-port', '65536'], 'Invalid --api-port'),
+    (['--api-port', '8080'], 'requires --player'),
     (['--probe-metadata', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
     (['--frames', '751'], 'Invalid'),
     (['--frames', '0'], 'Invalid'),
@@ -43,6 +46,11 @@ if sys.argv[3] == 'ON':
     assert result.returncode == 1 and 'open /nonexistent' in result.stderr, result
 else:
     assert result.returncode == 2 and 'metadata support is not built' in result.stderr, result
+
+if sys.argv[4] == 'OFF':
+    result = subprocess.run([sys.argv[1], '--player', '/nonexistent', '--cdda-reader', 'direct',
+                             '--api-port', '8080'], capture_output=True, text=True, timeout=3)
+    assert result.returncode == 2 and 'API support is not built' in result.stderr, result
 
 result = subprocess.run([sys.argv[1], '--lookup-disc', 'bad/id'], capture_output=True, text=True, timeout=3)
 if sys.argv[3] == 'ON':

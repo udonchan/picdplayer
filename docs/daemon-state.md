@@ -23,6 +23,21 @@ media、TOC、metadata候補、選択release、Cover Art状態を含む。option
 UIがmedia状態によって型を推測する必要をなくす。serializer自体はsocketを持たず、fixture testで
 schemaとCD frame単位を確認する。
 
+## HTTP読み取りPoC
+
+libwebsockets 4.3.5をoptional dependencyとして追加した。`--api-port PORT`を明示したplayerだけが
+`127.0.0.1`へlistenする。既定ではsocketを作らない。headerは2 KiB、同時header poolは4、
+service bufferは4 KiB、state responseは1 MiBを上限とする。未知pathは404、GET以外は405。
+
+libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0)`を呼ぶ。JSONはmain threadで
+250 msごとに完成済み文字列へ更新し、HTTP callbackはその文字列を返すだけにする。`revision`は
+このsnapshot publicationごとに増える。将来WebSocketで送る際は内容が変化した場合だけ通知し、
+250 msより細かい位置更新でclientを圧迫しないようにする。
+
+routeのmethod/path/size上限をhardwareなしで試験し、実loopback socketへHTTP/1.1 GETを送って
+200とJSON bodyを確認した。sandboxではsocket作成が制限されるため、この統合テストはloopbackを
+許可した環境で実行する必要がある。
+
 ## HTTP server候補
 
 実機のRaspberry Pi OSでは2026-09-16時点でHTTP server開発libraryは未導入。

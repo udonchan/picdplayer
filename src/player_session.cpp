@@ -9,6 +9,11 @@
 #include "metadata_worker.hpp"
 #include "metadata_session.hpp"
 #endif
+#ifdef ENABLE_API
+#include "api_server.hpp"
+#include "daemon_snapshot.hpp"
+#include "daemon_snapshot_json.hpp"
+#endif
 #include <charconv>
 #include <chrono>
 #include <csignal>
@@ -93,9 +98,12 @@ bool apply_cec_command(PlayerController& controller, CecCommand command) {
 void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& audio_device, bool use_cec, const std::string& cec_device,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
-                        const std::string& metadata_cache) {
+                        const std::string& metadata_cache, int api_port) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache;
+#endif
+#ifndef ENABLE_API
+    (void)api_port;
 #endif
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
@@ -133,6 +141,26 @@ void run_player_session(const std::string& device, CddaBackend backend,
     bool toc_needs_refresh = true;
 #ifdef ENABLE_METADATA
     MetadataSession metadata_session;
+#endif
+#ifdef ENABLE_API
+    std::string api_state_json;
+    std::uint64_t api_revision = 0;
+    auto publish_api_snapshot = [&] {
+        MetadataResult metadata;
+#ifdef ENABLE_METADATA
+        if (metadata_enabled) metadata = metadata_session.snapshot();
+#endif
+        api_state_json = serialize_daemon_snapshot(make_daemon_snapshot(
+            ++api_revision, controller.state(), media_state.state(), loaded_toc, metadata));
+    };
+    publish_api_snapshot();
+    std::unique_ptr<ApiServer> api_server;
+    if (api_port) {
+        api_server = std::make_unique<ApiServer>("127.0.0.1", api_port,
+                                                 [&] { return api_state_json; });
+        std::cout << "api: listening=http://127.0.0.1:" << api_port << '\n' << std::flush;
+    }
+    auto next_api_snapshot = std::chrono::steady_clock::now();
 #endif
     std::string last_media_error;
     std::string input;
@@ -248,6 +276,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
             std::cerr << "player: playback stopped: " << error.what() << '\n';
             print_state(controller);
         }
+#ifdef ENABLE_API
+        if (api_server) {
+            if (now >= next_api_snapshot) {
+                publish_api_snapshot();
+                next_api_snapshot = now + std::chrono::milliseconds(250);
+            }
+            api_server->service();
+        }
+#endif
         pollfd fds[]{{signals.fd, POLLIN, 0}, {interactive ? STDIN_FILENO : -1, POLLIN, 0},
                      {use_cec ? cec.poll_fd() : -1, POLLIN, 0}};
         const auto result = poll(fds, 3, 10);

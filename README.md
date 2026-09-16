@@ -257,6 +257,23 @@ CECリモコン操作、Playback Device応答を実装・実機確認済み。
 将来のREST/WebSocket/UIが参照する読み取り用の統一値モデルは
 [Daemon state snapshot](docs/daemon-state.md)を参照。
 
+## Local API（読み取りPoC）
+
+`ENABLE_API=ON`でlibwebsocketsを使うloopback限定HTTP serverをbuildできる。
+playerへ`--api-port`を明示した場合だけlistenし、現在は`GET /api/state`だけを提供する。
+callbackは既存main loopからserviceされ、別threadからPlayerControllerを操作しない。
+
+```sh
+cmake -S . -B build-api -DENABLE_API=ON -DENABLE_METADATA=ON
+cmake --build build-api -j1
+./build-api/cdplayerd --player /dev/sr0 --cdda-reader direct \
+  --metadata musicbrainz --metadata-cache /tmp/picdplayer-cache --api-port 8080
+curl --fail --show-error http://127.0.0.1:8080/api/state
+```
+
+依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。状態変更POSTとWebSocket eventsは
+次段階で追加する。JSON schemaとthread境界は[設計記録](docs/daemon-state.md)を参照。
+
 ## メディアライフサイクル
 
 空で起動してCDの挿入・取り出しを扱うため、hardware観測とapplication状態を

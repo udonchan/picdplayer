@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     std::string metadata_device, lookup_disc, metadata_mode = "off";
     std::string metadata_cache = "/var/cache/picdplayer";
     bool metadata_option = false, metadata_cache_option = false;
+    int api_port = 0;
     std::string device = "/dev/cec0";
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg(argv[i]);
@@ -45,6 +46,13 @@ int main(int argc, char** argv) {
         else if (arg == "--lookup-disc" && i + 1 < argc) lookup_disc = argv[++i];
         else if (arg == "--metadata" && i + 1 < argc) { metadata_mode = argv[++i]; metadata_option = true; }
         else if (arg == "--metadata-cache" && i + 1 < argc) { metadata_cache = argv[++i]; metadata_cache_option = true; }
+        else if (arg == "--api-port" && i + 1 < argc) {
+            const std::string_view value(argv[++i]);
+            const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), api_port);
+            if (error != std::errc{} || end != value.data() + value.size() || api_port < 1 || api_port > 65535) {
+                std::cerr << "Invalid --api-port: expected 1..65535\n"; return 2;
+            }
+        }
         else if (arg == "--player" && i + 1 < argc) player_device = argv[++i];
         else if (arg == "--audio-device" && i + 1 < argc) { audio_device = argv[++i]; audio_option = true; }
         else if (arg == "--probe-cdda" && i + 1 < argc) cdda_device = argv[++i];
@@ -79,7 +87,7 @@ int main(int argc, char** argv) {
         else if (arg == "--interactive") interactive = true;
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
-            std::cerr << "Usage: cdplayerd [--probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] | other modes]\n";
+            std::cerr << "Usage: cdplayerd [--probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--api-port 1..65535] | other modes]\n";
             return arg == "--help" ? 0 : 2;
         }
     }
@@ -117,6 +125,12 @@ int main(int argc, char** argv) {
     if (metadata_cache_option && player_device.empty() && metadata_device.empty() && lookup_disc.empty()) {
         std::cerr << "--metadata-cache requires a metadata diagnostic or --player\n"; return 2;
     }
+    if (api_port && player_device.empty()) {
+        std::cerr << "--api-port requires --player\n"; return 2;
+    }
+#ifndef ENABLE_API
+    if (api_port) { std::cerr << "API support is not built (ENABLE_API=OFF)\n"; return 2; }
+#endif
 #ifndef ENABLE_METADATA
     if (metadata_mode != "off" || !metadata_device.empty() || !lookup_disc.empty()) {
         std::cerr << "metadata support is not built (ENABLE_METADATA=OFF)\n"; return 2;
@@ -149,7 +163,8 @@ int main(int argc, char** argv) {
 #endif
         if (!player_device.empty()) {
             run_player_session(player_device, backend, audio_device, cec_enabled, device,
-                               cec_diagnostics, interactive, metadata_mode == "musicbrainz", metadata_cache);
+                               cec_diagnostics, interactive, metadata_mode == "musicbrainz",
+                               metadata_cache, api_port);
             return 0;
         }
         if (!cdda_device.empty()) {
