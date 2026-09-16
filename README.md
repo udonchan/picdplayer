@@ -281,6 +281,7 @@ curl --fail --show-error -X POST -H 'Content-Type: application/json' \
   -d '{"offset_seconds":10}' http://127.0.0.1:8080/api/seek
 curl --fail --show-error -X POST -H 'Content-Type: application/json' \
   -d '{"track":2}' http://127.0.0.1:8080/api/track
+curl --fail --show-error -X POST http://127.0.0.1:8080/api/eject
 ```
 
 別PCから診断する場合だけ、信頼できる開発用LAN上で明示的に外部listenを有効にする。
@@ -295,7 +296,8 @@ curl --fail --show-error -X POST -H 'Content-Type: application/json' \
 curl --fail --show-error http://PI_ADDRESS:8080/api/state
 ```
 
-依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。ejectは未実装。
+依存packageは`libwebsockets-dev`と`nlohmann-json3-dev`。ejectはPCM readerのdevice handle解放を
+待ってからMediaWorkerで実行するため、再生中でもmain loopをblockしない。
 JSON schemaとthread境界は[設計記録](docs/daemon-state.md)を参照。
 
 ## メディアライフサイクル

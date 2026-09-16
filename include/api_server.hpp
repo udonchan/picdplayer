@@ -5,7 +5,7 @@
 #include <string_view>
 
 struct ApiResponse { int status; std::string content_type; std::string body; };
-enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track };
+enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track, eject };
 struct ApiCommand { ApiCommandType type; int value = 0; };
 using ApiStateProvider = std::function<std::string()>;
 using ApiCommandHandler = std::function<bool(const ApiCommand&)>;

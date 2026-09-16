@@ -48,7 +48,13 @@ synchronizeする。discがなければ409、成功は204を返す。外部debug
 受け付ける。JSON objectは指定field 1個だけ、bodyは4 KiB以下、seekは±86400秒、trackは1〜99に
 制限する。実際のdisc範囲外のtrackはPlayerControllerが拒否して409を返す。bodyはlibwebsocketsの
 HTTP body callbackでmain thread内に収集し、完成後にcommand handlerへ渡す。ejectはdrive accessを
-MediaWorkerへ直列化する必要があるため未実装。
+MediaWorkerへ直列化する。
+
+`POST /api/eject`は先にPlayerControllerをSTOPPEDへ移し、PCM出力を止め、PcmWorkerへreader破棄を
+要求する。進行中のCDROMREADAUDIOが返ってreaderのdevice handleが閉じたことをmain loopから確認後、
+MediaWorkerへCDROMEJECTを投入する。これにより2つのworkerが同じdriveへ同時にioctlを発行せず、
+遅いreadの完了待ちでもCEC・HTTP処理をblockしない。eject成功後はmedia、TOC、metadata、playerを
+NO_DISCへ更新する。ioctl失敗時はSTOPPEDのdisc状態を維持し、通常のmedia pollingを再開する。
 
 routeのmethod/path/size上限をhardwareなしで試験し、実loopback socketへHTTP/1.1 GETを送って
 200とJSON bodyを確認した。sandboxではsocket作成が制限されるため、この統合テストはloopbackを

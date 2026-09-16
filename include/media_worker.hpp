@@ -10,7 +10,7 @@
 #include <string>
 #include <thread>
 
-enum class MediaWork { observe, read_toc };
+enum class MediaWork { observe, read_toc, eject };
 
 struct MediaWorkerResult {
     MediaWork work;
@@ -24,8 +24,9 @@ class MediaWorker {
 public:
     using Observe = std::function<MediaObservation()>;
     using ReadToc = std::function<DiscToc()>;
+    using Eject = std::function<void()>;
 
-    MediaWorker(Observe observe, ReadToc read_toc);
+    MediaWorker(Observe observe, ReadToc read_toc, Eject eject);
     ~MediaWorker();
     MediaWorker(const MediaWorker&) = delete;
     MediaWorker& operator=(const MediaWorker&) = delete;
@@ -37,6 +38,7 @@ private:
     void run();
     Observe observe_;
     ReadToc read_toc_;
+    Eject eject_;
     std::mutex mutex_;
     std::condition_variable changed_;
     std::deque<MediaWorkerResult> results_;

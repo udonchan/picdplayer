@@ -43,6 +43,8 @@ int main() {
         check(route_api_request("POST", "/api/seek", provider, commands, "{}").status == 400);
         check(route_api_request("POST", "/api/track", provider, commands,
                                 R"({"track":0})").status == 400);
+        response = route_api_request("POST", "/api/eject", provider, commands);
+        check(response.status == 204 && received_command.type == ApiCommandType::eject);
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
         check(route_api_request("GET", "/api/state", huge).status == 500);
 
@@ -95,7 +97,7 @@ int main() {
         }
         post_client.join();
         check(received.find("HTTP/1.1 204") != std::string::npos);
-        check(command_calls == 4 && received_command.type == ApiCommandType::select_track &&
+        check(command_calls == 5 && received_command.type == ApiCommandType::select_track &&
               received_command.value == 4);
 
         std::atomic<bool> got_initial_event = false;

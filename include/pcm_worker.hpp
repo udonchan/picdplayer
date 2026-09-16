@@ -40,6 +40,8 @@ public:
     // Close the backend on its owner thread before the next read. Use after
     // media removal or a hardware error; normal pause/seek keeps it open.
     void discard_reader();
+    // True once no read is in flight and the backend device handle is closed.
+    bool device_released();
     bool pop(PcmBlock& block);
     WorkerStatus status();
 private:
@@ -50,6 +52,7 @@ private:
     std::deque<PcmBlock> queue_;
     bool closing_ = false, active_ = false, done_ = false;
     bool discard_reader_ = false;
+    bool reader_open_ = false;
     bool reading_ = false;
     std::chrono::steady_clock::time_point read_started_{};
     std::int64_t last_read_us_ = 0;

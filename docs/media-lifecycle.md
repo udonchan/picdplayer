@@ -20,6 +20,7 @@
 PLAYING中は新しいmedia polling要求を止める。ただし再生開始前に発行済みの照会と、
 停止後も完了していないCD-DA読み取りの重複までは防いでいない。
 完全なdevice access直列化は未実装であり、競合の可能性が残る。
+APIから要求するejectだけは、後述の通りCDDA reader解放後に直列実行する。
 再生中にdiscを取り出した場合は、
 CD-DA読み取りエラーで再生が停止した後、500 ms周期のpollingが再開して
 `NO_DISC`を確定する。
@@ -190,3 +191,8 @@ Ejectでは、進行中のCD readが返るまで一時的に`PLAYING`のままbu
 - 復旧位置での音の重複、欠落、操作応答時間
 
 評価結果によって、復旧回数の上限、buffering状態の明示、無音または停止への遷移を決める。
+## API eject
+
+APIからのejectは再生を停止した後、PcmWorkerがCDDA readerを閉じるまで非同期に待つ。device解放後に
+MediaWorkerが`CDROMEJECT`を実行する。成功時は即座に`NO_DISC`へ遷移し、失敗時はdiscを保持して
+pollingを再開する。CDROMREADAUDIOとCDROMEJECTを別threadから同時実行しないことを優先する。

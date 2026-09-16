@@ -22,3 +22,6 @@ void probe_cd_toc(const std::string& device);
 
 // Returns a validated model; owns no device handle after return.
 DiscToc read_cd_toc(const std::string& device);
+
+// Opens the device only for the duration of CDROMEJECT.
+void eject_cd(const std::string& device);

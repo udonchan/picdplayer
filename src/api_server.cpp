@@ -31,6 +31,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         if (path == "/api/previous") return ApiCommand{ApiCommandType::previous};
         if (path == "/api/seek") return ApiCommand{ApiCommandType::seek_relative};
         if (path == "/api/track") return ApiCommand{ApiCommandType::select_track};
+        if (path == "/api/eject") return ApiCommand{ApiCommandType::eject};
         return std::nullopt;
     }();
     if (!command)

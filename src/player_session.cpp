@@ -112,7 +112,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
     PcmWorker worker([=] { return make_cdda_reader(backend, device); });
     MediaWorker media_worker(
         [device] { return read_cd_media(device).observation; },
-        [device] { return read_cd_toc(device); });
+        [device] { return read_cd_toc(device); },
+        [device] { eject_cd(device); });
 #ifdef ENABLE_METADATA
     std::unique_ptr<MetadataWorker> metadata_worker;
     if (metadata_enabled) {
@@ -154,6 +155,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::string api_state_json;
     std::string api_semantic_json;
     std::uint64_t api_revision = 0;
+    bool api_eject_pending = false;
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
 #ifdef ENABLE_METADATA
@@ -188,6 +190,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 case ApiCommandType::select_track:
                     if (!controller.select_track(command.value)) return false;
                     engine.synchronize(); print_state(controller); return true;
+                case ApiCommandType::eject:
+                    controller.stop();
+                    engine.synchronize();
+                    worker.discard_reader();
+                    api_eject_pending = true;
+                    print_state(controller);
+                    return true;
                 }
                 if (apply_cec_command(controller, player_command)) {
                     engine.synchronize();
@@ -218,11 +227,19 @@ void run_player_session(const std::string& device, CddaBackend backend,
     bool quitting = false;
     while (!quitting) {
         const auto now = std::chrono::steady_clock::now();
+#ifdef ENABLE_API
+        if (api_eject_pending && worker.device_released() && media_worker.request(MediaWork::eject))
+            api_eject_pending = false;
+#endif
         if (now >= next_media) {
             // Keep status ioctls off the drive while CD-DA reads are active.
             // A read failure stops playback; polling then resumes and observes
             // an opened tray or removed disc.
-            if (controller.state().playback != PlaybackState::playing)
+            bool may_poll_media = controller.state().playback != PlaybackState::playing;
+#ifdef ENABLE_API
+            may_poll_media = may_poll_media && !api_eject_pending;
+#endif
+            if (may_poll_media)
                 (void)media_worker.request(MediaWork::observe);
             next_media = now + std::chrono::milliseconds(500);
         }
@@ -268,7 +285,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                            controller.state().playback == PlaybackState::no_disc)) {
                     toc_pending = media_worker.request(MediaWork::read_toc);
                 }
-            } else {
+            } else if (media_result.work == MediaWork::read_toc) {
                 toc_pending = false;
                 if (media_state.state() != MediaLifecycleState::audio_ready || !media_result.toc)
                     continue;
@@ -290,6 +307,22 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
                 }
                 toc_needs_refresh = false;
+            } else {
+                const auto before = media_state.state();
+                const auto after = media_state.observe(MediaObservation::tray_open);
+                if (after != before)
+                    std::cout << "media: state=" << media_state_name(after) << '\n' << std::flush;
+                toc_pending = false;
+                toc_needs_refresh = true;
+                loaded_toc.reset();
+#ifdef ENABLE_METADATA
+                if (metadata_worker) metadata_worker->cancel_pending();
+                metadata_session.invalidate();
+#endif
+                controller.remove_disc();
+                engine.set_disc_end(0);
+                engine.synchronize();
+                print_state(controller);
             }
         }
 #ifdef ENABLE_METADATA

@@ -66,7 +66,7 @@ int main() {
             wait_for([&] { return idle.status().done; });
             idle.cancel();
             idle.discard_reader();
-            wait_for([&] { return destroyed.load() == 1; });
+            wait_for([&] { return destroyed.load() == 1 && idle.device_released(); });
             idle.start(0, 15);
             wait_for([&] { return idle.status().done; });
         }

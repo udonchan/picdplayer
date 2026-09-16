@@ -33,6 +33,10 @@ void PcmWorker::discard_reader() {
     discard_reader_ = true;
     changed_.notify_all();
 }
+bool PcmWorker::device_released() {
+    std::lock_guard lock(mutex_);
+    return !active_ && !reading_ && !discard_reader_ && !reader_open_;
+}
 bool PcmWorker::pop(PcmBlock& block) {
     std::lock_guard lock(mutex_);
     if (queue_.empty()) return false;
@@ -55,6 +59,9 @@ void PcmWorker::run() {
             discard_reader_ = false;
             lock.unlock();
             reader.reset(); // Never close a device while holding the queue mutex.
+            lock.lock();
+            reader_open_ = false;
+            lock.unlock();
             continue; // Recheck shutdown and any newer Start after slow close.
         }
         const auto generation = generation_;
@@ -62,7 +69,10 @@ void PcmWorker::run() {
         const auto end = end_;
         lock.unlock();
         try {
-            if (!reader) reader = factory_();
+            if (!reader) {
+                reader = factory_();
+                lock.lock(); reader_open_ = static_cast<bool>(reader); lock.unlock();
+            }
             if (!reader) throw std::runtime_error("reader factory returned null");
             // A slow open may have been superseded by Stop/Seek.
             lock.lock();
@@ -105,6 +115,7 @@ void PcmWorker::run() {
             // Release the reader on this thread, never from a Stop handler.
             reader.reset();
             if (!lock.owns_lock()) lock.lock();
+            reader_open_ = false;
             reading_ = false;
             if (generation == generation_) {
                 error_ = error.what(); active_ = false; done_ = false; queue_.clear();

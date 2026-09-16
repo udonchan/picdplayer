@@ -123,6 +123,14 @@ DiscToc read_cd_toc(const std::string& device) {
     return make_audio_toc(first, starts, leadout);
 }
 
+void eject_cd(const std::string& device) {
+    const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) throw std::system_error(errno, std::generic_category(), "open " + device);
+    const ScopedFd guard(fd);
+    if (ioctl(fd, CDROMEJECT, 0) < 0)
+        throw std::system_error(errno, std::generic_category(), "CDROMEJECT " + device);
+}
+
 void probe_cd_toc(const std::string& device) {
     const auto toc = read_cd_toc(device);
     // Buffer the report until all entries have been read and validated.

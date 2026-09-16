@@ -23,7 +23,8 @@ int main() {
         const auto toc = make_audio_toc(1, std::vector<std::int32_t>{0, 750}, 1500);
         MediaWorker worker(
             [] { return MediaObservation::audio_disc; },
-            [toc] { return toc; });
+            [toc] { return toc; },
+            [] {});
 
         check(worker.request(MediaWork::observe));
         auto result = wait_for_result(worker);
@@ -35,15 +36,20 @@ int main() {
         check(result.work == MediaWork::read_toc && result.toc && result.toc->tracks.size() == 2);
         check(!result.observation && result.error.empty());
 
+        check(worker.request(MediaWork::eject));
+        result = wait_for_result(worker);
+        check(result.work == MediaWork::eject && !result.observation && !result.toc && result.error.empty());
+
         MediaWorker failing(
             []() -> MediaObservation { throw std::runtime_error("probe failed"); },
-            [toc] { return toc; });
+            [toc] { return toc; },
+            [] {});
         check(failing.request(MediaWork::observe));
         result = wait_for_result(failing);
         check(!result.observation && result.error == "probe failed");
 
         bool rejected = false;
-        try { MediaWorker invalid({}, [toc] { return toc; }); }
+        try { MediaWorker invalid({}, [toc] { return toc; }, [] {}); }
         catch (const std::invalid_argument&) { rejected = true; }
         check(rejected);
         std::cout << "PASS: asynchronous media observation and TOC work\n";
