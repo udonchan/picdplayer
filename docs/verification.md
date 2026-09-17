@@ -106,6 +106,22 @@ time budget超過なしであることを確認した。
 
 この結果は同一driveから同じPCM bytesを2回得たことを示す。drive cacheから独立したread、傷discでの
 recovery、原盤PCMとの一致、seek latencyやCPU負荷の定量評価は未確認である。
+
+### single / repeat 先読み待ち比較
+
+同じ14曲CD、direct backend、150 frameの先読み条件で、2026-09-17に次を測定した。値は
+`prebuffer_ready`であり、HDMI以降の出力遅延を含まない。
+
+| 操作 | single | repeat | 差（repeat - single） |
+|---|---:|---:|---:|
+| 初回play | 1339 ms | 1035 ms | -304 ms |
+| CEC seek forward | 596 ms | 768 ms | +172 ms |
+| next track | 635 ms | 814 ms | +179 ms |
+
+repeatでは75 frame regionを2回読むため、seek/track変更後に約0.2秒の追加待ちが観測された。一方、
+初回playは75 frame単位の連続readが15 frame単位より効率的だった可能性があるが、1回の測定だけで
+一般化しない。repeatのAPI snapshotは23 read call、1725 requested/accepted frame、46 attempt、
+23 verified call、mismatch/failure/retry 0だった。通常CDでは両modeとも音切れなく再生できた。
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
 - LOADING中・PLAYING中のeject、重複要求、EJECT_ERROR、終了との競合を実機で継続確認する。
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。
