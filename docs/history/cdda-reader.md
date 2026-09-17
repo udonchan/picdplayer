@@ -1,3 +1,6 @@
+> 過去の設計・調査・検証記録です。提案や当時の制約を含み、現行仕様ではありません。
+> 現行仕様は[ドキュメント索引](../README.md)から参照してください。
+
 # CDDA reader: direct / optional paranoia
 
 既存のLinux media/TOC → DiscToc経路は維持する。
