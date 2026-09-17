@@ -15,7 +15,7 @@ APIへ部分的に誤った状態を公開しない。位置と長さは内部�
 UI向けには絶対LBAに加え、現在トラック内の`position_in_track_frames`と
 `current_track_length_frames`を計算する。millisecondへの丸めは表示層で行う。
 
-`revision`は将来main threadが状態更新ごとに増やし、WebSocket clientが更新順序を判定するための値。
+`revision`はmain threadが公開状態の更新ごとに増やし、WebSocket clientが更新順序を判定するための値。
 公開内容が変化した時だけ増やし、同じsnapshotの定期配信では増やさない。
 
 `ENABLE_API=ON`では`GET /api/state`用のJSON serializerもbuildする。JSONはrevision、player、
@@ -30,7 +30,7 @@ libwebsockets 4.3.5をoptional dependencyとして追加した。`--api-port POR
 service bufferは4 KiB、state responseは1 MiBを上限とする。未知pathは404、GET以外は405。
 
 デバッグ時は`--api-listen 0.0.0.0`またはPiの数値LANアドレスを明示して外部から照会できる。
-hostnameは受け付けず、意図しない名前解決を行わない。認証・TLS・操作APIはまだないため、
+hostnameは受け付けず、意図しない名前解決を行わない。認証・TLSはまだないため、
 信頼できる開発用LANだけで使用し、port forwardingやインターネット公開は行わない。
 
 libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0)`を呼ぶ。
@@ -92,3 +92,6 @@ main threadから短いnon-blocking service処理を呼び、CEC/playbackと同�
 requestをcontrollerへ適用する案を先に検証する。別threadからPlayerControllerを操作しない。
 listenは開発中も既定をloopbackとし、LAN公開は明示optionにする。request bodyと接続数へ小さな
 上限を設ける。外部libraryを選ぶ前に自前HTTP parserは実装しない。
+
+EJECTING中は通常操作POSTを409で拒否し、CEC/対話CLIの再生操作も適用しない。
+重複ejectは同じ要求として202を返す。ejectとreader再openの競合を防ぐためである。

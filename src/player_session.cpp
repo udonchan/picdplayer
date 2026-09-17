@@ -200,7 +200,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     print_state(controller);
                     return true;
                 }
-                if (controller.state().playback == PlaybackState::no_disc) return false;
+                if (media_state.state() == MediaLifecycleState::ejecting ||
+                    controller.state().playback == PlaybackState::no_disc) return false;
                 CecCommand player_command = CecCommand::play;
                 switch (command.type) {
                 case ApiCommandType::play: player_command = CecCommand::play; break;
@@ -436,7 +437,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             for (;;) {
                 const auto received = cec.receive();
                 if (!received.dequeued) break;
-                if (received.command && apply_cec_command(controller, *received.command)) {
+                if (received.command && media_state.state() != MediaLifecycleState::ejecting &&
+                    apply_cec_command(controller, *received.command)) {
                     engine.synchronize();
                     print_state(controller);
                 }
@@ -457,6 +459,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
             bool changed = true;
             if (command == "quit") { quitting = true; break; }
             if (command == "state") { print_state(controller); continue; }
+            if (media_state.state() == MediaLifecycleState::ejecting) {
+                std::cerr << "player: command rejected while ejecting\n";
+                continue;
+            }
             if (command == "play") {
                 if (controller.state().playback == PlaybackState::playing) changed = false;
                 else controller.play();

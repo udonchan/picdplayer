@@ -54,7 +54,7 @@ cec-ctl -d /dev/cec0 --show-topology
   native連続再生は端末操作モードでPlay/Stopと正常再生を実機確認済み。CECの
   Play/Pause/Stop/Skip Forward/Skip Backward/Fast Forward/Rewindを
   PlayerControllerへ接続済み。
-  systemd unitは実装・自動起動確認済み。API・UIは未実装。
+  systemd unitは実装・自動起動確認済み。HTTP操作API・WebSocket状態配信は実装済み。UIは未実装。
 
 詳細は[実機検証記録](docs/milestone-1.md)。
 
@@ -259,7 +259,7 @@ CECリモコン操作、Playback Device応答を実装・実機確認済み。
 
 ## Local API（読み取りPoC）
 
-`ENABLE_API=ON`でlibwebsocketsを使うloopback限定HTTP serverをbuildできる。
+`ENABLE_API=ON`でlibwebsocketsを使う既定でloopbackにlistenするHTTP serverをbuildできる。
 playerへ`--api-port`を明示した場合だけlistenし、`GET /api/state`と`WS /api/events`を提供する。
 callbackは既存main loopからserviceされ、別threadからPlayerControllerを操作しない。
 

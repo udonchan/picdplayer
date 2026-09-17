@@ -191,6 +191,7 @@ Ejectでは、進行中のCD readが返るまで一時的に`PLAYING`のままbu
 - 復旧位置での音の重複、欠落、操作応答時間
 
 評価結果によって、復旧回数の上限、buffering状態の明示、無音または停止への遷移を決める。
+
 ## API eject
 
 APIからのejectは再生を停止した後、PcmWorkerがCDDA readerを閉じるまで非同期に待つ。device解放後に
@@ -204,7 +205,7 @@ ASUS SDRW-08D2S-Uでは、先にdoor lockを解除しない`CDROMEJECT`に対し
 
 一度のAPI要求ではトレイが開かないという報告から、媒体のunloadだけが起きると推測していたが、
 この原因は未確認だった。後述のAPI待受によるmain loop停止が判明したため、ドライブ固有の挙動とは
-断定しない。現在はioctl成功を完了条件にせず、100 ms周期で最大2秒
+断定しない。現在はioctl成功を完了条件にせず、100 ms間隔で20回（sleep合計2秒。ioctl自体の待ち時間を除く）
 `CDROM_DRIVE_STATUS == CDS_TRAY_OPEN`を確認する。開かなければ`CDROMEJECT`をもう一度だけ実行し、
 再度最大2秒確認する。2回でもtray openを確認できなければ`EJECT_ERROR`とし、無制限retryは行わない。
 
@@ -218,4 +219,6 @@ ASUS SDRW-08D2S-Uでは、先にdoor lockを解除しない`CDROMEJECT`に対し
 調査でlibwebsocketsの`lws_service(context, 0)`が通信待ちでmain loopを止め得ることが判明した。
 worker待ち時間だけでなく、main threadが結果を回収するまでの遅延も上記時間に含まれる。
 service前に`lws_cancel_service()`でwake-upを予約する修正と、無接続時の回帰テストを追加した。
-修正後の一度のAPI要求による実機ejectは未確認。
+2026-09-17、ユーザーが修正後に一度のAPI要求でトレイが開くことを実機確認した。
+EJECTING中はAPI・CEC・対話CLIからの再生操作を拒否し、readerの再openとejectの競合を防ぐ。
+重複ejectは202を返し、CLIのstate/quitおよび終了signalは引き続き処理する。
