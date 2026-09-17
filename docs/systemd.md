@@ -122,8 +122,25 @@ SIGKILLでも即時終了を保証できない。quiet boot、splash、read-only
 ## metadata/APIの追加設定
 
 metadata/APIを使う場合はbuild時に`ENABLE_METADATA=ON` / `ENABLE_API=ON`を指定する。
-追加依存と設定例は[README](../README.md)を参照する。`CacheDirectory=picdplayer`が
+追加依存は[ビルド手順](build.md)を参照する。`CacheDirectory=picdplayer`が
 service user用の`/var/cache/picdplayer`を作成する。
+
+metadata/API有効版をインストールする場合のconfigure例:
+
+```sh
+cmake -S . -B build-metadata -DENABLE_METADATA=ON -DENABLE_API=ON \
+  -DINSTALL_SYSTEMD_UNIT=ON -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DPICDPLAYER_SERVICE_USER=picdplayer
+cmake --build build-metadata -j1
+```
+
+`/etc/default/picdplayer` の追加optionは次のように設定する。
+
+```ini
+PICDPLAYER_EXTRA_ARGS="--metadata musicbrainz --metadata-cache /var/cache/picdplayer --api-port 8080"
+```
+
+設定変更はserviceのrestartで反映する。
 
 既存serviceの更新は停止してからinstallし、daemon-reload後にstartする。
 

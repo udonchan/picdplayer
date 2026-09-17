@@ -1,6 +1,6 @@
 # 操作・診断手順
 
-ビルドは[README](../README.md)、常駐運転は[systemd手順](systemd.md)を参照する。
+ビルドは[ビルド手順](build.md)、常駐運転は[systemd手順](systemd.md)を参照する。
 以下はリポジトリrootから実行する。手動playerやdrive診断の前に既存serviceを停止する。
 トレイ操作と試聴は人間が行い、daemonと診断でdriveを同時使用しない。
 
