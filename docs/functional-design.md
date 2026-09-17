@@ -1,5 +1,9 @@
 # 機能設計
 
+この文書は現行機能を記す。QUIET/BALANCED/SECURE、能力の根拠付き表示、区間検証、
+provenance、technical statusの追加案は[読み取り信頼性の拡張設計案](integrity-design.md)を参照する。
+現行direct/paranoiaの選択や正常再生は、これらの検証modeが実装済みであることを意味しない。
+
 ## media・TOC
 
 sysfsのSCSI type 5から光学ドライブを列挙する。USB/SATAを識別条件にはしない。

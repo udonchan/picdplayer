@@ -18,6 +18,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は[検証
 | ジャケット画像 | URL取得まで実装。画像の取得・表示は未実装 |
 | systemd常駐・自動起動 | 実装・基本構成で実機確認済み |
 | ALSA underrun自動復旧 | 実装・自動試験済み。実機の異常系評価は未完了 |
+| 読み取りの信頼性評価・採用理由の表示 | [拡張設計案](docs/integrity-design.md)を作成、未実装 |
 | 複数metadata候補の選択、TV向けUI | 未実装 |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 

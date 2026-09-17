@@ -3,6 +3,10 @@
 公開関数の引数・型はリンク先のヘッダーを正とする。ここでは制御順序と所有権を記す。
 private helperを全件転記する代わりに、機能境界と不具合に関係する処理を対象とする。
 
+今後のread evidence保持、PCM区間との対応、structured eventとUI protocolの型・境界案は
+[読み取り信頼性の拡張設計案](integrity-design.md)を参照する。ここで説明する現行ReadResult、
+PcmBlock、DaemonSnapshotにはその拡張をまだ実装していない。
+
 ## 起動とmain loop
 
 [main.cpp](../src/main.cpp)はCLIのmode競合、数値範囲、build optionを検証し、

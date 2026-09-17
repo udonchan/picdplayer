@@ -42,6 +42,8 @@ metadata buildは前回レビューでAPI socket試験を除く18件成功の記
 
 ## 次の確認と残課題
 
+- [読み取り信頼性の拡張設計案](integrity-design.md)をレビュー後、Phase 1aの観測モデルから追加する。
+  同文書の試験計画は未実装であり、現行CTestの検証済み範囲には含めない。
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
 - LOADING中・PLAYING中のeject、重複要求、EJECT_ERROR、終了との競合を実機で継続確認する。
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。

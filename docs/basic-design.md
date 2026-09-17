@@ -6,6 +6,11 @@
 開発環境はRaspberry Pi OS Lite、C++20/CMake。将来Buildrootへ移植可能な小さなnative daemonを目指す。
 一般的な音楽ライブラリ管理、ripping、desktop操作を主用途にはしない。
 
+追加の製品目標として、再生PCMについて「観測した事実、採用理由、未確認事項」を説明できるようにする。
+音質や完全性を観測以上に主張しない。優先順位とtarget構成は
+[読み取り信頼性の拡張設計案](integrity-design.md)に定義する。以下の構成図と状態は現行実装であり、
+検証・provenance・technical status UIはまだ含まない。
+
 | 要求 | 現在の状態 |
 |---|---|
 | CD挿入・取り出しを認識しTOCに従って再生 | 実装済み。音声のみのCDが対象 |
@@ -15,6 +20,7 @@
 | 非rootで常駐、signalで正常終了 | systemd・signalfdを利用 |
 | TVに曲名・ジャケット・位置表示 | 状態APIまで実装。UIは未実装 |
 | Linux起動画面を見せない家電起動 | quiet boot・kiosk・専用imageは未実装 |
+| PCMの読み取り根拠・不確実性を説明する | 拡張設計案作成済み、実装前レビュー待ち |
 
 ## ブロック図
 
