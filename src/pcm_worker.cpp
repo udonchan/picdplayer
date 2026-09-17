@@ -2,9 +2,36 @@
 #include <algorithm>
 #include <stdexcept>
 
-PcmWorker::PcmWorker(Factory factory, std::string strategy) : factory_(std::move(factory)) {
+void validate_pcm_buffer_config(const PcmBufferConfig& config) {
+    if (config.capacity_cd_frames < pcm_block_cd_frames ||
+        config.capacity_cd_frames > maximum_buffer_cd_frames ||
+        config.capacity_cd_frames % pcm_block_cd_frames != 0)
+        throw std::invalid_argument("buffer capacity must be a multiple of 15 CD frames in range 15..2250");
+    if (config.startup_cd_frames < pcm_block_cd_frames ||
+        config.startup_cd_frames > config.capacity_cd_frames ||
+        config.startup_cd_frames % pcm_block_cd_frames != 0)
+        throw std::invalid_argument("startup buffer must be a multiple of 15 CD frames and not exceed capacity");
+}
+
+PcmWorker::PcmWorker(Factory factory, std::string strategy, PcmBufferConfig buffer,
+                     std::shared_ptr<DriveAccessCoordinator> drive_access,
+                     std::string requested_mode, std::size_t read_block_cd_frames)
+    : factory_(std::move(factory)), buffer_config_(buffer), drive_access_(std::move(drive_access)) {
     if (!factory_) throw std::invalid_argument("reader factory is empty");
+    validate_pcm_buffer_config(buffer_config_);
+    if (read_block_cd_frames < pcm_block_cd_frames ||
+        read_block_cd_frames % pcm_block_cd_frames != 0 ||
+        read_block_cd_frames > buffer_config_.capacity_cd_frames)
+        throw std::invalid_argument("read block must be a multiple of 15 CD frames and fit the buffer");
+    read_block_cd_frames_ = read_block_cd_frames;
+    capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
+    startup_blocks_ = (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) /
+                      read_block_cd_frames_;
     diagnostics_.effective_strategy = std::move(strategy);
+    diagnostics_.requested_mode = std::move(requested_mode);
+    diagnostics_.buffer_capacity_frames = buffer_config_.capacity_cd_frames;
+    diagnostics_.startup_buffer_frames = buffer_config_.startup_cd_frames;
+    diagnostics_.read_block_frames = read_block_cd_frames_;
     thread_ = std::thread(&PcmWorker::run, this);
 }
 PcmWorker::~PcmWorker() {
@@ -46,7 +73,7 @@ void PcmWorker::discard_reader() {
 }
 bool PcmWorker::device_released() {
     std::lock_guard lock(mutex_);
-    return !active_ && !reading_ && !discard_reader_ && !reader_open_;
+    return !active_ && !drive_call_inflight_ && !discard_reader_ && !reader_open_;
 }
 bool PcmWorker::pop(PcmBlock& block) {
     std::lock_guard lock(mutex_);
@@ -76,9 +103,13 @@ void PcmWorker::run() {
         if (closing_) return;
         if (discard_reader_) {
             discard_reader_ = false;
+            drive_call_inflight_ = true;
             lock.unlock();
-            reader.reset(); // Never close a device while holding the queue mutex.
+            // Never close a device while holding the queue mutex.
+            if (drive_access_) drive_access_->invoke([&] { reader.reset(); });
+            else reader.reset();
             lock.lock();
+            drive_call_inflight_ = false;
             reader_open_ = false;
             lock.unlock();
             continue; // Recheck shutdown and any newer Start after slow close.
@@ -89,8 +120,12 @@ void PcmWorker::run() {
         lock.unlock();
         try {
             if (!reader) {
-                reader = factory_();
-                lock.lock(); reader_open_ = static_cast<bool>(reader); lock.unlock();
+                lock.lock(); drive_call_inflight_ = true; lock.unlock();
+                reader = drive_access_ ? drive_access_->invoke(factory_) : factory_();
+                lock.lock();
+                drive_call_inflight_ = false;
+                reader_open_ = static_cast<bool>(reader);
+                lock.unlock();
             }
             if (!reader) throw std::runtime_error("reader factory returned null");
             // A slow open may have been superseded by Stop/Seek.
@@ -98,27 +133,35 @@ void PcmWorker::run() {
             if (closing_) return;
             if (generation != generation_) continue;
             lock.unlock();
-            reader->seek(position);
+            lock.lock(); drive_call_inflight_ = true; lock.unlock();
+            if (drive_access_) drive_access_->invoke([&] { reader->seek(position); });
+            else reader->seek(position);
+            lock.lock(); drive_call_inflight_ = false; lock.unlock();
             while (position < end) {
                 lock.lock();
                 changed_.wait(lock, [&] {
                     return closing_ || generation != generation_ ||
-                           queue_.size() < pcm_queue_capacity_blocks;
+                           queue_.size() < capacity_blocks_;
                 });
                 if (closing_) return;
                 if (generation != generation_) break;
                 reading_ = true;
+                drive_call_inflight_ = true;
                 diagnostics_.activity = ReadActivity::reading;
                 read_started_ = std::chrono::steady_clock::now();
                 lock.unlock();
-                const auto frames = std::min<std::int32_t>(15, end - position);
+                const auto frames = std::min<std::int32_t>(
+                    static_cast<std::int32_t>(read_block_cd_frames_), end - position);
                 PcmBlock block{generation, position,
                                std::vector<std::int16_t>(frames * cdda_samples_per_frame), {}};
-                const auto result = reader->read(block.samples);
+                const auto result = drive_access_
+                    ? drive_access_->invoke([&] { return reader->read(block.samples); })
+                    : reader->read(block.samples);
                 lock.lock();
                 last_read_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() - read_started_).count();
                 reading_ = false;
+                drive_call_inflight_ = false;
                 if (generation == generation_) {
                     observe_read(diagnostics_.stats, result);
                     block.evidence = make_read_evidence(result);
@@ -158,10 +201,12 @@ void PcmWorker::run() {
             }
         } catch (const std::exception& error) {
             // Release the reader on this thread, never from a Stop handler.
-            reader.reset();
+            if (drive_access_) drive_access_->invoke([&] { reader.reset(); });
+            else reader.reset();
             if (!lock.owns_lock()) lock.lock();
             reader_open_ = false;
             reading_ = false;
+            drive_call_inflight_ = false;
             if (generation == generation_) {
                 error_ = error.what(); active_ = false; done_ = false; queue_.clear();
                 diagnostics_.activity = ReadActivity::failed;

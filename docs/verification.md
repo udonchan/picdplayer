@@ -8,7 +8,7 @@
 CTestはCMakeの有効機能で件数が変わる。基本buildではcontroller、engine、ALSA抽象、CEC変換、
 media tracker/worker、TOC、reader、PCM保存、snapshot、CLIなどを検証する。
 metadata有効時はDisc ID公式vector、候補0/1/複数と不正JSON、worker/sessionの旧結果破棄を追加する。
-API有効時はJSON schema、route、loopback socket、無通信時のserviceがmainへ戻る回帰試験を追加する。
+API有効時はJSON schema、route、technical status asset、loopback socket、無通信時のserviceがmainへ戻る回帰試験を追加する。
 paranoiaにはlibrary呼び出しをwrapした試験がある。
 
 ```sh
@@ -18,8 +18,8 @@ cmake --build build-metadata -j1
 ctest --test-dir build-metadata --output-on-failure
 ```
 
-前回コミット時にdirectの13/13成功を確認済み。
-metadata buildは前回レビューでAPI socket試験を除く18件成功の記録がある。
+Phase 2基礎実装時にdirectの16/16、metadata/API buildのAPI以外21/21、
+sandbox外のAPI socket 1/1成功を確認した。
 これは全option組合せの保証ではない。socket試験はloopback通信を許可した環境で実行する。
 テスト名・登録条件の正規情報は[CMakeLists.txt](../CMakeLists.txt)にある。
 
@@ -84,8 +84,28 @@ stop後の`read.activity`はIDLE、再生再開後のstatsは新しいstreamに�
 
 - [読み取り信頼性の拡張設計案](integrity-design.md)のPhase 1aは実装・通常CDで実機確認済み。
   ReadResultからのtruthfulなevidence変換、集計、PCM blockへの伝搬、古い世代の排除、read-only能力probe、
-  bounded event、ALSA再生head推定、snapshot JSONを自動試験へ追加した。検証/recoveryやC2取得は未実装。
-- Phase 1a実装後、direct build 15件、metadata/API buildのAPI以外20件、sandbox外のAPI socket 1件が成功。
+  bounded event、ALSA再生head推定、snapshot JSONを自動試験へ追加した。C2取得は未実装。
+- Phase 1bのtechnical statusは実装・自動試験済みで、browserによる実機確認待ち。
+- Phase 1b technical statusをPiまたは別PCのbrowserで開き、NO DISC、再生、WebSocket再接続を確認する。
+- Phase 2の既定bufferで従来再生に退行がないことを確認後、750/300 frame等でstartup、seek、
+  track change、短いread stallへの余裕、memoryを比較する。production既定値は未決定。
+- drive access直列化後の挿入、TOC、再生、停止中観測、ejectを実機で確認する。
+- Phase 3の`--read-verification repeat`はfake readerでA/A、A/B/B、全不一致、read error、時間上限を確認済み。
+  15 frame regionの初回実機試験では約359 ms/readとなり、PCM生成が実時間を下回って周期的underrunが発生した。
+  repeat regionを75 frameへ変更後、連続性、startup/seek latency、CPU負荷、10秒予算を再確認する。cache独立性は未確認。
+- `last_prebuffer_wait_ms`と`prebuffer_target_frames`をAPI/logへ追加した。single/repeat、およびplay/seek/
+  track変更での先読み待ちを次回実機確認で比較する。TV/ARC/アンプ側の遅延はこの値の対象外。
+
+### Phase 3 初期実機確認
+
+2026-09-17、14曲Audio CDをdirect backend・`--read-verification repeat`で再生し、75 frame regionへ
+変更後は周期的underrunなしで再生、CEC seekとtrack変更を確認した。再生中のAPI snapshotでは86 read call、
+6450 requested/accepted frames、172 verification attempt（各region 2回）、86 verified call、mismatch/failure/
+direct retryはすべて0だった。latest regionは`CLEAN + MULTIPLE_MATCH`、2 complete read/2 matching read、
+time budget超過なしであることを確認した。
+
+この結果は同一driveから同じPCM bytesを2回得たことを示す。drive cacheから独立したread、傷discでの
+recovery、原盤PCMとの一致、seek latencyやCPU負荷の定量評価は未確認である。
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
 - LOADING中・PLAYING中のeject、重複要求、EJECT_ERROR、終了との競合を実機で継続確認する。
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。

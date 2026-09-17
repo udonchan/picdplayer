@@ -38,6 +38,22 @@ int main() {
         check(failed.local_verification == LocalVerification::single_read);
         observe_read(stats, result);
         check(stats.failed_calls == 1 && stats.frames_accepted == 30);
+
+        ReadResult verified{200, 15, 15, ReadStatus::ok, 0, 0};
+        verified.verification = {3, 3, 2, 1, false};
+        const auto recovered = make_read_evidence(verified);
+        check(recovered.status == IntegrityReadStatus::recovered);
+        check(recovered.local_verification == LocalVerification::multiple_match);
+        check(recovered.verification.attempts == 3);
+        observe_read(stats, verified);
+        check(stats.verification_attempts == 3 && stats.verification_mismatches == 1);
+        check(stats.verified_calls == 1 && stats.verification_failures == 0);
+
+        ReadResult unresolved{215, 15, 0, ReadStatus::read_error, EIO, 0};
+        unresolved.verification = {3, 3, 1, 2, false};
+        check(make_read_evidence(unresolved).status == IntegrityReadStatus::uncertain);
+        observe_read(stats, unresolved);
+        check(stats.verification_failures == 1);
         std::cout << "PASS: truthful read evidence and aggregate counters\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

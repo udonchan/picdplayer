@@ -79,18 +79,31 @@ CD frameへの切り捨てにより最大1 frame弱の重複があり得る。
 
 [PcmWorker](../src/pcm_worker.cpp)はreaderをworker threadだけで生成・使用・破棄する。
 start/cancelでgenerationを更新し、古いread完了データを採用しない。
-queueは20 block上限でcondition_variableにより待つ。
+queueは設定されたblock上限でcondition_variableにより待つ（既定20 block）。
 discard_readerは待機中workerも起こすが、進行中ioctlは中断しない。
 device_releasedはreaderが閉じ、readが進行中でないことをmutex下で確認する。
 accepted blockにはReadResultから作ったReadEvidenceを付ける。WorkerStatusのReadDiagnosticsは最新readと
 stream開始後の集計を値コピーで返す。世代が変わったread完了はPCMと同じく集計にも加えない。
 READ_OBSERVED eventは256件上限の別queueへ渡し、main側でsequenceを付ける。通常成功はDEBUG、
 backend回復報告はINFO、未確実な結果はWARNING。start/cancel/discardで旧世代のeventを破棄する。
+PcmBufferConfigは容量と開始閾値をCD frameで保持し、15 frame/blockへ変換する。既定300/150 frame、
+上限2250 frameで、0、15の倍数でない値、開始閾値が容量を超える値を起動前に拒否する。
+underrun時の開始閾値増加も設定された容量を上限とする。
+
+[DriveAccessCoordinator](../include/drive_access.hpp)は一台のdriveに対するblocking callをmutexで直列化する。
+PcmWorkerのfactory/seek/read/closeとMediaWorker callbackが共有する。mutex待ちはworker thread内で行い、
+main loopを止めない。実行中ioctlのcancelや公平性は提供せず、eject優先は既存の停止・reader解放順序で保証する。
 
 [CddaReader](../include/cdda_reader.hpp)は生成時open、seek、read、destructorによるcloseのRAII interface。
 read bufferはCD frameの整数倍で、ReadResult.frames_read部分だけが有効。
 最初とread_error後にseekが必要。EOF判定は呼び手がTOCで行う。
 [direct](../src/cdda_reader.cpp)と[paranoia](../src/paranoia_reader.cpp)は同じPCM形式を返す。
+[RepeatedReadVerifier](../src/repeated_read_verifier.cpp)はreaderを包み、各試行前に同じLBAへseekする。
+最大3候補をPCM全sampleで比較し、2候補一致で採用する。試行数・完全read数・最大一致数・不一致数・
+時間予算超過をReadResultへ記録する。最大3回または10秒で未解決ならframes_read=0のread_errorを返し、
+呼び手のbufferへ候補PCMをコピーしない。時間予算は進行中のblocking readを中断しない。
+PcmWorkerはsingle modeで15 frame、repeat modeで75 frameをreaderへ要求する。queue容量と開始閾値は
+CD frame設定をregion block数へ変換するため、repeatでも既定4秒/2秒を維持する。
 [AudioOutput](../include/audio_output.hpp)のwrite/delayの単位はCD frameでなくstereo sample frame。
 [ALSA実装](../src/alsa_output.cpp)がEPIPEをAudioUnderrunへ分類する。
 
@@ -107,6 +120,10 @@ optionalはnull。metadata.selectedはcandidate配列の0始まりindex。
 Phase 1aではschema_version=1とdrive capabilities、read activity、strategy、latest/current playback evidence、
 aggregate stats、直近64件のeventも含む。latestはreader側の最新先読み区間。current_playbackは
 ALSAへ提出したPCM範囲とdelayから求める再生head推定で、TV/ARC/アンプ内部の遅延は含まない。
+read objectはbuffer_capacity_framesとstartup_buffer_framesも公開する。
+`last_prebuffer_wait_ms`はplay、seek、track変更、underrun復旧の後に、engineが最初に先読み条件を
+満たすまでのmonotonic時間である。`prebuffer_target_frames`はその時点の必要PCM量であり、ALSA以降の
+出力遅延は含まない。single/repeatやbuffer設定を比較する診断値で、再生開始の外部的な保証時刻ではない。
 
 [probe_drive_capabilities](../src/drive_capabilities.cpp)はsysfsのvendor/model/revと読み取り専用の
 CDROM_GET_CAPABILITYを調べる。現段階でYES/NOを付けるのはkernelが報告するspeed controlだけで、
@@ -118,6 +135,9 @@ DAE、C2、cache、accurate stream、offsetはUNKNOWNを維持する。MediaWork
 serviceはlws_cancel_serviceでwake-upを予約してからlws_service(context,0)を呼ぶ。
 timeout=0だけでは待受を避けられずmain loopを止めることがあったため、この順序を保つ。
 publish_stateは送信用snapshotを更新する。mainが完成済みJSONを用意し、callback内でTOCやnetworkを読まない。
+[technical_status_page](../src/technical_status_page.cpp)はHTML/CSS/JavaScriptをcompile時に埋め込む。
+追加filesystemやNode runtimeを要求しない。画面はGET stateとWS eventsだけを消費し、再接続時には
+snapshotから全表示を再構築する。外部文字列はtextContentへ設定し、innerHTMLへ渡さない。
 
 ## metadata関数と非同期境界
 

@@ -1,4 +1,5 @@
 #include "api_server.hpp"
+#include "technical_status_page.hpp"
 #include <array>
 #include <algorithm>
 #include <cstring>
@@ -14,6 +15,16 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
                               const ApiCommandHandler& command_handler,
                               std::string_view body) {
+    if (path == "/debug/status" || path == "/debug/status.css" || path == "/debug/status.js") {
+        if (method != "GET")
+            return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
+        if (path == "/debug/status")
+            return {HTTP_STATUS_OK, "text/html; charset=utf-8", std::string(technical_status_html())};
+        if (path == "/debug/status.css")
+            return {HTTP_STATUS_OK, "text/css; charset=utf-8", std::string(technical_status_css())};
+        return {HTTP_STATUS_OK, "text/javascript; charset=utf-8",
+                std::string(technical_status_javascript())};
+    }
     if (path == "/api/state") {
         if (method != "GET")
             return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};

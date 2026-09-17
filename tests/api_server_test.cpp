@@ -19,6 +19,18 @@ int main() {
         check(response.body == R"({"revision":7})" && calls == 1);
         response = route_api_request("POST", "/api/state", provider);
         check(response.status == 405 && calls == 1);
+        response = route_api_request("GET", "/debug/status", provider);
+        check(response.status == 200 && response.content_type == "text/html; charset=utf-8");
+        check(response.body.find("PiCDPlayer Technical Status") != std::string::npos);
+        check(response.body.find("/debug/status.js") != std::string::npos && calls == 1);
+        response = route_api_request("GET", "/debug/status.js", provider);
+        check(response.status == 200 && response.content_type == "text/javascript; charset=utf-8");
+        check(response.body.find("/api/events") != std::string::npos);
+        check(response.body.find("innerHTML") == std::string::npos);
+        response = route_api_request("GET", "/debug/status.css", provider);
+        check(response.status == 200 && response.content_type == "text/css; charset=utf-8");
+        check(response.body.find("color-scheme:dark") != std::string::npos);
+        check(route_api_request("POST", "/debug/status", provider).status == 405);
         response = route_api_request("GET", "/missing", provider);
         check(response.status == 404 && calls == 1);
         ApiCommand received_command{ApiCommandType::play};

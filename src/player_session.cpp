@@ -102,7 +102,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& audio_device, bool use_cec, const std::string& cec_device,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
                         const std::string& metadata_cache, const std::string& api_listen,
-                        int api_port) {
+                        int api_port, PcmBufferConfig buffer_config,
+                        bool repeated_read_verification) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache;
 #endif
@@ -112,14 +113,27 @@ void run_player_session(const std::string& device, CddaBackend backend,
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
     auto audio = make_alsa_output(audio_device);
-    PcmWorker worker([=] { return make_cdda_reader(backend, device); },
-                     backend == CddaBackend::direct ? "direct-single-read"
-                                                    : "paranoia-library");
+    auto drive_access = std::make_shared<DriveAccessCoordinator>();
+    const auto base_strategy = backend == CddaBackend::direct ? "direct" : "paranoia-library";
+    PcmWorker worker([=] {
+                         auto reader = make_cdda_reader(backend, device);
+                         return repeated_read_verification
+                             ? make_repeated_read_verifier(std::move(reader))
+                             : std::move(reader);
+                     },
+                     std::string(base_strategy) + (repeated_read_verification
+                         ? "+repeat-2of3" : "-single-read"),
+                     buffer_config, drive_access,
+                     repeated_read_verification ? "REPEATED" : "LEGACY",
+                     repeated_read_verification ? std::size_t{75} : pcm_block_cd_frames);
     MediaWorker media_worker(
-        [device] { return read_cd_media(device).observation; },
-        [device] { return read_cd_toc(device); },
-        [device] { eject_cd(device); },
-        [device] { return probe_drive_capabilities(device); });
+        [device, drive_access] { return drive_access->invoke(
+            [&] { return read_cd_media(device).observation; }); },
+        [device, drive_access] { return drive_access->invoke(
+            [&] { return read_cd_toc(device); }); },
+        [device, drive_access] { drive_access->invoke([&] { eject_cd(device); }); },
+        [device, drive_access] { return drive_access->invoke(
+            [&] { return probe_drive_capabilities(device); }); });
 #ifdef ENABLE_METADATA
     std::unique_ptr<MetadataWorker> metadata_worker;
     if (metadata_enabled) {
@@ -146,6 +160,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
     CecDevice cec(cec_device, cec_diagnostics);
     std::cout << "player: backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
               << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native"
+              << " buffer_frames=" << buffer_config.capacity_cd_frames
+              << " startup_frames=" << buffer_config.startup_cd_frames
+              << " verification=" << (repeated_read_verification ? "repeat-2of3" : "single")
               << " stdin_commands=" << (interactive ? "enabled" : "disabled") << '\n';
     if (interactive)
         std::cout << "Commands: play pause stop next previous track N seek SECONDS state quit\n";

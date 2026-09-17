@@ -36,6 +36,9 @@ int main(int argc, char** argv) {
     std::string metadata_cache = "/var/cache/picdplayer";
     bool metadata_option = false, metadata_cache_option = false;
     int api_port = 0;
+    PcmBufferConfig buffer_config;
+    bool buffer_option = false;
+    bool verification_option = false, repeated_read_verification = false;
     std::string api_listen = "127.0.0.1";
     bool api_listen_option = false;
     std::string device = "/dev/cec0";
@@ -62,6 +65,32 @@ int main(int argc, char** argv) {
             if (inet_pton(AF_INET, api_listen.c_str(), &ipv4) != 1 &&
                 inet_pton(AF_INET6, api_listen.c_str(), &ipv6) != 1) {
                 std::cerr << "Invalid --api-listen: expected a numeric IP address\n"; return 2;
+            }
+        }
+        else if ((arg == "--read-buffer-frames" || arg == "--startup-buffer-frames") &&
+                 i + 1 < argc) {
+            const std::string_view value(argv[++i]);
+            unsigned long parsed = 0;
+            const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+            if (error != std::errc{} || end != value.data() + value.size() ||
+                parsed < pcm_block_cd_frames || parsed > maximum_buffer_cd_frames ||
+                parsed % pcm_block_cd_frames != 0) {
+                std::cerr << "Invalid " << arg
+                          << ": expected a multiple of 15 in range 15..2250 CD frames\n";
+                return 2;
+            }
+            if (arg == "--read-buffer-frames") buffer_config.capacity_cd_frames = parsed;
+            else buffer_config.startup_cd_frames = parsed;
+            buffer_option = true;
+        }
+        else if (arg == "--read-verification" && i + 1 < argc) {
+            const std::string_view value(argv[++i]);
+            verification_option = true;
+            if (value == "single") repeated_read_verification = false;
+            else if (value == "repeat") repeated_read_verification = true;
+            else {
+                std::cerr << "Invalid --read-verification: expected single or repeat\n";
+                return 2;
             }
         }
         else if (arg == "--player" && i + 1 < argc) player_device = argv[++i];
@@ -142,6 +171,19 @@ int main(int argc, char** argv) {
     if (api_listen_option && !api_port) {
         std::cerr << "--api-listen requires --api-port\n"; return 2;
     }
+    if (buffer_option && player_device.empty()) {
+        std::cerr << "buffer options require --player\n"; return 2;
+    }
+    if (verification_option && player_device.empty()) {
+        std::cerr << "--read-verification requires --player\n"; return 2;
+    }
+    try {
+        validate_pcm_buffer_config(buffer_config);
+        if (repeated_read_verification && buffer_config.capacity_cd_frames < 75)
+            throw std::invalid_argument("repeat verification requires at least 75 CD frames of buffer capacity");
+    } catch (const std::invalid_argument& error) {
+        std::cerr << "Invalid playback buffer: " << error.what() << '\n'; return 2;
+    }
 #ifndef ENABLE_API
     if (api_port || api_listen_option) { std::cerr << "API support is not built (ENABLE_API=OFF)\n"; return 2; }
 #endif
@@ -182,7 +224,8 @@ int main(int argc, char** argv) {
         if (!player_device.empty()) {
             run_player_session(player_device, backend, audio_device, cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
-                               metadata_cache, api_listen, api_port);
+                               metadata_cache, api_listen, api_port, buffer_config,
+                               repeated_read_verification);
             return 0;
         }
         if (!cdda_device.empty()) {

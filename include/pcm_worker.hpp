@@ -1,11 +1,13 @@
 #pragma once
 #include "cdda_reader.hpp"
+#include "drive_access.hpp"
 #include "integrity_state.hpp"
 #include "player_event.hpp"
 #include <condition_variable>
 #include <chrono>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -27,16 +29,29 @@ struct WorkerStatus {
 
 // Each block is 15 CD frames (200 ms). Four seconds absorbs short USB-drive
 // recovery stalls while staying below 1 MiB of PCM on a Raspberry Pi 3.
+inline constexpr std::size_t pcm_block_cd_frames = 15;
 inline constexpr std::size_t pcm_queue_capacity_blocks = 20;
 inline constexpr std::size_t pcm_prebuffer_blocks = 10;
+inline constexpr std::size_t maximum_buffer_cd_frames = 30 * 75;
 inline constexpr std::size_t read_event_capacity = 256;
+
+struct PcmBufferConfig {
+    std::size_t capacity_cd_frames = pcm_queue_capacity_blocks * pcm_block_cd_frames;
+    std::size_t startup_cd_frames = pcm_prebuffer_blocks * pcm_block_cd_frames;
+};
+
+void validate_pcm_buffer_config(const PcmBufferConfig& config);
 
 // Owns the reader exclusively on one worker. Main thread never waits for CD I/O,
 // except at destruction (joining an outstanding kernel/library operation).
 class PcmWorker {
 public:
     using Factory = std::function<std::unique_ptr<CddaReader>()>;
-    explicit PcmWorker(Factory factory, std::string strategy = "legacy");
+    explicit PcmWorker(Factory factory, std::string strategy = "legacy",
+                       PcmBufferConfig buffer = {},
+                       std::shared_ptr<DriveAccessCoordinator> drive_access = {},
+                       std::string requested_mode = "LEGACY",
+                       std::size_t read_block_cd_frames = pcm_block_cd_frames);
     ~PcmWorker();
     PcmWorker(const PcmWorker&) = delete;
     PcmWorker& operator=(const PcmWorker&) = delete;
@@ -50,9 +65,17 @@ public:
     bool pop(PcmBlock& block);
     bool pop_event(PlayerEvent& event);
     WorkerStatus status();
+    std::size_t buffer_capacity_blocks() const { return capacity_blocks_; }
+    std::size_t startup_buffer_blocks() const { return startup_blocks_; }
+    std::size_t read_block_cd_frames() const { return read_block_cd_frames_; }
 private:
     void run();
     Factory factory_;
+    PcmBufferConfig buffer_config_;
+    std::shared_ptr<DriveAccessCoordinator> drive_access_;
+    std::size_t capacity_blocks_ = pcm_queue_capacity_blocks;
+    std::size_t startup_blocks_ = pcm_prebuffer_blocks;
+    std::size_t read_block_cd_frames_ = pcm_block_cd_frames;
     std::mutex mutex_;
     std::condition_variable changed_;
     std::deque<PcmBlock> queue_;
@@ -60,6 +83,7 @@ private:
     bool closing_ = false, active_ = false, done_ = false;
     bool discard_reader_ = false;
     bool reader_open_ = false;
+    bool drive_call_inflight_ = false;
     bool reading_ = false;
     std::chrono::steady_clock::time_point read_started_{};
     std::int64_t last_read_us_ = 0;

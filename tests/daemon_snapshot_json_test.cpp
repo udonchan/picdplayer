@@ -21,6 +21,11 @@ int main() {
         read.latest = make_read_evidence({60, 15, 15, ReadStatus::ok, 0, 0});
         read.current_playback = make_read_evidence({45, 15, 15, ReadStatus::ok, 0, 0});
         read.queued_blocks = 8;
+        read.buffer_capacity_frames = 300;
+        read.startup_buffer_frames = 150;
+        read.read_block_frames = 15;
+        read.prebuffer_target_frames = 150;
+        read.last_prebuffer_wait_ms = 1234;
         observe_read(read.stats, {60, 15, 15, ReadStatus::ok, 0, 0});
         DriveCapabilities drive;
         drive.device = "/dev/sr0"; drive.vendor = "ASUS";
@@ -46,9 +51,16 @@ int main() {
         check(json["read"]["latest"]["local_verification"] == "SINGLE_READ");
         check(json["read"]["latest"]["c2_status"] == "NOT_CHECKED");
         check(json["read"]["latest"]["offset_status"] == "UNKNOWN");
+        check(json["read"]["latest"]["verification"]["attempts"] == 0);
         check(json["read"]["stats"]["read_calls"] == 1);
+        check(json["read"]["stats"]["verified_calls"] == 0);
         check(json["read"]["current_playback"]["start_lba"] == 45);
         check(json["read"]["queued_blocks"] == 8);
+        check(json["read"]["buffer_capacity_frames"] == 300);
+        check(json["read"]["startup_buffer_frames"] == 150);
+        check(json["read"]["read_block_frames"] == 15);
+        check(json["read"]["prebuffer_target_frames"] == 150);
+        check(json["read"]["last_prebuffer_wait_ms"] == 1234);
         check(json["drive"]["vendor"] == "ASUS");
         check(json["drive"]["digital_audio_extraction"]["value"] == "UNKNOWN");
         check(json["drive"]["speed_control"]["value"] == "YES");

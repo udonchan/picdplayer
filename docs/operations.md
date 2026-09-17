@@ -14,6 +14,34 @@
 `seek 10`は10秒先、`seek -10`は10秒前。対話CLIにeject commandはない。
 標準入力を使わない運転では--interactiveを外し、CECまたはAPIで操作する。
 
+先読みbufferはCD frame単位で指定できる。75 frameが1秒、値は15の倍数、容量上限は2250 frame。
+次は容量10秒・再生開始4秒の例。省略時は容量300 frame（4秒）、開始150 frame（2秒）。
+
+```sh
+./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \
+  --read-buffer-frames 750 --startup-buffer-frames 300
+```
+
+実験用の反復一致読み取りは次で有効にする。各15 CD frame区間を最大3回読み、PCM全体が2回一致した
+候補だけを再生する。既定は`single`であり、このoptionは実機確認前なので常駐serviceへはまだ設定しない。
+
+```sh
+./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \
+  --read-verification repeat
+```
+
+起動、seek、track変更後には次のログが出る。`wait_ms`はPCM先読みが再開条件に達するまでの時間で、
+HDMI、TV、ARC、アンプの出力遅延は含まない。
+
+```text
+player: prebuffer_ready wait_ms=... queued_blocks=... target_frames=...
+```
+
+同じ値は`GET /api/state`の`read.last_prebuffer_wait_ms`と`read.prebuffer_target_frames`でも取得できる。
+
+開始閾値は容量以下でなければならない。大きなbufferは短いread stallへの余裕を増やす一方、
+起動・seek後の待ち時間とmemory使用量を増やすため、production既定値は実機比較後に決める。
+
 ## 一回実行の診断
 
 ```sh
@@ -54,6 +82,21 @@ EJECTINGなら要求を保持している。EJECT_ERRORならmedia.errorを確�
 別PCからの状態照会は`--api-listen 0.0.0.0 --api-port 8080`を追加し、
 `http://PI_ADDRESS:8080/api/state`へ接続する。外部からの操作POSTは403であり仕様どおり。
 WebSocketは接続時と変化時に同じschemaを送る。定期heartbeatとしての配信はしない。
+
+### Technical status画面
+
+APIを有効にしたplayerへブラウザから次のURLで接続する。
+
+```text
+http://PI_ADDRESS:8080/debug/status
+```
+
+画面は読み取り専用で、player状態、現在位置、現在再生中と最新先読みのread evidence、集計、
+drive能力と根拠、disc/metadata、直近8件の観測を表示する。NO DISCではcurrent PCMをCLEANとせず
+NO DISCと表示する。右上がLiveならWebSocket接続中。切断時はReconnectingとなり、1.5秒後に
+GET stateで現在値を復元して再接続する。ここから再生操作は行わない。
+
+これはPhase 1bの診断画面であり、TV向け本番UI、ジャケット表示、kiosk起動ではない。
 
 ## ログの読み方
 

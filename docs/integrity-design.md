@@ -1,6 +1,7 @@
 # 読み取り信頼性・説明可能性の拡張設計案
 
-状態: Phase 1aを実装・通常CDで実機確認済み。設計基準はcbf458e。既存仕様の置き換えではなく、段階的な拡張案である。
+状態: Phase 1aは実装・通常CDで実機確認済み。Phase 1b、Phase 2の基礎、Phase 3の反復一致判定は実装・自動試験済みで実機確認前。
+設計基準はcbf458e。既存仕様の置き換えではなく、段階的な拡張案である。
 ユーザー提示の「Explainable Secure CD-DA Player」の要求を本repositoryの構成へ対応付ける。
 最初の実装では既存readの観測値をPCM blockとsnapshotへ伝搬し、read-only能力probe、
 bounded event、ALSA再生headに対応する根拠の推定を追加した。新しいmode、検証/recovery algorithm、
@@ -39,7 +40,7 @@ AccurateRip等はPhase 5でprotocolと利用条件を確認してから依存を
 | PCM | 15 sector block、generationとevidence付きbounded queue | 容量設定、region分割、複数候補 |
 | 出力 | PlaybackEngine→ALSA。delayから再生headのevidenceを推定 | TV/ARC以降を除く精度評価、供給状態 |
 | 状態 | main所有のPlayer/Media/Metadataとdrive/read値モデル | policy、active warning、coverage |
-| UI/API | snapshotにdrive/read/recent eventsを配信。UIなし | technical status renderer、専用diagnostic stream |
+| UI/API | snapshot配信と読み取り専用technical status renderer | TV向け本番UI、専用diagnostic stream |
 | ログ | RECOVERED/UNCERTAIN eventの診断行 | provenanceとevent gapの診断 |
 | 設定 | CLI・systemd EnvironmentFile、任意CMake機能 | mode/policy、buffer・retry上限 |
 | 試験 | fake reader/audio、能力UNKNOWN、evidence、世代、snapshot、loopback API | 検証・provenance・event欠落の試験 |
@@ -192,8 +193,8 @@ Phase 1に能動的cache/C2精度試験やトレイ操作は含めない。
 ## 8. bufferと検証・recovery
 
 既存bounded dequeを維持し、必要性が実測で示されるまでring bufferへ置き換えない。
-現在は15 sector/block、開始10 block=2秒、上限20 block=4秒。
-Phase 2で開始閾値・目標・上限を設定化し、設定値をCD frameで保持する。
+15 sector/blockを維持し、開始閾値・上限をCD frame単位で設定できる。既定は開始10 block=2秒、
+上限20 block=4秒で従来動作を保つ。
 BALANCEDの10〜30秒は評価候補であり、今すぐ既定値にしない。
 PCM単体は176400 bytes/秒なので10秒約1.68 MiB、30秒約5.05 MiB。
 比較用候補・overlap・provenance・ALSA bufferの予算も別途上限を持つ。
@@ -302,9 +303,9 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 | Phase | 小さな実装単位 | 完了条件 |
 |---|---|---|
 | 1a Observable core | 能力のUNKNOWNモデル、既存read統計、PCM世代/区間との対応、snapshot/event・診断ログ | 実装・通常CDで実機確認済み。read-only能力probe、bounded event、ALSA再生head推定を含む |
-| 1b Observable presentation | NO DISC能力表示、technical statusの小さなrenderer、event受信 | 欠落・再接続で復元し、UI不在でも再生。kiosk化は別作業 |
-| 2 Buffered Reader | 既存queueの容量/閾値設定、device I/O調停、速度設定と失敗fallback | memory上限、eject優先、速度UNKNOWN、10〜30秒の実機評価 |
-| 3 Checked Reading | overlap・候補比較・bounded recovery・provenance、BALANCED | fake異常を検出し採用理由を追跡。cache独立性の限界を公開 |
+| 1b Observable presentation | NO DISC能力表示、technical statusの小さなrenderer、event受信 | 実装・自動試験済み、実機確認前。snapshot再取得で復元し、kiosk化は別作業 |
+| 2 Buffered Reader | 既存queueの容量/閾値設定、device I/O調停、速度設定と失敗fallback | 容量/閾値と直列化を実装・自動試験済み。速度設定と実機評価は未実装 |
+| 3 Checked Reading | overlap・候補比較・bounded recovery・provenance、BALANCED | 2-of-3反復一致とprovenanceは実装・自動試験済み。overlap/cache対策と実機評価は未実装 |
 | 4 Drive-aware Secure | MMC/C2、cache評価/対策、offset、strategy選択、SECURE | 対応driveと根拠を実測、非対応は明示降格。QUIETもpolicyとして確認 |
 | 5 External Verification | checksum/照合、confidence・coverage、遅延結果 | 部分再生/交換/外部障害を誤ってMATCHにしない |
 
@@ -313,7 +314,7 @@ Phase 1aでは新規依存、reader API全面変更、追加drive read、速度�
 CMakeはモデル/集計テストを基本buildへ、JSON/API試験をENABLE_APIへ分ける。
 ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能にする。
 追加runtime optionはそのphaseで機能が成立したものだけ公開し、未実装指定を成功扱いしない。
-Phase 1aの実機確認後、次に着手する候補は1bの小さなtechnical status表示である。
+実機確認可能になるまではPhase 2の速度設定を有効化せず、Phase 3のhardware非依存な比較・provenanceモデルを先行できる。
 
 ### Phase 1aの実装済み範囲
 
@@ -330,7 +331,7 @@ direct retry後の成功は異常があったのに一致検証していない�
 paranoiaがfixupを報告してPCMを返した場合はRECOVERED + BACKEND_REPORTEDとする。
 いずれも原PCMの証明ではない。
 paranoiaのverify/fixup callbackがある場合も`BACKEND_REPORTED`とし、複数独立read一致とは表示しない。
-requested modeは未実装のためLEGACY、effective strategyはdirect-single-read/paranoia-libraryである。
+既定requested modeはLEGACY、effective strategyはdirect-single-read/paranoia-libraryである。
 
 DriveCapabilitiesは起動後にMediaWorkerで非同期probeする。sysfsのvendor/model/revと
 `CDROM_GET_CAPABILITY`の`CDC_SELECT_SPEED`だけを根拠付きで公開し、DAE、C2、cache、
@@ -341,6 +342,44 @@ accurate stream、offsetはUNKNOWNのまま保つ。probe失敗もNOへ変換せ
 seek/stop/ejectで旧世代のqueueとeventを破棄する。通常成功はDEBUG、backend回復報告はINFO、
 未確実な結果はWARNINGとする。eventやAPIの消費がaudio workerへbackpressureを返さないよう、
 worker queueとsnapshot履歴はいずれもboundedとした。
+
+### Phase 1bの実装済み範囲
+
+API buildは`GET /debug/status`で読み取り専用のtechnical status画面を提供する。HTML/CSS/JavaScriptは
+daemonへ埋め込み、追加runtime、静的asset directory、Node.jsを要求しない。画面はplayer、現在位置、
+current/latest evidence、集計、drive能力と根拠、disc/metadata、直近8件のeventを表示する。
+NO DISCではread evidenceをCLEANと表示しない。
+
+初回とWebSocket再接続時に`GET /api/state`から全状態を復元し、その後`WS /api/events`のsnapshotで
+更新する。event履歴だけから状態を再構成しないため、切断中のevent欠落を正常状態と誤認しない。
+画面は操作APIを呼ばず、metadata等の外部文字列をHTMLとして解釈しない。本番TV UI、画像表示、
+Chromium kiosk、個別event replayや専用diagnostic streamはこのphaseに含めない。
+
+### Phase 2の実装済み範囲
+
+既存dequeと15 frame/blockを維持したまま、容量と開始閾値をCD frame単位のruntime optionにした。
+既定300/150 frameは従来の4秒/2秒と同じ。最大2250 frame（30秒）、15 frame刻み、開始は容量以下に制限し、
+設定値をsnapshotとtechnical statusへ公開する。underrun後のadaptive prebufferも選択容量を越えない。
+
+DriveAccessCoordinatorをplayer sessionごとに一つ作り、PcmWorkerのreader操作とMediaWorkerの
+media/TOC/eject/capability操作を直列化した。main threadはmutexを取得しない。eject時はstream停止と
+reader解放を先に行う既存順序を維持する。kernel/library callの途中cancel、速度設定、適切なbuffer値の
+決定は実機依存のため未完了である。
+
+### Phase 3の実装済み範囲
+
+`--read-verification repeat`では既存readerをdecoratorで包み、75 CD frame（終端のみ短縮）の同一区間を最大3回読み、
+PCM全sampleが同一の候補を2回得た場合だけ採用する。A/AだけでなくA/B/Bも扱い、CRC衝突を一致としない。
+試行は最大3回、一区間10秒、候補memoryは最大3 blockに制限する。時間上限は新しい試行を始める前に判定し、
+進行中のkernel/library read自体を中断する保証ではない。
+
+一致しなければ候補PCMを出力せずread failureとして再生を停止する。A/B/Bのように不一致後に一致候補を
+採用した区間はRECOVERED、A/AはCLEANとし、どちらも`MULTIPLE_MATCH`と試行数を公開する。
+これは同一deviceから同じbytesを得た事実であり、drive cacheから独立したreadや原盤PCMとの一致を証明しない。
+通常CDで15 frame regionを反復した実機試験では1 regionに約359 msを要し、0.2秒分のPCM生成が再生に
+追いつかずunderrunした。このためrepeatだけregionを75 frameへ拡大し、queueは従来どおり4秒容量・2秒開始とした。
+既定は`--read-verification single`相当で、従来のread回数と再生動作を変えない。overlap、cache defeat、
+速度制御、BALANCED/SECURE policyはまだ実装していない。
 
 ## 13. 試験計画
 

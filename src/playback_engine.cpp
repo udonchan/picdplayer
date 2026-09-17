@@ -4,7 +4,8 @@
 #include <iostream>
 
 PlaybackEngine::PlaybackEngine(PlayerController& c, PcmWorker& w, AudioOutput& a, std::int32_t end)
-    : controller_(c), worker_(w), output_(a), end_(end) {
+    : controller_(c), worker_(w), output_(a), end_(end),
+      prebuffer_blocks_(w.startup_buffer_blocks()) {
     if (end < 0) throw std::invalid_argument("invalid disc end");
 }
 void PlaybackEngine::set_disc_end(std::int32_t end) {
@@ -17,6 +18,8 @@ void PlaybackEngine::synchronize() {
     worker_.cancel();
     output_.reset();
     block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
+    prebuffer_started_at_ = std::chrono::steady_clock::now();
+    last_prebuffer_wait_ms_.reset();
     submitted_evidence_.clear(); current_evidence_.reset();
     const auto state = controller_.state();
     if (state.playback == PlaybackState::playing) {
@@ -42,6 +45,12 @@ void PlaybackEngine::tick() {
             if (status.queued < prebuffer_blocks_ && !status.done)
                 return; // Adaptive prebuffer, shorter at disc end.
             primed_ = true;
+            last_prebuffer_wait_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
+                now - prebuffer_started_at_).count();
+            std::cout << "player: prebuffer_ready wait_ms=" << *last_prebuffer_wait_ms_
+                      << " queued_blocks=" << status.queued
+                      << " target_frames=" << prebuffer_blocks_ * worker_.read_block_cd_frames()
+                      << '\n' << std::flush;
         }
         // Bound work per main-loop iteration even for a sink that never blocks.
         for (int i = 0; i < 12; ++i) {
@@ -92,9 +101,11 @@ void PlaybackEngine::tick() {
             worker_.discard_reader();
             output_.reset();
             block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
+            prebuffer_started_at_ = std::chrono::steady_clock::now();
+            last_prebuffer_wait_ms_.reset();
             submitted_evidence_.clear(); current_evidence_.reset();
             start_ = *controller_.state().position_lba;
-            prebuffer_blocks_ = std::min(pcm_queue_capacity_blocks,
+            prebuffer_blocks_ = std::min(worker_.buffer_capacity_blocks(),
                                          prebuffer_blocks_ + std::size_t{5});
             ++underrun_recoveries_;
             generation_ = worker_.start(start_, end_);
@@ -137,5 +148,7 @@ ReadDiagnostics PlaybackEngine::read_diagnostics() {
     auto result = status.diagnostics;
     result.current_playback = current_evidence_;
     result.queued_blocks = status.queued;
+    result.prebuffer_target_frames = prebuffer_blocks_ * worker_.read_block_cd_frames();
+    result.last_prebuffer_wait_ms = last_prebuffer_wait_ms_;
     return result;
 }

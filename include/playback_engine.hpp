@@ -23,7 +23,9 @@ private:
     PcmBlock block_;
     std::size_t offset_ = 0;
     bool active_ = false, primed_ = false, draining_ = false;
-    std::size_t prebuffer_blocks_ = pcm_prebuffer_blocks;
+    std::size_t prebuffer_blocks_ = 0;
+    std::chrono::steady_clock::time_point prebuffer_started_at_{};
+    std::optional<std::int64_t> last_prebuffer_wait_ms_;
     unsigned underrun_recoveries_ = 0;
     std::chrono::steady_clock::time_point last_tick_{};
     struct SubmittedEvidence {

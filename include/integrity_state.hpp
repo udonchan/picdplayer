@@ -8,7 +8,7 @@
 // Observable facts about the current read stream. These types deliberately do
 // not claim that successfully returned PCM is the original disc PCM.
 enum class ReadActivity { idle, reading, buffering, complete, failed };
-enum class LocalVerification { none, single_read, backend_reported };
+enum class LocalVerification { none, single_read, backend_reported, multiple_match };
 enum class IntegrityReadStatus { unknown, clean, recovered, uncertain };
 enum class C2Status { unknown, not_available, not_checked, clean, reported };
 enum class OffsetStatus { unknown, uncorrected, corrected };
@@ -23,6 +23,7 @@ struct ReadEvidence {
     OffsetStatus offset_status = OffsetStatus::unknown;
     unsigned direct_retries = 0;
     ParanoiaEvents backend_events{};
+    LocalReadVerification verification{};
 };
 
 struct IntegrityStats {
@@ -38,6 +39,10 @@ struct IntegrityStats {
     std::uint64_t backend_cache_errors = 0;
     std::uint64_t backend_other = 0;
     std::uint64_t failed_calls = 0;
+    std::uint64_t verification_attempts = 0;
+    std::uint64_t verification_mismatches = 0;
+    std::uint64_t verified_calls = 0;
+    std::uint64_t verification_failures = 0;
 };
 
 struct ReadDiagnostics {
@@ -47,6 +52,11 @@ struct ReadDiagnostics {
     std::optional<ReadEvidence> latest;
     std::optional<ReadEvidence> current_playback;
     std::size_t queued_blocks = 0;
+    std::size_t buffer_capacity_frames = 0;
+    std::size_t startup_buffer_frames = 0;
+    std::size_t read_block_frames = 0;
+    std::size_t prebuffer_target_frames = 0;
+    std::optional<std::int64_t> last_prebuffer_wait_ms;
     std::uint64_t dropped_events = 0;
     IntegrityStats stats;
 };

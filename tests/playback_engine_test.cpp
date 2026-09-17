@@ -71,6 +71,90 @@ int main() {
             wait_for([&] { return idle.status().done; });
         }
         check(destroyed == 2);
+        // A cancelled slow open is still a live device operation until it
+        // returns and the newly-created reader has been discarded.
+        {
+            std::mutex open_mutex;
+            std::condition_variable open_changed;
+            bool open_entered = false, release_open = false;
+            PcmWorker opening([&] {
+                std::unique_lock lock(open_mutex);
+                open_entered = true; open_changed.notify_all();
+                open_changed.wait(lock, [&] { return release_open; });
+                return std::make_unique<FakeReader>();
+            });
+            opening.start(0, 15);
+            {
+                std::unique_lock lock(open_mutex);
+                open_changed.wait(lock, [&] { return open_entered; });
+            }
+            opening.cancel();
+            check(!opening.device_released());
+            opening.discard_reader();
+            { std::lock_guard lock(open_mutex); release_open = true; }
+            open_changed.notify_all();
+            wait_for([&] { return opening.device_released(); });
+        }
+        bool invalid_buffer = false;
+        try {
+            PcmWorker invalid([] { return std::make_unique<FakeReader>(); }, "test", {14, 15});
+        } catch (const std::invalid_argument&) { invalid_buffer = true; }
+        check(invalid_buffer);
+        bool invalid_read_block = false;
+        try {
+            PcmWorker invalid([] { return std::make_unique<FakeReader>(); }, "test", {30, 15},
+                              {}, "REPEATED", 75);
+        } catch (const std::invalid_argument&) { invalid_read_block = true; }
+        check(invalid_read_block);
+        {
+            PcmWorker bounded([] { return std::make_unique<FakeReader>(); }, "test", {30, 15});
+            check(bounded.buffer_capacity_blocks() == 2 && bounded.startup_buffer_blocks() == 1);
+            bounded.start(0, 1000);
+            wait_for([&] { return bounded.status().queued == 2; });
+            const auto diagnostics = bounded.status().diagnostics;
+            check(diagnostics.buffer_capacity_frames == 30 && diagnostics.startup_buffer_frames == 15);
+            check(diagnostics.read_block_frames == 15);
+            bounded.cancel();
+        }
+        {
+            PcmWorker regional([] { return std::make_unique<FakeReader>(); }, "repeat-test",
+                               {300, 150}, {}, "REPEATED", 75);
+            check(regional.buffer_capacity_blocks() == 4 && regional.startup_buffer_blocks() == 2);
+            check(regional.status().diagnostics.read_block_frames == 75);
+            regional.start(0, 375);
+            wait_for([&] { return regional.status().queued == 4; });
+            PcmBlock block;
+            check(regional.pop(block));
+            check(block.evidence.frames_requested == 75 && block.samples.size() == 75 * cdda_samples_per_frame);
+            regional.cancel();
+        }
+        // Media work using the same coordinator cannot overlap a PCM read.
+        {
+            auto coordinated_gate = std::make_shared<Gate>();
+            auto access = std::make_shared<DriveAccessCoordinator>();
+            PcmWorker coordinated([coordinated_gate] {
+                return std::make_unique<FakeReader>(coordinated_gate);
+            }, "test", {}, access);
+            coordinated.start(0, 15);
+            {
+                std::unique_lock lock(coordinated_gate->mutex);
+                if (!coordinated_gate->cv.wait_for(lock, std::chrono::seconds(3),
+                                                   [&] { return coordinated_gate->entered; }))
+                    throw std::runtime_error("coordinated reader did not enter");
+            }
+            std::atomic<bool> media_attempting = false, media_entered = false;
+            std::thread media([&] {
+                media_attempting = true;
+                access->invoke([&] { media_entered = true; });
+            });
+            wait_for([&] { return media_attempting.load(); });
+            check(!media_entered.load());
+            { std::lock_guard lock(coordinated_gate->mutex); coordinated_gate->release = true; }
+            coordinated_gate->cv.notify_all();
+            media.join();
+            check(media_entered.load());
+            wait_for([&] { return coordinated.status().done; });
+        }
         // An in-flight old read must not publish after a new range is requested.
         auto gate = std::make_shared<Gate>();
         {

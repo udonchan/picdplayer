@@ -1,11 +1,14 @@
 # 機能設計
 
-この文書は現行機能を記す。QUIET/BALANCED/SECURE、能力の根拠付き表示、区間検証、
-provenance、technical statusの追加案は[読み取り信頼性の拡張設計案](integrity-design.md)を参照する。
-現行direct/paranoiaの選択や正常再生は、これらの検証modeが実装済みであることを意味しない。
+この文書は現行機能を記す。QUIET/BALANCED/SECURE、C2、cache対策、offset、外部照合の追加案は
+[読み取り信頼性の拡張設計案](integrity-design.md)を参照する。現行direct/paranoiaの選択や正常再生は、
+原盤PCMとの一致やdrive cacheから独立した読み取りを保証しない。
 Phase 1aではread回数を変えず、既存ReadResultの観測、read-only drive能力probe、bounded event、
 ALSA再生headに対応する根拠の推定をsnapshotへ公開するところまで実装した。
 公開するCLEANは検証済みの意味ではなく、local verificationをSINGLE_READ等で別に示す。
+Phase 1bではこのsnapshotだけを入力にする読み取り専用technical status画面を追加した。
+これは診断用であり、将来のTV向け本番UIやauthoritative stateを兼ねない。
+Phase 3の初期実装では、任意指定した15 frame区間の2-of-3反復一致と採用根拠を追加した。
 
 ## media・TOC
 
@@ -47,11 +50,21 @@ direct追加retryは診断CLIで0〜10回指定でき、既定0。playerは既�
 paranoiaはFULLからNEVERSKIPを除いたmode、最大retry 20、skipは失敗として扱う。
 callback統計はdirectのretry回数と同じ意味ではない。
 
-PCMは15 CD frame（200 ms）単位、queue上限20 block（4秒、PCM約706 KiB）。
-通常は10 block（2秒）を先読みして開始する。終端付近は短くても開始可能。
+`--read-verification repeat`はbackendをdecoratorで包み、75 CD frame（終端のみ短縮）の同一区間を最大3回読み、PCM全体が2回一致した
+候補だけを採用する。一致しない場合は再生を停止する。既定の`single`は従来どおり一回のreadを採用する。
+反復一致はdrive cacheの影響を排除しないため、独立した複数readや原盤PCMとの一致とは表示しない。
+
+single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
+既定はqueue上限300 frame（4秒、PCM約706 KiB）、
+開始10 block（150 frame、2秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
+runtime設定できる。開始閾値は容量以下とする。終端付近は閾値より短くても開始可能。
 ALSA EPIPEはAudioUnderrunとしてreset・reader再生成・再bufferする。
-先読み閾値は復旧ごとに5 block増加し20 blockで止まる。現在はengineの寿命内でこの増加を保持する。
+先読み閾値は復旧ごとに5 block増加し、設定された容量で止まる。現在はengineの寿命内でこの増加を保持する。
 復旧回数上限はなく、長時間停止や傷discでの音質・応答は未評価。
+
+同一driveに対するreader open/seek/read/closeとmedia/TOC/eject/capability probeは共有mutexで直列化する。
+進行中ioctlは強制中断せず、ejectは従来どおりstream停止、reader解放確認後に要求する。
+速度設定はまだ行わず、buffer増加がstartup latencyや操作応答へ与える影響は実機評価待ち。
 
 ## CEC
 
@@ -76,6 +89,8 @@ libwebsocketsを採用しmain threadからserviceする。HTTPとWebSocketを一
 |---|---|
 | GET /api/state | DaemonSnapshotのJSON |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
+| GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
+| GET /debug/status.css, /debug/status.js | diagnostic画面の埋め込みasset |
 | POST /api/play, /pause, /stop, /next, /previous | bodyなし、受理204 |
 | POST /api/seek | `{"offset_seconds":10}`、±86400秒、受理204 |
 | POST /api/track | `{"track":2}`、1〜99かつ実disc内、受理204 |
@@ -85,6 +100,9 @@ seek/trackはfieldを1個だけ持つJSON object。操作body上限4 KiB、state
 未知pathは404、不適切なmethodは405。不正入力は400、body上限超過は413。
 通常操作はdiscなし/EJECTING時に409。操作の受理は音声出力開始の完了を意味しない。
 状態は250 msごとに変化を検査し、revisionを増加して配信する。HTTP直後のstateも最大でこの更新待ちがある。
+technical statusは初回にGET stateを読み、以後WebSocketで更新する。接続断ではstateを再取得してから
+再接続するため、eventを一件ずつ完全に受信したことを状態復元の前提にしない。metadata文字列は
+DOMのtextContentとして扱い、HTMLとして解釈しない。画面から操作POSTは送信しない。
 
 ## eject
 
