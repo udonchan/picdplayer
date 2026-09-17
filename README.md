@@ -5,7 +5,7 @@ C++20のdaemon `cdplayerd`がCD-DAを読み、ALSAからHDMIへ出力します�
 metadataがなくても再生できます。Node.jsやPythonをdaemonのruntimeには要求しません。
 
 開発・実機確認環境はRaspberry Pi 3 Model B、Raspberry Pi OS Lite、ASUS USB光学ドライブ、
-REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は[検証状況](docs/verification.md)を参照してください。
+REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は[検証状況](docs/development/verification.md)を参照してください。
 
 ## 現状
 
@@ -18,18 +18,18 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は[検証
 | ジャケット画像 | URL取得まで実装。画像の取得・表示は未実装 |
 | systemd常駐・自動起動 | 実装・基本構成で実機確認済み |
 | ALSA underrun自動復旧 | 実装・自動試験済み。実機の異常系評価は未完了 |
-| 読み取り状態・根拠の観測 | Phase 1aを実装し通常CDで確認済み。Phase 3の反復一致判定は自動試験済み、実機確認前 |
+| 読み取り状態・根拠の観測、反復一致 | 実装・通常CDで確認済み。起動中の設定切替は自動試験済み、実機確認待ち |
 | 読み取り専用technical status画面 | Phase 1bとして実装、自動試験済み、ブラウザ実機確認待ち |
 | CD-DA先読みbuffer設定・drive access直列化 | Phase 2の基礎を実装、自動試験済み、実機評価待ち |
 | 複数metadata候補の選択、TV向け本番UI | 未実装 |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 
 対象は音声のみのCDです。傷ディスクの評価やdirect/paranoia backendの性能比較は今後の課題です。
-詳しい確認範囲と残課題は[検証状況](docs/verification.md)にまとめています。
+詳しい確認範囲と残課題は[検証状況](docs/development/verification.md)にまとめています。
 
 ## はじめる
 
-[ビルド手順](docs/build.md)で依存パッケージとデバイス権限を準備した後、次を実行します。
+[ビルド手順](docs/manual/build.md)で依存パッケージとデバイス権限を準備した後、次を実行します。
 既存のserviceが動作中の場合は、先に停止してください。
 
 ```sh
@@ -39,10 +39,11 @@ cmake --build build-direct -j1
 ```
 
 Piの負荷を抑えるためビルドは `-j1` とします。終了はCtrl-Cです。
-任意機能の有効化は[ビルド手順](docs/build.md)、インストール・自動起動は
-[systemd運用手順](docs/systemd.md)、CLI・APIは[操作・診断手順](docs/operations.md)を参照してください。
+任意機能の有効化は[ビルド手順](docs/manual/build.md)、インストール・自動起動は
+[systemd運用手順](docs/manual/systemd.md)、CLI・APIは[操作・診断手順](docs/manual/operations.md)を参照してください。
 
 ## ドキュメント
 
-[ドキュメント索引](docs/README.md)から、基本設計・機能設計・詳細設計、運用手順、検証状況を参照できます。
+[Guide](docs/guide/README.md)で仕組みと設計意図を順に読めます。
+[ドキュメントの案内](docs/README.md)から、設計書、運用手順、検証状況を参照できます。
 過去の試行や実機ログは `docs/history/` に保存しています。
