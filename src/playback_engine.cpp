@@ -17,6 +17,7 @@ void PlaybackEngine::synchronize() {
     worker_.cancel();
     output_.reset();
     block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
+    submitted_evidence_.clear(); current_evidence_.reset();
     const auto state = controller_.state();
     if (state.playback == PlaybackState::playing) {
         if (end_ <= *state.position_lba) throw std::runtime_error("disc end is unavailable");
@@ -52,11 +53,21 @@ void PlaybackEngine::tick() {
             const auto remaining = std::span<const std::int16_t>(block_.samples).subspan(offset_);
             const auto accepted = output_.write(remaining);
             if (accepted > remaining.size() / 2) throw std::runtime_error("invalid audio write count");
+            if (accepted) {
+                submitted_evidence_.push_back({submitted_, submitted_ + static_cast<std::int64_t>(accepted),
+                                               block_.evidence});
+            }
             offset_ += accepted * 2;
             submitted_ += static_cast<std::int64_t>(accepted);
             if (accepted == 0) break;
         }
         const auto played = std::clamp<std::int64_t>(submitted_ - output_.delay(), 0, submitted_);
+        while (!submitted_evidence_.empty() && submitted_evidence_.front().end_stereo_frame <= played)
+            submitted_evidence_.pop_front();
+        if (!submitted_evidence_.empty() && submitted_evidence_.front().begin_stereo_frame <= played)
+            current_evidence_ = submitted_evidence_.front().evidence;
+        else
+            current_evidence_.reset();
         controller_.playback_position(static_cast<std::int32_t>(std::min<std::int64_t>(end_ - 1, start_ + played / 588)));
         const auto after = worker_.status();
         if (after.done && after.queued == 0 && offset_ == block_.samples.size()) {
@@ -81,6 +92,7 @@ void PlaybackEngine::tick() {
             worker_.discard_reader();
             output_.reset();
             block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
+            submitted_evidence_.clear(); current_evidence_.reset();
             start_ = *controller_.state().position_lba;
             prebuffer_blocks_ = std::min(pcm_queue_capacity_blocks,
                                          prebuffer_blocks_ + std::size_t{5});
@@ -118,4 +130,12 @@ void PlaybackEngine::tick() {
         output_.reset();
         throw;
     }
+}
+
+ReadDiagnostics PlaybackEngine::read_diagnostics() {
+    const auto status = worker_.status();
+    auto result = status.diagnostics;
+    result.current_playback = current_evidence_;
+    result.queued_blocks = status.queued;
+    return result;
 }

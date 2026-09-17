@@ -5,7 +5,8 @@ private helperを全件転記する代わりに、機能境界と不具合に関
 
 今後のread evidence保持、PCM区間との対応、structured eventとUI protocolの型・境界案は
 [読み取り信頼性の拡張設計案](integrity-design.md)を参照する。ここで説明する現行ReadResult、
-PcmBlock、DaemonSnapshotにはその拡張をまだ実装していない。
+PcmBlock、DaemonSnapshotにはPhase 1aのread evidence、集計、DriveCapabilities、bounded event、
+ALSA再生headに対応したintegrity推定を追加した。検証/recoveryと専用diagnostic endpointは未実装。
 
 ## 起動とmain loop
 
@@ -81,6 +82,10 @@ start/cancelでgenerationを更新し、古いread完了データを採用しな
 queueは20 block上限でcondition_variableにより待つ。
 discard_readerは待機中workerも起こすが、進行中ioctlは中断しない。
 device_releasedはreaderが閉じ、readが進行中でないことをmutex下で確認する。
+accepted blockにはReadResultから作ったReadEvidenceを付ける。WorkerStatusのReadDiagnosticsは最新readと
+stream開始後の集計を値コピーで返す。世代が変わったread完了はPCMと同じく集計にも加えない。
+READ_OBSERVED eventは256件上限の別queueへ渡し、main側でsequenceを付ける。通常成功はDEBUG、
+backend回復報告はINFO、未確実な結果はWARNING。start/cancel/discardで旧世代のeventを破棄する。
 
 [CddaReader](../include/cdda_reader.hpp)は生成時open、seek、read、destructorによるcloseのRAII interface。
 read bufferはCD frameの整数倍で、ReadResult.frames_read部分だけが有効。
@@ -99,6 +104,14 @@ receiveは一件dequeueし、応答が必要なmessageを処理して任意のCe
 track内位置と長さを追加した値コピーを作る。network/hardware I/Oはしない。
 [serialize_daemon_snapshot](../src/daemon_snapshot_json.cpp)はrevision/player/media/disc/metadataをJSON化する。
 optionalはnull。metadata.selectedはcandidate配列の0始まりindex。
+Phase 1aではschema_version=1とdrive capabilities、read activity、strategy、latest/current playback evidence、
+aggregate stats、直近64件のeventも含む。latestはreader側の最新先読み区間。current_playbackは
+ALSAへ提出したPCM範囲とdelayから求める再生head推定で、TV/ARC/アンプ内部の遅延は含まない。
+
+[probe_drive_capabilities](../src/drive_capabilities.cpp)はsysfsのvendor/model/revと読み取り専用の
+CDROM_GET_CAPABILITYを調べる。現段階でYES/NOを付けるのはkernelが報告するspeed controlだけで、
+DAE、C2、cache、accurate stream、offsetはUNKNOWNを維持する。MediaWorkerで非同期に実行するため、
+失敗や遅延はdisc認識と再生可能化を妨げない。
 
 [route_api_request](../src/api_server.cpp)はmethod/path/bodyを検証してhandlerへ渡す純粋な入口。
 実接続のloopback判定はApiServer callback側で行い、route単体は認証境界ではない。

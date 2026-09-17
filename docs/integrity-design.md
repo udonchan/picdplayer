@@ -1,8 +1,10 @@
 # 読み取り信頼性・説明可能性の拡張設計案
 
-状態: レビュー待ち・未実装。調査基準はdffb803。既存仕様の置き換えではなく、段階的な拡張案である。
+状態: Phase 1aを実装・通常CDで実機確認済み。設計基準はcbf458e。既存仕様の置き換えではなく、段階的な拡張案である。
 ユーザー提示の「Explainable Secure CD-DA Player」の要求を本repositoryの構成へ対応付ける。
-今回の変更範囲は設計文書のみ。新しいCLI、API、mode、probeはまだ利用できない。
+最初の実装では既存readの観測値をPCM blockとsnapshotへ伝搬し、read-only能力probe、
+bounded event、ALSA再生headに対応する根拠の推定を追加した。新しいmode、検証/recovery algorithm、
+専用diagnostic event endpoint、UIはまだ利用できない。
 
 ## 1. 目的と原則
 
@@ -20,18 +22,27 @@ playback continuity、quiet operation、extensibility、UI simplicityとする�
 
 ## 2. 現状調査と差分
 
+### 追加dependencyの調査
+
+Phase 1aは標準C++20、既存Linux UAPI、既存API buildのnlohmann/jsonだけで実装でき、
+新しいlibraryを追加しない。Raspberry Pi OS上で既存のALSA 1.2.14、libwebsockets 4.3.5、
+libdiscid 0.6.4、libcurl 8.14.1、nlohmann/json 3.11.3を確認した。
+CRC比較は最初から外部hash libraryを要求せず、Phase 3で衝突時のPCM bytes比較を含めて選定する。
+MMC/C2/cacheはlibrary導入を先に決めずLinux SG_IO/CDROM packet経路とdrive/bridgeの挙動を調査する。
+AccurateRip等はPhase 5でprotocolと利用条件を確認してから依存を決める。
+
 | 領域 | 現在の実装 | 追加が必要なもの |
 |---|---|---|
-| drive | sysfsでtype/vendor/model、Linux ioctlでmedia/TOC | firmware、能力と根拠、probe状態 |
+| drive | sysfs identity、media/TOC、read-only能力probeとUNKNOWNモデル | MMC/C2/cacheのreport・実測trust、速度、offset |
 | CD-DA | CddaReaderのseek/read、direct/paranoia | 観測保持、region検証、採用理由 |
-| 読み取り結果 | ReadResultに位置・件数・errno・retry・paranoia callback集計 | 区間ごとのevidence、独立性、C2、provenance |
-| PCM | PcmWorkerの15 sector block、generation付きbounded queue | PCMとevidenceの対応、容量設定 |
-| 出力 | PlaybackEngine→AudioOutput→ALSA。delayから位置推定 | 可聴位置に対応したintegrity、供給状態 |
-| 状態 | main所有のPlayerController / MediaStateTracker / MetadataSession | drive/read/integrityの独立した値モデル |
-| UI/API | UIなし。GET stateとWS eventsは同じsnapshotを配信 | structured event、technical status renderer |
-| ログ | 人間向け行ログ、probeにread統計 | 同じeventから診断ログを生成 |
+| 読み取り結果 | ReadResultとblock単位のevidence・集計 | 独立性、C2、詳細provenance |
+| PCM | 15 sector block、generationとevidence付きbounded queue | 容量設定、region分割、複数候補 |
+| 出力 | PlaybackEngine→ALSA。delayから再生headのevidenceを推定 | TV/ARC以降を除く精度評価、供給状態 |
+| 状態 | main所有のPlayer/Media/Metadataとdrive/read値モデル | policy、active warning、coverage |
+| UI/API | snapshotにdrive/read/recent eventsを配信。UIなし | technical status renderer、専用diagnostic stream |
+| ログ | RECOVERED/UNCERTAIN eventの診断行 | provenanceとevent gapの診断 |
 | 設定 | CLI・systemd EnvironmentFile、任意CMake機能 | mode/policy、buffer・retry上限 |
-| 試験 | fake reader/audio、worker、snapshot、parser、loopback API | 能力・検証・provenance・event欠落の試験 |
+| 試験 | fake reader/audio、能力UNKNOWN、evidence、世代、snapshot、loopback API | 検証・provenance・event欠落の試験 |
 
 現在のdata pathは `/dev/sr0 → CddaReader → PcmWorker queue → PlaybackEngine → ALSA → HDMI`。
 TOC取得は別のMediaWorkerから行う。PcmWorkerはReadResultの成功・frames_readを確認するが、
@@ -238,8 +249,11 @@ current playback regionのintegrity、coverage/stats、active warnings、last_ev
 警告が解消したかもstateで保持し、eventを逃しても復元できる。
 UIはread activityとcurrent playback integrityを別表示する。
 
-出来事は新しい`WS /api/diagnostics`（仮称）を用意し、既存eventsへ異種messageを混ぜない。
-イベント例（schema案であり現在送信されない）:
+Phase 1aでは直近64件のbounded eventをsnapshotの`recent_events`に含め、既存WebSocketでも
+snapshot更新として配信する。通常成功はDEBUGとして行ログへ出さず、RECOVERED/UNCERTAINを記録する。
+worker側のevent queueは256件を上限とし、溢れは`read.dropped_events`に表す。
+履歴の再送、gap検出、詳細provenanceが必要になる段階では新しい`WS /api/diagnostics`（仮称）を用意し、
+既存eventsへ異種messageを混ぜない。将来のイベント例:
 
 ```json
 {
@@ -287,7 +301,7 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 
 | Phase | 小さな実装単位 | 完了条件 |
 |---|---|---|
-| 1a Observable core | 能力のUNKNOWNモデル、既存read統計、PCM世代/区間との対応、snapshot/event・診断ログ | 読む回数・PCM・既存停止動作を変えず、観測以上の表示をしない |
+| 1a Observable core | 能力のUNKNOWNモデル、既存read統計、PCM世代/区間との対応、snapshot/event・診断ログ | 実装・通常CDで実機確認済み。read-only能力probe、bounded event、ALSA再生head推定を含む |
 | 1b Observable presentation | NO DISC能力表示、technical statusの小さなrenderer、event受信 | 欠落・再接続で復元し、UI不在でも再生。kiosk化は別作業 |
 | 2 Buffered Reader | 既存queueの容量/閾値設定、device I/O調停、速度設定と失敗fallback | memory上限、eject優先、速度UNKNOWN、10〜30秒の実機評価 |
 | 3 Checked Reading | overlap・候補比較・bounded recovery・provenance、BALANCED | fake異常を検出し採用理由を追跡。cache独立性の限界を公開 |
@@ -299,7 +313,34 @@ Phase 1aでは新規依存、reader API全面変更、追加drive read、速度�
 CMakeはモデル/集計テストを基本buildへ、JSON/API試験をENABLE_APIへ分ける。
 ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能にする。
 追加runtime optionはそのphaseで機能が成立したものだけ公開し、未実装指定を成功扱いしない。
-次に着手する候補は1a。今回はこの設計レビューで止め、実装には進まない。
+Phase 1aの実機確認後、次に着手する候補は1bの小さなtechnical status表示である。
+
+### Phase 1aの実装済み範囲
+
+`ReadResult`から、LBA、要求/取得frame、direct retry、paranoia callback集計を`ReadEvidence`へ変換する。
+PcmWorkerはaccepted PCM blockへevidenceを付け、stream開始からのboundedなaggregateを保持する。
+seek/stop等で世代が変わった古いread結果は、現行streamのevidenceや統計へ加えない。
+
+API snapshotには`schema_version=1`、`drive`、`read`、`recent_events`を追加した。`read.latest`は
+最新の先読み結果、`read.current_playback`はALSAへ提出した区間とALSA delayから推定した再生headである。
+後者はTV/ARC/アンプ内部の遅延を含まず、実際の音響出力時刻の保証ではない。
+direct成功readは`CLEAN + SINGLE_READ + C2 NOT_CHECKED + offset UNKNOWN`。
+CLEANはそのreadで利用可能な異常を観測しなかった意味で、原PCMの検証済み表示ではない。
+direct retry後の成功は異常があったのに一致検証していないためUNCERTAINとする。
+paranoiaがfixupを報告してPCMを返した場合はRECOVERED + BACKEND_REPORTEDとする。
+いずれも原PCMの証明ではない。
+paranoiaのverify/fixup callbackがある場合も`BACKEND_REPORTED`とし、複数独立read一致とは表示しない。
+requested modeは未実装のためLEGACY、effective strategyはdirect-single-read/paranoia-libraryである。
+
+DriveCapabilitiesは起動後にMediaWorkerで非同期probeする。sysfsのvendor/model/revと
+`CDROM_GET_CAPABILITY`の`CDC_SELECT_SPEED`だけを根拠付きで公開し、DAE、C2、cache、
+accurate stream、offsetはUNKNOWNのまま保つ。probe失敗もNOへ変換せず`probe_error`へ保持する。
+このprobeはdisc認識や再生可能化の条件ではない。
+
+各accepted blockからREAD_OBSERVED eventを生成し、stream generationとLBA区間を持たせる。
+seek/stop/ejectで旧世代のqueueとeventを破棄する。通常成功はDEBUG、backend回復報告はINFO、
+未確実な結果はWARNINGとする。eventやAPIの消費がaudio workerへbackpressureを返さないよう、
+worker queueとsnapshot履歴はいずれもboundedとした。
 
 ## 13. 試験計画
 

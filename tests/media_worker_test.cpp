@@ -24,10 +24,16 @@ int main() {
         MediaWorker worker(
             [] { return MediaObservation::audio_disc; },
             [toc] { return toc; },
-            [] {});
+            [] {},
+            [] { DriveCapabilities result; result.device = "/dev/fake"; return result; });
+
+        check(worker.request(MediaWork::probe_drive));
+        auto result = wait_for_result(worker);
+        check(result.work == MediaWork::probe_drive && result.drive);
+        check(result.drive->device == "/dev/fake" && result.error.empty());
 
         check(worker.request(MediaWork::observe));
-        auto result = wait_for_result(worker);
+        result = wait_for_result(worker);
         check(result.work == MediaWork::observe && result.observation == MediaObservation::audio_disc);
         check(!result.toc && result.error.empty());
 

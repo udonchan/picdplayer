@@ -2,8 +2,9 @@
 #include <stdexcept>
 #include <utility>
 
-MediaWorker::MediaWorker(Observe observe, ReadToc read_toc, Eject eject)
-    : observe_(std::move(observe)), read_toc_(std::move(read_toc)), eject_(std::move(eject)) {
+MediaWorker::MediaWorker(Observe observe, ReadToc read_toc, Eject eject, ProbeDrive probe_drive)
+    : observe_(std::move(observe)), read_toc_(std::move(read_toc)), eject_(std::move(eject)),
+      probe_drive_(std::move(probe_drive)) {
     if (!observe_ || !read_toc_ || !eject_) throw std::invalid_argument("media worker callback is empty");
     thread_ = std::thread(&MediaWorker::run, this);
 }
@@ -43,9 +44,12 @@ void MediaWorker::run() {
         busy_ = true;
         lock.unlock();
 
-        MediaWorkerResult result{work, std::nullopt, std::nullopt, {}};
+        MediaWorkerResult result{work, std::nullopt, std::nullopt, std::nullopt, {}};
         try {
-            if (work == MediaWork::observe) result.observation = observe_();
+            if (work == MediaWork::probe_drive) {
+                if (!probe_drive_) throw std::runtime_error("drive probe is unavailable");
+                result.drive = probe_drive_();
+            } else if (work == MediaWork::observe) result.observation = observe_();
             else if (work == MediaWork::read_toc) result.toc = read_toc_();
             else eject_();
         } catch (const std::exception& error) {

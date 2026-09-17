@@ -7,8 +7,12 @@ DaemonSnapshot make_daemon_snapshot(std::uint64_t revision,
                                     MediaLifecycleState media,
                                     const std::optional<DiscToc>& disc,
                                     const MetadataResult& metadata,
-                                    std::string media_error) {
-    DaemonSnapshot snapshot{revision, player, media, disc, metadata, std::move(media_error),
+                                    std::string media_error,
+                                    ReadDiagnostics read,
+                                    std::vector<PlayerEvent> recent_events,
+                                    DriveCapabilities drive) {
+    DaemonSnapshot snapshot{revision, player, media, disc, metadata, std::move(drive), std::move(read),
+                            std::move(recent_events), std::move(media_error),
                             std::nullopt, std::nullopt};
     if (player.playback == PlaybackState::no_disc) {
         if (player.track || player.position_lba)

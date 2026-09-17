@@ -4,6 +4,7 @@
 #include "cec_device.hpp"
 #include "media_state.hpp"
 #include "media_worker.hpp"
+#include "drive_capabilities.hpp"
 #ifdef ENABLE_METADATA
 #include "metadata_lookup.hpp"
 #include "metadata_worker.hpp"
@@ -111,11 +112,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
     auto audio = make_alsa_output(audio_device);
-    PcmWorker worker([=] { return make_cdda_reader(backend, device); });
+    PcmWorker worker([=] { return make_cdda_reader(backend, device); },
+                     backend == CddaBackend::direct ? "direct-single-read"
+                                                    : "paranoia-library");
     MediaWorker media_worker(
         [device] { return read_cd_media(device).observation; },
         [device] { return read_cd_toc(device); },
-        [device] { eject_cd(device); });
+        [device] { eject_cd(device); },
+        [device] { return probe_drive_capabilities(device); });
 #ifdef ENABLE_METADATA
     std::unique_ptr<MetadataWorker> metadata_worker;
     if (metadata_enabled) {
@@ -147,9 +151,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
         std::cout << "Commands: play pause stop next previous track N seek SECONDS state quit\n";
     print_state(controller);
     MediaStateTracker media_state;
+    DriveCapabilities drive_capabilities;
+    drive_capabilities.device = device;
+    (void)media_worker.request(MediaWork::probe_drive);
     std::optional<DiscToc> loaded_toc;
     bool toc_pending = false;
     bool toc_needs_refresh = true;
+    std::vector<PlayerEvent> recent_events;
+    std::uint64_t next_event_sequence = 0;
 #ifdef ENABLE_METADATA
     MetadataSession metadata_session;
 #endif
@@ -166,13 +175,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (metadata_enabled) metadata = metadata_session.snapshot();
 #endif
         const auto state = controller.state();
+        const auto read = engine.read_diagnostics();
         auto semantic = serialize_daemon_snapshot(make_daemon_snapshot(
-            0, state, media_state.state(), loaded_toc, metadata, media_state.error()));
+            0, state, media_state.state(), loaded_toc, metadata, media_state.error(),
+            read, recent_events, drive_capabilities));
         if (semantic == api_semantic_json) return false;
         api_semantic_json = std::move(semantic);
         api_state_json = serialize_daemon_snapshot(make_daemon_snapshot(
             ++api_revision, state, media_state.state(), loaded_toc, metadata,
-            media_state.error()));
+            media_state.error(), read, recent_events, drive_capabilities));
         return true;
     };
     publish_api_snapshot();
@@ -245,6 +256,19 @@ void run_player_session(const std::string& device, CddaBackend backend,
     bool quitting = false;
     while (!quitting) {
         const auto now = std::chrono::steady_clock::now();
+        PlayerEvent read_event;
+        while (worker.pop_event(read_event)) {
+            read_event.sequence = ++next_event_sequence;
+            if (read_event.severity != EventSeverity::debug) {
+                std::cout << "event: type=" << player_event_type_name(read_event.type)
+                          << " sequence=" << read_event.sequence
+                          << " lba=" << read_event.read.start_lba
+                          << " status=" << integrity_read_status_name(read_event.read.status)
+                          << " retries=" << read_event.read.direct_retries << '\n' << std::flush;
+            }
+            if (recent_events.size() == 64) recent_events.erase(recent_events.begin());
+            recent_events.push_back(std::move(read_event));
+        }
 #ifdef ENABLE_API
         if (api_eject_pending && worker.device_released() && media_worker.request(MediaWork::eject)) {
             api_eject_pending = false;
@@ -269,7 +293,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
         MediaWorkerResult media_result{};
         while (media_worker.pop(media_result)) {
             if (media_state.state() == MediaLifecycleState::ejecting &&
-                media_result.work != MediaWork::eject) {
+                media_result.work != MediaWork::eject &&
+                media_result.work != MediaWork::probe_drive) {
                 if (media_result.work == MediaWork::read_toc) toc_pending = false;
                 continue;
             }
@@ -291,7 +316,17 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 continue;
             }
             last_media_error.clear();
-            if (media_result.work == MediaWork::observe) {
+            if (media_result.work == MediaWork::probe_drive) {
+                if (media_result.drive) {
+                    drive_capabilities = std::move(*media_result.drive);
+                    std::cout << "drive: capabilities speed_control="
+                              << knowledge_name(drive_capabilities.speed_control.value)
+                              << " dae=" << knowledge_name(drive_capabilities.digital_audio_extraction.value)
+                              << " c2=" << knowledge_name(drive_capabilities.c2_supported.value)
+                              << " offset=" << (drive_capabilities.read_offset_samples ? "KNOWN" : "UNKNOWN")
+                              << '\n' << std::flush;
+                }
+            } else if (media_result.work == MediaWork::observe) {
                 const auto before = media_state.state();
                 const auto after = media_state.observe(*media_result.observation);
                 if (after != before)
@@ -346,7 +381,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
                 }
                 toc_needs_refresh = false;
-            } else {
+            } else if (media_result.work == MediaWork::eject) {
 #ifdef ENABLE_API
                 api_eject_inflight = false;
                 const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(

@@ -3,6 +3,7 @@
 #include "pcm_worker.hpp"
 #include "player_controller.hpp"
 #include <chrono>
+#include <deque>
 
 class PlaybackEngine {
 public:
@@ -11,6 +12,7 @@ public:
     // Call once after a position/state command; invalidates all old PCM.
     void synchronize();
     void tick();
+    ReadDiagnostics read_diagnostics();
 private:
     PlayerController& controller_;
     PcmWorker& worker_;
@@ -24,4 +26,11 @@ private:
     std::size_t prebuffer_blocks_ = pcm_prebuffer_blocks;
     unsigned underrun_recoveries_ = 0;
     std::chrono::steady_clock::time_point last_tick_{};
+    struct SubmittedEvidence {
+        std::int64_t begin_stereo_frame;
+        std::int64_t end_stereo_frame;
+        ReadEvidence evidence;
+    };
+    std::deque<SubmittedEvidence> submitted_evidence_;
+    std::optional<ReadEvidence> current_evidence_;
 };

@@ -15,15 +15,45 @@ int main() {
         metadata.candidates.push_back({album}); metadata.selected = 0;
         metadata.artwork.status = ArtworkStatus::available;
         metadata.artwork.image_url = "https://example.invalid/cover.jpg";
+        ReadDiagnostics read;
+        read.activity = ReadActivity::buffering;
+        read.effective_strategy = "direct-single-read";
+        read.latest = make_read_evidence({60, 15, 15, ReadStatus::ok, 0, 0});
+        read.current_playback = make_read_evidence({45, 15, 15, ReadStatus::ok, 0, 0});
+        read.queued_blocks = 8;
+        observe_read(read.stats, {60, 15, 15, ReadStatus::ok, 0, 0});
+        DriveCapabilities drive;
+        drive.device = "/dev/sr0"; drive.vendor = "ASUS";
+        drive.speed_control = {Knowledge::yes, CapabilityEvidenceSource::kernel_reported,
+                               "CDROM_GET_CAPABILITY CDC_SELECT_SPEED"};
+        PlayerEvent event;
+        event.sequence = 7; event.stream_generation = 3;
+        event.read = *read.latest;
         const auto snapshot = make_daemon_snapshot(42,
-            {PlaybackState::playing, 1, 75}, MediaLifecycleState::audio_ready, toc, metadata);
+            {PlaybackState::playing, 1, 75}, MediaLifecycleState::audio_ready, toc, metadata,
+            {}, read, {event}, drive);
         const auto json = nlohmann::json::parse(serialize_daemon_snapshot(snapshot));
         check(json["revision"] == 42 && json["player"]["state"] == "PLAYING");
+        check(json["schema_version"] == 1);
         check(json["player"]["position_in_track_frames"] == 75);
         check(json["disc"]["tracks"][0]["length_frames"] == 750);
         check(json["metadata"]["status"] == "AVAILABLE" && json["metadata"]["selected"] == 0);
         check(json["metadata"]["candidates"][0]["tracks"][0]["title"] == "Song");
         check(json["metadata"]["cover_art"]["status"] == "AVAILABLE");
+        check(json["read"]["activity"] == "BUFFERING");
+        check(json["read"]["effective_strategy"] == "direct-single-read");
+        check(json["read"]["latest"]["status"] == "CLEAN");
+        check(json["read"]["latest"]["local_verification"] == "SINGLE_READ");
+        check(json["read"]["latest"]["c2_status"] == "NOT_CHECKED");
+        check(json["read"]["latest"]["offset_status"] == "UNKNOWN");
+        check(json["read"]["stats"]["read_calls"] == 1);
+        check(json["read"]["current_playback"]["start_lba"] == 45);
+        check(json["read"]["queued_blocks"] == 8);
+        check(json["drive"]["vendor"] == "ASUS");
+        check(json["drive"]["digital_audio_extraction"]["value"] == "UNKNOWN");
+        check(json["drive"]["speed_control"]["value"] == "YES");
+        check(json["recent_events"][0]["sequence"] == 7);
+        check(json["recent_events"][0]["type"] == "READ_OBSERVED");
         const auto eject_error = nlohmann::json::parse(serialize_daemon_snapshot(
             make_daemon_snapshot(43, {PlaybackState::playing, 1, 75},
                                  MediaLifecycleState::eject_error, toc, metadata,

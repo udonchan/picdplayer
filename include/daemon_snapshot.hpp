@@ -1,9 +1,12 @@
 #pragma once
 
 #include "disc_toc.hpp"
+#include "drive_capabilities.hpp"
+#include "integrity_state.hpp"
 #include "media_state.hpp"
 #include "metadata_model.hpp"
 #include "player_controller.hpp"
+#include "player_event.hpp"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -16,6 +19,9 @@ struct DaemonSnapshot {
     MediaLifecycleState media = MediaLifecycleState::no_disc;
     std::optional<DiscToc> disc;
     MetadataResult metadata;
+    DriveCapabilities drive;
+    ReadDiagnostics read;
+    std::vector<PlayerEvent> recent_events;
     std::string media_error;
     std::optional<std::int64_t> position_in_track_frames;
     std::optional<std::int64_t> current_track_length_frames;
@@ -28,4 +34,7 @@ DaemonSnapshot make_daemon_snapshot(std::uint64_t revision,
                                     MediaLifecycleState media,
                                     const std::optional<DiscToc>& disc,
                                     const MetadataResult& metadata,
-                                    std::string media_error = {});
+                                    std::string media_error = {},
+                                    ReadDiagnostics read = {},
+                                    std::vector<PlayerEvent> recent_events = {},
+                                    DriveCapabilities drive = {});

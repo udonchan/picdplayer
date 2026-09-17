@@ -63,6 +63,7 @@ Json disc_metadata(const DiscMetadata& disc) {
 
 std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
     Json root;
+    root["schema_version"] = 1;
     root["revision"] = snapshot.revision;
     root["player"] = {{"state", playback_name(snapshot.player.playback)},
                       {"track", optional(snapshot.player.track)},
@@ -70,6 +71,76 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                       {"position_in_track_frames", optional(snapshot.position_in_track_frames)},
                       {"current_track_length_frames", optional(snapshot.current_track_length_frames)}};
     root["media"] = {{"state", media_name(snapshot.media)}, {"error", snapshot.media_error}};
+    const auto capability = [](const CapabilityFlag& value) {
+        return Json{{"value", knowledge_name(value.value)},
+                    {"source", capability_evidence_source_name(value.source)},
+                    {"detail", value.detail}};
+    };
+    root["drive"] = {{"device", snapshot.drive.device},
+                     {"vendor", snapshot.drive.vendor},
+                     {"model", snapshot.drive.model},
+                     {"firmware", snapshot.drive.firmware},
+                     {"probe_error", snapshot.drive.probe_error},
+                     {"digital_audio_extraction", capability(snapshot.drive.digital_audio_extraction)},
+                     {"c2_supported", capability(snapshot.drive.c2_supported)},
+                     {"c2_trustworthy", capability(snapshot.drive.c2_trustworthy)},
+                     {"read_cache", capability(snapshot.drive.read_cache)},
+                     {"accurate_stream", capability(snapshot.drive.accurate_stream)},
+                     {"speed_control", capability(snapshot.drive.speed_control)},
+                     {"current_speed_x", optional(snapshot.drive.current_speed_x)},
+                     {"read_offset_samples", optional(snapshot.drive.read_offset_samples)}};
+    const auto read_evidence = [](const std::optional<ReadEvidence>& source) -> Json {
+        if (!source) return nullptr;
+        const auto& evidence = *source;
+        return {{"start_lba", evidence.start_lba},
+                  {"frames_requested", evidence.frames_requested},
+                  {"frames_read", evidence.frames_read},
+                  {"status", integrity_read_status_name(evidence.status)},
+                  {"local_verification", local_verification_name(evidence.local_verification)},
+                  {"c2_status", c2_status_name(evidence.c2_status)},
+                  {"offset_status", offset_status_name(evidence.offset_status)},
+                  {"direct_retries", evidence.direct_retries},
+                  {"backend_events", {{"reads", evidence.backend_events.reads},
+                                      {"verifies", evidence.backend_events.verifies},
+                                      {"fixups", evidence.backend_events.fixups},
+                                      {"skips", evidence.backend_events.skips},
+                                      {"read_errors", evidence.backend_events.read_errors},
+                                      {"cache_errors", evidence.backend_events.cache_errors},
+                                      {"other", evidence.backend_events.other}}}};
+    };
+    const auto& stats = snapshot.read.stats;
+    root["read"] = {{"activity", read_activity_name(snapshot.read.activity)},
+                    {"requested_mode", snapshot.read.requested_mode},
+                    {"effective_strategy", snapshot.read.effective_strategy},
+                    {"queued_blocks", snapshot.read.queued_blocks},
+                    {"dropped_events", snapshot.read.dropped_events},
+                    {"latest", read_evidence(snapshot.read.latest)},
+                    {"current_playback", read_evidence(snapshot.read.current_playback)},
+                    {"stats", {{"read_calls", stats.read_calls},
+                               {"frames_requested", stats.frames_requested},
+                               {"frames_accepted", stats.frames_accepted},
+                               {"direct_retries", stats.direct_retries},
+                               {"backend_reads", stats.backend_reads},
+                               {"backend_verifies", stats.backend_verifies},
+                               {"backend_fixups", stats.backend_fixups},
+                               {"backend_skips", stats.backend_skips},
+                               {"backend_read_errors", stats.backend_read_errors},
+                               {"backend_cache_errors", stats.backend_cache_errors},
+                               {"backend_other", stats.backend_other},
+                               {"failed_calls", stats.failed_calls}}}};
+    Json events = Json::array();
+    for (const auto& event : snapshot.recent_events) {
+        events.push_back({{"sequence", event.sequence},
+                          {"stream_generation", event.stream_generation},
+                          {"type", player_event_type_name(event.type)},
+                          {"severity", event_severity_name(event.severity)},
+                          {"presentation_priority", presentation_priority_name(event.presentation)},
+                          {"region", {{"start_lba", event.read.start_lba},
+                                      {"end_lba", event.read.start_lba +
+                                                  static_cast<std::int32_t>(event.read.frames_read)}}},
+                          {"read_status", integrity_read_status_name(event.read.status)}});
+    }
+    root["recent_events"] = std::move(events);
     if (snapshot.disc) {
         Json tracks = Json::array();
         for (const auto& track : snapshot.disc->tracks)

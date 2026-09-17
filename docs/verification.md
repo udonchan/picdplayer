@@ -36,14 +36,56 @@ metadata buildは前回レビューでAPI socket試験を除く18件成功の記
 | metadata | 14曲Disc ID、候補1件、AVAILABLE、cache miss/hit、並行CEC処理 |
 | API | Macから外部GETによる状態照会、eject要求とトレイ動作 |
 | eject待受修正 | 2026-09-17に一回の要求でトレイが開いたとのユーザー確認 |
+| integrity Phase 1a | ASUS drive能力、direct read集計、先読み/ALSA再生head、bounded eventを通常CD再生中のAPI snapshotで確認 |
 
 14曲CDのleadout LBAは242334、Disc IDは6JTbUgqHL29gzUyOH5ir60K3hz0-。
 数値はこの試験discの結果であり、実装の固定値ではない。
 
+## Phase 1a実機確認結果
+
+2026-09-17、14曲CDのdirect再生中にAPI snapshotを取得し、次を確認した。
+
+- ASUS SDRW-08D2S-U、firmware F601を取得。speed controlはKERNEL_REPORTED/YES。
+- DAE、C2 support/trust、cache、accurate streamはUNKNOWN、offsetとcurrent speedはnullを維持。
+- player位置551 LBAはcurrent playback区間[540,555)内、最新先読み区間は[855,870)。
+- 58 read calls × 15 frames = requested/accepted 870 frames。retry、failure、backend anomalyは0。
+- directの各区間はCLEAN/SINGLE_READ/C2 NOT_CHECKED/offset UNKNOWNとして公開。
+- event sequence 1〜58は連続し、stream generation 3で統一、dropped eventsは0。
+- queueは20 block上限で動作した。metadata、TOC、player stateも従来どおり同じsnapshotへ含まれた。
+
+この結果は通常CDで観測経路が正しくつながったことを示す。CLEANは原PCMとの一致を証明せず、
+傷disc、retry、paranoia recovery、event overflowなどの異常経路は未確認である。
+
+### 再確認手順
+
+常駐serviceとのdevice競合を避けて停止し、API付きbuildをforegroundで起動する。
+
+```sh
+sudo systemctl stop picdplayer.service
+./build-metadata/cdplayerd --player /dev/sr0 --cdda-reader direct \
+  --metadata musicbrainz --metadata-cache /tmp/picdplayer-cache --api-port 8080
+```
+
+別terminalから`GET /api/state`を確認する。起動後は`drive`にidentityと能力の根拠が入り、未調査の
+DAE/C2/cache/offsetはUNKNOWN/nullのままであることを確認する。通常CDを再生すると`read.latest`、
+`read.current_playback`、`read.stats`、`recent_events`が更新される。先読み中のlatestとALSA再生headの
+current_playbackは異なるLBAになり得る。通常readのCLEANはSINGLE_READであり、検証済みを意味しない。
+
+```sh
+curl --fail --show-error http://127.0.0.1:8080/api/state |
+  python3 -m json.tool
+```
+
+CECでplay/pause/seek/next/stopを操作し、音声と従来のstate transitionに退行がないことを確認する。
+stop後の`read.activity`はIDLE、再生再開後のstatsは新しいstreamについて集計し直される。
+確認後はforeground daemonをCtrl-Cで止め、`sudo systemctl start picdplayer.service`で常駐運転へ戻す。
+
 ## 次の確認と残課題
 
-- [読み取り信頼性の拡張設計案](integrity-design.md)をレビュー後、Phase 1aの観測モデルから追加する。
-  同文書の試験計画は未実装であり、現行CTestの検証済み範囲には含めない。
+- [読み取り信頼性の拡張設計案](integrity-design.md)のPhase 1aは実装・通常CDで実機確認済み。
+  ReadResultからのtruthfulなevidence変換、集計、PCM blockへの伝搬、古い世代の排除、read-only能力probe、
+  bounded event、ALSA再生head推定、snapshot JSONを自動試験へ追加した。検証/recoveryやC2取得は未実装。
+- Phase 1a実装後、direct build 15件、metadata/API buildのAPI以外20件、sandbox外のAPI socket 1件が成功。
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
 - LOADING中・PLAYING中のeject、重複要求、EJECT_ERROR、終了との競合を実機で継続確認する。
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。

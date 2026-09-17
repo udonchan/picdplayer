@@ -3,6 +3,9 @@
 この文書は現行機能を記す。QUIET/BALANCED/SECURE、能力の根拠付き表示、区間検証、
 provenance、technical statusの追加案は[読み取り信頼性の拡張設計案](integrity-design.md)を参照する。
 現行direct/paranoiaの選択や正常再生は、これらの検証modeが実装済みであることを意味しない。
+Phase 1aではread回数を変えず、既存ReadResultの観測、read-only drive能力probe、bounded event、
+ALSA再生headに対応する根拠の推定をsnapshotへ公開するところまで実装した。
+公開するCLEANは検証済みの意味ではなく、local verificationをSINGLE_READ等で別に示す。
 
 ## media・TOC
 

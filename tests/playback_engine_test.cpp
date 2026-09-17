@@ -89,6 +89,12 @@ int main() {
             wait_for([&] { return w.status().done; });
             PcmBlock b;
             check(w.pop(b) && b.generation == current && b.lba == 100 && b.samples[0] == 100);
+            check(b.evidence.start_lba == 100 && b.evidence.frames_read == 15);
+            check(b.evidence.local_verification == LocalVerification::single_read);
+            check(w.status().diagnostics.stats.read_calls == 1); // Superseded read is not current evidence.
+            PlayerEvent event;
+            check(w.pop_event(event) && event.stream_generation == current);
+            check(event.read.start_lba == 100 && !w.pop_event(event));
             check(!w.pop(b));
             w.start(0, 1000);
             wait_for([&] { return w.status().queued == pcm_queue_capacity_blocks; });
@@ -109,9 +115,11 @@ int main() {
         wait_for([&] { return w.status().done; });
         engine.tick();
         check(c.state().position_lba == 0); // queued to ALSA is not yet played
+        check(engine.read_diagnostics().current_playback.has_value());
         check(a.total == 12 * 588); // partial writes retained across ticks
         a.pending = 0; a.blocked = true;
         engine.tick(); check(c.state().position_lba == 12);
+        check(engine.read_diagnostics().current_playback->start_lba == 0);
         c.pause(); engine.synchronize();
         check(w.status().queued == 0 && a.pending == 0);
         check(c.state().playback == PlaybackState::paused);
