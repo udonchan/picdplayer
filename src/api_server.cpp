@@ -222,6 +222,9 @@ void ApiServer::publish_state(std::string_view state_json) {
                                           &implementation_->protocols[0]);
 }
 void ApiServer::service() {
+    // Since lws 3.2 the timeout argument is ignored. Queue a wakeup so
+    // an idle HTTP server cannot sleep inside the player event loop.
+    lws_cancel_service(implementation_->context);
     if (lws_service(implementation_->context, 0) < 0) throw std::runtime_error("API service failed");
 }
 int ApiServer::port() const { return implementation_->port; }

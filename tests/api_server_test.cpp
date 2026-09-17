@@ -50,6 +50,10 @@ int main() {
 
         // A wildcard listener must still allow commands from a loopback peer.
         ApiServer server("0.0.0.0", 0, provider, commands);
+        // No clients and no network traffic: the player must still make progress.
+        const auto idle_start = std::chrono::steady_clock::now();
+        for (int i = 0; i < 20; ++i) server.service();
+        check(std::chrono::steady_clock::now() - idle_start < std::chrono::seconds(1));
         std::atomic<bool> done = false;
         std::string received;
         std::thread client([&] {

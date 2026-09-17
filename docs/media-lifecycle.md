@@ -202,11 +202,20 @@ ASUS SDRW-08D2S-Uでは、先にdoor lockを解除しない`CDROMEJECT`に対し
 `ILLEGAL REQUEST asc=0x53 ascq=0x2`（medium removal prevented）を記録した。eject処理は
 `CDROM_LOCKDOOR(0)`の後に`CDROMEJECT`を実行し、eject失敗時は再lockしてplayer状態を保持する。
 
-このUSB driveでは`CDROMEJECT`が0を返しても、最初の要求が媒体のunloadだけで物理トレイを開かない
-場合が実機で確認された。ioctl成功を完了条件にせず、100 ms周期で最大2秒
+一度のAPI要求ではトレイが開かないという報告から、媒体のunloadだけが起きると推測していたが、
+この原因は未確認だった。後述のAPI待受によるmain loop停止が判明したため、ドライブ固有の挙動とは
+断定しない。現在はioctl成功を完了条件にせず、100 ms周期で最大2秒
 `CDROM_DRIVE_STATUS == CDS_TRAY_OPEN`を確認する。開かなければ`CDROMEJECT`をもう一度だけ実行し、
 再度最大2秒確認する。2回でもtray openを確認できなければ`EJECT_ERROR`とし、無制限retryは行わない。
 
 診断ログは要求からdevice worker開始までを`eject=started wait_ms=...`、物理tray確認までを
 `eject=completed elapsed_ms=...`として記録する。EJECTING中の再送は新しいhardware操作を作らず、
 `eject=already_pending`を記録して同じ要求の202を返す。
+
+
+2026-09-17のログでは`already_pending`の後に`started wait_ms=11588`、
+`completed elapsed_ms=20100`を記録した。2回目の要求は新たなejectを発行していない。
+調査でlibwebsocketsの`lws_service(context, 0)`が通信待ちでmain loopを止め得ることが判明した。
+worker待ち時間だけでなく、main threadが結果を回収するまでの遅延も上記時間に含まれる。
+service前に`lws_cancel_service()`でwake-upを予約する修正と、無接続時の回帰テストを追加した。
+修正後の一度のAPI要求による実機ejectは未確認。

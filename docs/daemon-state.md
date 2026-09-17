@@ -33,7 +33,10 @@ service bufferは4 KiB、state responseは1 MiBを上限とする。未知path�
 hostnameは受け付けず、意図しない名前解決を行わない。認証・TLS・操作APIはまだないため、
 信頼できる開発用LANだけで使用し、port forwardingやインターネット公開は行わない。
 
-libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0)`を呼ぶ。JSONはmain threadで
+libwebsocketsの追加threadは作らず、player loopが`lws_service(context, 0)`を呼ぶ。
+ただしv3.2以降はtimeout引数0が非ブロッキングを意味しないため、直前に`lws_cancel_service()`で
+wake-upを予約し、無通信時にもmain loopへ戻す。無接続のservice反復が1秒以内に完了する回帰テストと
+CTestの10秒timeoutで待受停止を検出する。JSONはmain threadで
 250 msごとに状態変化を確認し、HTTP callbackは完成済み文字列を返すだけにする。
 `WS /api/events`は接続直後と公開内容の変化時に同じstate JSONをtext messageで送る。
 送信頻度は最大4 Hzとし、より細かい位置更新でclientを圧迫しない。clientからのmessageは受け付けず、

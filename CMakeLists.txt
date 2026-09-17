@@ -129,6 +129,7 @@ if(BUILD_TESTING)
         target_link_libraries(api_server_test PRIVATE PkgConfig::WEBSOCKETS Threads::Threads
                                                       nlohmann_json::nlohmann_json)
         add_test(NAME api_server COMMAND api_server_test)
+        set_tests_properties(api_server PROPERTIES TIMEOUT 10)
     endif()
     add_executable(optical_drive_test tests/optical_drive_test.cpp src/optical_drive.cpp)
     target_include_directories(optical_drive_test PRIVATE include)
