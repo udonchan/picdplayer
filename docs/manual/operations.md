@@ -81,8 +81,23 @@ technical status画面の`Read policy`は適用済みmodeを表示し、保留�
 ./build-direct/cdplayerd --probe-drives
 ./build-direct/cdplayerd --probe-media /dev/sr0
 ./build-direct/cdplayerd --probe-toc /dev/sr0
+./build-direct/cdplayerd --probe-drive-start /dev/sr0
 ./build-direct/cdplayerd --probe-cdda /dev/sr0 --cdda-reader direct --track 1 --frames 75
 ```
+
+`probe-drive-start`はLinux `CDROMSTART`を一回要求し、受理結果と所要時間を表示する。PCMは読まない。
+`rotation=UNVERIFIED`は、ioctl成功だけでは実際の回転開始や継続時間を確認できないことを示す。
+常駐serviceとdrive操作が競合しないよう、実機比較時はserviceを停止する。
+
+player modeではAudio CD準備完了直後に一回、その後STOPPEDまたはPAUSED中に15秒間隔で同じ命令を
+background要求する。
+PLAYING、disc未準備、eject中には要求しない。成功時はDEBUG levelで次を記録する。
+
+```text
+DEBUG drive: start_command=accepted elapsed_ms=... rotation=UNVERIFIED
+```
+
+これは待機中の回転維持を試みる機能であり、driveが実際に回転を継続したという状態表示ではない。
 
 probe-cddaは既定でPCMを捨て、再生しない。保存には`--pcm-output /tmp/track1.pcm`を追加する。
 保存形式はraw S16_LE・44.1 kHz・stereo。既存ファイルを上書きしない。framesは1〜750。

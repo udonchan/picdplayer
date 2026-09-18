@@ -11,7 +11,7 @@
 #include <string>
 #include <thread>
 
-enum class MediaWork { probe_drive, observe, read_toc, eject };
+enum class MediaWork { probe_drive, observe, read_toc, start_drive, eject };
 
 struct MediaWorkerResult {
     MediaWork work;
@@ -27,9 +27,11 @@ public:
     using Observe = std::function<MediaObservation()>;
     using ReadToc = std::function<DiscToc()>;
     using Eject = std::function<void()>;
+    using StartDrive = std::function<void()>;
     using ProbeDrive = std::function<DriveCapabilities()>;
 
-    MediaWorker(Observe observe, ReadToc read_toc, Eject eject, ProbeDrive probe_drive = {});
+    MediaWorker(Observe observe, ReadToc read_toc, Eject eject, ProbeDrive probe_drive = {},
+                StartDrive start_drive = {});
     ~MediaWorker();
     MediaWorker(const MediaWorker&) = delete;
     MediaWorker& operator=(const MediaWorker&) = delete;
@@ -43,6 +45,7 @@ private:
     ReadToc read_toc_;
     Eject eject_;
     ProbeDrive probe_drive_;
+    StartDrive start_drive_;
     std::mutex mutex_;
     std::condition_variable changed_;
     std::deque<MediaWorkerResult> results_;

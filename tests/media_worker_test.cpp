@@ -21,11 +21,13 @@ MediaWorkerResult wait_for_result(MediaWorker& worker) {
 int main() {
     try {
         const auto toc = make_audio_toc(1, std::vector<std::int32_t>{0, 750}, 1500);
+        bool drive_started = false;
         MediaWorker worker(
             [] { return MediaObservation::audio_disc; },
             [toc] { return toc; },
             [] {},
-            [] { DriveCapabilities result; result.device = "/dev/fake"; return result; });
+            [] { DriveCapabilities result; result.device = "/dev/fake"; return result; },
+            [&] { drive_started = true; });
 
         check(worker.request(MediaWork::probe_drive));
         auto result = wait_for_result(worker);
@@ -41,6 +43,10 @@ int main() {
         result = wait_for_result(worker);
         check(result.work == MediaWork::read_toc && result.toc && result.toc->tracks.size() == 2);
         check(!result.observation && result.error.empty());
+
+        check(worker.request(MediaWork::start_drive));
+        result = wait_for_result(worker);
+        check(result.work == MediaWork::start_drive && drive_started && result.error.empty());
 
         check(worker.request(MediaWork::eject));
         result = wait_for_result(worker);

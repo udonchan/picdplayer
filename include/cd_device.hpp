@@ -25,3 +25,10 @@ DiscToc read_cd_toc(const std::string& device);
 
 // Opens the device only for the duration of CDROMEJECT.
 void eject_cd(const std::string& device);
+
+// Requests spindle start through Linux CDROMSTART. Success only means that
+// the kernel/drive accepted the command; it does not prove continued rotation.
+void request_cd_start(const std::string& device);
+
+// One-shot CDROMSTART diagnostic. Does not read PCM or alter the TOC model.
+void probe_cd_start(const std::string& device);

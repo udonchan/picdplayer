@@ -156,6 +156,24 @@ void eject_cd(const std::string& device) {
                              std::to_string(last_status));
 }
 
+void request_cd_start(const std::string& device) {
+    const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) throw std::system_error(errno, std::generic_category(), "open " + device);
+    const ScopedFd guard(fd);
+    if (ioctl(fd, CDROMSTART, 0) < 0)
+        throw std::system_error(errno, std::generic_category(), "CDROMSTART " + device);
+}
+
+void probe_cd_start(const std::string& device) {
+    const auto started = std::chrono::steady_clock::now();
+    request_cd_start(device);
+    const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started).count();
+    std::cout << "cd: start_command=accepted device=" << device
+              << " elapsed_ms=" << elapsed_ms
+              << " rotation=UNVERIFIED\n";
+}
+
 void probe_cd_toc(const std::string& device) {
     const auto toc = read_cd_toc(device);
     // Buffer the report until all entries have been read and validated.

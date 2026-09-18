@@ -19,6 +19,8 @@ for args, expected in [
     (['--cdda-reader', 'direct'], 'require --probe-cdda'),
     (['--probe-cdda', '/nonexistent', '--probe-drives'], 'one diagnostic'),
     (['--probe-disc-id', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
+    (['--probe-drive-start'], 'Usage:'),
+    (['--probe-drive-start', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
     (['--probe-disc-id'], 'Usage:'),
     (['--probe-metadata'], 'Usage:'),
     (['--lookup-disc'], 'Usage:'),
@@ -51,6 +53,10 @@ for args, expected in [
     result = subprocess.run([sys.argv[1], *args], capture_output=True, text=True, timeout=3)
     assert result.returncode == 2 and expected in result.stderr, result
 print('PASS: CDDA CLI validation')
+
+result = subprocess.run([sys.argv[1], '--probe-drive-start', '/nonexistent'],
+                        capture_output=True, text=True, timeout=3)
+assert result.returncode == 1 and 'open /nonexistent' in result.stderr, result
 
 result = subprocess.run([sys.argv[1], '--probe-cdda', '/nonexistent', '--cdda-reader', 'paranoia'], capture_output=True, text=True, timeout=3)
 if sys.argv[2] == 'ON':

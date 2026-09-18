@@ -198,6 +198,20 @@ raw cacheはsize確認→read→通常parser、書き込みはtemporary file→r
 MusicBrainzの404は空releasesとして扱う。parse前にraw JSONをcacheするため、不正cacheが残る可能性がある。
 HTTP本文上限はあるが、cacheの総量制限や全JSON fieldへの厳密な型検証は保証しない。
 
+## drive start診断
+
+[request_cd_start](../../src/cd_device.cpp)はdeviceを一時的に開き、Linux `CDROMSTART` ioctlを一回だけ
+発行して閉じる。PCMやTOCを読まず、成功はkernel/driveが命令を受理したことだけを表す。
+[probe_cd_start](../../src/cd_device.cpp)はその所要時間を出力する一回実行の診断である。
+回転中かどうかを返す標準状態値としては扱わない。
+
+daemonはAudio CDのTOC読取完了直後を最初の期限とし、STOPPEDまたはPAUSED中だけMediaWorkerへ
+start_driveを要求する。要求受付時に次の期限を15秒後へ進める。PLAYING、NO DISC、LOADING、eject待ち・
+実行中には要求しない。再生終了時に期限を過ぎていれば直ちに要求する。MediaWorker callbackは
+DriveAccessCoordinator内で実行するため、PCM reader、status/TOC、ejectと同時にdevice ioctlを行わない。
+結果ログの`rotation=UNVERIFIED`は、命令受理から物理的な回転状態を推測しないという契約である。
+初回命令もbackground処理であり、再生可能化の必須条件にはしない。
+
 ## テスト境界
 
 controller、media tracker、TOC、CEC変換、snapshot、parser/sessionはhardwareなしで試験する。

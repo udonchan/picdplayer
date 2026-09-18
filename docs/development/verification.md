@@ -50,6 +50,7 @@ policy入力、JSON、reader再生成・region変更を確認したが、実機�
 | integrity Phase 1b | Macのbrowserでtechnical statusを表示。停止・通常再生、Live接続、player位置、現在再生PCM、先読みread、統計、event、drive能力を確認 |
 | integrity Phase 2 buffer | direct singleで300/150、300/75、300/45、750/45 frameを比較。750/45で通常再生、操作、Mac状態表示を確認 |
 | 非同期logger | UTC/monotonic時刻、level、componentをforegroundで確認。CEC操作、再生、technical status、SIGINT時flushに退行なし |
+| drive start維持 | CDROMSTARTをTOC直後と停止・一時停止中15秒周期で実行。再生中抑止、長時間停止後の高速Playを確認 |
 
 14曲CDのleadout LBAは242334、Disc IDは6JTbUgqHL29gzUyOH5ir60K3hz0-。
 数値はこの試験discの結果であり、実装の固定値ではない。
@@ -201,11 +202,33 @@ stopをCECから操作し、音声とtechnical statusのLive更新は正常だ�
 約100秒経過した後の一回だけの測定であり、drive再始動を含む可能性があるためlogger overheadとは断定しない。
 systemd/journald経由の確認と、意図的なqueue overflowは未確認である。
 
+### CDROMSTART一回診断
+
+2026-09-18、停止していたASUS SDRW-08D2S-Uへ`CDROMSTART`を要求し、2566 msで受理された。
+直後にtrack 1先頭15 frameをdirect readerで読むとopen 9.7 ms、read 284.3 ms、first block 284.7 msだった。
+以前の停止状態からの同drive試験ではfirst block約3.12秒だったため、待ち時間の大部分をbackgroundの
+start命令へ移せる可能性を確認した。この比較は同一条件での反復測定ではなく、ioctl成功だけでは回転継続を
+証明しない。
+
+最初の常駐試験では30秒周期でSTOPPED/PAUSED中に要求され、PLAYING中は抑止された。Pause/Stop後の再開、
+CEC/API/technical statusにも退行はなかった。約3分停止後のPlay先読みは238 ms、別のPlayは401 msだった。
+多くのstart命令は20〜255 msだったが、初回2430 msと途中2510 msの再スピンアップを観測したため、
+30秒では物理的な回転維持に長すぎると判断し15秒へ変更した。15秒試験では初回2487 msの後、
+2分以上にわたり20〜290 msで完了し、途中の2秒台再スピンアップはなかった。初回をTOC完了の15秒後に
+出していたため、その待ち時間中の停止を避ける目的で初回だけ即時要求へ変更した。
+
+即時要求版ではTOC・STOPPEDログの直後にstart命令を開始し、434 msで完了した。その4秒後のPlayは
+232 msで先読みを完了した。約46秒のPLAYING中にstart命令は出ず、Pause直後は86 msで要求を完了した。
+これにより初回background start、再生中抑止、Pause後再開を確認した。物理回転状態そのものは取得できないため、
+ログは引き続き`rotation=UNVERIFIED`とする。
+
 ## 継続する検証と開発課題
 
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
 - 非同期loggerはforegroundで確認済み。systemd/journaldでの時刻・level・componentと終了時flushを確認する。
   queue overflowは通常運用では意図的に発生させず、発生時は`logger: dropped=N`を記録する。
+- `CDROMSTART`一回診断、TOC直後の初回要求、15秒周期、PLAYING中抑止、Pause/Stop後再開はASUS driveで
+  確認済み。別drive、長期運転、ejectとstart命令が重なった場合を継続確認する。
 - LOADING中・PLAYING中のeject、重複要求、EJECT_ERROR、終了との競合を実機で継続確認する。
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。
   正常試聴では異常を再現できておらず、復旧経路の実機確認は未完了。

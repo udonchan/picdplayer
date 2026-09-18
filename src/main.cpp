@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     bool cdda_options = false;
     std::string media_device;
     std::string toc_device;
+    std::string drive_start_device;
     std::string disc_id_device;
     std::string metadata_device, lookup_disc, metadata_mode = "off";
     std::string metadata_cache = "/var/cache/picdplayer";
@@ -51,6 +52,7 @@ int main(int argc, char** argv) {
         if (arg == "--probe-drives") probe_drives = true;
         else if (arg == "--probe-media" && i + 1 < argc) media_device = argv[++i];
         else if (arg == "--probe-toc" && i + 1 < argc) toc_device = argv[++i];
+        else if (arg == "--probe-drive-start" && i + 1 < argc) drive_start_device = argv[++i];
         else if (arg == "--probe-disc-id" && i + 1 < argc) disc_id_device = argv[++i];
         else if (arg == "--probe-metadata" && i + 1 < argc) metadata_device = argv[++i];
         else if (arg == "--lookup-disc" && i + 1 < argc) lookup_disc = argv[++i];
@@ -141,11 +143,12 @@ int main(int argc, char** argv) {
         else if (arg == "--interactive") interactive = true;
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
-            std::cerr << "Usage: cdplayerd [--probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--api-listen IP --api-port 1..65535] | other modes]\n";
+            std::cerr << "Usage: cdplayerd [--probe-drive-start PATH | --probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--api-listen IP --api-port 1..65535] | other modes]\n";
             return arg == "--help" ? 0 : 2;
         }
     }
     if (int(probe_drives) + int(!media_device.empty()) + int(!toc_device.empty()) +
+        int(!drive_start_device.empty()) +
         int(!disc_id_device.empty()) + int(!metadata_device.empty()) + int(!lookup_disc.empty()) +
         int(!cdda_device.empty()) + int(!player_device.empty()) > 1) {
         std::cerr << "Choose only one diagnostic mode\n";
@@ -249,6 +252,10 @@ int main(int argc, char** argv) {
         }
         if (!toc_device.empty()) {
             probe_cd_toc(toc_device);
+            return 0;
+        }
+        if (!drive_start_device.empty()) {
+            probe_cd_start(drive_start_device);
             return 0;
         }
         if (!media_device.empty()) {

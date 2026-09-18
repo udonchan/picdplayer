@@ -2,9 +2,10 @@
 #include <stdexcept>
 #include <utility>
 
-MediaWorker::MediaWorker(Observe observe, ReadToc read_toc, Eject eject, ProbeDrive probe_drive)
+MediaWorker::MediaWorker(Observe observe, ReadToc read_toc, Eject eject,
+                         ProbeDrive probe_drive, StartDrive start_drive)
     : observe_(std::move(observe)), read_toc_(std::move(read_toc)), eject_(std::move(eject)),
-      probe_drive_(std::move(probe_drive)) {
+      probe_drive_(std::move(probe_drive)), start_drive_(std::move(start_drive)) {
     if (!observe_ || !read_toc_ || !eject_) throw std::invalid_argument("media worker callback is empty");
     thread_ = std::thread(&MediaWorker::run, this);
 }
@@ -51,7 +52,10 @@ void MediaWorker::run() {
                 result.drive = probe_drive_();
             } else if (work == MediaWork::observe) result.observation = observe_();
             else if (work == MediaWork::read_toc) result.toc = read_toc_();
-            else eject_();
+            else if (work == MediaWork::start_drive) {
+                if (!start_drive_) throw std::runtime_error("drive start is unavailable");
+                start_drive_();
+            } else eject_();
         } catch (const std::exception& error) {
             result.error = error.what();
         }
