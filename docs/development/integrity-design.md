@@ -281,7 +281,7 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 | Phase | 小さな実装単位 | 完了条件 |
 |---|---|---|
 | 1a Observable core | 能力のUNKNOWNモデル、既存read統計、PCM世代/区間との対応、snapshot/event・診断ログ | 実装・通常CDで実機確認済み。read-only能力probe、bounded event、ALSA再生head推定を含む |
-| 1b Observable presentation | NO DISC能力表示、technical statusの小さなrenderer、event受信 | 実装・自動試験済み、実機確認前。snapshot再取得で復元し、kiosk化は別作業 |
+| 1b Observable presentation | NO DISC能力表示、technical statusの小さなrenderer、event受信 | 実装・自動試験済み。通常再生のbrowser表示を実機確認済み、再接続は未確認。kiosk化は別作業 |
 | 2 Buffered Reader | 既存queueの容量/閾値設定、device I/O調停、速度設定と失敗fallback | 容量/閾値と直列化を実装・自動試験済み。速度設定と実機評価は未実装 |
 | 3 Checked Reading | overlap・候補比較・bounded recovery・provenance、BALANCED | 反復一致の現行範囲は機能設計、測定結果は検証状況を参照。overlap/cache対策とBALANCEDは未実装 |
 | 4 Drive-aware Secure | MMC/C2、cache評価/対策、offset、strategy選択、SECURE | 対応driveと根拠を実測、非対応は明示降格。QUIETもpolicyとして確認 |

@@ -27,6 +27,7 @@ std::string_view technical_status_html() {
         <dl>
           <dt>Activity</dt><dd id="read-activity">—</dd>
           <dt>Strategy</dt><dd id="read-strategy">—</dd>
+          <dt>Read policy</dt><dd id="read-policy">—</dd>
           <dt>Buffered blocks</dt><dd id="queued-blocks">—</dd>
           <dt>Last prebuffer</dt><dd id="prebuffer-wait">—</dd>
           <dt>Latest read</dt><dd id="latest-read">—</dd>
@@ -89,7 +90,9 @@ function render(state){
   const player=state.player||{},read=state.read||{},drive=state.drive||{},media=state.media||{};
   set('player-state',player.state);set('track',player.track);set('position',frames(player.position_in_track_frames));
   set('integrity',media.state==='NO_DISC'?'NO DISC':evidence(read.current_playback));
-  set('read-activity',read.activity);set('read-strategy',`${read.requested_mode||'—'} · ${read.effective_strategy||'—'}`);
+  set('read-activity',read.activity);set('read-strategy',read.effective_strategy);
+  const policy=read.policy||{},requestedPolicy=policy.requested?.mode,effectivePolicy=policy.effective?.mode;
+  set('read-policy',policy.pending?`${effectivePolicy||'—'} → ${requestedPolicy||'—'} (pending)`:(effectivePolicy||requestedPolicy));
   const capacity=Number.isInteger(read.buffer_capacity_frames)&&read.read_block_frames?read.buffer_capacity_frames/read.read_block_frames:'—';
   set('queued-blocks',`${read.queued_blocks??'—'} / ${capacity} (start ${read.startup_buffer_frames??'—'} frames)`);set('latest-read',evidence(read.latest));
   set('prebuffer-wait',read.last_prebuffer_wait_ms==null?'Pending':`${read.last_prebuffer_wait_ms} ms (${read.prebuffer_target_frames??'—'} frames)`);

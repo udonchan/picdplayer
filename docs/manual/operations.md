@@ -60,6 +60,8 @@ curl --fail --show-error -X POST http://127.0.0.1:8080/api/read-policy \
 再生中に変更すると`requested`だけが更新され、`pending: true`となる。現在のPCM streamは変更せず、
 STOPPEDまたはNO DISCになった時点でeffectiveへ反映し、次回playからreaderを作り直す。
 PAUSED中は保留する。停止中またはNO DISC中の変更は直ちにeffectiveとなる。
+technical status画面の`Read policy`は適用済みmodeを表示し、保留中は
+`REPEAT → SINGLE (pending)`のように適用済み値から要求値への遷移を示す。
 外部listenを使うdebug構成でも、policy変更を含む操作APIはloopbackからだけ受け付ける。
 
 開始閾値は容量以下でなければならない。大きなbufferは短いread stallへの余裕を増やす一方、

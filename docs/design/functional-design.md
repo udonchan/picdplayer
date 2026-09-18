@@ -122,7 +122,8 @@ region_framesは15以上・15の倍数・設定buffer容量以下、required_mat
 maximum_attemptsはrequired_matches以上8以下、time_budget_msは1〜60000。
 singleでも保持する検証設定を検査する。共通入力不正は400、現在のbuffer容量に収まらなければ409。
 single時の実read量はregion_framesによらず15 frame。repeat時にregion_framesを用いる。
-technical statusは初回にGET stateを読み、以後WebSocketで更新する。接続断ではstateを再取得してから
+technical statusはeffective strategyとReadPolicyを別々に表示し、未適用の要求は
+`effective → requested (pending)`として示す。初回にGET stateを読み、以後WebSocketで更新する。接続断ではstateを再取得してから
 再接続するため、eventを一件ずつ完全に受信したことを状態復元の前提にしない。metadata文字列は
 DOMのtextContentとして扱い、HTMLとして解釈しない。画面から操作POSTは送信しない。
 

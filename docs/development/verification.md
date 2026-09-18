@@ -46,6 +46,7 @@ policy入力、JSON、reader再生成・region変更を確認したが、実機�
 | eject待受修正 | 2026-09-17に一回の要求でトレイが開いたとのユーザー確認 |
 | integrity Phase 1a | ASUS drive能力、direct read集計、先読み/ALSA再生head、bounded eventを通常CD再生中のAPI snapshotで確認 |
 | ReadPolicy runtime切替 | repeatを適用して再生後、SINGLE要求をPLAYING/PAUSED中に保留し、STOPPED境界で適用。APIでrequested/effective/pendingと15 frame single readerへの切替を確認 |
+| integrity Phase 1b | Macのbrowserでtechnical statusを表示。停止・通常再生、Live接続、player位置、現在再生PCM、先読みread、統計、event、drive能力を確認 |
 
 14曲CDのleadout LBAは242334、Disc IDは6JTbUgqHL29gzUyOH5ir60K3hz0-。
 数値はこの試験discの結果であり、実装の固定値ではない。
@@ -60,6 +61,17 @@ APIで`direct-single-read`、15 frame reader、requested/effectiveともSINGLE�
 
 この確認は安全な適用境界と状態公開の確認である。傷disc、read error、時間上限超過時のpolicy変更、
 各policyの音質・CPU・操作待ち時間の比較は未実施である。
+
+## Phase 1b実機確認結果
+
+2026-09-18、Macのbrowserからtechnical statusを開き、停止中とdirect single再生中の表示を確認した。
+WebSocketは`Live`となり、再生中はPLAYER、track、position、current PCM、buffer、latest read、集計、
+recent observationsが更新された。current PCMはLBA 2730–2745、latest readはLBA 3045–3060で、
+現在再生区間と先読み区間を別に表示した。204 calls × 15 frames = 3060 accepted frames、retry/failureと
+dropped eventは0だった。strategyは`direct-single-read`、ReadPolicyは`SINGLE`として分離表示した。
+
+metadataなしで起動したためNOT_REQUESTED、album/artistなしとなることも仕様どおり確認した。
+ブラウザ再読み込みとnetwork切断後のWebSocket再接続・snapshot復元は未確認である。
 
 ## Phase 1a実機確認結果
 
@@ -105,8 +117,9 @@ stop後の`read.activity`はIDLE、再生再開後のstatsは新しいstreamに�
 - [読み取り信頼性の拡張設計案](../development/integrity-design.md)のPhase 1aは実装・通常CDで実機確認済み。
   ReadResultからのtruthfulなevidence変換、集計、PCM blockへの伝搬、古い世代の排除、read-only能力probe、
   bounded event、ALSA再生head推定、snapshot JSONを自動試験へ追加した。C2取得は未実装。
-- Phase 1bのtechnical statusは実装・自動試験済みで、browserによる実機確認待ち。
-- Phase 1b technical statusをPiまたは別PCのbrowserで開き、NO DISC、再生、WebSocket再接続を確認する。
+- Phase 1bのtechnical statusは実装・自動試験済みで、停止・通常再生のbrowser表示を実機確認した。
+- Phase 1bの残りとして、NO DISC表示、ブラウザ再読み込み、network切断後のWebSocket再接続と
+  snapshot復元を確認する。
 - Phase 2の既定bufferで従来再生に退行がないことを確認後、750/300 frame等でstartup、seek、
   track change、短いread stallへの余裕、memoryを比較する。production既定値は未決定。
 - drive access直列化後の挿入、TOC、再生、停止中観測、ejectを実機で確認する。
