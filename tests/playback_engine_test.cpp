@@ -53,6 +53,8 @@ struct FakeOutput : AudioOutput {
 };
 int main() {
     try {
+        const PcmBufferConfig defaults;
+        check(defaults.capacity_cd_frames == 750 && defaults.startup_cd_frames == 45);
         // Removal must release the reader even if no further Play arrives.
         std::atomic<int> destroyed{0};
         struct ClosingReader : FakeReader {

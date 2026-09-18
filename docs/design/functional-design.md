@@ -65,8 +65,8 @@ readerの設定をread途中で変えないため、現在再生中のPCMとそ�
 設定の永続保存、backendの稼働中切替、QUIET/BALANCED/SECUREへの対応は未実装。
 
 single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
-既定はqueue上限300 frame（4秒、PCM約706 KiB）、
-開始閾値150 frame（2秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
+既定はqueue上限750 frame（10秒、PCM約1.68 MiB）、
+開始閾値45 frame（0.6秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
 起動optionで設定できる。起動中に変更するAPIはない。開始閾値は容量以下とする。
 block数への変換では容量を切り捨て、開始閾値を切り上げるため、任意のregion設定では
 実際の容量・閾値が要求値と異なり得る。終端付近は閾値より短くても開始可能。
@@ -77,7 +77,8 @@ ALSA EPIPEはAudioUnderrunとしてreset・reader再生成・再bufferする。
 
 同一driveに対するreader open/seek/read/closeとmedia/TOC/eject/capability probeは共有mutexで直列化する。
 進行中ioctlは強制中断せず、ejectは従来どおりstream停止、reader解放確認後に要求する。
-速度設定はまだ行わず、buffer増加がstartup latencyや操作応答へ与える影響は実機評価待ち。
+速度設定はまだ行わない。既定bufferは通常CDでstartup、seek、track変更、pause復帰と連続再生を
+実機比較して決めたが、傷discや長いread stallに対する余裕は未評価である。
 
 ## CEC
 

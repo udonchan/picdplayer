@@ -27,11 +27,11 @@ struct WorkerStatus {
     ReadDiagnostics diagnostics;
 };
 
-// Each block is 15 CD frames (200 ms). Four seconds absorbs short USB-drive
-// recovery stalls while staying below 1 MiB of PCM on a Raspberry Pi 3.
+// Each block is 15 CD frames (200 ms).  The queue can retain ten seconds of
+// PCM (about 1.8 MiB), while playback starts after three blocks (0.6 seconds).
 inline constexpr std::size_t pcm_block_cd_frames = 15;
-inline constexpr std::size_t pcm_queue_capacity_blocks = 20;
-inline constexpr std::size_t pcm_prebuffer_blocks = 10;
+inline constexpr std::size_t pcm_queue_capacity_blocks = 50;
+inline constexpr std::size_t pcm_prebuffer_blocks = 3;
 inline constexpr std::size_t maximum_buffer_cd_frames = 30 * 75;
 inline constexpr std::size_t read_event_capacity = 256;
 

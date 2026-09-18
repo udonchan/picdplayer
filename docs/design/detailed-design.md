@@ -80,7 +80,7 @@ CD frameへの切り捨てにより最大1 frame弱の重複があり得る。
 
 [PcmWorker](../../src/pcm_worker.cpp)はreaderをworker threadだけで生成・使用・破棄する。
 start/cancelでgenerationを更新し、古いread完了データを採用しない。
-queueは設定されたblock上限でcondition_variableにより待つ（既定20 block）。
+queueは設定されたblock上限でcondition_variableにより待つ（singleの既定50 block）。
 discard_readerは待機中workerも起こすが、進行中ioctlは中断しない。
 device_releasedはreaderが閉じ、readが進行中でないことをmutex下で確認する。
 accepted blockにはReadResultから作ったReadEvidenceを付ける。WorkerStatusのReadDiagnosticsは最新readと
@@ -97,7 +97,7 @@ read数であり、policyの必要一致数を満たした採用read数と同一
 
 READ_OBSERVED eventは256件上限の別queueへ渡し、main側でsequenceを付ける。通常成功はDEBUG、
 backend回復報告はINFO、未確実な結果はWARNING。start/cancel/discardで旧世代のeventを破棄する。
-PcmBufferConfigは容量と開始閾値をCD frameで保持し、有効read block数へ変換する。既定300/150 frame、
+PcmBufferConfigは容量と開始閾値をCD frameで保持し、有効read block数へ変換する。既定750/45 frame、
 上限2250 frameで、0、15の倍数でない値、開始閾値が容量を超える値を起動前に拒否する。
 underrun時の開始閾値増加も設定された容量を上限とする。
 
@@ -116,7 +116,8 @@ read bufferはCD frameの整数倍で、ReadResult.frames_read部分だけが有
 呼び手のbufferへ候補PCMをコピーしない。時間予算は進行中のblocking readを中断しない。
 PcmWorkerはsingleで15 frame、repeatでpolicyのregion_frames（既定75）を要求する。
 queue容量はCD frame設定をregionで割って切り捨て、開始閾値は切り上げる。
-既定設定では4秒/2秒を維持する。各世代の処理開始時にblock量と容量をmutex下でコピーし、
+既定設定ではsingleは10秒/0.6秒、repeatは10秒/1秒（75 frame blockへの切り上げ）となる。
+各世代の処理開始時にblock量と容量をmutex下でコピーし、
 旧世代のreadが戻るまでに設定が変わっても可変設定をlock外から参照しない。
 [AudioOutput](../../include/audio_output.hpp)のwrite/delayの単位はCD frameでなくstereo sample frame。
 [ALSA実装](../../src/alsa_output.cpp)がEPIPEをAudioUnderrunへ分類する。

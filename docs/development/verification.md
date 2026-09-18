@@ -47,6 +47,7 @@ policy入力、JSON、reader再生成・region変更を確認したが、実機�
 | integrity Phase 1a | ASUS drive能力、direct read集計、先読み/ALSA再生head、bounded eventを通常CD再生中のAPI snapshotで確認 |
 | ReadPolicy runtime切替 | repeatを適用して再生後、SINGLE要求をPLAYING/PAUSED中に保留し、STOPPED境界で適用。APIでrequested/effective/pendingと15 frame single readerへの切替を確認 |
 | integrity Phase 1b | Macのbrowserでtechnical statusを表示。停止・通常再生、Live接続、player位置、現在再生PCM、先読みread、統計、event、drive能力を確認 |
+| integrity Phase 2 buffer | direct singleで300/150、300/75、300/45、750/45 frameを比較。750/45で通常再生、操作、Mac状態表示を確認 |
 
 14曲CDのleadout LBAは242334、Disc IDは6JTbUgqHL29gzUyOH5ir60K3hz0-。
 数値はこの試験discの結果であり、実装の固定値ではない。
@@ -71,7 +72,7 @@ recent observationsが更新された。current PCMはLBA 2730–2745、latest r
 dropped eventは0だった。strategyは`direct-single-read`、ReadPolicyは`SINGLE`として分離表示した。
 
 metadataなしで起動したためNOT_REQUESTED、album/artistなしとなることも仕様どおり確認した。
-ブラウザ再読み込みとnetwork切断後のWebSocket再接続・snapshot復元は未確認である。
+続けてブラウザ再読み込みとnetwork切断後のWebSocket再接続・snapshot復元が正常に動作することを確認した。
 
 ## Phase 1a実機確認結果
 
@@ -117,11 +118,10 @@ stop後の`read.activity`はIDLE、再生再開後のstatsは新しいstreamに�
 - [読み取り信頼性の拡張設計案](../development/integrity-design.md)のPhase 1aは実装・通常CDで実機確認済み。
   ReadResultからのtruthfulなevidence変換、集計、PCM blockへの伝搬、古い世代の排除、read-only能力probe、
   bounded event、ALSA再生head推定、snapshot JSONを自動試験へ追加した。C2取得は未実装。
-- Phase 1bのtechnical statusは実装・自動試験済みで、停止・通常再生のbrowser表示を実機確認した。
-- Phase 1bの残りとして、NO DISC表示、ブラウザ再読み込み、network切断後のWebSocket再接続と
-  snapshot復元を確認する。
-- Phase 2の既定bufferで従来再生に退行がないことを確認後、750/300 frame等でstartup、seek、
-  track change、短いread stallへの余裕、memoryを比較する。production既定値は未決定。
+- Phase 1bのtechnical statusは実装・自動試験済みで、停止・通常再生、ブラウザ再読み込み、
+  network切断後のWebSocket再接続とsnapshot復元を実機確認した。NO DISC表示は継続確認項目とする。
+- Phase 2の通常CD比較を行い、既定bufferを750 frame、開始閾値を45 frameとした。
+  傷disc、長いread stall、memory/CPU、異なるdriveでの評価は継続する。
 - drive access直列化後の挿入、TOC、再生、停止中観測、ejectを実機で確認する。
 - Phase 3の`--read-verification repeat`はfake readerでA/A、A/B/B、全不一致、read error、時間上限を確認済み。
   15 frame regionの初回実機試験では約359 ms/readとなり、PCM生成が実時間を下回って周期的underrunが発生した。
@@ -155,6 +155,23 @@ repeatでは75 frame regionを2回読むため、seek/track変更後に約0.2秒
 初回playは75 frame単位の連続readが15 frame単位より効率的だった可能性があるが、1回の測定だけで
 一般化しない。repeatのAPI snapshotは23 read call、1725 requested/accepted frame、46 attempt、
 23 verified call、mismatch/failure/retry 0だった。通常CDでは両modeとも音切れなく再生できた。
+
+### Phase 2 buffer比較
+
+2026-09-18、同じ14曲CDとdirect single readerで、容量/開始閾値をCD frame単位で比較した。
+各条件でCECのplay、seek、next、pause/play、stopと通常再生を行い、underrunとread failureはなかった。
+
+| 容量/開始 | 初回play | seek | next | pause→play | 備考 |
+|---|---:|---:|---:|---:|---|
+| 300/150 | 1040 ms | 493〜557 ms | 674〜689 ms | 599 ms | 従来既定値 |
+| 300/75 | 532 ms | 327〜333 ms | 428 ms | 313 ms | 容量を保ち開始量を半減 |
+| 300/45 | 3292 ms、再play 412 ms | 227 ms | 369〜400 ms | 219 ms | 初回だけdrive起動とみられる外れ値 |
+| 750/45 | 481 ms、再play 394 ms | 210〜229 ms | 246〜422 ms | 159 ms | 通常再生とMac状態表示も正常 |
+
+初回3292 msは同じ起動内の再playでは再現せず、開始閾値だけの効果とは断定しない。
+750/45はPCM約1.68 MiB、10秒分の容量と0.6秒分のsingle開始閾値であり、今回の通常CDでは
+応答性と連続再生を両立したため既定値に採用した。repeatは75 frame blockなので実際の開始量は
+1 block（1秒）へ切り上がる。容量増加が傷discや4秒超stallを救済することはまだ実証していない。
 
 ## 継続する検証と開発課題
 

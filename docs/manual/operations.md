@@ -15,7 +15,7 @@
 標準入力を使わない運転では--interactiveを外し、CECまたはAPIで操作する。
 
 先読みbufferはCD frame単位で指定できる。75 frameが1秒、値は15の倍数、容量上限は2250 frame。
-次は容量10秒・再生開始4秒の例。省略時は容量300 frame（4秒）、開始150 frame（2秒）。
+省略時は容量750 frame（10秒）、開始45 frame（0.6秒）。次は開始を4秒へ増やす例である。
 
 ```sh
 ./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \
