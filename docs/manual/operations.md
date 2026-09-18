@@ -133,6 +133,22 @@ GET stateで現在値を復元して再接続する。ここから再生操作�
 
 ## ログの読み方
 
+daemonログは次の形式である。先頭はUTC、`+...ms`はprocess内logger起動からのmonotonic経過時間で、
+wall clock補正が起きても処理間隔の比較に使える。
+
+```text
+2026-09-18T09:30:12.345Z +1234ms INFO player: state=PLAYING track=1 lba=0
+```
+
+DEBUG/INFOはstdout、WARN/ERRORはstderrへ出す。systemd運用では両方を次で確認できる。
+
+```sh
+journalctl -u picdplayer.service -f -o cat
+```
+
+出力先が長時間停止しても再生loopを待たせないためqueueは有界である。終了時の
+`WARN logger: dropped=N`はN件を保存できなかったことを示す。診断CLIの結果はこの形式に変換しない。
+
 | ログ | 意味 |
 |---|---|
 | cec: command | キーを受信して意味的操作へ変換。EJECTING中は適用しない |

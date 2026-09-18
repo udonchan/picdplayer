@@ -15,6 +15,7 @@ media tracker/worker、TOC、reader、PCM保存、snapshot、CLIなどを検証�
 metadata有効時はDisc ID公式vector、候補0/1/複数と不正JSON、worker/sessionの旧結果破棄を追加する。
 API有効時はJSON schema、route、technical status asset、loopback socket、無通信時のserviceがmainへ戻る回帰試験を追加する。
 paranoiaにはlibrary呼び出しをwrapした試験がある。
+logger試験は時刻・level・component、stdout/stderrのlevel別振り分け、終了時のqueue drainを確認する。
 
 ```sh
 cmake --build build-direct -j1
@@ -48,6 +49,7 @@ policy入力、JSON、reader再生成・region変更を確認したが、実機�
 | ReadPolicy runtime切替 | repeatを適用して再生後、SINGLE要求をPLAYING/PAUSED中に保留し、STOPPED境界で適用。APIでrequested/effective/pendingと15 frame single readerへの切替を確認 |
 | integrity Phase 1b | Macのbrowserでtechnical statusを表示。停止・通常再生、Live接続、player位置、現在再生PCM、先読みread、統計、event、drive能力を確認 |
 | integrity Phase 2 buffer | direct singleで300/150、300/75、300/45、750/45 frameを比較。750/45で通常再生、操作、Mac状態表示を確認 |
+| 非同期logger | UTC/monotonic時刻、level、componentをforegroundで確認。CEC操作、再生、technical status、SIGINT時flushに退行なし |
 
 14曲CDのleadout LBAは242334、Disc IDは6JTbUgqHL29gzUyOH5ir60K3hz0-。
 数値はこの試験discの結果であり、実装の固定値ではない。
@@ -187,9 +189,23 @@ underrunは発生しなかった。一方、50 ms以上のstallを147回記録�
 繰り返した。`api_snapshot`の50 ms超過は1回（58.8 ms）まで減り、音飛び、failure context、underrunは
 発生しなかった。この結果から既定200 msを維持し、500 msは環境別の比較optionとして残す。
 
+### 非同期logger実機確認
+
+2026-09-18、metadata/API buildをforegroundで起動し、UTC wall clock、logger起動後のmonotonic経過時間、
+DEBUG/INFO level、player/CEC/media/API/drive componentを確認した。direct singleでplay、連続seek、next、
+stopをCECから操作し、音声とtechnical statusのLive更新は正常だった。WARN/ERROR、underrun、log dropは
+発生しなかった。SIGINTでは`shutdown signal=2`と`output stopped`を順に出力して終了し、queue内の
+終了ログが失われないことを確認した。
+
+初回playの先読みは4001 ms、その後のseekは162〜186 ms、nextは257〜271 msだった。初回値は停止状態で
+約100秒経過した後の一回だけの測定であり、drive再始動を含む可能性があるためlogger overheadとは断定しない。
+systemd/journald経由の確認と、意図的なqueue overflowは未確認である。
+
 ## 継続する検証と開発課題
 
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
+- 非同期loggerはforegroundで確認済み。systemd/journaldでの時刻・level・componentと終了時flushを確認する。
+  queue overflowは通常運用では意図的に発生させず、発生時は`logger: dropped=N`を記録する。
 - LOADING中・PLAYING中のeject、重複要求、EJECT_ERROR、終了との競合を実機で継続確認する。
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。
   正常試聴では異常を再現できておらず、復旧経路の実機確認は未完了。

@@ -6,6 +6,7 @@
 #include "media_worker.hpp"
 #include "drive_capabilities.hpp"
 #include "read_policy.hpp"
+#include "logger.hpp"
 #ifdef ENABLE_METADATA
 #include "metadata_lookup.hpp"
 #include "metadata_worker.hpp"
@@ -56,8 +57,8 @@ void print_state(const PlayerController& controller) {
     case PlaybackState::stopped: name = "STOPPED"; break;
     case PlaybackState::no_disc: break;
     }
-    std::cout << "player: state=" << name << " track=" << state.track.value_or(0)
-              << " lba=" << state.position_lba.value_or(0) << '\n' << std::flush;
+    log_info("player") << "state=" << name << " track=" << state.track.value_or(0)
+                       << " lba=" << state.position_lba.value_or(0);
 }
 
 const char* media_state_name(MediaLifecycleState state) {
@@ -176,10 +177,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
         effective_read_policy = policy;
         read_policy_pending = false;
         engine.reset_prebuffer_target();
-        std::cout << "read_policy: applied mode=" << read_verification_mode_name(policy.mode)
-                  << " region_frames=" << policy.region_frames
-                  << " matches=" << policy.required_matches << '/' << policy.maximum_attempts
-                  << " budget_ms=" << policy.time_budget_ms << '\n' << std::flush;
+        log_info("read_policy") << "applied mode=" << read_verification_mode_name(policy.mode)
+                                << " region_frames=" << policy.region_frames
+                                << " matches=" << policy.required_matches << '/' << policy.maximum_attempts
+                                << " budget_ms=" << policy.time_budget_ms;
     };
     struct StopOnExit {
         PlayerController& controller; PcmWorker& worker; AudioOutput& output;
@@ -189,15 +190,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
         }
     } stop_on_exit{controller, worker, *audio};
     CecDevice cec(cec_device, cec_diagnostics);
-    std::cout << "player: backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
-              << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native"
-              << " alsa_latency_ms=" << audio_latency_ms
-              << " buffer_frames=" << buffer_config.capacity_cd_frames
-              << " startup_frames=" << buffer_config.startup_cd_frames
-              << " verification=" << read_policy_strategy(initial_read_policy, backend)
-              << " stdin_commands=" << (interactive ? "enabled" : "disabled") << '\n';
+    log_info("player") << "backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
+                       << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native"
+                       << " alsa_latency_ms=" << audio_latency_ms
+                       << " buffer_frames=" << buffer_config.capacity_cd_frames
+                       << " startup_frames=" << buffer_config.startup_cd_frames
+                       << " verification=" << read_policy_strategy(initial_read_policy, backend)
+                       << " stdin_commands=" << (interactive ? "enabled" : "disabled");
     if (interactive)
-        std::cout << "Commands: play pause stop next previous track N seek SECONDS state quit\n";
+        log_info("player") << "Commands: play pause stop next previous track N seek SECONDS state quit";
     print_state(controller);
     MediaStateTracker media_state;
     DriveCapabilities drive_capabilities;
@@ -256,7 +257,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
                 if (command.type == ApiCommandType::eject) {
                     if (media_state.state() == MediaLifecycleState::ejecting) {
-                        std::cout << "media: eject=already_pending\n" << std::flush;
+                        log_info("media") << "eject=already_pending";
                         return true;
                     }
                     controller.stop();
@@ -271,7 +272,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     if (metadata_worker) metadata_worker->cancel_pending();
                     metadata_session.invalidate();
 #endif
-                    std::cout << "media: state=EJECTING\n" << std::flush;
+                    log_info("media") << "state=EJECTING";
                     print_state(controller);
                     return true;
                 }
@@ -285,9 +286,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         apply_read_policy(requested_read_policy);
                     } else {
                         read_policy_pending = true;
-                        std::cout << "read_policy: pending mode="
-                                  << read_verification_mode_name(requested_read_policy.mode) << '\n'
-                                  << std::flush;
+                        log_info("read_policy") << "pending mode="
+                                                << read_verification_mode_name(requested_read_policy.mode);
                     }
                     return true;
                 }
@@ -318,15 +318,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; },
                                                  std::move(command_handler), serialize_read_policy);
-        std::cout << "api: listening=http://";
-        if (api_listen.find(':') != std::string::npos) std::cout << '[' << api_listen << ']';
-        else std::cout << api_listen;
-        std::cout << ':' << api_port;
+        auto line = log_info("api");
+        line << "listening=http://";
+        if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';
+        else line << api_listen;
+        line << ':' << api_port;
         if (api_listen != "127.0.0.1" && api_listen != "::1")
-            std::cout << " access=external-debug commands=loopback-only";
+            line << " access=external-debug commands=loopback-only";
         else
-            std::cout << " commands=enabled";
-        std::cout << '\n' << std::flush;
+            line << " commands=enabled";
     }
     auto next_api_snapshot = std::chrono::steady_clock::now();
 #endif
@@ -339,8 +339,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
         const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::steady_clock::now() - started).count();
         if (elapsed_us >= 50'000)
-            std::cerr << "player: main_loop_stall stage=" << stage
-                      << " duration_us=" << elapsed_us << '\n';
+            log_warning("player") << "main_loop_stall stage=" << stage
+                                  << " duration_us=" << elapsed_us;
     };
     bool quitting = false;
     while (!quitting) {
@@ -354,11 +354,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
         while (worker.pop_event(read_event)) {
             read_event.sequence = ++next_event_sequence;
             if (read_event.severity != EventSeverity::debug) {
-                std::cout << "event: type=" << player_event_type_name(read_event.type)
-                          << " sequence=" << read_event.sequence
-                          << " lba=" << read_event.read.start_lba
-                          << " status=" << integrity_read_status_name(read_event.read.status)
-                          << " retries=" << read_event.read.direct_retries << '\n' << std::flush;
+                log_warning("event") << "type=" << player_event_type_name(read_event.type)
+                                     << " sequence=" << read_event.sequence
+                                     << " lba=" << read_event.read.start_lba
+                                     << " status=" << integrity_read_status_name(read_event.read.status)
+                                     << " retries=" << read_event.read.direct_retries;
             }
             if (recent_events.size() == 64) recent_events.erase(recent_events.begin());
             recent_events.push_back(std::move(read_event));
@@ -369,7 +369,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             api_eject_inflight = true;
             const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - api_eject_requested_at).count();
-            std::cout << "media: eject=started wait_ms=" << wait_ms << '\n' << std::flush;
+            log_info("media") << "eject=started wait_ms=" << wait_ms;
         }
 #endif
         if (now >= next_media) {
@@ -394,7 +394,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             }
             if (!media_result.error.empty()) {
                 if (media_result.error != last_media_error)
-                    std::cerr << "media: " << media_result.error << '\n';
+                    log_warning("media") << media_result.error;
                 last_media_error = media_result.error;
                 if (media_result.work == MediaWork::read_toc) toc_pending = false;
 #ifdef ENABLE_API
@@ -403,8 +403,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     media_state.eject_failed(media_result.error);
                     const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::steady_clock::now() - api_eject_requested_at).count();
-                    std::cout << "media: state=EJECT_ERROR elapsed_ms=" << elapsed_ms << '\n'
-                              << std::flush;
+                    log_error("media") << "state=EJECT_ERROR elapsed_ms=" << elapsed_ms;
                 }
 #endif
                 continue;
@@ -413,18 +412,17 @@ void run_player_session(const std::string& device, CddaBackend backend,
             if (media_result.work == MediaWork::probe_drive) {
                 if (media_result.drive) {
                     drive_capabilities = std::move(*media_result.drive);
-                    std::cout << "drive: capabilities speed_control="
-                              << knowledge_name(drive_capabilities.speed_control.value)
-                              << " dae=" << knowledge_name(drive_capabilities.digital_audio_extraction.value)
-                              << " c2=" << knowledge_name(drive_capabilities.c2_supported.value)
-                              << " offset=" << (drive_capabilities.read_offset_samples ? "KNOWN" : "UNKNOWN")
-                              << '\n' << std::flush;
+                    log_info("drive") << "capabilities speed_control="
+                                      << knowledge_name(drive_capabilities.speed_control.value)
+                                      << " dae=" << knowledge_name(drive_capabilities.digital_audio_extraction.value)
+                                      << " c2=" << knowledge_name(drive_capabilities.c2_supported.value)
+                                      << " offset=" << (drive_capabilities.read_offset_samples ? "KNOWN" : "UNKNOWN");
                 }
             } else if (media_result.work == MediaWork::observe) {
                 const auto before = media_state.state();
                 const auto after = media_state.observe(*media_result.observation);
                 if (after != before)
-                    std::cout << "media: state=" << media_state_name(after) << '\n' << std::flush;
+                    log_info("media") << "state=" << media_state_name(after);
                 if (after == MediaLifecycleState::loading) {
 #ifdef ENABLE_METADATA
                     if (metadata_worker) metadata_worker->cancel_pending();
@@ -463,13 +461,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.set_disc_end(media_result.toc->leadout_lba);
                     engine.synchronize();
                     loaded_toc = *media_result.toc;
-                    std::cout << "media: audio_disc tracks=" << loaded_toc->tracks.size()
-                              << " leadout_lba=" << loaded_toc->leadout_lba << '\n' << std::flush;
+                    log_info("media") << "audio_disc tracks=" << loaded_toc->tracks.size()
+                                      << " leadout_lba=" << loaded_toc->leadout_lba;
                     print_state(controller);
 #ifdef ENABLE_METADATA
                     if (metadata_worker) {
                         const auto request = metadata_session.begin(*loaded_toc);
-                        std::cout << "metadata: status=LOADING generation=" << request.generation << '\n' << std::flush;
+                        log_info("metadata") << "status=LOADING generation=" << request.generation;
                         metadata_worker->request(request);
                     }
 #endif
@@ -481,15 +479,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - api_eject_requested_at).count();
 #endif
-                std::cout << "media: eject=completed";
+                auto line = log_info("media");
+                line << "eject=completed";
 #ifdef ENABLE_API
-                std::cout << " elapsed_ms=" << elapsed_ms;
+                line << " elapsed_ms=" << elapsed_ms;
 #endif
-                std::cout << '\n' << std::flush;
                 const auto before = media_state.state();
                 const auto after = media_state.observe(MediaObservation::tray_open);
                 if (after != before)
-                    std::cout << "media: state=" << media_state_name(after) << '\n' << std::flush;
+                    log_info("media") << "state=" << media_state_name(after);
                 toc_pending = false;
                 toc_needs_refresh = true;
                 loaded_toc.reset();
@@ -509,16 +507,16 @@ void run_player_session(const std::string& device, CddaBackend backend,
             while (metadata_worker->pop(result)) {
                 const auto result_generation = result.generation;
                 if (!metadata_session.apply(std::move(result))) {
-                    std::cout << "metadata: stale_result_discarded generation=" << result_generation << '\n' << std::flush;
+                    log_warning("metadata") << "stale_result_discarded generation=" << result_generation;
                     continue;
                 }
                 const auto& metadata = metadata_session.snapshot();
-                std::cout << "metadata: status=" << metadata_status_name(metadata.status)
-                          << " candidates=" << metadata.candidates.size()
-                          << " disc_id=" << metadata.disc_id
-                          << " cache=" << (metadata.from_cache ? "hit" : "miss");
-                if (!metadata.error.empty()) std::cout << " error=\"" << metadata.error << '"';
-                std::cout << '\n' << std::flush;
+                auto line = log_info("metadata");
+                line << "status=" << metadata_status_name(metadata.status)
+                     << " candidates=" << metadata.candidates.size()
+                     << " disc_id=" << metadata.disc_id
+                     << " cache=" << (metadata.from_cache ? "hit" : "miss");
+                if (!metadata.error.empty()) line << " error=\"" << metadata.error << '"';
             }
         }
 #endif
@@ -529,16 +527,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
             const auto update_us = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::steady_clock::now() - update_started).count();
             if (cec_diagnostics && update_us >= 10'000)
-                std::cout << "cec: update_us=" << update_us << '\n' << std::flush;
+                log_debug("cec") << "update_us=" << update_us;
             if (update_us >= 50'000)
-                std::cerr << "player: main_loop_stall stage=cec_update duration_us="
-                          << update_us << '\n';
+                log_warning("player") << "main_loop_stall stage=cec_update duration_us=" << update_us;
             next_cec = now + std::chrono::milliseconds(250);
         }
         const auto engine_started = std::chrono::steady_clock::now();
         try { engine.tick(); }
         catch (const std::exception& error) {
-            std::cerr << "player: playback stopped: " << error.what() << '\n';
+            log_error("player") << "playback stopped: " << error.what();
             print_state(controller);
         }
         report_slow_stage("engine_tick", engine_started);
@@ -567,7 +564,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (fds[0].revents & POLLIN) {
             signalfd_siginfo info{};
             (void)read(signals.fd, &info, sizeof(info));
-            std::cout << "player: shutdown signal=" << info.ssi_signo << '\n';
+            log_info("player") << "shutdown signal=" << info.ssi_signo;
             break;
         }
         if (fds[2].revents & (POLLERR | POLLHUP | POLLNVAL))
@@ -594,7 +591,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (n == 0) break;
         if (n < 0) { if (errno == EINTR || errno == EAGAIN) continue; throw std::runtime_error("stdin read failed"); }
         input.append(buffer, static_cast<std::size_t>(n));
-        if (input.size() > 4096) { input.clear(); std::cerr << "player: input too long\n"; continue; }
+        if (input.size() > 4096) { input.clear(); log_warning("player") << "input too long"; continue; }
         std::size_t newline;
         while ((newline = input.find('\n')) != std::string::npos) {
             auto command = input.substr(0, newline); input.erase(0, newline + 1);
@@ -603,7 +600,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             if (command == "quit") { quitting = true; break; }
             if (command == "state") { print_state(controller); continue; }
             if (media_state.state() == MediaLifecycleState::ejecting) {
-                std::cerr << "player: command rejected while ejecting\n";
+                log_warning("player") << "command rejected while ejecting";
                 continue;
             }
             if (command == "play") {
@@ -623,14 +620,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (error != std::errc{} || end != value.data() + value.size()) changed = false;
                 else if (command.starts_with("track ")) changed = controller.select_track(number);
                 else controller.seek_relative(std::int64_t(number) * cd_frames_per_second);
-                if (!changed) std::cerr << "player: invalid argument\n";
-            } else { changed = false; std::cerr << "player: unknown command\n"; }
+                if (!changed) log_warning("player") << "invalid argument";
+            } else { changed = false; log_warning("player") << "unknown command"; }
             if (changed) engine.synchronize();
             print_state(controller);
         }
     }
     controller.stop();
     engine.synchronize();
-    std::cout << "player: output stopped; waiting for outstanding drive I/O\n" << std::flush;
+    log_info("player") << "output stopped; waiting for outstanding drive I/O";
     // worker joins before audio/signals destruction. No detached hardware access.
 }

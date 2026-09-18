@@ -1,9 +1,9 @@
 #include "cec_device.hpp"
+#include "logger.hpp"
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <fcntl.h>
-#include <iostream>
 #include <linux/cec.h>
 #include <linux/cec-funcs.h>
 #include <sstream>
@@ -31,7 +31,7 @@ CecDevice::CecDevice(std::string path, bool diagnostics)
 CecDevice::~CecDevice() { if (fd_ >= 0) close(fd_); }
 void CecDevice::status(const std::string& message) {
     if (message != last_status_) {
-        std::cout << "cec: " << message << '\n' << std::flush;
+        log_info("cec") << message;
         last_status_ = message;
     }
 }
@@ -112,15 +112,15 @@ void CecDevice::report_active_source(const char* reason) {
     cec_msg_active_source(&response, physical_);
     if (ioctl(fd_, CEC_TRANSMIT, &response) < 0)
         throw std::system_error(errno, std::generic_category(), "CEC report active source");
-    std::cout << "cec: active_source=" << physical_address_text(physical_)
-              << " reason=" << reason << '\n' << std::flush;
+    log_info("cec") << "active_source=" << physical_address_text(physical_)
+                    << " reason=" << reason;
 }
 
 void CecDevice::set_active_source(bool active, const char* reason, std::uint16_t path) {
     if (active_source_ == active) return;
     active_source_ = active;
-    std::cout << "cec: active_source=" << (active ? physical_address_text(physical_) : "inactive")
-              << " reason=" << reason << " path=" << physical_address_text(path) << '\n' << std::flush;
+    log_info("cec") << "active_source=" << (active ? physical_address_text(physical_) : "inactive")
+                    << " reason=" << reason << " path=" << physical_address_text(path);
 }
 
 int CecDevice::poll_fd() const noexcept { return fd_; }
@@ -150,8 +150,7 @@ CecReceiveResult CecDevice::receive() {
         cec_msg_report_power_status(&response, CEC_OP_POWER_STATUS_ON);
         if (ioctl(fd_, CEC_TRANSMIT, &response) < 0)
             throw std::system_error(errno, std::generic_category(), "CEC report power status");
-        std::cout << "cec: power_status=on source=" << unsigned(cec_msg_initiator(&message))
-                  << '\n' << std::flush;
+        log_debug("cec") << "power_status=on source=" << unsigned(cec_msg_initiator(&message));
         return result;
     }
     if (cec_msg_opcode(&message) == CEC_MSG_SET_STREAM_PATH && message.len == 4) {
@@ -180,11 +179,11 @@ CecReceiveResult CecDevice::receive() {
           " receive_ioctl_us=" + std::to_string(call_us)
         : "";
     if (command) {
-        std::cout << "cec: command=" << cec_command_name(*command)
-                  << " source=" << unsigned(cec_msg_initiator(&message)) << timing << '\n' << std::flush;
+        log_info("cec") << "command=" << cec_command_name(*command)
+                        << " source=" << unsigned(cec_msg_initiator(&message)) << timing;
     } else {
-        std::cout << "cec: ignored UI code=0x" << std::hex << unsigned(message.msg[2])
-                  << std::dec << " source=" << unsigned(cec_msg_initiator(&message)) << timing << '\n' << std::flush;
+        log_debug("cec") << "ignored UI code=0x" << std::hex << unsigned(message.msg[2])
+                         << std::dec << " source=" << unsigned(cec_msg_initiator(&message)) << timing;
     }
     return result;
 }

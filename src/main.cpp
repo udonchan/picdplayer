@@ -4,6 +4,7 @@
 #include "cdda_probe.hpp"
 #include "player_session.hpp"
 #include "read_policy.hpp"
+#include "logger.hpp"
 #include "metadata_probe.hpp"
 #ifdef ENABLE_METADATA
 #include "metadata_lookup.hpp"
@@ -271,7 +272,7 @@ int main(int argc, char** argv) {
             throw std::system_error(errno, std::generic_category(), "sigprocmask");
         const int fd = signalfd(-1, &mask, SFD_CLOEXEC);
         if (fd < 0) throw std::system_error(errno, std::generic_category(), "signalfd");
-        std::cout << "cdplayerd: started\n" << std::flush;
+        log_info("cdplayerd") << "started";
         CecDevice cec(device, cec_diagnostics);
         pollfd polls[]{{fd, POLLIN, 0}, {-1, POLLIN, 0}};
         while (true) {
@@ -295,7 +296,7 @@ int main(int argc, char** argv) {
         const int error = errno;
         close(fd);
         if (count != sizeof(info)) throw std::system_error(error, std::generic_category(), "read signal");
-        std::cout << "cdplayerd: shutdown signal=" << info.ssi_signo << '\n';
+        log_info("cdplayerd") << "shutdown signal=" << info.ssi_signo;
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "cdplayerd: " << error.what() << '\n';

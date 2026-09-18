@@ -1,7 +1,7 @@
 #include "playback_engine.hpp"
+#include "logger.hpp"
 #include <algorithm>
 #include <stdexcept>
-#include <iostream>
 
 PlaybackEngine::PlaybackEngine(PlayerController& c, PcmWorker& w, AudioOutput& a, std::int32_t end)
     : controller_(c), worker_(w), output_(a), end_(end),
@@ -51,10 +51,10 @@ void PlaybackEngine::tick() {
             primed_ = true;
             last_prebuffer_wait_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now - prebuffer_started_at_).count();
-            std::cout << "player: prebuffer_ready wait_ms=" << *last_prebuffer_wait_ms_
-                      << " queued_blocks=" << status.queued
-                      << " target_frames=" << prebuffer_blocks_ * worker_.read_block_cd_frames()
-                      << '\n' << std::flush;
+            log_info("player") << "prebuffer_ready wait_ms=" << *last_prebuffer_wait_ms_
+                               << " queued_blocks=" << status.queued
+                               << " target_frames="
+                               << prebuffer_blocks_ * worker_.read_block_cd_frames();
         }
         // Bound work per main-loop iteration even for a sink that never blocks.
         for (int i = 0; i < 12; ++i) {
@@ -89,12 +89,12 @@ void PlaybackEngine::tick() {
         }
     } catch (const AudioUnderrun& error) {
         const auto status = worker_.status();
-        std::cerr << "player: failure_context tick_gap_us=" << gap_us
-                  << " queued_blocks=" << status.queued
-                  << " pending_samples=" << (block_.samples.size() - offset_)
-                  << " submitted_stereo_frames=" << submitted_
-                  << " last_read_us=" << status.last_read_us
-                  << " read_inflight_us=" << status.read_inflight_us << '\n';
+        log_warning("player") << "failure_context tick_gap_us=" << gap_us
+                              << " queued_blocks=" << status.queued
+                              << " pending_samples=" << (block_.samples.size() - offset_)
+                              << " submitted_stereo_frames=" << submitted_
+                              << " last_read_us=" << status.last_read_us
+                              << " read_inflight_us=" << status.read_inflight_us;
         try {
             // At XRUN ALSA has consumed everything it accepted. Resume at the
             // last whole CD frame submitted, avoiding a large audible repeat.
@@ -115,10 +115,10 @@ void PlaybackEngine::tick() {
             generation_ = worker_.start(start_, end_);
             active_ = true;
             last_tick_ = std::chrono::steady_clock::now();
-            std::cerr << "player: underrun recovery=" << underrun_recoveries_
-                      << " resume_lba=" << start_
-                      << " prebuffer_blocks=" << prebuffer_blocks_
-                      << " reason=" << error.what() << '\n';
+            log_warning("player") << "underrun recovery=" << underrun_recoveries_
+                                  << " resume_lba=" << start_
+                                  << " prebuffer_blocks=" << prebuffer_blocks_
+                                  << " reason=" << error.what();
             return;
         } catch (...) {
             controller_.stop();
@@ -130,12 +130,12 @@ void PlaybackEngine::tick() {
         }
     } catch (...) {
         const auto status = worker_.status();
-        std::cerr << "player: failure_context tick_gap_us=" << gap_us
-                  << " queued_blocks=" << status.queued
-                  << " pending_samples=" << (block_.samples.size() - offset_)
-                  << " submitted_stereo_frames=" << submitted_
-                  << " last_read_us=" << status.last_read_us
-                  << " read_inflight_us=" << status.read_inflight_us << '\n';
+        log_warning("player") << "failure_context tick_gap_us=" << gap_us
+                              << " queued_blocks=" << status.queued
+                              << " pending_samples=" << (block_.samples.size() - offset_)
+                              << " submitted_stereo_frames=" << submitted_
+                              << " last_read_us=" << status.last_read_us
+                              << " read_inflight_us=" << status.read_inflight_us;
         controller_.stop();
         active_ = false;
         worker_.cancel();

@@ -164,6 +164,18 @@ publish_stateは送信用snapshotを更新する。mainが完成済みJSONを用
 追加filesystemやNode runtimeを要求しない。画面はGET stateとWS eventsだけを消費し、再接続時には
 snapshotから全表示を再構築する。外部文字列はtextContentへ設定し、innerHTMLへ渡さない。
 
+## daemon logging
+
+[AsyncLogger](../../src/logger.cpp)はwall clock（UTC）、process起動後のmonotonic経過時間、level、
+component、messageを一行で出力する。INFO/DEBUGはstdout、WARN/ERRORはstderrへ送るため、systemdでは
+両方をjournaldが収集できる。診断CLIのPCMやJSON等の結果はログではなく、従来どおり直接出力する。
+
+daemonのmain loopは文字列を有界queueへ追加するだけで、terminalやjournaldへのwriteを待たない。
+専用threadがqueueを順に出力する。queue上限は512件であり、満杯時のDEBUG/INFOは捨てる。
+WARN/ERRORでは可能なら古いDEBUG/INFOを一件押し出す。失った総数は終了時に
+`WARN logger: dropped=N`として通知する。logger自身の失敗は再生処理へ例外を伝播させない。
+このthreadはhardwareやauthoritative stateへ触れず、出力遅延をmain/audio pathから隔離するためだけに使う。
+
 ## metadata関数と非同期境界
 
 | 関数・型 | 契約 |
@@ -201,5 +213,6 @@ APIはroute試験とloopback socket試験を持つ。詳細な確認範囲は[�
 | [metadata_parser_test.cpp](../../tests/metadata_parser_test.cpp) / [metadata_session_test.cpp](../../tests/metadata_session_test.cpp) | 候補変換・古い結果の拒否 |
 | [api_server_test.cpp](../../tests/api_server_test.cpp) | route・socket・待受によるloop停止の回帰試験 |
 | [daemon_snapshot_json_test.cpp](../../tests/daemon_snapshot_json_test.cpp) | 公開JSONの単位・null・状態 |
+| [logger_test.cpp](../../tests/logger_test.cpp) | level別sink、時刻・経過時間・component、終了時flush |
 
 自動試験は本物のCD・TV・アンプでの試聴やトレイ動作を代替しない。
