@@ -120,7 +120,10 @@ queue容量はCD frame設定をregionで割って切り捨て、開始閾値は�
 各世代の処理開始時にblock量と容量をmutex下でコピーし、
 旧世代のreadが戻るまでに設定が変わっても可変設定をlock外から参照しない。
 [AudioOutput](../../include/audio_output.hpp)のwrite/delayの単位はCD frameでなくstereo sample frame。
-[ALSA実装](../../src/alsa_output.cpp)がEPIPEをAudioUnderrunへ分類する。
+[ALSA実装](../../src/alsa_output.cpp)はnonblocking PCMを44.1 kHz、signed 16-bit、stereoで開き、
+EPIPEをAudioUnderrunへ分類する。latency要求は既定200 ms、起動optionで100〜2000 msを比較できる。
+これはPcmWorkerの先読み容量と独立しており、main loopが長く停止するとCD queueにPCMが残っていても
+ALSA underrunになり得る。
 
 ## CEC・API・状態公開
 
@@ -130,6 +133,8 @@ receiveは一件dequeueし、応答が必要なmessageを処理して任意のCe
 
 [make_daemon_snapshot](../../src/daemon_snapshot.cpp)はplayerとTOCの整合を検証し、
 track内位置と長さを追加した値コピーを作る。network/hardware I/Oはしない。
+[serialize_daemon_snapshot](../../src/daemon_snapshot_json.cpp)は1回のJSON生成結果を配信と変更検出に使う。
+変更検出ではtransport用revisionの数字だけを無視し、semanticな状態が同じなら配信revisionを増やさない。
 [serialize_daemon_snapshot](../../src/daemon_snapshot_json.cpp)はrevision/player/media/disc/metadataをJSON化する。
 optionalはnull。metadata.selectedはcandidate配列の0始まりindex。
 Phase 1aではschema_version=1とdrive capabilities、read activity、strategy、latest/current playback evidence、

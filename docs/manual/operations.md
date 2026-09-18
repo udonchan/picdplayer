@@ -40,6 +40,14 @@ player: prebuffer_ready wait_ms=... queued_blocks=... target_frames=...
 
 同じ値は`GET /api/state`の`read.last_prebuffer_wait_ms`と`read.prebuffer_target_frames`でも取得できる。
 
+ALSA出力bufferの要求latencyは既定200 msである。main loopの一時停止に対する余裕を比較する場合は
+100〜2000 msを指定できる。CD先読みbufferとは別の設定である。
+
+```sh
+./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \
+  --audio-latency-ms 500
+```
+
 ### 読み取りpolicyのruntime変更
 
 API有効buildでは、loopbackから現在のpolicyを確認できる。

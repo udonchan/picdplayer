@@ -50,6 +50,8 @@ paranoiaはoptional build、runtimeの未知名・無効なbackend指定はエ�
 存在するが、HDMI以外の出力profileやdevice検出は実装していない。USB S/PDIF、I²S S/PDIF、
 外部I²Sの将来候補と、bit-perfectを安易に主張しない原則は
 [デジタルオーディオ出力の将来拡張](../development/digital-audio-output.md)を参照する。
+ALSAへ要求するlatencyは既定200 msで、比較用に`--audio-latency-ms`（100〜2000）を指定できる。
+これはCD-DA先読みqueueとは別で、main loopの一時停止に対する出力側の余裕である。
 
 direct追加retryは診断CLIで0〜10回指定でき、既定0。playerは既定設定を使用する。
 paranoiaはFULLからNEVERSKIPを除いたmode、最大retry 20、skipは失敗として扱う。
@@ -78,7 +80,8 @@ ALSA EPIPEはAudioUnderrunとしてreset・reader再生成・再bufferする。
 同一driveに対するreader open/seek/read/closeとmedia/TOC/eject/capability probeは共有mutexで直列化する。
 進行中ioctlは強制中断せず、ejectは従来どおりstream停止、reader解放確認後に要求する。
 速度設定はまだ行わない。既定bufferは通常CDでstartup、seek、track変更、pause復帰と連続再生を
-実機比較して決めたが、傷discや長いread stallに対する余裕は未評価である。
+実機比較して決めたが、傷discや長いread stallに対する余裕は未評価である。CD queueが満杯でも
+main loopがALSA latency近く停止すればunderrunし得るため、両bufferを同じものとして扱わない。
 
 ## CEC
 

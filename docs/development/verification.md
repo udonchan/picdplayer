@@ -173,6 +173,20 @@ repeatでは75 frame regionを2回読むため、seek/track変更後に約0.2秒
 応答性と連続再生を両立したため既定値に採用した。repeatは75 frame blockなので実際の開始量は
 1 block（1秒）へ切り上がる。容量増加が傷discや4秒超stallを救済することはまだ実証していない。
 
+その後の750/45連続再生で一度ALSA underrunを観測した。直前はCD queue 50/50、未送信sample 12592、
+read 46.7 ms、read in-flightなしで、CD読み取り不足ではなかった。main loopのtick gapが175.3 msとなり、
+既定200 msのALSA latency内にwriteできなかったことが直接の失敗条件である。自動復旧はresume LBA 92086、
+開始8 block（120 frame）で成功した。停止したmain処理の特定用に50 ms以上のcontrol、CEC、engine、
+API snapshot/serviceを記録する診断を追加し、ALSA latencyを起動optionで比較可能にした。
+
+ALSA latency 500 ms、APIとMacのtechnical statusを有効にして10分超再生した試験では、音飛びと
+underrunは発生しなかった。一方、50 ms以上のstallを147回記録し、すべて`api_snapshot`だった。
+所要時間は主に約57〜68 ms、最大83.6 msである。変更検出用revision 0と配信用revision付きJSONを
+毎回二重生成していたため、revision以外を比較する関数を追加してsnapshot生成を1回へ削減した。
+最適化後に既定200 msへ戻し、Macのtechnical statusを接続した状態で再生、前後seek、next、stopを
+繰り返した。`api_snapshot`の50 ms超過は1回（58.8 ms）まで減り、音飛び、failure context、underrunは
+発生しなかった。この結果から既定200 msを維持し、500 msは環境別の比較optionとして残す。
+
 ## 継続する検証と開発課題
 
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。

@@ -5,7 +5,7 @@
 int main() {
     try {
         // ALSA null plugin: exercises native API without a sound device.
-        auto output = make_alsa_output("null");
+        auto output = make_alsa_output("null", 500'000);
         output->reset();
         std::vector<std::int16_t> samples(8820, 0);
         std::size_t offset = 0;

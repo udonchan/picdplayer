@@ -102,7 +102,8 @@ bool apply_cec_command(PlayerController& controller, CecCommand command) {
 }
 }
 void run_player_session(const std::string& device, CddaBackend backend,
-                        const std::string& audio_device, bool use_cec, const std::string& cec_device,
+                        const std::string& audio_device, unsigned audio_latency_ms,
+                        bool use_cec, const std::string& cec_device,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
                         const std::string& metadata_cache, const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config,
@@ -115,7 +116,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
-    auto audio = make_alsa_output(audio_device);
+    auto audio = make_alsa_output(audio_device, audio_latency_ms * 1000U);
     auto drive_access = std::make_shared<DriveAccessCoordinator>();
     validate_read_policy(initial_read_policy, buffer_config.capacity_cd_frames);
     auto reader_policy = std::make_shared<ReadPolicy>(initial_read_policy);
@@ -190,6 +191,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     CecDevice cec(cec_device, cec_diagnostics);
     std::cout << "player: backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
               << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native"
+              << " alsa_latency_ms=" << audio_latency_ms
               << " buffer_frames=" << buffer_config.capacity_cd_frames
               << " startup_frames=" << buffer_config.startup_cd_frames
               << " verification=" << read_policy_strategy(initial_read_policy, backend)
@@ -211,7 +213,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
 #ifdef ENABLE_API
     std::string api_state_json;
-    std::string api_semantic_json;
     std::uint64_t api_revision = 0;
     bool api_eject_pending = false;
     bool api_eject_inflight = false;
@@ -226,14 +227,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
         read.requested_policy = requested_read_policy;
         read.effective_policy = effective_read_policy;
         read.policy_pending = read_policy_pending;
-        auto semantic = serialize_daemon_snapshot(make_daemon_snapshot(
-            0, state, media_state.state(), loaded_toc, metadata, media_state.error(),
-            read, recent_events, drive_capabilities));
-        if (semantic == api_semantic_json) return false;
-        api_semantic_json = std::move(semantic);
-        api_state_json = serialize_daemon_snapshot(make_daemon_snapshot(
-            ++api_revision, state, media_state.state(), loaded_toc, metadata,
+        auto candidate = serialize_daemon_snapshot(make_daemon_snapshot(
+            api_revision + 1, state, media_state.state(), loaded_toc, metadata,
             media_state.error(), read, recent_events, drive_capabilities));
+        if (!api_state_json.empty() &&
+            snapshot_json_equal_ignoring_revision(candidate, api_state_json)) return false;
+        ++api_revision;
+        api_state_json = std::move(candidate);
         return true;
     };
     publish_api_snapshot();
@@ -334,9 +334,18 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::string input;
     auto next_cec = std::chrono::steady_clock::now();
     auto next_media = std::chrono::steady_clock::now();
+    const auto report_slow_stage = [](const char* stage,
+                                      std::chrono::steady_clock::time_point started) {
+        const auto elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - started).count();
+        if (elapsed_us >= 50'000)
+            std::cerr << "player: main_loop_stall stage=" << stage
+                      << " duration_us=" << elapsed_us << '\n';
+    };
     bool quitting = false;
     while (!quitting) {
         const auto now = std::chrono::steady_clock::now();
+        const auto control_started = now;
         if (read_policy_pending &&
             (controller.state().playback == PlaybackState::stopped ||
              controller.state().playback == PlaybackState::no_disc))
@@ -513,6 +522,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             }
         }
 #endif
+        report_slow_stage("control", control_started);
         if (use_cec && now >= next_cec) {
             const auto update_started = std::chrono::steady_clock::now();
             cec.update();
@@ -520,25 +530,36 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 std::chrono::steady_clock::now() - update_started).count();
             if (cec_diagnostics && update_us >= 10'000)
                 std::cout << "cec: update_us=" << update_us << '\n' << std::flush;
+            if (update_us >= 50'000)
+                std::cerr << "player: main_loop_stall stage=cec_update duration_us="
+                          << update_us << '\n';
             next_cec = now + std::chrono::milliseconds(250);
         }
+        const auto engine_started = std::chrono::steady_clock::now();
         try { engine.tick(); }
         catch (const std::exception& error) {
             std::cerr << "player: playback stopped: " << error.what() << '\n';
             print_state(controller);
         }
+        report_slow_stage("engine_tick", engine_started);
 #ifdef ENABLE_API
         if (api_server) {
             if (now >= next_api_snapshot) {
+                const auto snapshot_started = std::chrono::steady_clock::now();
                 if (publish_api_snapshot()) api_server->publish_state(api_state_json);
+                report_slow_stage("api_snapshot", snapshot_started);
                 next_api_snapshot = now + std::chrono::milliseconds(250);
             }
+            const auto api_started = std::chrono::steady_clock::now();
             api_server->service();
+            report_slow_stage("api_service", api_started);
         }
 #endif
         pollfd fds[]{{signals.fd, POLLIN, 0}, {interactive ? STDIN_FILENO : -1, POLLIN, 0},
                      {use_cec ? cec.poll_fd() : -1, POLLIN, 0}};
+        const auto poll_started = std::chrono::steady_clock::now();
         const auto result = poll(fds, 3, 10);
+        report_slow_stage("poll", poll_started);
         if (result < 0) {
             if (errno == EINTR) continue;
             throw std::system_error(errno, std::generic_category(), "player poll");
@@ -552,6 +573,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (fds[2].revents & (POLLERR | POLLHUP | POLLNVAL))
             throw std::runtime_error("CEC poll failure");
         if (fds[2].revents & POLLIN) {
+            const auto receive_started = std::chrono::steady_clock::now();
             // Drain every queued message now. Processing only one per poll
             // iteration could make a key wait behind unrelated CEC traffic.
             for (;;) {
@@ -563,6 +585,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     print_state(controller);
                 }
             }
+            report_slow_stage("cec_receive", receive_started);
         }
         if (fds[1].revents & (POLLERR | POLLNVAL)) throw std::runtime_error("stdin poll failure");
         if (!(fds[1].revents & (POLLIN | POLLHUP))) continue;

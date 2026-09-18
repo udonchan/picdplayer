@@ -189,3 +189,22 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                                        {"error", snapshot.metadata.artwork.error}}}};
     return root.dump();
 }
+
+bool snapshot_json_equal_ignoring_revision(std::string_view left, std::string_view right) {
+    constexpr std::string_view marker = "\"revision\":";
+    const auto revision_end = [](std::string_view value, std::size_t begin) {
+        while (begin < value.size() && value[begin] >= '0' && value[begin] <= '9') ++begin;
+        return begin;
+    };
+    const auto left_marker = left.find(marker);
+    const auto right_marker = right.find(marker);
+    if (left_marker == std::string_view::npos || right_marker == std::string_view::npos)
+        return false;
+    if (left.substr(0, left_marker) != right.substr(0, right_marker)) return false;
+    const auto left_value = left_marker + marker.size();
+    const auto right_value = right_marker + marker.size();
+    const auto left_end = revision_end(left, left_value);
+    const auto right_end = revision_end(right, right_value);
+    if (left_end == left_value || right_end == right_value) return false;
+    return left.substr(left_end) == right.substr(right_end);
+}

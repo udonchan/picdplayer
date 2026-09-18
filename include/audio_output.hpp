@@ -19,4 +19,5 @@ public:
     virtual std::int64_t delay() = 0;
     virtual bool drain() = 0;
 };
-std::unique_ptr<AudioOutput> make_alsa_output(const std::string& device);
+std::unique_ptr<AudioOutput> make_alsa_output(const std::string& device,
+                                               unsigned latency_microseconds = 200'000);

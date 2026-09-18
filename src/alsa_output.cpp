@@ -10,11 +10,12 @@ void checked(int code, const char* action) {
 class AlsaOutput final : public AudioOutput {
     snd_pcm_t* pcm_ = nullptr;
 public:
-    explicit AlsaOutput(const std::string& device) {
+    AlsaOutput(const std::string& device, unsigned latency_microseconds) {
         checked(snd_pcm_open(&pcm_, device.c_str(), SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK), "ALSA open");
         try {
             checked(snd_pcm_set_params(pcm_, SND_PCM_FORMAT_S16, SND_PCM_ACCESS_RW_INTERLEAVED,
-                                       2, 44100, 0, 200000), "ALSA configure 44100Hz stereo");
+                                       2, 44100, 0, latency_microseconds),
+                    "ALSA configure 44100Hz stereo");
         } catch (...) { snd_pcm_close(pcm_); throw; }
     }
     ~AlsaOutput() override { snd_pcm_drop(pcm_); snd_pcm_close(pcm_); }
@@ -45,6 +46,9 @@ public:
     }
 };
 }
-std::unique_ptr<AudioOutput> make_alsa_output(const std::string& device) {
-    return std::make_unique<AlsaOutput>(device);
+std::unique_ptr<AudioOutput> make_alsa_output(const std::string& device,
+                                              unsigned latency_microseconds) {
+    if (latency_microseconds < 100'000 || latency_microseconds > 2'000'000)
+        throw std::invalid_argument("ALSA latency must be within 100000..2000000 microseconds");
+    return std::make_unique<AlsaOutput>(device, latency_microseconds);
 }

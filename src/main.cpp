@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
     bool probe_drives = false;
     std::string cdda_device, backend_name, pcm_output, player_device;
     std::string audio_device = "plughw:CARD=vc4hdmi,DEV=0";
+    unsigned audio_latency_ms = 200;
     bool probe_only_options = false, audio_option = false;
     int cdda_track = 1, cdda_frames = 75, cdda_retries = 0;
     bool cdda_options = false;
@@ -96,6 +97,17 @@ int main(int argc, char** argv) {
         }
         else if (arg == "--player" && i + 1 < argc) player_device = argv[++i];
         else if (arg == "--audio-device" && i + 1 < argc) { audio_device = argv[++i]; audio_option = true; }
+        else if (arg == "--audio-latency-ms" && i + 1 < argc) {
+            const std::string_view value(argv[++i]);
+            const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(),
+                                                       audio_latency_ms);
+            if (error != std::errc{} || end != value.data() + value.size() ||
+                audio_latency_ms < 100 || audio_latency_ms > 2000) {
+                std::cerr << "Invalid --audio-latency-ms: expected 100..2000\n";
+                return 2;
+            }
+            audio_option = true;
+        }
         else if (arg == "--probe-cdda" && i + 1 < argc) cdda_device = argv[++i];
         else if (arg == "--pcm-output" && i + 1 < argc) {
             probe_only_options = true;
@@ -147,7 +159,8 @@ int main(int argc, char** argv) {
         return 2;
     }
     if ((!player_device.empty() && probe_only_options) || (audio_option && player_device.empty())) {
-        std::cerr << "Player accepts --cdda-reader, --audio-device, --interactive and CEC options only\n";
+        std::cerr << "Player accepts --cdda-reader, --audio-device, --audio-latency-ms, "
+                     "--interactive and CEC options only\n";
         return 2;
     }
     if (interactive && player_device.empty()) {
@@ -222,7 +235,8 @@ int main(int argc, char** argv) {
         }
 #endif
         if (!player_device.empty()) {
-            run_player_session(player_device, backend, audio_device, cec_enabled, device,
+            run_player_session(player_device, backend, audio_device, audio_latency_ms,
+                               cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
                                metadata_cache, api_listen, api_port, buffer_config,
                                read_policy);

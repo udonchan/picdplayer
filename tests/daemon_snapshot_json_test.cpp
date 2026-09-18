@@ -39,7 +39,8 @@ int main() {
         const auto snapshot = make_daemon_snapshot(42,
             {PlaybackState::playing, 1, 75}, MediaLifecycleState::audio_ready, toc, metadata,
             {}, read, {event}, drive);
-        const auto json = nlohmann::json::parse(serialize_daemon_snapshot(snapshot));
+        const auto serialized = serialize_daemon_snapshot(snapshot);
+        const auto json = nlohmann::json::parse(serialized);
         check(json["revision"] == 42 && json["player"]["state"] == "PLAYING");
         check(json["schema_version"] == 1);
         check(json["player"]["position_in_track_frames"] == 75);
@@ -69,12 +70,18 @@ int main() {
         check(json["drive"]["speed_control"]["value"] == "YES");
         check(json["recent_events"][0]["sequence"] == 7);
         check(json["recent_events"][0]["type"] == "READ_OBSERVED");
+        const auto next_revision = serialize_daemon_snapshot(make_daemon_snapshot(43,
+            {PlaybackState::playing, 1, 75}, MediaLifecycleState::audio_ready, toc, metadata,
+            {}, read, {event}, drive));
+        check(snapshot_json_equal_ignoring_revision(serialized, next_revision));
         const auto eject_error = nlohmann::json::parse(serialize_daemon_snapshot(
             make_daemon_snapshot(43, {PlaybackState::playing, 1, 75},
                                  MediaLifecycleState::eject_error, toc, metadata,
                                  "tray jammed")));
         check(eject_error["media"]["state"] == "EJECT_ERROR");
         check(eject_error["media"]["error"] == "tray jammed");
+        check(!snapshot_json_equal_ignoring_revision(serialized, eject_error.dump()));
+        check(!snapshot_json_equal_ignoring_revision("{}", serialized));
         const auto empty = nlohmann::json::parse(serialize_daemon_snapshot(
             make_daemon_snapshot(1, {}, MediaLifecycleState::no_disc, std::nullopt, {})));
         check(empty["disc"].is_null() && empty["player"]["track"].is_null());
