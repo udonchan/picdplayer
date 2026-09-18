@@ -157,6 +157,21 @@ int main() {
         websocket_client.join();
         check(websocket_received.find("101 Switching Protocols") != std::string::npos);
         check(websocket_received.find(R"({"revision":8})") != std::string::npos);
+
+        const ApiReadPolicyProvider policy_provider = [] {
+            return std::string(R"({"requested":{"mode":"REPEAT"},"effective":{"mode":"SINGLE"},"pending":true})");
+        };
+        response = route_api_request("GET", "/api/read-policy", provider, {}, {}, policy_provider);
+        check(response.status == 200 && response.body.find("\"pending\":true") != std::string::npos);
+        response = route_api_request("POST", "/api/read-policy", provider, commands,
+            R"({"mode":"repeat","region_frames":75,"required_matches":2,"maximum_attempts":3,"time_budget_ms":10000})");
+        check(response.status == 204 && received_command.type == ApiCommandType::set_read_policy);
+        check(received_command.read_policy.mode == ReadVerificationMode::repeat &&
+              received_command.read_policy.region_frames == 75 &&
+              received_command.read_policy.required_matches == 2);
+        check(route_api_request("POST", "/api/read-policy", provider, commands,
+                                R"({"mode":"repeat","region_frames":14,"required_matches":2,"maximum_attempts":3,"time_budget_ms":10000})").status == 400);
+        check(route_api_request("POST", "/api/read-policy", provider, commands, "{}").status == 400);
         std::cout << "PASS: HTTP state and WebSocket event API\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

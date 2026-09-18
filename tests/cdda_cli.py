@@ -38,7 +38,7 @@ for args, expected in [
     (['--player', '/nonexistent', '--cdda-reader', 'direct', '--read-buffer-frames', '150',
       '--startup-buffer-frames', '300'], 'Invalid playback buffer'),
     (['--player', '/nonexistent', '--cdda-reader', 'direct', '--read-verification', 'repeat',
-      '--read-buffer-frames', '15', '--startup-buffer-frames', '15'], 'requires at least 75'),
+      '--read-buffer-frames', '15', '--startup-buffer-frames', '15'], 'fit the read buffer'),
     (['--probe-metadata', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
     (['--frames', '751'], 'Invalid'),
     (['--frames', '0'], 'Invalid'),

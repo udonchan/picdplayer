@@ -3,6 +3,7 @@
 #include "cd_device.hpp"
 #include "cdda_probe.hpp"
 #include "player_session.hpp"
+#include "read_policy.hpp"
 #include "metadata_probe.hpp"
 #ifdef ENABLE_METADATA
 #include "metadata_lookup.hpp"
@@ -38,7 +39,8 @@ int main(int argc, char** argv) {
     int api_port = 0;
     PcmBufferConfig buffer_config;
     bool buffer_option = false;
-    bool verification_option = false, repeated_read_verification = false;
+    bool verification_option = false;
+    ReadPolicy read_policy;
     std::string api_listen = "127.0.0.1";
     bool api_listen_option = false;
     std::string device = "/dev/cec0";
@@ -86,9 +88,8 @@ int main(int argc, char** argv) {
         else if (arg == "--read-verification" && i + 1 < argc) {
             const std::string_view value(argv[++i]);
             verification_option = true;
-            if (value == "single") repeated_read_verification = false;
-            else if (value == "repeat") repeated_read_verification = true;
-            else {
+            try { read_policy.mode = parse_read_verification_mode(value); }
+            catch (const std::invalid_argument&) {
                 std::cerr << "Invalid --read-verification: expected single or repeat\n";
                 return 2;
             }
@@ -179,8 +180,7 @@ int main(int argc, char** argv) {
     }
     try {
         validate_pcm_buffer_config(buffer_config);
-        if (repeated_read_verification && buffer_config.capacity_cd_frames < 75)
-            throw std::invalid_argument("repeat verification requires at least 75 CD frames of buffer capacity");
+        validate_read_policy(read_policy, buffer_config.capacity_cd_frames);
     } catch (const std::invalid_argument& error) {
         std::cerr << "Invalid playback buffer: " << error.what() << '\n'; return 2;
     }
@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
             run_player_session(player_device, backend, audio_device, cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
                                metadata_cache, api_listen, api_port, buffer_config,
-                               repeated_read_verification);
+                               read_policy);
             return 0;
         }
         if (!cdda_device.empty()) {

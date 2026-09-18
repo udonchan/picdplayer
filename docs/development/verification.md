@@ -1,14 +1,9 @@
 # 検証状況と残課題
 
 更新日: 2026-09-18。実装済み、hardware非依存試験済み、実機確認済みを区別する。
-今回の文書整理では追加の実機操作を行っていない。日付付きの測定は当該条件だけの結果である。
+日付付きの測定は当該条件だけの結果である。
 
 ## 現在の確認待ち
-
-ReadPolicyの起動中変更は未コミットの実装と自動試験が完了し、実機確認待ち。
-停止中の即時適用、PLAYING/PAUSED中の保留、停止後の適用と次回再生を確認する。
-再生しながら要求しても現在のPCMと根拠が変わらず、requested/effective/pendingで
-適用状況が区別できることを確認する。操作方法は[Manual](../manual/operations.md)に置く。
 
 technical statusのブラウザ確認、傷disc、cache独立性、速度変更、S/PDIF出力は未確認。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
@@ -50,9 +45,21 @@ policy入力、JSON、reader再生成・region変更を確認したが、実機�
 | API | Macから外部GETによる状態照会、eject要求とトレイ動作 |
 | eject待受修正 | 2026-09-17に一回の要求でトレイが開いたとのユーザー確認 |
 | integrity Phase 1a | ASUS drive能力、direct read集計、先読み/ALSA再生head、bounded eventを通常CD再生中のAPI snapshotで確認 |
+| ReadPolicy runtime切替 | repeatを適用して再生後、SINGLE要求をPLAYING/PAUSED中に保留し、STOPPED境界で適用。APIでrequested/effective/pendingと15 frame single readerへの切替を確認 |
 
 14曲CDのleadout LBAは242334、Disc IDは6JTbUgqHL29gzUyOH5ir60K3hz0-。
 数値はこの試験discの結果であり、実装の固定値ではない。
+
+## ReadPolicy runtime切替の実機確認
+
+2026-09-18、14曲Audio CDとdirect backendで確認した。停止中にrepeat（75 frame、2-of-3）を
+要求すると直ちにeffectiveとなり、`direct+repeat-2of3`と75 frame readerで再生した。再生中に
+singleを要求するとrequestedだけがSINGLEへ変わり、PLAYINGとPAUSEDの間はeffectiveがREPEAT、
+`pending: true`を維持した。再開してstopすると`read_policy: applied mode=SINGLE`を記録し、
+APIで`direct-single-read`、15 frame reader、requested/effectiveともSINGLE、`pending: false`を確認した。
+
+この確認は安全な適用境界と状態公開の確認である。傷disc、read error、時間上限超過時のpolicy変更、
+各policyの音質・CPU・操作待ち時間の比較は未実施である。
 
 ## Phase 1a実機確認結果
 

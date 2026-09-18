@@ -52,6 +52,32 @@ std::uint64_t PcmWorker::start(std::int32_t begin, std::int32_t end) {
     changed_.notify_all();
     return generation_;
 }
+void PcmWorker::reconfigure(std::string strategy, std::string requested_mode,
+                            std::size_t read_block_cd_frames) {
+    std::lock_guard lock(mutex_);
+    if (read_block_cd_frames < pcm_block_cd_frames ||
+        read_block_cd_frames % pcm_block_cd_frames != 0 ||
+        read_block_cd_frames > buffer_config_.capacity_cd_frames)
+        throw std::invalid_argument("read block must be a multiple of 15 CD frames and fit the buffer");
+    read_block_cd_frames_ = read_block_cd_frames;
+    capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
+    startup_blocks_ = (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) /
+                      read_block_cd_frames_;
+    diagnostics_.effective_strategy = std::move(strategy);
+    diagnostics_.requested_mode = std::move(requested_mode);
+    diagnostics_.read_block_frames = read_block_cd_frames_;
+    discard_reader_ = true;
+    changed_.notify_all();
+}
+std::size_t PcmWorker::buffer_capacity_blocks() const {
+    std::lock_guard lock(mutex_); return capacity_blocks_;
+}
+std::size_t PcmWorker::startup_buffer_blocks() const {
+    std::lock_guard lock(mutex_); return startup_blocks_;
+}
+std::size_t PcmWorker::read_block_cd_frames() const {
+    std::lock_guard lock(mutex_); return read_block_cd_frames_;
+}
 void PcmWorker::cancel() {
     std::lock_guard lock(mutex_);
     ++generation_; active_ = false; done_ = false;
@@ -117,6 +143,12 @@ void PcmWorker::run() {
         const auto generation = generation_;
         auto position = begin_;
         const auto end = end_;
+        // A configuration is immutable for the lifetime of this stream
+        // generation.  reconfigure() is only used after the session has
+        // stopped this generation, but keep local copies so an old in-flight
+        // worker never races with its replacement configuration.
+        const auto capacity_blocks = capacity_blocks_;
+        const auto read_block_cd_frames = read_block_cd_frames_;
         lock.unlock();
         try {
             if (!reader) {
@@ -141,7 +173,7 @@ void PcmWorker::run() {
                 lock.lock();
                 changed_.wait(lock, [&] {
                     return closing_ || generation != generation_ ||
-                           queue_.size() < capacity_blocks_;
+                           queue_.size() < capacity_blocks;
                 });
                 if (closing_) return;
                 if (generation != generation_) break;
@@ -151,7 +183,7 @@ void PcmWorker::run() {
                 read_started_ = std::chrono::steady_clock::now();
                 lock.unlock();
                 const auto frames = std::min<std::int32_t>(
-                    static_cast<std::int32_t>(read_block_cd_frames_), end - position);
+                    static_cast<std::int32_t>(read_block_cd_frames), end - position);
                 PcmBlock block{generation, position,
                                std::vector<std::int16_t>(frames * cdda_samples_per_frame), {}};
                 const auto result = drive_access_

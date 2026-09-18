@@ -5,6 +5,7 @@
 #include "media_state.hpp"
 #include "media_worker.hpp"
 #include "drive_capabilities.hpp"
+#include "read_policy.hpp"
 #ifdef ENABLE_METADATA
 #include "metadata_lookup.hpp"
 #include "metadata_worker.hpp"
@@ -20,7 +21,9 @@
 #include <csignal>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <poll.h>
+#include <sstream>
 #include <stdexcept>
 #include <sys/signalfd.h>
 #include <system_error>
@@ -103,7 +106,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
                         const std::string& metadata_cache, const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config,
-                        bool repeated_read_verification) {
+                        ReadPolicy initial_read_policy) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache;
 #endif
@@ -114,18 +117,23 @@ void run_player_session(const std::string& device, CddaBackend backend,
     PlayerController controller;
     auto audio = make_alsa_output(audio_device);
     auto drive_access = std::make_shared<DriveAccessCoordinator>();
-    const auto base_strategy = backend == CddaBackend::direct ? "direct" : "paranoia-library";
-    PcmWorker worker([=] {
+    validate_read_policy(initial_read_policy, buffer_config.capacity_cd_frames);
+    auto reader_policy = std::make_shared<ReadPolicy>(initial_read_policy);
+    auto reader_policy_mutex = std::make_shared<std::mutex>();
+    auto reader_factory = [=] {
+                         ReadPolicy policy;
+                         { std::lock_guard lock(*reader_policy_mutex); policy = *reader_policy; }
                          auto reader = make_cdda_reader(backend, device);
-                         return repeated_read_verification
-                             ? make_repeated_read_verifier(std::move(reader))
+                         return policy.mode == ReadVerificationMode::repeat
+                             ? make_repeated_read_verifier(std::move(reader), repeated_read_policy(policy))
                              : std::move(reader);
-                     },
-                     std::string(base_strategy) + (repeated_read_verification
-                         ? "+repeat-2of3" : "-single-read"),
+                     };
+    const auto initial_block_frames = initial_read_policy.mode == ReadVerificationMode::repeat
+        ? initial_read_policy.region_frames : pcm_block_cd_frames;
+    PcmWorker worker(std::move(reader_factory), read_policy_strategy(initial_read_policy, backend),
                      buffer_config, drive_access,
-                     repeated_read_verification ? "REPEATED" : "LEGACY",
-                     repeated_read_verification ? std::size_t{75} : pcm_block_cd_frames);
+                     initial_read_policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
+                     initial_block_frames);
     MediaWorker media_worker(
         [device, drive_access] { return drive_access->invoke(
             [&] { return read_cd_media(device).observation; }); },
@@ -150,6 +158,28 @@ void run_player_session(const std::string& device, CddaBackend backend,
     }
 #endif
     PlaybackEngine engine(controller, worker, *audio, 0);
+    ReadPolicy requested_read_policy = initial_read_policy;
+    ReadPolicy effective_read_policy = initial_read_policy;
+    bool read_policy_pending = false;
+    const auto apply_read_policy = [&](const ReadPolicy& policy) {
+        validate_read_policy(policy, buffer_config.capacity_cd_frames);
+        const auto block_frames = policy.mode == ReadVerificationMode::repeat
+            ? policy.region_frames : pcm_block_cd_frames;
+        {
+            std::lock_guard lock(*reader_policy_mutex);
+            *reader_policy = policy;
+        }
+        worker.reconfigure(read_policy_strategy(policy, backend),
+                           policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
+                           block_frames);
+        effective_read_policy = policy;
+        read_policy_pending = false;
+        engine.reset_prebuffer_target();
+        std::cout << "read_policy: applied mode=" << read_verification_mode_name(policy.mode)
+                  << " region_frames=" << policy.region_frames
+                  << " matches=" << policy.required_matches << '/' << policy.maximum_attempts
+                  << " budget_ms=" << policy.time_budget_ms << '\n' << std::flush;
+    };
     struct StopOnExit {
         PlayerController& controller; PcmWorker& worker; AudioOutput& output;
         ~StopOnExit() {
@@ -162,7 +192,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
               << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native"
               << " buffer_frames=" << buffer_config.capacity_cd_frames
               << " startup_frames=" << buffer_config.startup_cd_frames
-              << " verification=" << (repeated_read_verification ? "repeat-2of3" : "single")
+              << " verification=" << read_policy_strategy(initial_read_policy, backend)
               << " stdin_commands=" << (interactive ? "enabled" : "disabled") << '\n';
     if (interactive)
         std::cout << "Commands: play pause stop next previous track N seek SECONDS state quit\n";
@@ -192,7 +222,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (metadata_enabled) metadata = metadata_session.snapshot();
 #endif
         const auto state = controller.state();
-        const auto read = engine.read_diagnostics();
+        auto read = engine.read_diagnostics();
+        read.requested_policy = requested_read_policy;
+        read.effective_policy = effective_read_policy;
+        read.policy_pending = read_policy_pending;
         auto semantic = serialize_daemon_snapshot(make_daemon_snapshot(
             0, state, media_state.state(), loaded_toc, metadata, media_state.error(),
             read, recent_events, drive_capabilities));
@@ -206,6 +239,20 @@ void run_player_session(const std::string& device, CddaBackend backend,
     publish_api_snapshot();
     std::unique_ptr<ApiServer> api_server;
     if (api_port) {
+        const auto serialize_read_policy = [&] {
+            const auto policy_json = [](const ReadPolicy& value) {
+                std::ostringstream output;
+                output << "{\"mode\":\"" << read_verification_mode_name(value.mode)
+                       << "\",\"region_frames\":" << value.region_frames
+                       << ",\"required_matches\":" << value.required_matches
+                       << ",\"maximum_attempts\":" << value.maximum_attempts
+                       << ",\"time_budget_ms\":" << value.time_budget_ms << '}';
+                return output.str();
+            };
+            return std::string("{\"requested\":") + policy_json(requested_read_policy) +
+                   ",\"effective\":" + policy_json(effective_read_policy) +
+                   ",\"pending\":" + (read_policy_pending ? "true" : "false") + '}';
+        };
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
                 if (command.type == ApiCommandType::eject) {
                     if (media_state.state() == MediaLifecycleState::ejecting) {
@@ -228,6 +275,22 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     print_state(controller);
                     return true;
                 }
+                if (command.type == ApiCommandType::set_read_policy) {
+                    try {
+                        validate_read_policy(command.read_policy, buffer_config.capacity_cd_frames);
+                    } catch (const std::invalid_argument&) { return false; }
+                    requested_read_policy = command.read_policy;
+                    if (controller.state().playback == PlaybackState::stopped ||
+                        controller.state().playback == PlaybackState::no_disc) {
+                        apply_read_policy(requested_read_policy);
+                    } else {
+                        read_policy_pending = true;
+                        std::cout << "read_policy: pending mode="
+                                  << read_verification_mode_name(requested_read_policy.mode) << '\n'
+                                  << std::flush;
+                    }
+                    return true;
+                }
                 if (media_state.state() == MediaLifecycleState::ejecting ||
                     controller.state().playback == PlaybackState::no_disc) return false;
                 CecCommand player_command = CecCommand::play;
@@ -243,6 +306,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 case ApiCommandType::select_track:
                     if (!controller.select_track(command.value)) return false;
                     engine.synchronize(); print_state(controller); return true;
+                case ApiCommandType::set_read_policy: return false; // handled above
                 case ApiCommandType::eject: break;
                 }
                 if (apply_cec_command(controller, player_command)) {
@@ -253,7 +317,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             };
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; },
-                                                 std::move(command_handler));
+                                                 std::move(command_handler), serialize_read_policy);
         std::cout << "api: listening=http://";
         if (api_listen.find(':') != std::string::npos) std::cout << '[' << api_listen << ']';
         else std::cout << api_listen;
@@ -273,6 +337,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
     bool quitting = false;
     while (!quitting) {
         const auto now = std::chrono::steady_clock::now();
+        if (read_policy_pending &&
+            (controller.state().playback == PlaybackState::stopped ||
+             controller.state().playback == PlaybackState::no_disc))
+            apply_read_policy(requested_read_policy);
         PlayerEvent read_event;
         while (worker.pop_event(read_event)) {
             read_event.sequence = ++next_event_sequence;

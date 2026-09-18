@@ -115,6 +115,13 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                                       {"other", evidence.backend_events.other}}}};
     };
     const auto& stats = snapshot.read.stats;
+    const auto policy = [](const ReadPolicy& value) {
+        return Json{{"mode", read_verification_mode_name(value.mode)},
+                    {"region_frames", value.region_frames},
+                    {"required_matches", value.required_matches},
+                    {"maximum_attempts", value.maximum_attempts},
+                    {"time_budget_ms", value.time_budget_ms}};
+    };
     root["read"] = {{"activity", read_activity_name(snapshot.read.activity)},
                     {"requested_mode", snapshot.read.requested_mode},
                     {"effective_strategy", snapshot.read.effective_strategy},
@@ -124,6 +131,9 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                     {"read_block_frames", snapshot.read.read_block_frames},
                     {"prebuffer_target_frames", snapshot.read.prebuffer_target_frames},
                     {"last_prebuffer_wait_ms", optional(snapshot.read.last_prebuffer_wait_ms)},
+                    {"policy", {{"requested", policy(snapshot.read.requested_policy)},
+                                {"effective", policy(snapshot.read.effective_policy)},
+                                {"pending", snapshot.read.policy_pending}}},
                     {"dropped_events", snapshot.read.dropped_events},
                     {"latest", read_evidence(snapshot.read.latest)},
                     {"current_playback", read_evidence(snapshot.read.current_playback)},

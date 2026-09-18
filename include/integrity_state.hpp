@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cdda_reader.hpp"
+#include "read_policy.hpp"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -57,6 +58,9 @@ struct ReadDiagnostics {
     std::size_t read_block_frames = 0;
     std::size_t prebuffer_target_frames = 0;
     std::optional<std::int64_t> last_prebuffer_wait_ms;
+    ReadPolicy requested_policy{};
+    ReadPolicy effective_policy{};
+    bool policy_pending = false;
     std::uint64_t dropped_events = 0;
     IntegrityStats stats;
 };

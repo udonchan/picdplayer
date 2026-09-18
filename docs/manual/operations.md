@@ -23,8 +23,8 @@
 ```
 
 実験用の反復一致読み取りは次で有効にする。既定75 CD frame区間を最大3回読み、PCM全体が2回一致した
-候補だけを再生する。既定は`single`。repeatの通常CD再生は確認済みだが、傷disc評価と
-起動中のpolicy切替は実機確認待ち。確認範囲は[検証状況](../development/verification.md)を参照する。
+候補だけを再生する。既定は`single`。repeatの通常CD再生と、起動中のpolicy切替は確認済みだが、
+傷disc評価は未実施である。確認範囲は[検証状況](../development/verification.md)を参照する。
 
 ```sh
 ./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \

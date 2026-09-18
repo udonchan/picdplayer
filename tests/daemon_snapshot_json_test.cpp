@@ -26,6 +26,8 @@ int main() {
         read.read_block_frames = 15;
         read.prebuffer_target_frames = 150;
         read.last_prebuffer_wait_ms = 1234;
+        read.requested_policy = {ReadVerificationMode::repeat, 75, 2, 3, 10000};
+        read.effective_policy = read.requested_policy;
         observe_read(read.stats, {60, 15, 15, ReadStatus::ok, 0, 0});
         DriveCapabilities drive;
         drive.device = "/dev/sr0"; drive.vendor = "ASUS";
@@ -61,6 +63,7 @@ int main() {
         check(json["read"]["read_block_frames"] == 15);
         check(json["read"]["prebuffer_target_frames"] == 150);
         check(json["read"]["last_prebuffer_wait_ms"] == 1234);
+        check(json["read"]["policy"]["effective"]["mode"] == "REPEAT");
         check(json["drive"]["vendor"] == "ASUS");
         check(json["drive"]["digital_audio_extraction"]["value"] == "UNKNOWN");
         check(json["drive"]["speed_control"]["value"] == "YES");

@@ -56,6 +56,10 @@ public:
     PcmWorker(const PcmWorker&) = delete;
     PcmWorker& operator=(const PcmWorker&) = delete;
     std::uint64_t start(std::int32_t begin, std::int32_t end);
+    // Applies only to a later start. It also asks the owner thread to close
+    // any existing reader before that start uses a different configuration.
+    void reconfigure(std::string strategy, std::string requested_mode,
+                     std::size_t read_block_cd_frames);
     void cancel();
     // Close the backend on its owner thread before the next read. Use after
     // media removal or a hardware error; normal pause/seek keeps it open.
@@ -65,9 +69,9 @@ public:
     bool pop(PcmBlock& block);
     bool pop_event(PlayerEvent& event);
     WorkerStatus status();
-    std::size_t buffer_capacity_blocks() const { return capacity_blocks_; }
-    std::size_t startup_buffer_blocks() const { return startup_blocks_; }
-    std::size_t read_block_cd_frames() const { return read_block_cd_frames_; }
+    std::size_t buffer_capacity_blocks() const;
+    std::size_t startup_buffer_blocks() const;
+    std::size_t read_block_cd_frames() const;
 private:
     void run();
     Factory factory_;
@@ -76,7 +80,7 @@ private:
     std::size_t capacity_blocks_ = pcm_queue_capacity_blocks;
     std::size_t startup_blocks_ = pcm_prebuffer_blocks;
     std::size_t read_block_cd_frames_ = pcm_block_cd_frames;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::condition_variable changed_;
     std::deque<PcmBlock> queue_;
     std::deque<PlayerEvent> events_;

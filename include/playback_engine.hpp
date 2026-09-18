@@ -9,6 +9,8 @@ class PlaybackEngine {
 public:
     PlaybackEngine(PlayerController& controller, PcmWorker& worker, AudioOutput& output, std::int32_t end);
     void set_disc_end(std::int32_t end);
+    // Call only while stopped, before starting a stream with a new reader plan.
+    void reset_prebuffer_target();
     // Call once after a position/state command; invalidates all old PCM.
     void synchronize();
     void tick();

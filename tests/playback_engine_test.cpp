@@ -128,6 +128,32 @@ int main() {
             check(block.evidence.frames_requested == 75 && block.samples.size() == 75 * cdda_samples_per_frame);
             regional.cancel();
         }
+        // A stopped stream can adopt a larger verified-read region.  The
+        // already-open reader is discarded, so the next range uses the
+        // reader factory and the new immutable generation configuration.
+        {
+            int readers_created = 0;
+            PcmWorker reconfigured([&] {
+                ++readers_created;
+                return std::make_unique<FakeReader>();
+            }, "single-test", {300, 150});
+            reconfigured.start(0, 15);
+            wait_for([&] { return reconfigured.status().done; });
+            check(readers_created == 1);
+            reconfigured.reconfigure("repeat-test", "REPEATED", 75);
+            check(reconfigured.buffer_capacity_blocks() == 4 &&
+                  reconfigured.startup_buffer_blocks() == 2 &&
+                  reconfigured.read_block_cd_frames() == 75);
+            reconfigured.start(100, 475);
+            wait_for([&] { return reconfigured.status().queued == 4; });
+            PcmBlock block;
+            check(reconfigured.pop(block));
+            check(block.lba == 100 && block.evidence.frames_requested == 75 &&
+                  block.samples.size() == 75 * cdda_samples_per_frame);
+            check(readers_created == 2);
+            check(reconfigured.status().diagnostics.effective_strategy == "repeat-test");
+            reconfigured.cancel();
+        }
         // Media work using the same coordinator cannot overlap a PCM read.
         {
             auto coordinated_gate = std::make_shared<Gate>();

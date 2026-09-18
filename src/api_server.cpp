@@ -1,11 +1,13 @@
 #include "api_server.hpp"
 #include "technical_status_page.hpp"
+#include "pcm_worker.hpp"
 #include <array>
 #include <algorithm>
 #include <cstring>
 #include <libwebsockets.h>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <limits>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
@@ -14,7 +16,8 @@
 ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
                               const ApiCommandHandler& command_handler,
-                              std::string_view body) {
+                              std::string_view body,
+                              const ApiReadPolicyProvider& read_policy_provider) {
     if (path == "/debug/status" || path == "/debug/status.css" || path == "/debug/status.js") {
         if (method != "GET")
             return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
@@ -34,6 +37,14 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
             return {HTTP_STATUS_INTERNAL_SERVER_ERROR, "application/json", R"({"error":"state_too_large"})"};
         return {HTTP_STATUS_OK, "application/json", std::move(body)};
     }
+    if (path == "/api/read-policy" && method == "GET") {
+        if (!read_policy_provider)
+            return {HTTP_STATUS_SERVICE_UNAVAILABLE, "application/json", R"({"error":"read_policy_unavailable"})"};
+        auto body = read_policy_provider();
+        if (body.size() > 4096)
+            return {HTTP_STATUS_INTERNAL_SERVER_ERROR, "application/json", R"({"error":"policy_too_large"})"};
+        return {HTTP_STATUS_OK, "application/json", std::move(body)};
+    }
     auto command = [&]() -> std::optional<ApiCommand> {
         if (path == "/api/play") return ApiCommand{ApiCommandType::play};
         if (path == "/api/pause") return ApiCommand{ApiCommandType::pause};
@@ -43,6 +54,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         if (path == "/api/seek") return ApiCommand{ApiCommandType::seek_relative};
         if (path == "/api/track") return ApiCommand{ApiCommandType::select_track};
         if (path == "/api/eject") return ApiCommand{ApiCommandType::eject};
+        if (path == "/api/read-policy") return ApiCommand{ApiCommandType::set_read_policy};
         return std::nullopt;
     }();
     if (!command)
@@ -51,12 +63,39 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
     if (!command_handler)
         return {HTTP_STATUS_FORBIDDEN, "application/json", R"({"error":"commands_disabled"})"};
-    if (command->type == ApiCommandType::seek_relative || command->type == ApiCommandType::select_track) {
+    if (command->type == ApiCommandType::set_read_policy ||
+        command->type == ApiCommandType::seek_relative || command->type == ApiCommandType::select_track) {
         constexpr std::size_t maximum_command_bytes = 4096;
         if (body.size() > maximum_command_bytes)
             return {HTTP_STATUS_REQ_ENTITY_TOO_LARGE, "application/json", R"({"error":"body_too_large"})"};
         try {
             const auto json = nlohmann::json::parse(body);
+            if (command->type == ApiCommandType::set_read_policy) {
+                if (!json.is_object() || json.size() != 5 || !json.contains("mode") ||
+                    !json["mode"].is_string() || !json.contains("region_frames") ||
+                    !json.contains("required_matches") || !json.contains("maximum_attempts") ||
+                    !json.contains("time_budget_ms"))
+                    return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+                const auto number = [&](const char* key) -> std::optional<unsigned> {
+                    if (!json[key].is_number_unsigned()) return std::nullopt;
+                    const auto value = json[key].get<unsigned long long>();
+                    if (value > std::numeric_limits<unsigned>::max()) return std::nullopt;
+                    return static_cast<unsigned>(value);
+                };
+                const auto region = number("region_frames");
+                const auto matches = number("required_matches");
+                const auto attempts = number("maximum_attempts");
+                const auto budget = number("time_budget_ms");
+                if (!region || !matches || !attempts || !budget)
+                    return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+                try {
+                    command->read_policy = {parse_read_verification_mode(json["mode"].get<std::string>()),
+                                            *region, *matches, *attempts, *budget};
+                    validate_read_policy(command->read_policy, maximum_buffer_cd_frames);
+                } catch (const std::exception&) {
+                    return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+                }
+            } else {
             const char* field = command->type == ApiCommandType::seek_relative ? "offset_seconds" : "track";
             if (!json.is_object() || json.size() != 1 || !json.contains(field) || !json[field].is_number_integer())
                 return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
@@ -66,6 +105,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
             if (value < minimum || value > maximum)
                 return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
             command->value = static_cast<int>(value);
+            }
         } catch (const nlohmann::json::exception&) {
             return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
         }
@@ -84,6 +124,7 @@ struct ApiServer::Implementation {
     int port;
     ApiStateProvider state_provider;
     ApiCommandHandler command_handler;
+    ApiReadPolicyProvider read_policy_provider;
     std::string websocket_state;
     std::array<lws_protocols, 2> protocols{};
     lws_context* context = nullptr;
@@ -156,7 +197,8 @@ struct ApiServer::Implementation {
                 auto request = std::move(found->second);
                 self->pending_requests.erase(found);
                 return send_response(wsi, route_api_request(request.method, request.path,
-                                     self->state_provider, self->handler_for(wsi), request.body));
+                                     self->state_provider, self->handler_for(wsi), request.body,
+                                     self->read_policy_provider));
             }
             if (reason == LWS_CALLBACK_CLOSED_HTTP) {
                 self->pending_requests.erase(wsi);
@@ -186,7 +228,7 @@ struct ApiServer::Implementation {
                 return 0;
             }
             return send_response(wsi, route_api_request(method_name, path, self->state_provider,
-                                 self->handler_for(wsi)));
+                                 self->handler_for(wsi), {}, self->read_policy_provider));
         } catch (...) {
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;
@@ -194,9 +236,9 @@ struct ApiServer::Implementation {
     }
 
     Implementation(std::string listen_address, int listen_port, ApiStateProvider provider,
-                   ApiCommandHandler handler)
+                   ApiCommandHandler handler, ApiReadPolicyProvider policy_provider)
         : address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
-          command_handler(std::move(handler)) {
+          command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)) {
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
         websocket_state = state_provider();
         if (port < 0 || port > 65535) throw std::invalid_argument("API port is outside 0..65535");
@@ -222,9 +264,9 @@ struct ApiServer::Implementation {
 };
 
 ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
-                     ApiCommandHandler handler)
+                     ApiCommandHandler handler, ApiReadPolicyProvider policy_provider)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
-                                                        std::move(handler))) {}
+                                                        std::move(handler), std::move(policy_provider))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

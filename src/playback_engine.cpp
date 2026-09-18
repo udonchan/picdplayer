@@ -12,6 +12,10 @@ void PlaybackEngine::set_disc_end(std::int32_t end) {
     if (end < 0) throw std::invalid_argument("invalid disc end");
     end_ = end;
 }
+void PlaybackEngine::reset_prebuffer_target() {
+    if (active_) throw std::logic_error("cannot change prebuffer target while active");
+    prebuffer_blocks_ = worker_.startup_buffer_blocks();
+}
 void PlaybackEngine::synchronize() {
     last_tick_ = std::chrono::steady_clock::now();
     active_ = false;

@@ -24,8 +24,9 @@ playback continuity、quiet operation、extensibility、UI simplicityとする�
 
 観測core、technical status、先読み設定、drive access直列化、任意の反復一致は現行設計へ統合した。
 本案の中心はC2の取得と信頼性評価、cache独立性、overlap、offset、詳細provenance、
-能力に応じたstrategy選択、外部照合である。ReadPolicyの稼働中切替は実装・自動試験済みで
-実機確認待ち。現在の小さなReadPolicyと、以下の全要素を備えた将来policyは区別する。
+能力に応じたstrategy選択、外部照合である。ReadPolicyの稼働中切替は実装・自動試験済みで、
+通常CDでPLAYING/PAUSED中の保留とSTOPPED境界での適用を確認した。現在の小さなReadPolicyと、
+以下の全要素を備えた将来policyは区別する。
 
 初期の依存調査では観測coreへの新規libraryは不要だった。MMC/C2/cacheはLinux UAPIと
 drive/bridgeの挙動を確認してから選び、外部照合のprotocol・利用条件は着手時に再調査する。
