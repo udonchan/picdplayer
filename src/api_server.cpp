@@ -1,4 +1,5 @@
 #include "api_server.hpp"
+#include "now_playing_page.hpp"
 #include "technical_status_page.hpp"
 #include "pcm_worker.hpp"
 #include <array>
@@ -18,6 +19,15 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiCommandHandler& command_handler,
                               std::string_view body,
                               const ApiReadPolicyProvider& read_policy_provider) {
+    if (path == "/player" || path == "/player.css" || path == "/player.js") {
+        if (method != "GET")
+            return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
+        if (path == "/player")
+            return {HTTP_STATUS_OK, "text/html; charset=utf-8", std::string(now_playing_html())};
+        if (path == "/player.css")
+            return {HTTP_STATUS_OK, "text/css; charset=utf-8", std::string(now_playing_css())};
+        return {HTTP_STATUS_OK, "text/javascript; charset=utf-8", std::string(now_playing_javascript())};
+    }
     if (path == "/debug/status" || path == "/debug/status.css" || path == "/debug/status.js") {
         if (method != "GET")
             return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
@@ -144,12 +154,22 @@ struct ApiServer::Implementation {
     }
 
     static int send_response(lws* wsi, const ApiResponse& response) {
-        std::array<unsigned char, LWS_PRE + 512> headers{};
+        std::array<unsigned char, LWS_PRE + 1024> headers{};
         auto* start = headers.data() + LWS_PRE;
         auto* cursor = start;
         auto* end = headers.data() + headers.size();
+        const auto add_header = [&](std::string_view name, std::string_view value) {
+            return lws_add_http_header_by_name(wsi,
+                reinterpret_cast<const unsigned char*>(name.data()),
+                reinterpret_cast<const unsigned char*>(value.data()),
+                static_cast<int>(value.size()), &cursor, end);
+        };
         if (lws_add_http_common_headers(wsi, static_cast<unsigned int>(response.status),
                 response.content_type.c_str(), response.body.size(), &cursor, end) ||
+            add_header("content-security-policy:", "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data: https:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none") ||
+            add_header("x-content-type-options:", "nosniff") ||
+            add_header("referrer-policy:", "no-referrer") ||
+            add_header("x-frame-options:", "DENY") ||
             lws_finalize_write_http_header(wsi, start, &cursor, end)) return -1;
         if (!response.body.empty() &&
             lws_write_http(wsi, response.body.data(), response.body.size()) < 0) return -1;
@@ -249,8 +269,7 @@ struct ApiServer::Implementation {
         info.vhost_name = "picdplayer";
         info.count_threads = 1; info.max_http_header_data = 2048; info.max_http_header_pool = 4;
         info.pt_serv_buf_size = 4096;
-        info.options = LWS_SERVER_OPTION_FAIL_UPON_UNABLE_TO_BIND |
-                       LWS_SERVER_OPTION_HTTP_HEADERS_SECURITY_BEST_PRACTICES_ENFORCE;
+        info.options = LWS_SERVER_OPTION_FAIL_UPON_UNABLE_TO_BIND;
         lws_set_log_level(LLL_ERR | LLL_WARN, nullptr);
         context = lws_create_context(&info);
         if (!context) throw std::runtime_error("failed to create API server on " + address + ':' + std::to_string(port));

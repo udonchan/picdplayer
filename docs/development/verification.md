@@ -5,7 +5,7 @@
 
 ## 現在の確認待ち
 
-technical statusのブラウザ確認、傷disc、cache独立性、速度変更、S/PDIF出力は未確認。
+傷disc、cache独立性、速度変更、S/PDIF出力は未確認。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
 ## 自動試験
@@ -13,7 +13,7 @@ S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試�
 CTestはCMakeの有効機能で件数が変わる。基本buildではcontroller、engine、ALSA抽象、CEC変換、
 media tracker/worker、TOC、reader、PCM保存、snapshot、CLIなどを検証する。
 metadata有効時はDisc ID公式vector、候補0/1/複数と不正JSON、worker/sessionの旧結果破棄を追加する。
-API有効時はJSON schema、route、technical status asset、loopback socket、無通信時のserviceがmainへ戻る回帰試験を追加する。
+API有効時はJSON schema、route、technical status/Now Playing asset、loopback socket、無通信時のserviceがmainへ戻る回帰試験を追加する。
 paranoiaにはlibrary呼び出しをwrapした試験がある。
 logger試験は時刻・level・component、stdout/stderrのlevel別振り分け、終了時のqueue drainを確認する。
 
@@ -44,6 +44,7 @@ policy入力、JSON、reader再生成・region変更を確認したが、実機�
 | systemd | 自動起動からCEC再生。metadata有効版のservice起動・cache hit・play/pause |
 | metadata | 14曲Disc ID、候補1件、AVAILABLE、cache miss/hit、並行CEC処理 |
 | API | Macから外部GETによる状態照会、eject要求とトレイ動作 |
+| Now Playing | Macのbrowserでmetadata、track、CAA cover art、Live接続、停止状態の表示を確認 |
 | eject待受修正 | 2026-09-17に一回の要求でトレイが開いたとのユーザー確認 |
 | integrity Phase 1a | ASUS drive能力、direct read集計、先読み/ALSA再生head、bounded eventを通常CD再生中のAPI snapshotで確認 |
 | ReadPolicy runtime切替 | repeatを適用して再生後、SINGLE要求をPLAYING/PAUSED中に保留し、STOPPED境界で適用。APIでrequested/effective/pendingと15 frame single readerへの切替を確認 |
@@ -76,6 +77,14 @@ dropped eventは0だった。strategyは`direct-single-read`、ReadPolicyは`SIN
 
 metadataなしで起動したためNOT_REQUESTED、album/artistなしとなることも仕様どおり確認した。
 続けてブラウザ再読み込みとnetwork切断後のWebSocket再接続・snapshot復元が正常に動作することを確認した。
+
+## Now Playing実機確認結果
+
+2026-09-19、Macのbrowserから`/player`を開き、MusicBrainzの単一候補metadataでalbum/artist、
+track 1のtitle/artist、曲長、STOPPED表示を確認した。`metadata.cover_art.status=AVAILABLE`とCAAの
+HTTPS image URLを取得し、CSPの`img-src`許可後にジャケット画像を表示できた。右上はWebSocket接続中の
+`Live`を示した。この確認はbrowser表示だけであり、CEC操作による画面追従、NO_DISC/LOADING、metadata
+NOT_FOUND/AMBIGUOUS、画像取得失敗時の表示は継続確認項目である。
 
 ## Phase 1a実機確認結果
 

@@ -131,7 +131,21 @@ EJECTINGなら要求を保持している。EJECT_ERRORならmedia.errorを確�
 `http://PI_ADDRESS:8080/api/state`へ接続する。外部からの操作POSTは403であり仕様どおり。
 WebSocketは接続時と変化時に同じschemaを送る。定期heartbeatとしての配信はしない。
 
-### Technical status画面
+### ブラウザ画面
+
+APIを有効にしたplayerへブラウザから次のURLで接続する。
+
+```text
+http://PI_ADDRESS:8080/player
+```
+
+`/player`は読み取り専用のNow Playing画面である。album/artist/track titleはselected metadataが
+AVAILABLEの場合に表示する。metadataを有効にするには起動時に`--metadata musicbrainz`と必要なら
+`--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
+再生位置は表示できる。CAA image URLが得られた場合はブラウザがジャケットを読み、失敗時はCDの
+プレースホルダーを表示する。この画面は操作を送らず、Chromium kioskの自動起動も行わない。
+
+`/debug/status`は以下のtechnical status画面であり、読み取り根拠やdrive能力を確認するために使う。
 
 APIを有効にしたplayerへブラウザから次のURLで接続する。
 
@@ -144,7 +158,7 @@ drive能力と根拠、disc/metadata、直近8件の観測を表示する。NO D
 NO DISCと表示する。右上がLiveならWebSocket接続中。切断時はReconnectingとなり、1.5秒後に
 GET stateで現在値を復元して再接続する。ここから再生操作は行わない。
 
-これはPhase 1bの診断画面であり、TV向け本番UI、ジャケット表示、kiosk起動ではない。
+これはPhase 1bの診断画面であり、TV向け本番UIやkiosk起動ではない。
 
 ## ログの読み方
 

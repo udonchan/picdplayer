@@ -163,6 +163,10 @@ publish_stateは送信用snapshotを更新する。mainが完成済みJSONを用
 [technical_status_page](../../src/technical_status_page.cpp)はHTML/CSS/JavaScriptをcompile時に埋め込む。
 追加filesystemやNode runtimeを要求しない。画面はGET stateとWS eventsだけを消費し、再接続時には
 snapshotから全表示を再構築する。外部文字列はtextContentへ設定し、innerHTMLへ渡さない。
+[now_playing_page](../../src/now_playing_page.cpp)も同じ配信経路だけを使用する。metadata.selectedを
+candidate配列のindexとして解決し、現在track番号でTrackMetadataを探す。metadataが不在ならDiscToc由来の
+track番号と時間だけを表示する。cover_art.image_urlはbrowserのimgへ渡し、load errorでは表示を戻す。
+このpageはdaemonへの操作・metadata候補選択・画像cacheを実装しない。
 
 ## daemon logging
 

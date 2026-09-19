@@ -34,6 +34,19 @@ int main() {
         check(response.status == 200 && response.content_type == "text/css; charset=utf-8");
         check(response.body.find("color-scheme:dark") != std::string::npos);
         check(route_api_request("POST", "/debug/status", provider).status == 405);
+        response = route_api_request("GET", "/player", provider);
+        check(response.status == 200 && response.content_type == "text/html; charset=utf-8");
+        check(response.body.find("PiCDPlayer") != std::string::npos);
+        check(response.body.find("/player.js") != std::string::npos && calls == 1);
+        response = route_api_request("GET", "/player.js", provider);
+        check(response.status == 200 && response.content_type == "text/javascript; charset=utf-8");
+        check(response.body.find("/api/events") != std::string::npos);
+        check(response.body.find("image.complete") != std::string::npos);
+        check(response.body.find("innerHTML") == std::string::npos);
+        response = route_api_request("GET", "/player.css", provider);
+        check(response.status == 200 && response.content_type == "text/css; charset=utf-8");
+        check(response.body.find("color-scheme:dark") != std::string::npos);
+        check(route_api_request("POST", "/player", provider).status == 405);
         response = route_api_request("GET", "/missing", provider);
         check(response.status == 404 && calls == 1);
         ApiCommand received_command{ApiCommandType::play};
@@ -93,6 +106,9 @@ int main() {
         client.join();
         check(received.find("200 OK") != std::string::npos);
         check(received.find(R"({"revision":7})") != std::string::npos);
+        check(received.find("content-security-policy:") != std::string::npos);
+        check(received.find("img-src 'self' data: https:") != std::string::npos);
+        check(received.find("x-content-type-options: nosniff") != std::string::npos);
 
         done = false;
         received.clear();

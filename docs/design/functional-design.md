@@ -7,7 +7,9 @@ Phase 1aではread回数を変えず、既存ReadResultの観測、read-only dri
 ALSA再生headに対応する根拠の推定をsnapshotへ公開するところまで実装した。
 公開するCLEANは検証済みの意味ではなく、local verificationをSINGLE_READ等で別に示す。
 Phase 1bではこのsnapshotだけを入力にする読み取り専用technical status画面を追加した。
-これは診断用であり、将来のTV向け本番UIやauthoritative stateを兼ねない。
+これは診断用であり、TV向け本番UIやauthoritative stateを兼ねない。
+`/player`は同じsnapshotを表示用に整形する初期のNow Playing画面である。画面は状態を所有せず、
+操作POSTも送らない。Chromium kiosk起動や家電向け画面遷移はまだ実装していない。
 反復一致読み取りは既定75 frame区間で2-of-3比較を行う。設定変更の契約は以下に記す。
 
 ## media・TOC
@@ -69,7 +71,8 @@ readerの設定をread途中で変えないため、現在再生中のPCMとそ�
 single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
 既定はqueue上限750 frame（10秒、PCM約1.68 MiB）、
 開始閾値45 frame（0.6秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
-起動optionで設定できる。起動中に変更するAPIはない。開始閾値は容量以下とする。
+起動optionで設定できる。read policyはAPIで起動中に変更できるが、先読みqueueの容量・開始閾値は
+起動時設定のままである。開始閾値は容量以下とする。
 block数への変換では容量を切り捨て、開始閾値を切り上げるため、任意のregion設定では
 実際の容量・閾値が要求値と異なり得る。終端付近は閾値より短くても開始可能。
 ALSA EPIPEはAudioUnderrunとしてreset・reader再生成・再bufferする。
@@ -110,6 +113,8 @@ libwebsocketsを採用しmain threadからserviceする。HTTPとWebSocketを一
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
 | GET /debug/status.css, /debug/status.js | diagnostic画面の埋め込みasset |
+| GET /player | album、track、位置、cover artを表示する読み取り専用Now Playing HTML |
+| GET /player.css, /player.js | Now Playing画面の埋め込みasset |
 | POST /api/play, /pause, /stop, /next, /previous | bodyなし、受理204 |
 | POST /api/seek | `{"offset_seconds":10}`、±86400秒、受理204 |
 | POST /api/track | `{"track":2}`、1〜99かつ実disc内、受理204 |
@@ -130,6 +135,12 @@ technical statusはeffective strategyとReadPolicyを別々に表示し、未適
 `effective → requested (pending)`として示す。初回にGET stateを読み、以後WebSocketで更新する。接続断ではstateを再取得してから
 再接続するため、eventを一件ずつ完全に受信したことを状態復元の前提にしない。metadata文字列は
 DOMのtextContentとして扱い、HTMLとして解釈しない。画面から操作POSTは送信しない。
+
+`/player`も初回GETとWebSocketで同じsnapshotを消費する。selected metadataがなければ `Audio CD` と
+track番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。CAA image URLが
+AVAILABLEならブラウザが画像として読む。URLの存在は画像binaryのdaemon取得・検証完了を意味しない。
+画像の失敗時はプレースホルダーへ戻る。外部文字列はtechnical statusと同様にtextContentで表示する。
+HTTP responseはCSPでscript/style/connectをselfへ制限し、cover artに必要な`img-src`だけHTTPSを許可する。
 
 ## eject
 
