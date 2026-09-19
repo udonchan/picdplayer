@@ -439,7 +439,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 const auto after = media_state.observe(*media_result.observation);
                 if (after != before)
                     log_info("media") << "state=" << media_state_name(after);
-                if (after == MediaLifecycleState::loading) {
+                if (after == MediaLifecycleState::loading && after != before) {
                     next_drive_start = std::chrono::steady_clock::time_point::max();
 #ifdef ENABLE_METADATA
                     if (metadata_worker) metadata_worker->cancel_pending();
@@ -479,20 +479,21 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.set_disc_end(media_result.toc->leadout_lba);
                     engine.synchronize();
                     loaded_toc = *media_result.toc;
-                    // Warm the drive as soon as the disc is ready. This remains
-                    // asynchronous and is not a playback readiness gate.
-                    next_drive_start = std::chrono::steady_clock::now();
                     log_info("media") << "audio_disc tracks=" << loaded_toc->tracks.size()
                                       << " leadout_lba=" << loaded_toc->leadout_lba;
                     print_state(controller);
-#ifdef ENABLE_METADATA
-                    if (metadata_worker) {
-                        const auto request = metadata_session.begin(*loaded_toc);
-                        log_info("metadata") << "status=LOADING generation=" << request.generation;
-                        metadata_worker->request(request);
-                    }
-#endif
                 }
+                // LOADING invalidates enrichment and the keep-awake deadline,
+                // even if the subsequent TOC identifies the same disc.
+                next_drive_start = std::chrono::steady_clock::now();
+#ifdef ENABLE_METADATA
+                if (metadata_worker) {
+                    if (const auto request = metadata_session.begin_if_needed(*loaded_toc)) {
+                        log_info("metadata") << "status=LOADING generation=" << request->generation;
+                        metadata_worker->request(*request);
+                    }
+                }
+#endif
                 toc_needs_refresh = false;
             } else if (media_result.work == MediaWork::start_drive) {
                 const auto elapsed_ms = drive_start_requested_at

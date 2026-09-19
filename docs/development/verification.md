@@ -238,6 +238,25 @@ CEC/API/technical statusにも退行はなかった。約3分停止後のPlay先
 これにより初回background start、再生中抑止、Pause後再開を確認した。物理回転状態そのものは取得できないため、
 ログは引き続き`rotation=UNVERIFIED`とする。
 
+### 2026-09-19 設計回帰確認
+
+direct singleの既定750/45 frame構成で、CECのplay、pause/play、next、previous、seek forward/backward、
+stopを実機確認した。各操作後に先読みを完了し、pause/playでは248 ms、track変更では363 ms、
+seekでは445〜463 msだった。previousでtrack 2からtrack 1先頭へ戻り、stopはtrack 1先頭へ戻った。
+
+repeat readerでは、75 frame regionに対して容量/開始閾値を90/90 frameとした。実際に保持できるqueueは
+1 blockだけであるが、`prebuffer_ready`は`queued_blocks=1 target_frames=75`となって再生、seek、next、
+pause/play、stopを完了した。容量をblock単位へ変換した際に、開始待ちが保持可能なblock数を超えないことを
+確認した。この小容量設定は境界試験用であり、通常設定の推奨値ではない。
+
+metadata有効時にCDを取り出して同じCDを再挿入し、`NO_DISC`、`LOADING`、`AUDIO_READY`の後にmetadataが
+再び`LOADING`から`AVAILABLE`へ遷移することを確認した。cache hitだったため外部問い合わせは発生しなかった。
+LOADING中の繰り返し観測では状態遷移時だけmetadata世代を無効化するようにし、同一LOADING状態で不要に
+世代を増やさない実装へ修正した。
+
+APIの`offset_seconds`へ`18446744073709551615`をPOSTし、`400 invalid_body`を返してdaemonが継続することを
+確認した。unsigned JSON値をsigned seek値へ変換する前に範囲検査する経路である。
+
 ## 継続する検証と開発課題
 
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
@@ -251,7 +270,7 @@ CEC/API/technical statusにも退行はなかった。約3分停止後のPlay先
 - direct/paranoiaの採用、性能、CPU負荷、startup/seek latencyは実測後に判断する。
 - pause再開の待ち時間、buffering表示、復旧回数上限を検討する。
 - mediaとPCMのdevice access直列化は実装済み。挿抜を含む実機回帰確認を継続する。
-- 同じTOCの別disc識別、LOADING後のmetadata再要求を検討する。
+- 同じTOCの別disc識別を検討する。LOADING後に同じTOCへ戻った場合のmetadata再要求は実装・確認済み。
 - metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
 - cache期限/総容量/破損復旧、候補選択、非1始まりtrack対応、HTTP/JSON制限の強化は未実装。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。

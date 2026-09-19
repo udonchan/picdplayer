@@ -2,6 +2,7 @@
 #include <curl/curl.h>
 #include <memory>
 #include <mutex>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -9,9 +10,15 @@ std::once_flag curl_once;
 struct WriteTarget { std::string body; std::size_t maximum; bool exceeded = false; };
 size_t write_body(char* data, size_t size, size_t count, void* opaque) noexcept {
     auto& target = *static_cast<WriteTarget*>(opaque);
+    if (size != 0 && count > std::numeric_limits<size_t>::max() / size) {
+        target.exceeded = true;
+        return 0;
+    }
     const auto bytes = size * count;
     if (bytes > target.maximum - target.body.size()) { target.exceeded = true; return 0; }
-    target.body.append(data, bytes); return bytes;
+    // No exception may escape a C callback (or this noexcept function).
+    try { target.body.append(data, bytes); return bytes; }
+    catch (...) { return 0; }
 }
 int transfer_progress(void* opaque, curl_off_t, curl_off_t, curl_off_t, curl_off_t) noexcept {
     const auto* cancelled = static_cast<const std::function<bool()>*>(opaque);

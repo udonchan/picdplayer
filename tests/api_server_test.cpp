@@ -69,6 +69,9 @@ int main() {
         check(response.status == 204 && received_command.type == ApiCommandType::select_track &&
               received_command.value == 3);
         check(route_api_request("POST", "/api/seek", provider, commands, "{}").status == 400);
+        // Unsigned JSON integers must not wrap into an accepted negative seek.
+        check(route_api_request("POST", "/api/seek", provider, commands,
+                                R"({"offset_seconds":18446744073709551615})").status == 400);
         check(route_api_request("POST", "/api/track", provider, commands,
                                 R"({"track":0})").status == 400);
         response = route_api_request("POST", "/api/eject", provider, commands);

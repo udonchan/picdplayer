@@ -109,6 +109,9 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
             const char* field = command->type == ApiCommandType::seek_relative ? "offset_seconds" : "track";
             if (!json.is_object() || json.size() != 1 || !json.contains(field) || !json[field].is_number_integer())
                 return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+            if (json[field].is_number_unsigned() &&
+                json[field].get<unsigned long long>() > static_cast<unsigned long long>(std::numeric_limits<long long>::max()))
+                return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
             const auto value = json[field].get<long long>();
             const auto minimum = command->type == ApiCommandType::seek_relative ? -86'400LL : 1LL;
             const auto maximum = command->type == ApiCommandType::seek_relative ? 86'400LL : 99LL;

@@ -6,6 +6,8 @@
 class MetadataSession {
 public:
     MetadataRequest begin(const DiscToc& toc);
+    // Restart after invalidation even when the refreshed TOC is unchanged.
+    std::optional<MetadataRequest> begin_if_needed(const DiscToc& toc);
     void invalidate();
     bool apply(MetadataWorkerResult result);
     std::uint64_t generation() const { return generation_; }

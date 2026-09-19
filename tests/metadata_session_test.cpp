@@ -20,6 +20,14 @@ int main() {
         auto request_a_again = session.begin(a);
         check(!session.apply({request_a.generation, a, old}));
         check(session.apply({request_a_again.generation, a, old}));
+        check(!session.begin_if_needed(a)); // A ready result is not requested again.
+        session.invalidate(); // Temporary LOADING may return the same TOC.
+        const auto refreshed = session.begin_if_needed(a);
+        check(refreshed.has_value());
+        check(!session.begin_if_needed(a)); // Nor is an in-flight request duplicated.
+        check(!session.apply({request_a_again.generation, a, old}));
+        check(session.apply({refreshed->generation, a, old}));
+        check(session.begin_if_needed(b).has_value());
         std::cout << "PASS: stale metadata generations and TOCs are rejected\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

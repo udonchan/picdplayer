@@ -73,8 +73,9 @@ single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overhead�
 開始閾値45 frame（0.6秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
 起動optionで設定できる。read policyはAPIで起動中に変更できるが、先読みqueueの容量・開始閾値は
 起動時設定のままである。開始閾値は容量以下とする。
-block数への変換では容量を切り捨て、開始閾値を切り上げるため、任意のregion設定では
-実際の容量・閾値が要求値と異なり得る。終端付近は閾値より短くても開始可能。
+block数への変換では容量を切り捨て、開始閾値を切り上げる。切り上げた閾値が実際に
+保持できるblock数を超える場合は容量へ丸めるため、任意のregion設定では実際の容量・
+閾値が要求値と異なり得る。終端付近は閾値より短くても開始可能。
 ALSA EPIPEはAudioUnderrunとしてreset・reader再生成・再bufferする。
 先読み閾値は復旧ごとに5 block増加し、設定されたblock容量で止まる。
 増加はengine内で保持し、ReadPolicyを適用すると初期閾値へ戻す。

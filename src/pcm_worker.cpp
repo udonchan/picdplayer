@@ -25,8 +25,8 @@ PcmWorker::PcmWorker(Factory factory, std::string strategy, PcmBufferConfig buff
         throw std::invalid_argument("read block must be a multiple of 15 CD frames and fit the buffer");
     read_block_cd_frames_ = read_block_cd_frames;
     capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
-    startup_blocks_ = (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) /
-                      read_block_cd_frames_;
+    startup_blocks_ = std::min(capacity_blocks_,
+        (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) / read_block_cd_frames_);
     diagnostics_.effective_strategy = std::move(strategy);
     diagnostics_.requested_mode = std::move(requested_mode);
     diagnostics_.buffer_capacity_frames = buffer_config_.capacity_cd_frames;
@@ -61,8 +61,8 @@ void PcmWorker::reconfigure(std::string strategy, std::string requested_mode,
         throw std::invalid_argument("read block must be a multiple of 15 CD frames and fit the buffer");
     read_block_cd_frames_ = read_block_cd_frames;
     capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
-    startup_blocks_ = (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) /
-                      read_block_cd_frames_;
+    startup_blocks_ = std::min(capacity_blocks_,
+        (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) / read_block_cd_frames_);
     diagnostics_.effective_strategy = std::move(strategy);
     diagnostics_.requested_mode = std::move(requested_mode);
     diagnostics_.read_block_frames = read_block_cd_frames_;

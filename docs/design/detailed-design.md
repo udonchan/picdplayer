@@ -116,6 +116,7 @@ read bufferはCD frameの整数倍で、ReadResult.frames_read部分だけが有
 呼び手のbufferへ候補PCMをコピーしない。時間予算は進行中のblocking readを中断しない。
 PcmWorkerはsingleで15 frame、repeatでpolicyのregion_frames（既定75）を要求する。
 queue容量はCD frame設定をregionで割って切り捨て、開始閾値は切り上げる。
+切り上げ結果がqueue容量を超える場合は容量へ丸め、待機条件が達成不能にならないようにする。
 既定設定ではsingleは10秒/0.6秒、repeatは10秒/1秒（75 frame blockへの切り上げ）となる。
 各世代の処理開始時にblock量と容量をmutex下でコピーし、
 旧世代のreadが戻るまでに設定が変わっても可変設定をlock外から参照しない。

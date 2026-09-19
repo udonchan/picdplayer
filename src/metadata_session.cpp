@@ -15,6 +15,10 @@ MetadataRequest MetadataSession::begin(const DiscToc& toc) {
     return {generation_, toc};
 }
 void MetadataSession::invalidate() { ++generation_; toc_.reset(); snapshot_ = {}; }
+std::optional<MetadataRequest> MetadataSession::begin_if_needed(const DiscToc& toc) {
+    if (toc_ && same_toc(*toc_, toc)) return std::nullopt;
+    return begin(toc);
+}
 bool MetadataSession::apply(MetadataWorkerResult result) {
     if (result.generation != generation_ || !toc_ || !same_toc(result.toc, *toc_)) return false;
     snapshot_ = std::move(result.metadata); return true;

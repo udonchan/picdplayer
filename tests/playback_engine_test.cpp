@@ -108,6 +108,26 @@ int main() {
                               {}, "REPEATED", 75);
         } catch (const std::invalid_argument&) { invalid_read_block = true; }
         check(invalid_read_block);
+        // A region need not divide capacity: never wait for a block count
+        // that the bounded queue cannot hold (90/75 used to wait forever).
+        {
+            PcmWorker regional([] { return std::make_unique<FakeReader>(); }, "repeat-test",
+                               {90, 90}, {}, "REPEATED", 75);
+            check(regional.buffer_capacity_blocks() == 1 && regional.startup_buffer_blocks() == 1);
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 750));
+            FakeOutput output;
+            PlaybackEngine playback(controller, regional, output, 750);
+            controller.play(); playback.synchronize();
+            wait_for([&] { return regional.status().queued == 1; });
+            playback.tick();
+            check(output.total > 0); // Playback progresses before the reader reaches EOF.
+            controller.stop(); playback.synchronize();
+            regional.reconfigure("single-test", "LEGACY", 15);
+            check(regional.startup_buffer_blocks() == 6);
+            regional.reconfigure("repeat-test", "REPEATED", 75);
+            check(regional.startup_buffer_blocks() == 1);
+        }
         {
             PcmWorker bounded([] { return std::make_unique<FakeReader>(); }, "test", {30, 15});
             check(bounded.buffer_capacity_blocks() == 2 && bounded.startup_buffer_blocks() == 1);
