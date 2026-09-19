@@ -1,0 +1,59 @@
+#!/bin/bash
+set -eu
+
+: "${PICDPLAYER_KIOSK_URL:=http://127.0.0.1:8080/player}"
+: "${PICDPLAYER_CAGE:=/usr/bin/cage}"
+: "${PICDPLAYER_CHROMIUM:=/usr/bin/chromium}"
+: "${PICDPLAYER_API_WAIT_HOST:=127.0.0.1}"
+: "${PICDPLAYER_API_WAIT_PORT:=8080}"
+: "${PICDPLAYER_API_WAIT_TIMEOUT_SECONDS:=30}"
+: "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must be set by picdplayer-kiosk.service}"
+: "${XDG_STATE_HOME:?XDG_STATE_HOME must be set by picdplayer-kiosk.service}"
+
+if ! [[ "$PICDPLAYER_API_WAIT_HOST" =~ ^[A-Za-z0-9.-]+$ ]] ||
+   ! [[ "$PICDPLAYER_API_WAIT_PORT" =~ ^[0-9]{1,5}$ ]] ||
+   ! [[ "$PICDPLAYER_API_WAIT_TIMEOUT_SECONDS" =~ ^[0-9]{1,3}$ ]]; then
+  echo "picdplayer-kiosk: invalid API wait configuration" >&2
+  exit 2
+fi
+
+port=$((10#$PICDPLAYER_API_WAIT_PORT))
+wait_seconds=$((10#$PICDPLAYER_API_WAIT_TIMEOUT_SECONDS))
+if (( port < 1 || port > 65535 || wait_seconds < 1 || wait_seconds > 300 )); then
+  echo "picdplayer-kiosk: port must be 1..65535; wait timeout must be 1..300 seconds" >&2
+  exit 2
+fi
+if [[ ! -x "$PICDPLAYER_CAGE" || ! -x "$PICDPLAYER_CHROMIUM" ]]; then
+  echo "picdplayer-kiosk: install Cage and Chromium or correct their paths" >&2
+  exit 2
+fi
+
+deadline=$((SECONDS + wait_seconds))
+while true; do
+  remaining=$((deadline - SECONDS))
+  if (( remaining <= 0 )); then
+    echo "picdplayer-kiosk: API did not listen on $PICDPLAYER_API_WAIT_HOST:$port" >&2
+    exit 1
+  fi
+  # DNS and TCP connection establishment can block; bound the whole attempt.
+  if timeout --kill-after=1s "${remaining}s" /bin/bash -c \
+      'exec 3<>"/dev/tcp/$1/$2"' kiosk-connect "$PICDPLAYER_API_WAIT_HOST" "$port" 2>/dev/null; then
+    break
+  fi
+  if (( SECONDS >= deadline )); then
+    echo "picdplayer-kiosk: API did not listen on $PICDPLAYER_API_WAIT_HOST:$PICDPLAYER_API_WAIT_PORT" >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+exec "$PICDPLAYER_CAGE" -- "$PICDPLAYER_CHROMIUM" \
+  --ozone-platform=wayland \
+  --kiosk \
+  --no-first-run \
+  --no-default-browser-check \
+  --disable-session-crashed-bubble \
+  --disable-features=Translate \
+  --noerrdialogs \
+  --user-data-dir="$XDG_STATE_HOME/chromium" \
+  "$PICDPLAYER_KIOSK_URL"

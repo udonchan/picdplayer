@@ -4,6 +4,7 @@ option(ENABLE_PARANOIA "Enable libcdio-paranoia reader" OFF)
 option(ENABLE_METADATA "Enable MusicBrainz metadata support" OFF)
 option(ENABLE_API "Enable the local control API" OFF)
 option(INSTALL_SYSTEMD_UNIT "Install the picdplayer systemd service" OFF)
+option(INSTALL_SYSTEMD_KIOSK_UNIT "Install the optional PiCDPlayer Chromium kiosk service" OFF)
 set(PICDPLAYER_SERVICE_USER "picdplayer" CACHE STRING "User for the systemd service")
 include(GNUInstallDirs)
 set(PICDPLAYER_SYSTEMD_UNIT_DIR "lib/systemd/system" CACHE STRING
@@ -68,9 +69,17 @@ set_target_properties(cdplayerd PROPERTIES CXX_EXTENSIONS OFF)
 target_compile_options(cdplayerd PRIVATE -Wall -Wextra -Wpedantic)
 install(TARGETS cdplayerd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 configure_file(systemd/picdplayer.service.in picdplayer.service @ONLY)
+configure_file(systemd/picdplayer-kiosk.service.in picdplayer-kiosk.service @ONLY)
+configure_file(systemd/picdplayer-kiosk.sh.in picdplayer-kiosk @ONLY)
 if(INSTALL_SYSTEMD_UNIT)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picdplayer.service
             DESTINATION ${PICDPLAYER_SYSTEMD_UNIT_DIR})
+endif()
+if(INSTALL_SYSTEMD_KIOSK_UNIT)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picdplayer-kiosk.service
+            DESTINATION ${PICDPLAYER_SYSTEMD_UNIT_DIR})
+    install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/picdplayer-kiosk
+            DESTINATION ${CMAKE_INSTALL_LIBEXECDIR})
 endif()
 
 include(CTest)

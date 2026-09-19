@@ -6,8 +6,9 @@ PiCDPlayerは、Raspberry Piと一般的な光学ドライブを使い、物理C
 
 物理CDを使う楽しさを残しながら、Linux、HDMI、HDMI-CEC、インターネット上の曲名・ジャケット情報を
 組み合わせて、据え置きプレイヤーの使い方を再設計します。普段の操作でデスクトップを開いたり、
-音楽ライブラリへ登録したりする必要のない装置が目標です。現在は再生daemonとブラウザ表示までを
-実装しており、TV画面の自動起動やLinux起動画面を隠す仕上げはこれからです。
+音楽ライブラリへ登録したりする必要のない装置が目標です。現在は再生daemon、ブラウザ表示、
+任意導入のTV kiosk serviceまでを実装しており、再bootからのkiosk運転確認とLinux起動画面を隠す
+仕上げはこれからです。
 
 この開発では、音を出すだけでなく、CDを再生する仕組みを観測し、説明できるようにします。
 例えば音が途切れたとき、ドライブの読み取りが遅れたのか、音声出力への供給が間に合わなかったのかを
@@ -30,7 +31,8 @@ PiCDPlayerは、Raspberry Piと一般的な光学ドライブを使い、物理C
 - ドライブ、ディスク、再生の状態と読み取りの根拠をAPI・診断画面へ公開し、未確認事項も明示します。
 
 C++20のdaemon `cdplayerd`が中心です。Node.jsやPythonをdaemonのruntimeには要求しません。
-HDMIを標準の音声出力・将来のTV表示先とし、現在のブラウザ画面とTV上のkiosk運転は別段階で扱います。
+HDMIを標準の音声出力・TV表示先とする。Now Playing画面はbrowserで表示でき、任意導入の
+Chromium/Cage kiosk用systemd unitも用意している。quiet bootと専用imageは別段階で扱う。
 
 開発・実機確認環境はRaspberry Pi 3 Model B、Raspberry Pi OS Lite、ASUS USB光学ドライブ、
 REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は[検証状況](docs/development/verification.md)を参照してください。
@@ -43,14 +45,14 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は[検証
 | TVリモコンのCEC再生・一時停止・停止・曲移動・シーク | 実装済み、実機確認済み |
 | HTTP操作・eject・WebSocket状態配信 | 実装済み、状態照会とejectを実機確認済み |
 | MusicBrainz metadata・JSON cache | 任意機能として実装済み、単一候補CDで実機確認済み |
-| 読み取り専用Now Playing画面 | 実装済み。metadata・CAA URLがあればalbum/track/cover artをブラウザに表示。kiosk化は未実装 |
+| 読み取り専用Now Playing画面 | 実装済み。metadata・CAA URLがあればalbum/track/cover artをブラウザに表示。Chromium/Cage kiosk unitを実装、TV表示を確認済み、boot・継続運転は確認待ち |
 | ジャケット画像 | CAA URL取得とNow Playing画面でのbrowser表示を実装。daemonの画像binary cacheは未実装 |
 | systemd常駐・自動起動 | 実装・基本構成で実機確認済み |
 | ALSA underrun自動復旧 | 実装・自動試験済み。実機の異常系評価は未完了 |
 | 読み取り状態・根拠の観測、反復一致 | 実装・通常CDで確認済み。起動中の設定切替は実機確認済み |
 | 読み取り専用technical status画面 | Phase 1bとして実装、通常再生・再読み込み・再接続をブラウザで実機確認済み |
 | CD-DA先読みbuffer設定・drive access直列化 | Phase 2を実装。通常CDで容量・開始閾値と操作応答を実機比較済み。速度制御は未実装 |
-| 複数metadata候補の選択、TV向けkiosk UI | 未実装 |
+| 複数metadata候補の選択 | 未実装 |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 
 対象は音声のみのCDです。傷ディスクの評価やdirect/paranoia backendの性能比較は今後の課題です。

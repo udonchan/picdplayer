@@ -129,7 +129,8 @@ metadata/API有効版をインストールする場合のconfigure例:
 
 ```sh
 cmake -S . -B build-metadata -DENABLE_METADATA=ON -DENABLE_API=ON \
-  -DINSTALL_SYSTEMD_UNIT=ON -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DINSTALL_SYSTEMD_UNIT=ON \
+  -DCMAKE_INSTALL_PREFIX=/usr/local \
   -DPICDPLAYER_SERVICE_USER=picdplayer
 cmake --build build-metadata -j1
 ```
@@ -150,5 +151,104 @@ sudo cmake --install build-metadata
 sudo systemctl daemon-reload
 sudo systemctl start picdplayer.service
 ```
+
+## Chromium/Cage kiosk
+
+`picdplayer-kiosk.service`はtty1で[Cage](https://github.com/cage-kiosk/cage)を起動し、その中で
+Wayland版Chromiumを`http://127.0.0.1:8080/player`へ固定して表示する任意の表示serviceである。
+daemonとは別serviceで、kioskが停止・再起動しても再生状態はdaemon側に残る。Cageは一つの
+maximized applicationだけを表示するkiosk compositorなので、通常利用時にdesktopやterminalを
+表示しない構成にできる。
+
+このunitは既定でinstallしない。ChromiumとCageのpackageを導入してから、kiosk unitを明示して
+configure/installする。Raspberry Pi OS/Debian系でのpackage名は次のとおりである。
+
+```sh
+sudo apt install chromium cage fonts-noto-cjk
+cmake -S . -B build-metadata -DENABLE_METADATA=ON -DENABLE_API=ON \
+  -DINSTALL_SYSTEMD_UNIT=ON -DINSTALL_SYSTEMD_KIOSK_UNIT=ON \
+  -DCMAKE_INSTALL_PREFIX=/usr/local -DPICDPLAYER_SERVICE_USER=picdplayer
+cmake --build build-metadata -j1
+sudo systemctl stop picdplayer-kiosk.service picdplayer.service
+sudo cmake --install build-metadata
+sudo systemctl daemon-reload
+```
+
+日本語のalbum/track名を表示するため、`fonts-noto-cjk`も導入する。Pi OS Liteでは
+日本語glyphを持つfontがない場合があり、UTF-8のmetadataでも四角などで表示される。
+`fc-list :lang=ja family`で日本語対応fontを確認できる。後からfontを導入した場合は
+`sudo systemctl restart picdplayer-kiosk.service`でChromiumを再起動する。daemonの再buildは不要。
+
+unitは`/usr/local/lib/systemd/system/picdplayer-kiosk.service`、wrapperは
+`/usr/local/libexec/picdplayer-kiosk`へ入る。CageはDRM/KMS、Wayland runtime、tty1を使うため、
+unitは`video render input`を補助groupに加え、`/run/picdplayer-kiosk`をruntime directoryとして
+作成する。実機にこれらのgroupまたはDRM deviceがない場合は、distributionの権限設計に合わせて
+unitを調整する。daemonの`video cdrom audio`とは目的が異なる。
+
+`/etc/default/picdplayer`ではdaemonがAPIを有効化している必要がある。metadataは任意であり、
+次の例では曲名・画像のために併せて有効にする。
+
+```ini
+PICDPLAYER_EXTRA_ARGS="--metadata musicbrainz --metadata-cache /var/cache/picdplayer --api-port 8080"
+```
+
+画面URLやdistributionごとの実行ファイルパスを変える場合だけ、
+`/etc/default/picdplayer-kiosk`を作成する。
+
+```ini
+PICDPLAYER_KIOSK_URL=http://127.0.0.1:8080/player
+PICDPLAYER_CAGE=/usr/bin/cage
+PICDPLAYER_CHROMIUM=/usr/bin/chromium
+```
+
+wrapperはChromiumを起動する前に、既定で30秒間`127.0.0.1:8080`のlistenを待つ。daemon側で
+`--api-port 8080`を指定し忘れた場合やAPIの起動が遅い場合に、Chromiumの`This site can't be reached`
+画面へ進む可能性を減らすためである。これはTCP接続確認であり、HTTPの正常応答や、その直後の
+daemon停止まで保証しない。ページを読み込めた後の切断は既存のWebSocket再接続で復旧する。
+別portを使う場合はURLと待受先を同時に変える。待受時間は1〜300秒、portは1〜65535。
+wrapperはBashとcoreutilsの`timeout`を使用し、DNS/TCP待ちにも期限を適用する。
+
+```ini
+PICDPLAYER_KIOSK_URL=http://127.0.0.1:18080/player
+PICDPLAYER_API_WAIT_HOST=127.0.0.1
+PICDPLAYER_API_WAIT_PORT=18080
+PICDPLAYER_API_WAIT_TIMEOUT_SECONDS=30
+```
+
+本番bootへ入れる前に、TVを接続した実機で一時起動する。tty1のgettyとは排他なので、SSHまたは
+別ttyから実行する。
+
+```sh
+sudo systemctl restart picdplayer.service
+sudo systemctl start picdplayer-kiosk.service
+systemctl status picdplayer-kiosk.service
+journalctl -u picdplayer-kiosk.service -b -o cat
+```
+
+確認項目:
+
+1. tty1にNow Playingだけが表示され、browserの初回設定やaddress barが見えない。
+2. CD挿入、metadata取得、ジャケット、CEC操作に画面が追従する。
+3. `sudo systemctl restart picdplayer.service`の後、browserが接続を回復する。
+4. `sudo systemctl stop picdplayer-kiosk.service`で表示を停止しても、daemonの再生とCECは続く。
+   tty1のlogin promptへ戻すには下記のgetty起動が必要である。
+
+ここまで確認してからboot時起動を有効化する。
+
+```sh
+sudo systemctl enable picdplayer.service picdplayer-kiosk.service
+```
+
+停止して通常のttyへ戻す場合は次を実行する。
+
+```sh
+sudo systemctl disable --now picdplayer-kiosk.service
+sudo systemctl start getty@tty1.service
+```
+
+Chromiumはsandboxを有効にしたまま起動する。`--no-sandbox`を追加して問題を回避しない。
+Now Playingのdocument内ではCSSでcursorを隠す。Cageのerror pageや他のapplicationまで
+cursor非表示を保証するものではない。boot途中のkernel/systemd messageを消すquiet boot/splash、
+browserの画面遷移や画面内操作は未実装である。これらはkiosk表示が実TVで安定してから別の変更として扱う。
 
 [実機確認状況](../development/verification.md)と[過去のservice試験](../history/systemd-validation.md)も参照する。

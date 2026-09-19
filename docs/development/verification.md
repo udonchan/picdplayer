@@ -257,6 +257,19 @@ LOADING中の繰り返し観測では状態遷移時だけmetadata世代を無�
 APIの`offset_seconds`へ`18446744073709551615`をPOSTし、`400 invalid_body`を返してdaemonが継続することを
 確認した。unsigned JSON値をsigned seek値へ変換する前に範囲検査する経路である。
 
+## Kiosk導入の確認（2026-09-19〜20）
+
+ユーザーがChromium/Cageを起動し、TVでaddress barやdesktopが見えないことを確認した。
+当初はAPIが有効でなく接続エラーになったが、API設定とservice再起動後にページ表示を確認した。
+日本語対応fontが未導入だったため`fonts-noto-cjk`の導入を手順へ追加した。
+日本語表示の改善、CSS適用後のcursor非表示、CEC操作の画面追従、再bootとdaemon再起動後の復旧は
+明示的な確認待ちである。設定・表示の確認を、連続kiosk運転の保証とはしない。
+
+レビューでTCP接続自体が待受期限を超えてblockし得る点を修正し、coreutils timeoutで
+接続処理を制限した。port/時間の範囲検査と10進数変換も追加した。2026-09-20に既存CTest
+25件を通過（API socket試験はsandbox外で再実行）。wrapperは模擬接続による起動引数、
+接続失敗、不正設定、先頭ゼロ付き数値を検証した。TV上での変更後の再確認は未実施。
+
 ## 継続する検証と開発課題
 
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
@@ -277,8 +290,9 @@ APIの`offset_seconds`へ`18446744073709551615`をPOSTし、`400 invalid_body`�
 - metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
 - cache期限/総容量/破損復旧、候補選択、非1始まりtrack対応、HTTP/JSON制限の強化は未実装。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
-- Now Playingはブラウザが画像を取得して表示する。TV上のkiosk運転、daemon側の画像binary取得・保存、
-  quiet boot・read-only root・Buildroot imageは未実装。
+- Now Playingはブラウザが画像を取得して表示する。Chromium/Cage kioskのTV表示は確認済みで、
+  boot・継続運転を確認する。daemon側の画像binary取得・保存、quiet boot・read-only root・
+  Buildroot imageは未実装。
 
 Piハング時は原因を確定できる前bootログがなかった。メモリ圧迫とswap I/Oは候補であり確定原因ではない。
 ビルドは-j1を維持する。障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。

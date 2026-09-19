@@ -1,0 +1,36 @@
+[Unit]
+Description=PiCDPlayer Now Playing kiosk
+After=systemd-user-sessions.service getty@tty1.service picdplayer.service
+Wants=picdplayer.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=@PICDPLAYER_SERVICE_USER@
+Group=@PICDPLAYER_SERVICE_USER@
+SupplementaryGroups=video render input
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+RuntimeDirectory=picdplayer-kiosk
+RuntimeDirectoryMode=0700
+StateDirectory=picdplayer
+StateDirectoryMode=0750
+CacheDirectory=picdplayer
+CacheDirectoryMode=0750
+Environment=XDG_RUNTIME_DIR=/run/picdplayer-kiosk
+Environment=XDG_STATE_HOME=/var/lib/picdplayer
+Environment=XDG_CACHE_HOME=/var/cache/picdplayer
+Environment=HOME=/var/lib/picdplayer
+EnvironmentFile=-/etc/default/picdplayer-kiosk
+ExecStart=@CMAKE_INSTALL_FULL_LIBEXECDIR@/picdplayer-kiosk
+Restart=on-failure
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target

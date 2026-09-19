@@ -20,8 +20,8 @@
 | metadataなし・ネットワーク障害時にも再生可能 | metadataを独立した任意機能として実装 |
 | 一回のeject操作を保持し、待機後に実行 | HTTP経由で実装。失敗はEJECT_ERRORとして公開 |
 | 非rootで常駐、signalで正常終了 | systemd・signalfdを利用 |
-| TVに曲名・ジャケット・位置表示 | 状態APIとブラウザ用Now Playingを実装。TV上のkiosk運転は未実装 |
-| Linux起動画面を見せない家電起動 | quiet boot・kiosk・専用imageは未実装 |
+| TVに曲名・ジャケット・位置表示 | 状態APIとブラウザ用Now Playingを実装。任意導入のChromium/Cage kiosk serviceを実装し、TV表示を確認済み、boot・継続運転は確認待ち |
+| Linux起動画面を見せない家電起動 | kiosk serviceは実装。quiet boot・splash・専用imageは未実装 |
 | PCMの読み取り根拠・不確実性を説明する | 観測・反復一致・snapshotを実装。確認範囲は検証状況を参照 |
 
 ## ブロック図
@@ -47,6 +47,7 @@ flowchart TD
     Snapshot --> Events[GET state / WebSocket events]
     Events --> Technical[読み取り専用technical status]
     Events --> NowPlaying[読み取り専用Now Playing]
+    NowPlaying --> Kiosk[任意: Cage / Chromium kiosk]
 ```
 
 単一process。main threadが再生・media・metadataの正規状態を所有する。

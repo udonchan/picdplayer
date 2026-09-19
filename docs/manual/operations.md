@@ -143,7 +143,8 @@ http://PI_ADDRESS:8080/player
 AVAILABLEの場合に表示する。metadataを有効にするには起動時に`--metadata musicbrainz`と必要なら
 `--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
 再生位置は表示できる。CAA image URLが得られた場合はブラウザがジャケットを読み、失敗時はCDの
-プレースホルダーを表示する。この画面は操作を送らず、Chromium kioskの自動起動も行わない。
+プレースホルダーを表示する。この画面は操作を送らない。任意のChromium/Cage kioskによる
+tty1への自動表示は[systemd常駐運転](systemd.md#chromiumcage-kiosk)を参照する。
 
 `/debug/status`は以下のtechnical status画面であり、読み取り根拠やdrive能力を確認するために使う。
 

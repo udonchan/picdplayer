@@ -9,7 +9,10 @@ ALSA再生headに対応する根拠の推定をsnapshotへ公開するところ�
 Phase 1bではこのsnapshotだけを入力にする読み取り専用technical status画面を追加した。
 これは診断用であり、TV向け本番UIやauthoritative stateを兼ねない。
 `/player`は同じsnapshotを表示用に整形する初期のNow Playing画面である。画面は状態を所有せず、
-操作POSTも送らない。Chromium kiosk起動や家電向け画面遷移はまだ実装していない。
+操作POSTも送らない。任意導入の`picdplayer-kiosk.service`はCageからWayland版Chromiumを起動し、
+この画面だけをtty1へ表示する。daemonとbrowserは別serviceであり、browserが状態を所有しない。
+Now Playing document内のcursorはCSSで隠すが、Cageのerror pageや他applicationまで含む
+cursor非表示の保証、画面遷移、画面からの操作、quiet bootは未実装である。
 反復一致読み取りは既定75 frame区間で2-of-3比較を行う。設定変更の契約は以下に記す。
 
 ## media・TOC
