@@ -181,6 +181,12 @@ WARN/ERRORでは可能なら古いDEBUG/INFOを一件押し出す。失った総
 `WARN logger: dropped=N`として通知する。logger自身の失敗は再生処理へ例外を伝播させない。
 このthreadはhardwareやauthoritative stateへ触れず、出力遅延をmain/audio pathから隔離するためだけに使う。
 
+現在のAsyncLoggerは、依存を増やさず、Pi 3とBuildrootで扱いやすい小さな非同期出力を実現するための独自実装である。
+将来、出力先、runtime level変更、構造化field、rotation、journald以外のsinkなどを必要とする場合は、
+spdlog等の一般的なC++ logging libraryとの比較を行う。比較では、binary size、Buildroot package化、
+非同期queueの満杯時挙動、終了時flush、sinkのthread safety、ライセンス、再生threadを待たせない設定を確認する。
+呼び出し側は`log_info("component") << ...`の境界を維持し、libraryを採用する場合もlogger実装を交換可能にする。
+
 ## metadata関数と非同期境界
 
 | 関数・型 | 契約 |
