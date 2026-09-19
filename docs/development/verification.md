@@ -1,11 +1,18 @@
 # 検証状況と残課題
 
-更新日: 2026-09-18。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-09-19。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
+
+現在の到達点は[実機確認済み](#実機確認済み)、次に試す項目は
+[継続する検証と開発課題](#継続する検証と開発課題)を参照する。
+その間の日付付きの節は、条件ごとの個別実験記録である。過去のbuffer値や試験件数を
+現在の仕様として使わず、設定の正本は[機能設計](../design/functional-design.md)で確認する。
 
 ## 現在の確認待ち
 
 傷disc、cache独立性、速度変更、S/PDIF出力は未確認。
+Now Playingの停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
+[Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
 ## 自動試験
@@ -245,10 +252,11 @@ CEC/API/technical statusにも退行はなかった。約3分停止後のPlay先
 - pause再開の待ち時間、buffering表示、復旧回数上限を検討する。
 - mediaとPCMのdevice access直列化は実装済み。挿抜を含む実機回帰確認を継続する。
 - 同じTOCの別disc識別、LOADING後のmetadata再要求を検討する。
-- metadata lookup中交換、network切断、複数候補、CAA失敗・redirect修正後の取得を実機確認する。
+- metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
 - cache期限/総容量/破損復旧、候補選択、非1始まりtrack対応、HTTP/JSON制限の強化は未実装。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
-- TV向け本番UI・画像binary取得・quiet boot・read-only root・Buildroot imageは未実装。
+- Now Playingはブラウザが画像を取得して表示する。TV上のkiosk運転、daemon側の画像binary取得・保存、
+  quiet boot・read-only root・Buildroot imageは未実装。
 
 Piハング時は原因を確定できる前bootログがなかった。メモリ圧迫とswap I/Oは候補であり確定原因ではない。
 ビルドは-j1を維持する。障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。

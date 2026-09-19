@@ -7,6 +7,23 @@
 既存文書には複数時期の追記がある。以下は文書内の記録を段階順に辿る読書案内であり、
 同じ文書へ別の節を読むために戻ることもある。記録がない日付や動機は補わない。
 
+下図は本文で辿る問題解決の順序であり、コンポーネントの依存関係や厳密な実装日順ではない。
+読み取りを交換可能にして操作をモデル化した後、native連続再生へ接続した流れを示す。
+
+```mermaid
+flowchart TD
+    A[環境・CEC / TVとアンプへの参加] --> B[drive・media判定 / TOC]
+    B --> C[CLI PoC / 読み取ったPCMをHDMIへ]
+    C --> D[CddaReader / 取得方式を交換可能に]
+    D --> E[PlayerController / 操作と状態をモデル化]
+    E --> F[PlaybackEngine / native連続再生とCEC操作]
+    F --> G[media lifecycle / 空起動・交換・供給不足への対応]
+    G --> H[systemd / 常駐・自動起動]
+    H --> I[metadata / 再生を待たせない表示情報]
+    I --> J[API・snapshot / 状態公開とeject待受の修正]
+    J --> K[integrity / 読み取りの根拠を公開]
+```
+
 ## 1. TVとアンプの構成に参加する
 
 [第1段階](milestone-1.md)ではPiの環境、CEC device、非root権限、signal停止を確認した。

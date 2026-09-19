@@ -140,7 +140,8 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。画面から�
 track番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。CAA image URLが
 AVAILABLEならブラウザが画像として読む。URLの存在は画像binaryのdaemon取得・検証完了を意味しない。
 画像の失敗時はプレースホルダーへ戻る。外部文字列はtechnical statusと同様にtextContentで表示する。
-HTTP responseはCSPでscript/style/connectをselfへ制限し、cover artに必要な`img-src`だけHTTPSを許可する。
+HTTP responseはCSPでscript/styleをselfへ制限する。`connect-src`はselfとws:/wss:を許可し、
+画面の実装は同一hostのAPIへ接続する。cover art用の`img-src`はself、data:、HTTPSを許可する。
 
 ## eject
 

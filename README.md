@@ -1,8 +1,36 @@
 # PiCDPlayer
 
-Raspberry PiとUSB光学ドライブで物理Audio CDを再生する、家電型CDプレイヤーです。
-C++20のdaemon `cdplayerd`がCD-DAを読み、ALSAからHDMIへ出力します。
-metadataがなくても再生できます。Node.jsやPythonをdaemonのruntimeには要求しません。
+PiCDPlayerは、Raspberry Piと一般的な光学ドライブを使い、物理CDを現代のTV・オーディオ環境で
+楽しむためのCDプレイヤーです。CDを手に取り、トレイへ入れ、TVリモコンで再生する。
+その体験を、独立して常時動作する家電として実現することを目指しています。
+
+物理CDを使う楽しさを残しながら、Linux、HDMI、HDMI-CEC、インターネット上の曲名・ジャケット情報を
+組み合わせて、据え置きプレイヤーの使い方を再設計します。普段の操作でデスクトップを開いたり、
+音楽ライブラリへ登録したりする必要のない装置が目標です。現在は再生daemonとブラウザ表示までを
+実装しており、TV画面の自動起動やLinux起動画面を隠す仕上げはこれからです。
+
+この開発では、音を出すだけでなく、CDを再生する仕組みを観測し、説明できるようにします。
+例えば音が途切れたとき、ドライブの読み取りが遅れたのか、音声出力への供給が間に合わなかったのかを
+調べられること。曲名の取得に失敗しても、CDの再生は続けられること。そのために、ディスクの状態、
+再生の進行、表示情報を明示的に扱い、一つのdaemonが装置全体を管理します。
+
+読み取りの信頼性（playback integrity）についても、確認できたことの範囲を大切にします。
+「読み取れた」「同じデータを複数回得た」「独立した読み取りで一致した」「原盤と一致した」
+「出力までbit-perfectだった」は、それぞれ別の確認です。**正確さに加え、正確さについて嘘をつかないこと**を
+設計上の目標とし、観測だけでsecureやperfectを断言しません。
+考え方は[読み取り結果について言えること](docs/guide/integrity.md)、現在の判定仕様は
+[機能設計](docs/design/functional-design.md)で説明しています。
+
+## 特徴
+
+- Raspberry Piと一般的なUSB光学ドライブで、CD-DAをnative APIから読み取り、HDMIへ音声を出力します。
+- HDMI-CECでTVリモコンの再生・停止・曲移動・シークを受け付け、systemdから常駐できます。
+- CDの曲配置（TOC）を基に曲名やジャケットを取得し、ブラウザのNow Playing画面に表示します。
+- CD再生はネットワークやmetadataサービスに依存せず、曲番号と時間だけでも利用できます。
+- ドライブ、ディスク、再生の状態と読み取りの根拠をAPI・診断画面へ公開し、未確認事項も明示します。
+
+C++20のdaemon `cdplayerd`が中心です。Node.jsやPythonをdaemonのruntimeには要求しません。
+HDMIを標準の音声出力・将来のTV表示先とし、現在のブラウザ画面とTV上のkiosk運転は別段階で扱います。
 
 開発・実機確認環境はRaspberry Pi 3 Model B、Raspberry Pi OS Lite、ASUS USB光学ドライブ、
 REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は[検証状況](docs/development/verification.md)を参照してください。
