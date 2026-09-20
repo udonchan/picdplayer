@@ -83,4 +83,19 @@ kioskのloopback接続では操作POSTも可能。静的検証はJavaScript sand
 外部UIによる大量requestやbrowserのCPU/memory消費まで、この段階で隔離・保証はしない。
 壊れたファイルによるloaderエラーをdaemon起動失敗にしないことと、悪意あるコードの隔離は別である。
 
+## 実機確認記録
+
+2026-09-20、`ui/default/`を`/tmp/picdplayer-custom-ui`へコピーし、`--custom-ui`
+を付けてPi上で起動した。ログに`ui: source=custom`が出力され、Audio CDの認識、TOC取得、
+MusicBrainz metadataのcache hit、CEC初期化が継続することを確認した。
+
+次に`manifest.json`を不正な文字列へ置き換えて起動したところ、
+`ui: custom_disabled reason=malformed manifest, field types or text encoding`となり、
+default UIへフォールバックした。この状態でもdaemon、CEC、再生系、metadata取得は停止しなかった。
+manifestを`ui/default/manifest.json`から復元して再起動すると、再び`ui: source=custom`となった。
+
+なお、カスタムUIのディレクトリに拡張子のない一時ファイルなどが残っている場合は、
+manifestが正しくても`unsupported asset extension`でfallbackする。編集途中のファイルを置かず、
+起動前にUIディレクトリを完成した一組にしておく。
+
 将来の設定基盤は[ユーザー設定の拡張案](../development/user-configuration.md)を参照する。

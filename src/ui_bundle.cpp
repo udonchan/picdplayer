@@ -44,6 +44,29 @@ std::string mime(std::string_view name) {
     if (ext == ".woff2") return "font/woff2";
     throw std::runtime_error("unsupported asset extension");
 }
+bool valid_utf8(std::string_view text) {
+    for (std::size_t i = 0; i < text.size();) {
+        const auto c = static_cast<unsigned char>(text[i]);
+        std::size_t count = 0;
+        unsigned codepoint = 0;
+        unsigned minimum = 0;
+        if (c <= 0x7f) { ++i; continue; }
+        if (c >= 0xc2 && c <= 0xdf) { count = 1; codepoint = c & 0x1f; minimum = 0x80; }
+        else if (c >= 0xe0 && c <= 0xef) { count = 2; codepoint = c & 0x0f; minimum = 0x800; }
+        else if (c >= 0xf0 && c <= 0xf4) { count = 3; codepoint = c & 0x07; minimum = 0x10000; }
+        else return false;
+        if (i + count >= text.size()) return false;
+        for (std::size_t j = 1; j <= count; ++j) {
+            const auto continuation = static_cast<unsigned char>(text[i + j]);
+            if ((continuation & 0xc0) != 0x80) return false;
+            codepoint = (codepoint << 6) | (continuation & 0x3f);
+        }
+        if (codepoint < minimum || codepoint > 0x10ffff ||
+            (codepoint >= 0xd800 && codepoint <= 0xdfff)) return false;
+        i += count + 1;
+    }
+    return true;
+}
 void collect(int directory, const std::string& prefix,
              std::map<std::string, UiAsset, std::less<>>& assets,
              std::size_t& total, unsigned depth, unsigned& count) {
@@ -85,8 +108,7 @@ void collect(int directory, const std::string& prefix,
             asset.bytes.append(buffer, static_cast<std::size_t>(n)); total += n;
         }
         if (asset.mime.starts_with("text/") || asset.mime == "application/json") {
-            // Strict UTF-8 validation; no HTML/JavaScript execution or semantic validation.
-            (void)nlohmann::json(asset.bytes).dump();
+            if (!valid_utf8(asset.bytes)) throw std::runtime_error("text asset is not valid UTF-8");
         }
         assets.emplace(path, std::move(asset));
     }
