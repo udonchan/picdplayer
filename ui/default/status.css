@@ -1,1 +1,71 @@
-:root{color-scheme:dark;--bg:#101314;--panel:#191e20;--line:#2c3437;--text:#edf2f2;--muted:#9aa8aa;--good:#7ed9a3;--warn:#f2c66d;--bad:#ff8c82}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif}header,main,footer{max-width:1100px;margin:auto;padding:20px}header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}h1,h2,p{margin:0}header p,.label,.note,footer{color:var(--muted)}h1{font-size:24px}h2{font-size:16px;margin-bottom:14px}.pill{padding:5px 10px;border:1px solid;border-radius:999px}.connected{color:var(--good)}.pending{color:var(--warn)}.disconnected,.warning{color:var(--bad)}.hero{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:18px}.hero div{background:var(--panel);padding:18px}.hero strong,.hero span{display:block}.hero strong{font-size:20px;margin-top:4px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}article{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}dl{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,1.6fr);gap:8px 14px;margin:0}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}.drive-name{font-size:18px;margin-bottom:14px}.note{font-size:13px;margin-top:16px}.events{margin:0;padding-left:22px;max-height:270px;overflow:auto}.events li{padding:4px 0}.events .WARNING,.events .ERROR{color:var(--warn)}footer{text-align:center;font-size:13px}@media(max-width:720px){.hero,.grid{grid-template-columns:1fr 1fr}.hero strong{font-size:17px}}@media(max-width:480px){.hero,.grid{grid-template-columns:1fr}header{align-items:flex-start}}
+/* PiCDPlayer technical status styles.
+ * 日本語: 読み取り診断画面の標準スタイルです。
+ * English: Styles for the read-only technical status reference UI. */
+
+:root{color-scheme:dark;--bg:#101314;--panel:#191e20;--line:#2c3437;--text:#edf2f2;--muted:#9aa8aa;--good:#7ed9a3;--warn:#f2c66d;--bad:#ff8c82}
+
+*{box-sizing:border-box}
+
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif}
+
+header,main,footer{max-width:1100px;margin:auto;padding:20px}
+
+header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+
+h1,h2,p{margin:0}
+
+header p,.label,.note,footer{color:var(--muted)}
+
+h1{font-size:24px}
+
+h2{font-size:16px;margin-bottom:14px}
+
+.pill{padding:5px 10px;border:1px solid;border-radius:999px}
+
+.connected{color:var(--good)}
+
+.pending{color:var(--warn)}
+
+.disconnected,.warning{color:var(--bad)}
+
+.hero{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:18px}
+
+.hero div{background:var(--panel);padding:18px}
+
+.hero strong,.hero span{display:block}
+
+.hero strong{font-size:20px;margin-top:4px}
+
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+
+article{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+
+dl{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,1.6fr);gap:8px 14px;margin:0}
+
+dt{color:var(--muted)}
+
+dd{margin:0;overflow-wrap:anywhere}
+
+.drive-name{font-size:18px;margin-bottom:14px}
+
+.note{font-size:13px;margin-top:16px}
+
+.events{margin:0;padding-left:22px;max-height:270px;overflow:auto}
+
+.events li{padding:4px 0}
+
+.events .WARNING,.events .ERROR{color:var(--warn)}
+
+footer{text-align:center;font-size:13px}
+
+@media(max-width:720px){.hero,.grid{grid-template-columns:1fr 1fr}
+
+.hero strong{font-size:17px}
+
+}
+
+@media(max-width:480px){.hero,.grid{grid-template-columns:1fr}
+
+header{align-items:flex-start}
+
+}
