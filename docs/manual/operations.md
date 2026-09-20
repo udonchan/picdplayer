@@ -133,6 +133,9 @@ WebSocketは接続時と変化時に同じschemaを送る。定期heartbeatと�
 
 ### ブラウザ画面
 
+`--custom-ui PATH`を指定すると起動時にユーザー編集版を検証・採用する。失敗時の表示通知、
+manifestとassetの契約は[Custom UI](custom-ui.md)を参照する。`/builtin/player`は常にdefaultを表示する。
+
 APIを有効にしたplayerへブラウザから次のURLで接続する。
 
 ```text

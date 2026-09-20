@@ -40,6 +40,8 @@ int main(int argc, char** argv) {
     std::string metadata_cache = "/var/cache/picdplayer";
     bool metadata_option = false, metadata_cache_option = false;
     int api_port = 0;
+    std::string custom_ui;
+    bool custom_ui_option = false;
     PcmBufferConfig buffer_config;
     bool buffer_option = false;
     bool verification_option = false;
@@ -58,6 +60,7 @@ int main(int argc, char** argv) {
         else if (arg == "--lookup-disc" && i + 1 < argc) lookup_disc = argv[++i];
         else if (arg == "--metadata" && i + 1 < argc) { metadata_mode = argv[++i]; metadata_option = true; }
         else if (arg == "--metadata-cache" && i + 1 < argc) { metadata_cache = argv[++i]; metadata_cache_option = true; }
+        else if (arg == "--custom-ui" && i + 1 < argc) { custom_ui = argv[++i]; custom_ui_option = true; }
         else if (arg == "--api-port" && i + 1 < argc) {
             const std::string_view value(argv[++i]);
             const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), api_port);
@@ -143,7 +146,7 @@ int main(int argc, char** argv) {
         else if (arg == "--interactive") interactive = true;
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
-            std::cerr << "Usage: cdplayerd [--probe-drive-start PATH | --probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--api-listen IP --api-port 1..65535] | other modes]\n";
+            std::cerr << "Usage: cdplayerd [--probe-drive-start PATH | --probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--api-listen IP --api-port 1..65535] [--custom-ui PATH] | other modes]\n";
             return arg == "--help" ? 0 : 2;
         }
     }
@@ -182,6 +185,9 @@ int main(int argc, char** argv) {
     }
     if (metadata_cache_option && player_device.empty() && metadata_device.empty() && lookup_disc.empty()) {
         std::cerr << "--metadata-cache requires a metadata diagnostic or --player\n"; return 2;
+    }
+    if (custom_ui_option && (!api_port || custom_ui.empty())) {
+        std::cerr << "--custom-ui requires a nonempty path and --api-port\n"; return 2;
     }
     if (api_port && player_device.empty()) {
         std::cerr << "--api-port requires --player\n"; return 2;
@@ -243,7 +249,7 @@ int main(int argc, char** argv) {
                                cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
                                metadata_cache, api_listen, api_port, buffer_config,
-                               read_policy);
+                               read_policy, custom_ui);
             return 0;
         }
         if (!cdda_device.empty()) {

@@ -64,6 +64,10 @@ DaemonSnapshotはそのコピーを公開する。CEC、API、将来のUIが独�
 library内部の補助threadを除いた構成であり、thread poolは使わない。
 O_NONBLOCKで開いたCD deviceでもioctlは待ち得るためworkerに隔離する。
 
+UIの正本は`ui/default/`で、ビルド時にdefaultを埋め込む。ユーザー編集版は起動時に検証・
+読み込みし、失敗時はdefaultへ戻す。UI選択はPlayerStateから独立し、Samba等の共有管理はOS側に置く。
+Custom JSの実行結果を静的検証で保証せず、default専用URLを復旧経路として維持する。
+
 採用PCMは区間とstream generationに対応する根拠を持つ。最新readとALSA再生headの推定を分け、
 未来の先読み結果を現在の可聴区間の保証として表示しない。APIや診断画面は値の投影だけを扱う。
 ReadPolicyはmainが要求値と適用値を所有し、read中の検証条件を変えず停止境界で更新する。

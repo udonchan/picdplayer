@@ -8,4 +8,4 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
                         const std::string& metadata_cache, const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config = {},
-                        ReadPolicy read_policy = {});
+                        ReadPolicy read_policy = {}, const std::string& custom_ui = {});

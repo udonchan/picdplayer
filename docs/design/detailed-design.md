@@ -32,6 +32,23 @@ workerはmaskを継承し、mainのpollで停止要求を処理する。
 CEC受信はqueueを空になるまで回収する。操作後に位置/状態が変わればengineをsynchronizeする。
 shutdownでは音声停止を先に行い、その後workerのdestructorがjoinする。
 
+## UI生成・選択・配信
+
+`cmake/EmbedUi.cmake`は`ui/default/`を読み、generated includeへ変換する。
+`now_playing_page.cpp`と`technical_status_page.cpp`の既存関数はこの生成物を返す。
+元assetの編集でCMakeが再configureし、default用ファイルとC++文字列を二重管理しない。
+
+`UiBundle::load()`はユーザーdirectoryをcomponentごとにno-followでopenし、`collect()`が
+regular fileを上限付きで読み込む。`validate()`は読み込んだmapのmanifestと必須assetを確認する。
+通常の読み込み・validation例外はdefault選択結果へ変換する。`player_session`が原因をlogへ記録し、
+`ApiServer`へimmutableなbundleを渡す。`find()`はmapだけを参照し、HTTP入力でfilesystemをopenしない。
+root自体はローカルfilesystemを想定し、NFS等がkernel内でblockする場合の期限は保証しない。
+
+`route_api_request()`はCustom UI、built-in recovery URL、従来APIを既存serverで振り分ける。
+defaultのfallback通知には固定文言のみを用い、filesystem由来のエラーをHTMLへ挿入しない。
+同一originのCustom JSに権限sandboxはない。設定/APIの将来案は
+[ユーザー設定基盤](../development/user-configuration.md)へ分離する。
+
 ## media・TOC関数
 
 | 関数・型 | 契約 |

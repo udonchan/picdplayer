@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PiCDPlayer Technical Status</title>
+  <link rel="stylesheet" href="/debug/status.css">
+</head>
+<body>
+  <header>
+    <div><h1>PiCDPlayer</h1><p>Technical status</p></div>
+    <span id="connection" class="pill pending">Connecting</span>
+  </header>
+  <main>
+    <section class="hero">
+      <div><span class="label">PLAYER</span><strong id="player-state">—</strong></div>
+      <div><span class="label">TRACK</span><strong id="track">—</strong></div>
+      <div><span class="label">POSITION</span><strong id="position">—</strong></div>
+      <div><span class="label">CURRENT PCM</span><strong id="integrity">—</strong></div>
+    </section>
+    <section class="grid">
+      <article>
+        <h2>Read path</h2>
+        <dl>
+          <dt>Activity</dt><dd id="read-activity">—</dd>
+          <dt>Strategy</dt><dd id="read-strategy">—</dd>
+          <dt>Read policy</dt><dd id="read-policy">—</dd>
+          <dt>Buffered blocks</dt><dd id="queued-blocks">—</dd>
+          <dt>Last prebuffer</dt><dd id="prebuffer-wait">—</dd>
+          <dt>Latest read</dt><dd id="latest-read">—</dd>
+          <dt>Calls / accepted</dt><dd id="read-stats">—</dd>
+          <dt>Retries / failures</dt><dd id="read-errors">—</dd>
+          <dt>Dropped events</dt><dd id="dropped-events">—</dd>
+        </dl>
+        <p class="note">CLEAN means no anomaly was observed by the selected reader. It does not prove identity with the original PCM.</p>
+      </article>
+      <article>
+        <h2>Drive</h2>
+        <p id="drive-name" class="drive-name">—</p>
+        <dl>
+          <dt>Firmware</dt><dd id="drive-firmware">—</dd>
+          <dt>DAE</dt><dd id="cap-dae">—</dd>
+          <dt>C2 support</dt><dd id="cap-c2">—</dd>
+          <dt>C2 trust</dt><dd id="cap-c2-trust">—</dd>
+          <dt>Read cache</dt><dd id="cap-cache">—</dd>
+          <dt>Accurate stream</dt><dd id="cap-stream">—</dd>
+          <dt>Speed control</dt><dd id="cap-speed">—</dd>
+          <dt>Read offset</dt><dd id="drive-offset">—</dd>
+        </dl>
+        <p id="probe-error" class="warning" hidden></p>
+      </article>
+      <article>
+        <h2>Disc</h2>
+        <dl>
+          <dt>Media</dt><dd id="media-state">—</dd>
+          <dt>Tracks</dt><dd id="disc-tracks">—</dd>
+          <dt>Metadata</dt><dd id="metadata-state">—</dd>
+          <dt>Album</dt><dd id="album">—</dd>
+          <dt>Artist</dt><dd id="artist">—</dd>
+        </dl>
+      </article>
+      <article>
+        <h2>Recent observations</h2>
+        <ol id="events" class="events"><li>No read observations</li></ol>
+      </article>
+    </section>
+  </main>
+  <footer>Read-only diagnostics · snapshot revision <span id="revision">—</span></footer>
+  <script src="/debug/status.js" defer></script>
+</body>
+</html>

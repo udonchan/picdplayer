@@ -15,6 +15,15 @@ Now Playing document内のcursorはCSSで隠すが、Cageのerror pageや他appl
 cursor非表示の保証、画面遷移、画面からの操作、quiet bootは未実装である。
 反復一致読み取りは既定75 frame区間で2-of-3比較を行う。設定変更の契約は以下に記す。
 
+## UIのカスタマイズ
+
+UIのHTML/CSS/JSは`ui/default/`を単一のソースとし、ビルド時にfallback用として埋め込む。
+`--custom-ui PATH`はAPI有効時だけ指定可能で、起動時に上限付きでload/validationする。
+不正なCustom UIはWARNを記録してdefaultへ戻り、`/player`上でも無効化を通知する。
+`/builtin/player`とtechnical statusはCustom UIから独立して配信する。通常の再生状態や
+metadata modelはUI選択によって変更しない。manifest version・ファイル上限・URL契約は
+[Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、設定APIは未実装。
+
 ## media・TOC
 
 sysfsのSCSI type 5から光学ドライブを列挙する。USB/SATAを識別条件にはしない。

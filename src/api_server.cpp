@@ -18,12 +18,36 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
                               const ApiCommandHandler& command_handler,
                               std::string_view body,
-                              const ApiReadPolicyProvider& read_policy_provider) {
+                              const ApiReadPolicyProvider& read_policy_provider, const UiBundle* ui) {
+    if (path == "/builtin/player" || path == "/builtin/player.css" || path == "/builtin/player.js") {
+        if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
+        if (path == "/builtin/player.css") return {200, "text/css; charset=utf-8", std::string(now_playing_css())};
+        if (path == "/builtin/player.js") return {200, "text/javascript; charset=utf-8", std::string(now_playing_javascript())};
+        auto html = std::string(now_playing_html());
+        for (const auto* asset : {"/player.css", "/player.js"}) {
+            auto pos = html.find(asset);
+            if (pos != html.npos) html.insert(pos, "/builtin");
+        }
+        return {200, "text/html; charset=utf-8", std::move(html)};
+    }
+    if (ui && ui->custom() && (path == "/player" || path == "/player.css" || path == "/player.js" || path.starts_with("/player/"))) {
+        if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
+        if (const auto* asset = ui->find(path)) return {200, asset->mime, asset->bytes};
+        return {404, "application/json", R"({"error":"not_found"})"};
+    }
+    if (path == "/player/") path = "/player";
     if (path == "/player" || path == "/player.css" || path == "/player.js") {
         if (method != "GET")
             return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
-        if (path == "/player")
-            return {HTTP_STATUS_OK, "text/html; charset=utf-8", std::string(now_playing_html())};
+        if (path == "/player") {
+            auto html = std::string(now_playing_html());
+            if (ui && !ui->error().empty()) {
+                const auto at = html.find("<main>");
+                if (at != html.npos) html.insert(at + 6,
+                    "<aside role=\"alert\">CUSTOM UI DISABLED — Custom UI validation failed. Using built-in UI.</aside>");
+            }
+            return {HTTP_STATUS_OK, "text/html; charset=utf-8", std::move(html)};
+        }
         if (path == "/player.css")
             return {HTTP_STATUS_OK, "text/css; charset=utf-8", std::string(now_playing_css())};
         return {HTTP_STATUS_OK, "text/javascript; charset=utf-8", std::string(now_playing_javascript())};
@@ -133,6 +157,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
 }
 
 struct ApiServer::Implementation {
+    UiBundle ui;
     std::string address;
     int port;
     ApiStateProvider state_provider;
@@ -170,6 +195,7 @@ struct ApiServer::Implementation {
         if (lws_add_http_common_headers(wsi, static_cast<unsigned int>(response.status),
                 response.content_type.c_str(), response.body.size(), &cursor, end) ||
             add_header("content-security-policy:", "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data: https:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none") ||
+            add_header("cache-control:", "no-store") ||
             add_header("x-content-type-options:", "nosniff") ||
             add_header("referrer-policy:", "no-referrer") ||
             add_header("x-frame-options:", "DENY") ||
@@ -221,7 +247,7 @@ struct ApiServer::Implementation {
                 self->pending_requests.erase(found);
                 return send_response(wsi, route_api_request(request.method, request.path,
                                      self->state_provider, self->handler_for(wsi), request.body,
-                                     self->read_policy_provider));
+                                     self->read_policy_provider, &self->ui));
             }
             if (reason == LWS_CALLBACK_CLOSED_HTTP) {
                 self->pending_requests.erase(wsi);
@@ -251,7 +277,7 @@ struct ApiServer::Implementation {
                 return 0;
             }
             return send_response(wsi, route_api_request(method_name, path, self->state_provider,
-                                 self->handler_for(wsi), {}, self->read_policy_provider));
+                                 self->handler_for(wsi), {}, self->read_policy_provider, &self->ui));
         } catch (...) {
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;
@@ -259,8 +285,8 @@ struct ApiServer::Implementation {
     }
 
     Implementation(std::string listen_address, int listen_port, ApiStateProvider provider,
-                   ApiCommandHandler handler, ApiReadPolicyProvider policy_provider)
-        : address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
+                   ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle)
+        : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
           command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)) {
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
         websocket_state = state_provider();
@@ -286,9 +312,9 @@ struct ApiServer::Implementation {
 };
 
 ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
-                     ApiCommandHandler handler, ApiReadPolicyProvider policy_provider)
+                     ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
-                                                        std::move(handler), std::move(policy_provider))) {}
+                                                        std::move(handler), std::move(policy_provider), std::move(ui))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

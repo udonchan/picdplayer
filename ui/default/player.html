@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PiCDPlayer</title>
+  <link rel="stylesheet" href="/player.css">
+</head>
+<body>
+  <main>
+    <header><span class="brand">PiCDPlayer</span><span id="connection" class="connection">Connecting</span></header>
+    <section class="now-playing" aria-live="polite">
+      <div id="art" class="art placeholder"><img id="cover" alt=""><span id="art-mark">CD</span></div>
+      <div class="details">
+        <p id="media-message" class="eyebrow">WAITING FOR DISC</p>
+        <h1 id="album">No disc</h1>
+        <p id="album-artist" class="album-artist">Insert an audio CD</p>
+        <div class="track-row"><span id="track-number">—</span><div><h2 id="track-title">—</h2><p id="track-artist">—</p></div></div>
+        <div class="timeline"><div class="progress"><span id="progress"></span></div><div><span id="position">0:00</span><span id="duration">0:00</span></div></div>
+        <p id="player-state" class="state">NO_DISC</p>
+      </div>
+    </section>
+  </main>
+  <script src="/player.js" defer></script>
+</body>
+</html>

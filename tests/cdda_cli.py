@@ -45,6 +45,8 @@ for args, expected in [
     (['--player', '/nonexistent', '--cdda-reader', 'direct', '--read-verification', 'repeat',
       '--read-buffer-frames', '15', '--startup-buffer-frames', '15'], 'fit the read buffer'),
     (['--probe-metadata', '/nonexistent', '--probe-toc', '/nonexistent'], 'one diagnostic'),
+    (['--custom-ui', '/nonexistent'], '--custom-ui requires'),
+    (['--custom-ui', '', '--api-port', '8080'], '--custom-ui requires'),
     (['--frames', '751'], 'Invalid'),
     (['--frames', '0'], 'Invalid'),
     (['--frames', '12x'], 'Invalid'),

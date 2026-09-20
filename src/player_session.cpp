@@ -108,12 +108,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
                         const std::string& metadata_cache, const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config,
-                        ReadPolicy initial_read_policy) {
+                        ReadPolicy initial_read_policy, const std::string& custom_ui) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache;
 #endif
 #ifndef ENABLE_API
-    (void)api_listen; (void)api_port;
+    (void)api_listen; (void)api_port; (void)custom_ui;
 #endif
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
@@ -319,9 +319,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 }
                 return true;
             };
+        auto ui = UiBundle::load(custom_ui);
+        if (!ui.error().empty()) log_warning("ui") << "custom_disabled reason=" << ui.error();
+        else log_info("ui") << "source=" << (ui.custom() ? "custom" : "built-in");
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; },
-                                                 std::move(command_handler), serialize_read_policy);
+                                                 std::move(command_handler), serialize_read_policy, std::move(ui));
         auto line = log_info("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';

@@ -55,6 +55,10 @@ ctest --test-dir build-metadata --output-on-failure
 HTTPSにはCA証明書と正しいシステム時刻が必要。
 build optionだけではmetadata/APIは起動せず、実行時optionも指定する。
 APIは上の例では `http://127.0.0.1:8080` で待ち受ける。
+
+API有効buildでは`ui/default/`のHTML/CSS/JSからbuilt-in UIを生成し、同じファイルを
+`share/picdplayer/ui/default/`へinstallする。Node.js等のUI build runtimeは不要で、追加依存はない。
+ユーザー編集版の指定と復旧方法は[Custom UI](custom-ui.md)を参照する。
 paranoiaを使用する場合は `ENABLE_PARANOIA=ON` でconfigureし、`--cdda-reader paranoia` を指定する。
 
 インストールと起動設定は[systemd手順](../manual/systemd.md)、操作例は[操作・診断](../manual/operations.md)を参照する。

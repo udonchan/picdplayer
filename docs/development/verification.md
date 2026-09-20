@@ -272,6 +272,27 @@ APIの`offset_seconds`へ`18446744073709551615`をPOSTし、`400 invalid_body`�
 
 ## 継続する検証と開発課題
 
+### Custom UI第一段階（2026-09-20）
+
+`ui/default/`の6 assetは外部化前の埋め込み内容と一致し、CMake生成物と一時install先の
+コピーも一致することを確認した。UI loader/route試験では通常採用、欠損・不正manifest、
+version不一致、不正entry、symlink、特殊ファイル、UTF-8、サイズ・件数・深さ制限、
+起動後の編集がメモリ内の採用済みUIへ反映されないことを確認した。
+
+実際のdaemonをALSA null・存在しないCD device・CEC無効で起動する9ケースを追加した。
+Custom UIなし、正常UI、directory欠損、manifest欠損/不正、entry欠損、不正path、UI/API version不一致で
+APIが起動しNO_DISCを返す。不正UIではdefaultの通知、正常UIでは独自HTMLと128 KiB超のbinary asset
+配信を確認した。localhostを使うAPI/起動試験はsandbox外で実施する。
+ブラウザーによる見た目、実機再生と並行したCustom UI表示は確認待ち。
+
+最終buildでmetadata/API有効版のCTest 27件を通過した。API/metadata無効版も差分buildし、
+CLI検証と常駐player試験を通過した。警告修正後のloaderを含めて確認済み。
+
+ビルドはPiのメモリ圧迫を避けるため`-j1`と一時的なコンパイラメモリ制限で行った。
+前bootログがないためハング原因は未確定。Samba、設定API、runtime JS検査、hot reloadは未実装。
+
+### その他の課題
+
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
 - 非同期loggerはforegroundで確認済み。systemd/journaldでの時刻・level・componentと終了時flushを確認する。
   queue overflowは通常運用では意図的に発生させず、発生時は`logger: dropped=N`を記録する。

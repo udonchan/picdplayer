@@ -75,6 +75,9 @@ Piの負荷を抑えるためビルドは `-j1` とします。終了はCtrl-C�
 
 ## ドキュメント
 
+画面の編集は[Custom UI](docs/manual/custom-ui.md)を参照してください。起動時の静的検証と
+built-in画面へのfallbackを実装しています。設定画面・hot reloadは今後の対象です。
+
 [Guide](docs/guide/README.md)で仕組みと設計意図を順に読めます。
 [ドキュメントの案内](docs/README.md)から、設計書、運用手順、検証状況を参照できます。
 過去の試行や実機ログは `docs/history/` に保存しています。
