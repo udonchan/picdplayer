@@ -64,36 +64,18 @@ rsync -av \
 # Install on target
 # ---------------------------------------------------------------------------
 
-echo "==> Stopping PiCDPlayer services"
+echo "==> Installing staged files and restarting PiCDPlayer"
 
-# Stop the UI first, then the daemon.
-# "|| true" allows deployment if a service is not currently running.
-ssh "${TARGET}" "
+# A single remote TTY lets sudo prompt once when the target requires a password.
+# Remote bash exits on an installation/reload/start error. Never delete from /.
+ssh -tt "${TARGET}" "
+    set -e
+    sudo -v
     sudo systemctl stop ${KIOSK_SERVICE} || true
     sudo systemctl stop ${DAEMON_SERVICE} || true
-"
-
-echo "==> Installing staged files"
-
-# IMPORTANT:
-# Do not add --delete here.
-# ~/stage represents only files owned by PiCDPlayer; the destination is /.
-ssh "${TARGET}" "
     sudo rsync -av ~/${REMOTE_STAGE}/ /
-"
-
-echo "==> Reloading systemd units"
-ssh "${TARGET}" "
     sudo systemctl daemon-reload
-"
-
-echo "==> Starting PiCDPlayer daemon"
-ssh "${TARGET}" "
     sudo systemctl start ${DAEMON_SERVICE}
-"
-
-echo "==> Starting PiCDPlayer kiosk"
-ssh "${TARGET}" "
     sudo systemctl start ${KIOSK_SERVICE}
 "
 

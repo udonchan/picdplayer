@@ -9,6 +9,7 @@
 struct ApiResponse { int status; std::string content_type; std::string body; };
 enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track, eject, set_read_policy };
 struct ApiCommand { ApiCommandType type; int value = 0; ReadPolicy read_policy{}; };
+using ApiUiBootHandler = std::function<bool(std::string_view, std::string_view, double)>;
 using ApiStateProvider = std::function<std::string()>;
 using ApiReadPolicyProvider = std::function<std::string()>;
 using ApiCommandHandler = std::function<bool(const ApiCommand&)>;
@@ -18,7 +19,8 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiCommandHandler& command_handler = {},
                               std::string_view body = {},
                               const ApiReadPolicyProvider& read_policy_provider = {},
-                              const UiBundle* ui = nullptr);
+                              const UiBundle* ui = nullptr,
+                              const ApiUiBootHandler& ui_boot_handler = {});
 
 class ApiServer {
 public:

@@ -1,4 +1,7 @@
 #include "api_server.hpp"
+#include "logger.hpp"
+#include <chrono>
+#include <cmath>
 #include "now_playing_page.hpp"
 #include "technical_status_page.hpp"
 #include "pcm_worker.hpp"
@@ -18,7 +21,35 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
                               const ApiCommandHandler& command_handler,
                               std::string_view body,
-                              const ApiReadPolicyProvider& read_policy_provider, const UiBundle* ui) {
+                              const ApiReadPolicyProvider& read_policy_provider, const UiBundle* ui,
+                              const ApiUiBootHandler& ui_boot_handler) {
+    if (path == "/api/ui-boot") {
+        if (method != "POST") return {405, "application/json", R"({"error":"method_not_allowed"})"};
+        if (!ui_boot_handler) return {403, "application/json", R"({"error":"telemetry_disabled"})"};
+        if (body.size() > 512) return {413, "application/json", R"({"error":"body_too_large"})"};
+        try {
+            const auto data = nlohmann::json::parse(body);
+            if (!data.is_object() || data.size() != 3 ||
+                !data.contains("page_id") || !data["page_id"].is_string() ||
+                !data.contains("event") || !data["event"].is_string() ||
+                !data.contains("client_ms") || !data["client_ms"].is_number())
+                return {400, "application/json", R"({"error":"invalid_body"})"};
+            const auto page = data["page_id"].get<std::string>();
+            const auto event = data["event"].get<std::string>();
+            const auto ms = data["client_ms"].get<double>();
+            if (page.empty() || page.size() > 64 ||
+                page.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != page.npos ||
+                (event != "ui_script_start" && event != "dom_content_loaded" &&
+                 event != "websocket_connected" && event != "first_render" && event != "ui_ready") ||
+                !std::isfinite(ms) || ms < 0 || ms > 86400000)
+                return {400, "application/json", R"({"error":"invalid_body"})"};
+            if (!ui_boot_handler(page, event, ms))
+                return {429, "application/json", R"({"error":"telemetry_limited"})"};
+            return {204, "application/json", {}};
+        } catch (const nlohmann::json::exception&) {
+            return {400, "application/json", R"({"error":"invalid_body"})"};
+        }
+    }
     if (path == "/builtin/player" || path == "/builtin/player.css" || path == "/builtin/player.js") {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (path == "/builtin/player.css") return {200, "text/css; charset=utf-8", std::string(now_playing_css())};
@@ -176,9 +207,30 @@ struct ApiServer::Implementation {
         return peer == "::1" || peer.starts_with("127.") || peer.starts_with("::ffff:127.");
     }
 
-    const ApiCommandHandler& handler_for(lws* wsi) const {
-        static const ApiCommandHandler disabled;
-        return peer_is_loopback(wsi) ? command_handler : disabled;
+    // Bound memory and log volume globally, including reloads with new page IDs.
+    // ページ再読み込みを含め、メモリ使用量とログ量を制限します。
+    std::chrono::steady_clock::time_point boot_window = std::chrono::steady_clock::now();
+    std::vector<std::pair<std::string, std::string>> boot_events;
+
+    ApiResponse route(lws* wsi, std::string_view method, std::string_view path,
+                      std::string_view body) {
+        const bool local = peer_is_loopback(wsi);
+        ApiUiBootHandler telemetry;
+        if (local) telemetry = [this](std::string_view page, std::string_view event, double ms) {
+            const auto now = std::chrono::steady_clock::now();
+            if (now - boot_window >= std::chrono::minutes(1)) {
+                boot_window = now;
+                boot_events.clear();
+            }
+            const auto key = std::make_pair(std::string(page), std::string(event));
+            if (std::find(boot_events.begin(), boot_events.end(), key) != boot_events.end()) return true;
+            if (boot_events.size() >= 30) return false;
+            boot_events.push_back(key);
+            log_info("ui_boot") << "event=" << event << " page_id=" << page << " client_ms=" << ms;
+            return true;
+        };
+        return route_api_request(method, path, state_provider,
+            local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry);
     }
 
     static int send_response(lws* wsi, const ApiResponse& response) {
@@ -233,7 +285,7 @@ struct ApiServer::Implementation {
             if (reason == LWS_CALLBACK_HTTP_BODY) {
                 auto found = self->pending_requests.find(wsi);
                 if (found == self->pending_requests.end()) return -1;
-                constexpr std::size_t maximum_command_bytes = 4096;
+                const std::size_t maximum_command_bytes = found->second.path == "/api/ui-boot" ? 512 : 4096;
                 if (length > maximum_command_bytes - std::min(found->second.body.size(), maximum_command_bytes))
                     found->second.body.resize(maximum_command_bytes + 1);
                 else
@@ -245,9 +297,7 @@ struct ApiServer::Implementation {
                 if (found == self->pending_requests.end()) return -1;
                 auto request = std::move(found->second);
                 self->pending_requests.erase(found);
-                return send_response(wsi, route_api_request(request.method, request.path,
-                                     self->state_provider, self->handler_for(wsi), request.body,
-                                     self->read_policy_provider, &self->ui));
+                return send_response(wsi, self->route(wsi, request.method, request.path, request.body));
             }
             if (reason == LWS_CALLBACK_CLOSED_HTTP) {
                 self->pending_requests.erase(wsi);
@@ -276,8 +326,7 @@ struct ApiServer::Implementation {
                 self->pending_requests[wsi] = {std::string(method_name), std::string(path), {}};
                 return 0;
             }
-            return send_response(wsi, route_api_request(method_name, path, self->state_provider,
-                                 self->handler_for(wsi), {}, self->read_policy_provider, &self->ui));
+            return send_response(wsi, self->route(wsi, method_name, path, {}));
         } catch (...) {
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;

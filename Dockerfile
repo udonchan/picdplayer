@@ -13,6 +13,7 @@ RUN apt-get update \
         nlohmann-json3-dev \
         libwebsockets-dev \
         file \
+        nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src

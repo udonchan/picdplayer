@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-09-19。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-09-25。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に試す項目は
@@ -11,7 +11,7 @@
 ## 現在の確認待ち
 
 傷disc、cache独立性、速度変更、S/PDIF出力は未確認。
-Now Playingの停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
+Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
@@ -34,6 +34,8 @@ ctest --test-dir build-metadata --output-on-failure
 Phase 2基礎実装時にdirectの16/16、metadata/API buildのAPI以外21/21、
 sandbox外のAPI socket 1/1成功を確認した。
 これは全option組合せの保証ではない。socket試験はloopback通信を許可した環境で実行する。
+2026-09-25のMac上Docker/aarch64 buildではNode.jsによる標準UIとwrapperの動作試験を含む26件が通過した。
+Node.jsがない環境ではその2件を登録せず、C++ビルドは従来どおり可能。
 2026-09-18のReadPolicy作業ではmetadata/API buildのAPI以外23件とsocket試験1件、
 direct buildの関連4件（playback_engine/read_policy/cdda_cli/player_daemon）が成功した。
 policy入力、JSON、reader再生成・region変更を確認したが、実機上の切替試聴を代替しない。
@@ -51,7 +53,7 @@ policy入力、JSON、reader再生成・region変更を確認したが、実機�
 | systemd | 自動起動からCEC再生。metadata有効版のservice起動・cache hit・play/pause |
 | metadata | 14曲Disc ID、候補1件、AVAILABLE、cache miss/hit、並行CEC処理 |
 | API | Macから外部GETによる状態照会、eject要求とトレイ動作 |
-| Now Playing | Macのbrowserでmetadata、track、CAA cover art、Live接続、停止状態の表示を確認 |
+| Now Playing | Macのbrowserでmetadata、track、CAA cover art、Live接続、停止状態の表示を確認。cold boot後のTV表示とUI telemetry到達も確認 |
 | eject待受修正 | 2026-09-17に一回の要求でトレイが開いたとのユーザー確認 |
 | integrity Phase 1a | ASUS drive能力、direct read集計、先読み/ALSA再生head、bounded eventを通常CD再生中のAPI snapshotで確認 |
 | ReadPolicy runtime切替 | repeatを適用して再生後、SINGLE要求をPLAYING/PAUSED中に保留し、STOPPED境界で適用。APIでrequested/effective/pendingと15 frame single readerへの切替を確認 |
@@ -270,6 +272,77 @@ APIの`offset_seconds`へ`18446744073709551615`をPOSTし、`400 invalid_body`�
 25件を通過（API socket試験はsandbox外で再実行）。wrapperは模擬接続による起動引数、
 接続失敗、不正設定、先頭ゼロ付き数値を検証した。TV上での変更後の再確認は未実施。
 
+## Mac Dockerビルドと起動telemetryの実機確認（2026-09-25）
+
+Mac上のDebian Trixie arm64 Dockerでbuild/stageし、CTest 26件が全て通過した。
+`stage/usr/local/bin/cdplayerd`はELF aarch64で、Piのインストール済みdaemon・wrapper・標準UI JSと
+MacのstageでSHA-256が一致した。Piではコンパイルしていない。
+
+稼働中のPiでサービスを起動した際、両サービスはactive、kiosk unitは`After=picdplayer.service`、
+`Wants=picdplayer.service`、`Conflicts=getty@tty1.service`だった。journalのmonotonic時刻では
+service開始が+377432.699秒、wrapper開始が+377434.660秒、TCP readyとCage execが+377434.678秒。
+wrapper内の記録は開始0 ms、API待機開始10 ms、TCP ready 20 ms、Cage exec 20 msだった。
+Chromiumの`/player`はDevToolsで`readyState=complete`、接続表示`Live`、可視状態`visible`。
+DevTools screenshotではアルバム画像・日本語曲名・停止状態が描画されていた。
+ユーザーがTVでもNow Playing画面と`STOPPED`表示を確認した。
+
+同一page IDのUI telemetryはscript開始+377458.629秒、DOMContentLoaded+377458.665秒、
+描画機会+377460.324秒、WebSocket接続+377460.358秒、UI ready+377460.370秒にdaemonが受信した。
+この試行では描画機会がWebSocket接続より先だった。wrapper stdoutはPAM session scopeで記録され、
+`journalctl -u picdplayer-kiosk.service`だけでは表示されなかった。
+
+これは長時間稼働中のPiでのservice起動であり、cold boot時間ではない。TVへの画面表示は確認済みだが、
+HDMI first pixel、CEC・音声・ディスクの再生準備、再boot後の値はこの記録から保証できない。
+
+## cold bootの起動計測（2026-09-25）
+
+ユーザーがcold bootしてSSH接続後、boot ID `dafb840e-1092-4c20-b0a8-c1c3f4de2984` の
+`systemd-analyze critical-chain picdplayer-kiosk.service`と`journalctl -b -o short-monotonic`を取得した。
+両サービスはactiveで、kioskの再起動回数は0。Chromium DevToolsでは標準UIの
+`readyState=complete`、WebSocket表示`Live`、表示状態`visible`、player状態`STOPPED`を確認した。
+
+|観測点|kernel起動後のjournal時刻|
+|---|---:|
+|daemon service開始|+15.803秒|
+|kiosk service開始|+15.820秒|
+|daemon API listen|+16.916秒|
+|wrapper開始|+23.637秒|
+|TCP接続成功・Cage exec直前|+23.657〜23.658秒|
+|systemd起動完了|+26.681秒|
+|UI script開始をdaemonが受信|+45.938秒|
+|DOMContentLoadedをdaemonが受信|+45.969秒|
+|最初の描画機会をdaemonが受信|+47.354秒|
+|`ui_ready`をdaemonが受信|+47.411秒|
+|WebSocket接続をdaemonが受信|+47.412秒|
+
+`systemd-analyze critical-chain`ではkiosk開始がuserspace +10.958秒で、
+`systemd-analyze time`のkernel 4.860秒を足すとjournalの+15.820秒と一致する。
+前回のユーザー計測（service開始+16.942秒→+9.914秒）は別boot・別条件の値である。
+このbootでwrapper開始までservice開始から約7.8秒を要し、Cage execからUI script受信まで約22.3秒だった。
+`ui_ready`はsystemd起動完了から約20.7秒後だった。
+
+同一page IDのbrowser `client_ms`はscript開始2895.7、DOMContentLoaded3073.0、
+最初の描画機会4421.5、WebSocket接続4468.8、UI ready4484.4。
+WebSocket接続のclient時刻はUI readyより前だが、HTTP telemetryのdaemon受信順は逆だった。
+受信順をbrowser内の発生順とみなさない。上表はdaemonへの到着時刻であり、HDMIの
+first pixel、TVで実際に見えた時刻、CEC・再生準備完了を表さない。
+ユーザーがこのcold boot後のTV表示を確認した。最初に画面が見えた時刻は未計測。
+
+## 起動時間短縮の未解決課題
+
+cold bootでTV表示と`ui_ready`受信は確認したが、起動時間の短縮は未解決である。
+今回のbootではkiosk service開始がkernel起動後+15.820秒、wrapper開始が+23.637秒、
+Cage exec直前が+23.658秒、UI script開始の受信が+45.938秒、`ui_ready`受信が+47.411秒だった。
+特にservice開始からwrapper開始まで約7.8秒、Cage execからUI script受信まで約22.3秒を要した。
+この内訳にはPAM/seat準備、Cage/Chromium起動、ページ取得・JS実行などが含まれ得るが、
+現時点で各段階の支配要因は確定していない。
+
+次回は同じTV入力・ディスク・ネットワーク条件で複数回cold bootし、
+Chrome DevToolsのnavigation/paint情報、journal、必要ならTVを撮影したfirst pixel時刻を対応付ける。
+`ui_ready`はHDMI first pixelではないため、体感起動時間の代用として断定しない。
+原因を特定してから、Cage/Chromium/ページ側の費用を個別に評価する。
+今回のtelemetry追加は観測手段であり、起動高速化の実装ではない。
+
 ## 継続する検証と開発課題
 
 ### Custom UI第一段階（2026-09-20）
@@ -311,8 +384,8 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 - metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
 - cache期限/総容量/破損復旧、候補選択、非1始まりtrack対応、HTTP/JSON制限の強化は未実装。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
-- Now Playingはブラウザが画像を取得して表示する。Chromium/Cage kioskのTV表示は確認済みで、
-  boot・継続運転を確認する。daemon側の画像binary取得・保存、quiet boot・read-only root・
+- Now Playingはブラウザが画像を取得して表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。
+  長期継続運転と起動時間短縮を継続確認する。daemon側の画像binary取得・保存、quiet boot・read-only root・
   Buildroot imageは未実装。
 
 Piハング時は原因を確定できる前bootログがなかった。メモリ圧迫とswap I/Oは候補であり確定原因ではない。

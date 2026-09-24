@@ -7,8 +7,8 @@ PiCDPlayerは、Raspberry Piと一般的な光学ドライブを使い、物理C
 物理CDを使う楽しさを残しながら、Linux、HDMI、HDMI-CEC、インターネット上の曲名・ジャケット情報を
 組み合わせて、据え置きプレイヤーの使い方を再設計します。普段の操作でデスクトップを開いたり、
 音楽ライブラリへ登録したりする必要のない装置が目標です。現在は再生daemon、ブラウザ表示、
-任意導入のTV kiosk serviceまでを実装しており、再bootからのkiosk運転確認とLinux起動画面を隠す
-仕上げはこれからです。
+任意導入のTV kiosk serviceまでを実装し、cold boot後のTV表示を確認しました。
+起動時間の短縮とLinux起動画面を隠す仕上げは今後の課題です。
 
 この開発では、音を出すだけでなく、CDを再生する仕組みを観測し、説明できるようにします。
 例えば音が途切れたとき、ドライブの読み取りが遅れたのか、音声出力への供給が間に合わなかったのかを
@@ -46,7 +46,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | TVリモコンのCEC再生・一時停止・停止・曲移動・シーク | 実装済み、実機確認済み |
 | HTTP操作・eject・WebSocket状態配信 | 実装済み、状態照会とejectを実機確認済み |
 | MusicBrainz metadata・JSON cache | 任意機能として実装済み、単一候補CDで実機確認済み |
-| 読み取り専用Now Playing画面 | 実装済み。metadata・CAA URLがあればalbum/track/cover artをブラウザに表示。Chromium/Cage kiosk unitを実装、TV表示を確認済み、boot・継続運転は確認待ち |
+| 読み取り専用Now Playing画面 | 実装済み。metadata・CAA URLがあればalbum/track/cover artをブラウザに表示。Chromium/Cage kiosk unitを実装、cold boot後のTV表示を確認済み。長期継続運転は確認待ち |
 | ジャケット画像 | CAA URL取得とNow Playing画面でのbrowser表示を実装。daemonの画像binary cacheは未実装 |
 | systemd常駐・自動起動 | 実装・基本構成で実機確認済み |
 | ALSA underrun自動復旧 | 実装・自動試験済み。実機の異常系評価は未完了 |
@@ -132,7 +132,8 @@ docker build -t picdplayer-build .
 ```
 
 `picdplayer-build` imageには、CMake、C++ compiler、ALSAやmetadata/API機能に必要な
-development packageが含まれています。
+development packageが含まれています。`BUILD_TESTING=ON`（既定）のJavaScript動作試験用に
+Node.jsも含みます。Node.jsはPiのdaemon/kiosk実行時には不要です。
 
 Dockerfileを変更した場合は、build imageを再作成してください。
 

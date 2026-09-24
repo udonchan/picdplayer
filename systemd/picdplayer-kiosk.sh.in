@@ -1,6 +1,17 @@
 #!/bin/bash
 set -eu
 
+# Linux uptime is monotonic (centisecond resolution); no subprocess per marker.
+# Linux uptime を使い、時刻補正の影響を受けない経過時間を記録します。
+read -r boot_uptime _ < /proc/uptime
+wrapper_start_cs=${boot_uptime/./}
+kiosk_mark() {
+  local uptime_now unused
+  read -r uptime_now unused < /proc/uptime
+  echo "kiosk_boot: event=$1 wrapper_elapsed_ms=$(( (10#${uptime_now/./} - 10#$wrapper_start_cs) * 10 ))"
+}
+kiosk_mark kiosk_wrapper_start
+
 : "${PICDPLAYER_KIOSK_URL:=http://127.0.0.1:8080/player}"
 : "${PICDPLAYER_CAGE:=/usr/bin/cage}"
 : "${PICDPLAYER_CHROMIUM:=/usr/bin/chromium}"
@@ -28,6 +39,7 @@ if [[ ! -x "$PICDPLAYER_CAGE" || ! -x "$PICDPLAYER_CHROMIUM" ]]; then
   exit 2
 fi
 
+kiosk_mark api_wait_start
 deadline=$((SECONDS + wait_seconds))
 while true; do
   remaining=$((deadline - SECONDS))
@@ -38,6 +50,7 @@ while true; do
   # DNS and TCP connection establishment can block; bound the whole attempt.
   if timeout --kill-after=1s "${remaining}s" /bin/bash -c \
       'exec 3<>"/dev/tcp/$1/$2"' kiosk-connect "$PICDPLAYER_API_WAIT_HOST" "$port" 2>/dev/null; then
+    kiosk_mark api_ready
     break
   fi
   if (( SECONDS >= deadline )); then
@@ -47,6 +60,7 @@ while true; do
   sleep 1
 done
 
+kiosk_mark cage_exec
 exec "$PICDPLAYER_CAGE" -- "$PICDPLAYER_CHROMIUM" \
   --ozone-platform=wayland \
   --kiosk \

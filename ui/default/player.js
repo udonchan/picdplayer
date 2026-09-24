@@ -6,6 +6,59 @@
 
 'use strict';
 
+const scriptStartMs = performance.now();
+// Optional, best-effort observations. Never await telemetry or retry failures.
+// 任意の計測です。送信完了を待たず、失敗しても UI の処理を続けます。
+const boot = (() => {
+  const pageId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const sent = new Set();
+  let connected = false;
+  let painted = false;
+  let scheduled = false;
+  function mark(event, clientMs = performance.now()) {
+    if (sent.has(event)) return;
+    sent.add(event);
+    try {
+      Promise.resolve(fetch('/api/ui-boot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page_id: pageId, event, client_ms: clientMs }),
+      })).catch(() => {});
+    } catch {
+      // Telemetry is optional even if fetch throws synchronously.
+      // fetch が同期的に失敗しても表示には影響させません。
+    }
+  }
+  function ready() {
+    if (connected && painted) mark('ui_ready');
+  }
+  mark('ui_script_start', scriptStartMs);
+  if (document.readyState === 'complete') {
+    // A late script cannot observe the original DOMContentLoaded event.
+    // 遅れて実行された場合は元のイベント時刻を作りません。
+  } else {
+    document.addEventListener('DOMContentLoaded', () => mark('dom_content_loaded'), { once: true });
+  }
+  return {
+    connection(value) {
+      connected = value;
+      if (value) mark('websocket_connected');
+      ready();
+    },
+    snapshot() {
+      if (scheduled) return;
+      scheduled = true;
+      // Two animation frames allow a paint opportunity, not HDMI scanout proof.
+      // 2 回の rAF は描画機会の近似であり、HDMI 表示完了の保証ではありません。
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        painted = true;
+        mark('first_render');
+        ready();
+      }));
+    },
+  };
+})();
+
 const byId = (id) => document.getElementById(id);
 const set = (id, value) => {
   byId(id).textContent = value || '—';
@@ -104,6 +157,7 @@ function render(snapshot) {
   byId('progress').style.width = `${fraction}%`;
   set('player-state', player.state || 'NO_DISC');
   showArt(metadata.cover_art);
+  boot.snapshot();
 }
 
 // Fetch an initial REST snapshot before opening the live event stream.
@@ -128,7 +182,10 @@ function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   const socket = new WebSocket(`${scheme}://${location.host}/api/events`);
 
-  socket.onopen = () => setConnection('Live');
+  socket.onopen = () => {
+    setConnection('Live');
+    boot.connection(true);
+  };
   socket.onmessage = (event) => {
     try {
       render(JSON.parse(event.data));
@@ -138,6 +195,7 @@ function connect() {
   };
   socket.onerror = () => socket.close();
   socket.onclose = () => {
+    boot.connection(false);
     setConnection('Reconnecting');
     retry = setTimeout(async () => {
       await load();

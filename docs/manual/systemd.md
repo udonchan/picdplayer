@@ -166,7 +166,8 @@ kioskのorderingは`After=picdplayer.service`とし、`Wants=picdplayer.service`
 ユーザーの実機計測では、`After=systemd-user-sessions.service getty@tty1.service`を外すことで
 kiosk service開始がuserspace +16.942秒から+9.914秒へ前倒しされた。
 これはservice開始時刻であり、Chromium表示やHDMIへの最初の描画時刻ではない。
-wrapperとWeb UIの起動telemetryによる追加計測は未実装である。
+wrapperと標準Web UIの起動telemetryを追加し、cold bootで記録を確認した。
+結果と未解決の起動時間短縮課題は[検証状況](../development/verification.md)を参照する。
 
 このunitは既定でinstallしない。ChromiumとCageのpackageを導入してから、kiosk unitを明示して
 configure/installする。Raspberry Pi OS/Debian系でのpackage名は次のとおりである。
@@ -260,3 +261,98 @@ cursor非表示を保証するものではない。boot途中のkernel/systemd m
 browserの画面遷移や画面内操作は未実装である。これらはkiosk表示が実TVで安定してから別の変更として扱う。
 
 [実機確認状況](../development/verification.md)と[過去のservice試験](../history/systemd-validation.md)も参照する。
+
+## 起動時間の計測（Cage + Chromium + 標準UI）
+
+wrapperはjournalへ`kiosk_boot: event=... wrapper_elapsed_ms=...`を出す。
+`/proc/uptime`によるwrapper開始基準の経過時間（10 ms分解能）で、daemonの`+ms`とは原点が異なる。
+
+|event|観測点|
+|---|---|
+|`kiosk_wrapper_start`|wrapperの初期処理開始|
+|`api_wait_start`|既存TCP待機loopの直前|
+|`api_ready`|TCP接続成功。HTTP応答・daemonの継続稼働を保証しない|
+|`cage_exec`|Cageへのexec直前。CageやChromiumの起動完了ではない|
+
+TCP待機のtimeout・再試行規則は変更していない。PAM、TTY、seat/logind、NetworkManager設定も
+変更していない。Chromiumの既存loopback remote debugging設定（9222）も維持する。
+
+標準UIは任意の`POST /api/ui-boot`へJSONを送る。再生commandとは独立しており、
+custom UIは送信しなくても従来どおり動作する。共通bootstrap注入やSDKは追加していない。
+
+```json
+{"page_id":"m-page-1","event":"first_render","client_ms":123.4}
+```
+
+本文は512 bytes以下、上記3フィールドのみ。`page_id`は1〜64文字のASCII英数字・`-`・`_`、
+`event`は下表の名前のみ、`client_ms`は0〜86400000の有限数値とする。
+`client_ms`はbrowserの`performance.now()`（navigation基準ms）であり、daemon受信時刻ではない。
+ページ読み込みごとに新しいランダム識別子を生成し、再接続では同じIDを使う。
+IDは照合用で、認証情報ではない。
+
+|event|定義|
+|---|---|
+|`ui_script_start`|JS先頭付近で取得した実行開始時刻|
+|`dom_content_loaded`|登録したDOMContentLoaded listenerの実行時刻|
+|`websocket_connected`|最初のWebSocket open callback|
+|`first_render`|RESTまたはWebSocketの最初のsnapshot反映後、2回のrequestAnimationFrameを経た時点|
+|`ui_ready`|snapshot反映後の上記描画機会を経て、WebSocketが接続中になった時点|
+
+`first_render`はbrowserへ描画機会を与えた近似値。HDMI scanout、実際のfirst pixelや
+ジャケット画像読込完了を保証しない。非表示ページではrAFが遅延し得る。
+`ui_ready`は読み取り専用Now Playingの準備完了であり、CEC・ディスク・音声の再生準備ではない。
+REST失敗時はWebSocket snapshotでも準備条件を満たせる。イベント順序や受信順序は仮定しない。
+標準のdefer scriptでDOMContentLoadedを観測する。イベント後に動的読込されたscriptについては
+過去の発火時刻を捏造せず、イベントを記録できないことがある。
+
+telemetryのPOSTは本文あり／なしで同じpeer判定を通し、loopback以外は403にする。
+既存commandも同じ判定を使う。
+正常受信は204、不正入力は400、本文超過は413、流量制限は429（method違いは405）。
+ApiServerごとにsteady clockの60秒窓で最大30件を記録し、その窓内で同一page/eventを重複排除する。
+窓更新後は同じIDを再受信しても記録可能。抑制自体を毎回ログには出さない。
+標準UIは各eventを一度だけ送信し、応答待ち・再試行をしない。送信失敗は描画・再生を止めない。
+AsyncLoggerの容量制限や通信失敗で計測点が欠ける場合がある。
+
+ログは`INFO ui_boot: event=... page_id=... client_ms=...`。
+daemonログの`+ms`は既存AsyncLoggerのsteady clock基準の受信処理時刻であり、browserの時計とは
+直接減算しない。journal時刻はログ出力・取り込みの遅延を含み、厳密な描画計測ではない。
+
+### ユーザーによる実機確認
+
+Macで以下を実行する（Piではコンパイルしない）。deployはサービスを停止・置換・再開する。
+
+```sh
+./scripts/build-container.sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
+./scripts/deploy.sh
+ssh picdplayer-pi 'systemctl --no-pager --full status picdplayer.service picdplayer-kiosk.service'
+```
+
+`deploy.sh`はPi側でsudoのパスワードが必要ならMacの端末に一度だけ入力を求める。
+非対話環境では実行せず、SSHの対話端末からinstallする。
+
+TV表示・CEC再生と両サービスの正常稼働を確認してから、cold bootを測る場合は
+`ssh -t picdplayer-pi 'sudo systemctl poweroff'`で安全に停止し、電源断可能な状態になってから
+電源を入れ直す。単なる`sudo reboot`の結果はwarm rebootとして区別して記録する。
+起動後、Macで取得する。
+
+```sh
+ssh picdplayer-pi 'systemd-analyze critical-chain picdplayer-kiosk.service'
+ssh picdplayer-pi 'journalctl -b -o short-monotonic --no-pager | grep -E "(picdplayer|kiosk_boot|ui_boot)"'
+ssh picdplayer-pi 'systemctl --no-pager --full status picdplayer.service picdplayer-kiosk.service'
+```
+
+`PAMName=login`で起動したwrapper/Chromiumのstdoutは、journalではkiosk unitではなく
+user session scopeに分類されることがある。そのため`journalctl -u picdplayer-kiosk.service`だけでは
+`kiosk_boot`が欠ける。上記はboot全体から識別子で抽出する。
+journal上でservice開始→wrapper→TCP ready→Cage exec→UI eventを並べ、`page_id`ごとに読む。
+wrapper内の差分、daemon内の受信時刻差分、browser内の`client_ms`差分をそれぞれ確認する。
+DOMContentLoaded・WebSocket・描画イベントを固定の順序に並べ替えない。
+ページ再読込でIDが変わること、daemon再起動後に画面が再接続すること、custom UI未送信でも
+動作することを確認する。CDなし／あり、TV入力・ネットワーク条件を揃えて複数回計測する。
+
+ordering変更時のユーザー実測はservice開始がuserspace +16.942秒→+9.914秒。
+2026-09-25の別のcold bootではkiosk開始がuserspace +10.958秒、daemonが受信した`ui_ready`は
+kernel起動後+47.411秒だった。両サービスの起動とTV表示は確認済み。
+この2回の差からboot時間改善量を推定しない。HDMI first pixelは未計測で、
+起動時間の短縮は[未解決課題](../development/verification.md#起動時間短縮の未解決課題)として残す。

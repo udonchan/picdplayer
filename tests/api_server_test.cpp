@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstring>
 #include <netinet/in.h>
+#include <ifaddrs.h>
 #include <sys/socket.h>
 #include <stdexcept>
 #include <thread>
@@ -32,7 +33,7 @@ int main() {
         check(response.body.find("innerHTML") == std::string::npos);
         response = route_api_request("GET", "/debug/status.css", provider);
         check(response.status == 200 && response.content_type == "text/css; charset=utf-8");
-        check(response.body.find("color-scheme:dark") != std::string::npos);
+        check(response.body.find("color-scheme: dark") != std::string::npos);
         check(route_api_request("POST", "/debug/status", provider).status == 405);
         response = route_api_request("GET", "/player", provider);
         check(response.status == 200 && response.content_type == "text/html; charset=utf-8");
@@ -45,7 +46,7 @@ int main() {
         check(response.body.find("innerHTML") == std::string::npos);
         response = route_api_request("GET", "/player.css", provider);
         check(response.status == 200 && response.content_type == "text/css; charset=utf-8");
-        check(response.body.find("color-scheme:dark") != std::string::npos);
+        check(response.body.find("color-scheme: dark") != std::string::npos);
         check(route_api_request("POST", "/player", provider).status == 405);
         response = route_api_request("GET", "/missing", provider);
         check(response.status == 404 && calls == 1);
@@ -79,8 +80,105 @@ int main() {
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
         check(route_api_request("GET", "/api/state", huge).status == 500);
 
+        int boot_calls = 0;
+        const ApiUiBootHandler boot = [&](std::string_view page, std::string_view event, double ms) {
+            check(page == "page-1" && event == "first_render" && ms == 12.5);
+            ++boot_calls;
+            return true;
+        };
+        const std::string boot_body = R"({"page_id":"page-1","event":"first_render","client_ms":12.5})";
+        const auto boot_route = [&](std::string_view body) {
+            return route_api_request("POST", "/api/ui-boot", provider, {}, body, {}, nullptr, boot);
+        };
+        check(boot_route(boot_body).status == 204 && boot_calls == 1);
+        check(route_api_request("POST", "/api/ui-boot", provider, {}, boot_body).status == 403);
+        check(route_api_request("POST", "/api/ui-boot", provider).status == 403);
+        check(route_api_request("GET", "/api/ui-boot", provider).status == 405);
+        check(boot_route("").status == 400);
+        check(boot_route("{}").status == 400);
+        check(boot_route(std::string(513, 'x')).status == 413);
+        for (const auto* invalid : {
+            R"({"page_id":"bad\nlog","event":"first_render","client_ms":1})",
+            R"({"page_id":"p","event":"unknown","client_ms":1})",
+            R"({"page_id":"p","event":"ui_ready","client_ms":-1})",
+            R"({"page_id":"p","event":"ui_ready","client_ms":86400001})",
+            R"({"page_id":"p","event":"ui_ready","client_ms":"1"})",
+            R"({"page_id":1,"event":"ui_ready","client_ms":1})",
+            R"({"page_id":"p","event":"ui_ready","client_ms":1,"extra":true})"
+        }) check(boot_route(invalid).status == 400);
+        check(boot_calls == 1);
+        check(route_api_request("POST", "/api/ui-boot", provider, {}, boot_body, {}, nullptr,
+            [](std::string_view, std::string_view, double) { return false; }).status == 429);
+
         // A wildcard listener must still allow commands from a loopback peer.
         ApiServer server("0.0.0.0", 0, provider, commands);
+        const auto post = [&](std::string_view path, const std::string& body, in_addr destination) {
+            std::atomic<bool> finished = false;
+            std::string reply;
+            std::thread worker([&] {
+                const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+                if (fd < 0) { finished = true; return; }
+                timeval timeout{2, 0};
+                setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+                sockaddr_in target{};
+                target.sin_family = AF_INET;
+                target.sin_port = htons(static_cast<std::uint16_t>(server.port()));
+                target.sin_addr = destination;
+                if (::connect(fd, reinterpret_cast<sockaddr*>(&target), sizeof(target)) == 0) {
+                    const std::string request = "POST " + std::string(path) +
+                        " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: " +
+                        std::to_string(body.size()) + "\r\n\r\n" + body;
+                    (void)send(fd, request.data(), request.size(), 0);
+                    char buffer[2048];
+                    for (;;) {
+                        const auto count = recv(fd, buffer, sizeof(buffer), 0);
+                        if (count <= 0) break;
+                        reply.append(buffer, static_cast<std::size_t>(count));
+                    }
+                }
+                close(fd);
+                finished = true;
+            });
+            for (int i = 0; i < 1500 && !finished; ++i) {
+                server.service();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            worker.join();
+            return reply;
+        };
+        const in_addr loopback{htonl(INADDR_LOOPBACK)};
+        check(post("/api/ui-boot", boot_body, loopback).find("HTTP/1.1 204") != std::string::npos);
+        check(post("/api/ui-boot", "", loopback).find("HTTP/1.1 400") != std::string::npos);
+        check(post("/api/ui-boot", std::string(513, 'x'), loopback).find("HTTP/1.1 413") != std::string::npos);
+        // Duplicates do not consume the bounded log budget.
+        for (int i = 0; i < 31; ++i)
+            check(post("/api/ui-boot", boot_body, loopback).find("HTTP/1.1 204") != std::string::npos);
+        for (int i = 0; i < 29; ++i) {
+            const auto body = "{\"page_id\":\"reload-" + std::to_string(i) +
+                "\",\"event\":\"ui_ready\",\"client_ms\":10}";
+            check(post("/api/ui-boot", body, loopback).find("HTTP/1.1 204") != std::string::npos);
+        }
+        check(post("/api/ui-boot", R"({"page_id":"overflow","event":"ui_ready","client_ms":1})",
+                   loopback).find("HTTP/1.1 429") != std::string::npos);
+        ifaddrs* interfaces = nullptr;
+        check(getifaddrs(&interfaces) == 0);
+        in_addr external{};
+        for (auto* item = interfaces; item; item = item->ifa_next) {
+            if (!item->ifa_addr || item->ifa_addr->sa_family != AF_INET) continue;
+            const auto candidate = reinterpret_cast<sockaddr_in*>(item->ifa_addr)->sin_addr;
+            if ((ntohl(candidate.s_addr) >> 24) != 127) { external = candidate; break; }
+        }
+        freeifaddrs(interfaces);
+        // A loopback-only test namespace has no address for an external-peer probe.
+        if (external.s_addr != 0) {
+            for (const auto* path : {"/api/ui-boot", "/api/play"}) {
+                check(post(path, "", external).find("HTTP/1.1 403") != std::string::npos);
+                check(post(path, boot_body, external).find("HTTP/1.1 403") != std::string::npos);
+            }
+        } else {
+            std::cout << "SKIP: external-peer probe requires a non-loopback interface\n";
+        }
+
         // No clients and no network traffic: the player must still make progress.
         const auto idle_start = std::chrono::steady_clock::now();
         for (int i = 0; i < 20; ++i) server.service();
