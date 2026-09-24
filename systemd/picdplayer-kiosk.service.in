@@ -1,6 +1,6 @@
 [Unit]
 Description=PiCDPlayer Now Playing kiosk
-After=systemd-user-sessions.service getty@tty1.service picdplayer.service
+After=picdplayer.service
 Wants=picdplayer.service
 Conflicts=getty@tty1.service
 

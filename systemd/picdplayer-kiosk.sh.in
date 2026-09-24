@@ -55,5 +55,7 @@ exec "$PICDPLAYER_CAGE" -- "$PICDPLAYER_CHROMIUM" \
   --disable-session-crashed-bubble \
   --disable-features=Translate \
   --noerrdialogs \
+  --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port=9222 \
   --user-data-dir="$XDG_STATE_HOME/chromium" \
   "$PICDPLAYER_KIOSK_URL"

@@ -160,6 +160,14 @@ daemonとは別serviceで、kioskが停止・再起動しても再生状態はda
 maximized applicationだけを表示するkiosk compositorなので、通常利用時にdesktopやterminalを
 表示しない構成にできる。
 
+kioskのorderingは`After=picdplayer.service`とし、`Wants=picdplayer.service`と
+`Conflicts=getty@tty1.service`を維持する。localhost UIの起動に外部networkや通常のlogin sessionの
+完了を要求しない。`PAMName=login`、TTY、seat/logind設定は従来どおりである。
+ユーザーの実機計測では、`After=systemd-user-sessions.service getty@tty1.service`を外すことで
+kiosk service開始がuserspace +16.942秒から+9.914秒へ前倒しされた。
+これはservice開始時刻であり、Chromium表示やHDMIへの最初の描画時刻ではない。
+wrapperとWeb UIの起動telemetryによる追加計測は未実装である。
+
 このunitは既定でinstallしない。ChromiumとCageのpackageを導入してから、kiosk unitを明示して
 configure/installする。Raspberry Pi OS/Debian系でのpackage名は次のとおりである。
 
