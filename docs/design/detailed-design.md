@@ -187,9 +187,13 @@ publish_stateは送信用snapshotを更新する。mainが完成済みJSONを用
 technical statusのHTML/CSS/JavaScriptは`ui/default/`からビルド時に埋め込み、APIから配信する。
 追加filesystemやNode runtimeを要求しない。画面はGET stateとWS eventsだけを消費し、再接続時には
 snapshotから全表示を再構築する。外部文字列はtextContentへ設定し、innerHTMLへ渡さない。
-Now Playingも同じ配信経路だけを使用する。metadata.selectedを
-candidate配列のindexとして解決し、現在track番号でTrackMetadataを探す。metadataが不在ならDiscToc由来の
-track番号と時間だけを表示する。cover_art.image_urlはbrowserのimgへ渡し、load errorでは表示を戻す。
+Now PlayingはPresentation Modelのplayer/disc/tracks/enrichment/artworkを表示し、現在track番号で
+tracksを検索する。metadataが不在ならtrack番号と時間をfallback表示する。
+textContentは表示文字列が変わったときだけ設定し、progress widthも直前に設定したCSS値と比較する。
+frame単位の再生位置は省略せず、秒表示だけが同じ場合は文字列の書き換えを省く。
+artwork.cover.urlが変わったときだけ画像属性とhandlerを更新し、load errorではplaceholderへ戻す。
+画像切替時は旧coverを隠し、差し替え前のload/error callbackは無視する。同URLの失敗をsnapshotごとに
+再試行しない。表示値の比較は標準Player内部の処理であり、APIのrevisionや配信頻度を変更しない。
 このpageはdaemonへの操作・metadata候補選択・画像cacheを実装しない。
 
 ## daemon logging

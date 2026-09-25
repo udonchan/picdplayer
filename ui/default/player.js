@@ -61,7 +61,9 @@ const boot = (() => {
 
 const byId = (id) => document.getElementById(id);
 const set = (id, value) => {
-  byId(id).textContent = value || '—';
+  const element = byId(id);
+  const text = value || '—';
+  if (element.textContent !== text) element.textContent = text;
 };
 
 // CD frame is 1/75 second. Keep this conversion in the UI presentation layer.
@@ -74,7 +76,7 @@ const formatTime = (frames) => {
 };
 
 function setConnection(value) {
-  byId('connection').textContent = value;
+  set('connection', value);
 }
 
 function currentTrack(tracks, number) {
@@ -90,22 +92,32 @@ function showArt(artwork) {
     ? artwork.url
     : '';
 
+  // Compare image identity before touching attributes or event handlers.
+  // 同じ画像なら属性・handler を書き換えず、失敗時も毎回再試行しません。
+  if ((image.dataset.url || '') === url) return;
+  image.dataset.url = url;
+  if (container.classList.contains('has-cover')) container.classList.remove('has-cover');
+
   if (!url) {
     image.removeAttribute('src');
-    image.dataset.url = '';
-    container.classList.remove('has-cover');
+    image.onload = null;
+    image.onerror = null;
     return;
   }
 
-  image.onload = () => container.classList.add('has-cover');
-  image.onerror = () => container.classList.remove('has-cover');
-  if (image.dataset.url !== url) {
-    image.dataset.url = url;
-    image.src = url;
-  }
-  if (image.complete && image.naturalWidth > 0) {
-    container.classList.add('has-cover');
-  }
+  image.onload = () => {
+    // Ignore completion from a replaced image and avoid repeated class writes.
+    // 差し替え前の画像完了を無視し、同じ class を繰り返し設定しません。
+    if (image.dataset.url === url && image.complete && image.naturalWidth > 0 &&
+        !container.classList.contains('has-cover')) container.classList.add('has-cover');
+  };
+  image.onerror = () => {
+    if (image.dataset.url === url && container.classList.contains('has-cover')) {
+      container.classList.remove('has-cover');
+    }
+  };
+  image.src = url;
+  if (image.complete && image.naturalWidth > 0) image.onload();
 }
 
 function mediaMessage(hasDisc, mediaState, enrichmentStatus) {
@@ -115,6 +127,10 @@ function mediaMessage(hasDisc, mediaState, enrichmentStatus) {
   if (enrichmentStatus === 'ERROR') return 'METADATA UNAVAILABLE';
   return 'NOW PLAYING';
 }
+
+// Cache only the last CSS value, never an extrapolated playback position.
+// CSS の直前の表示値だけを保持し、再生位置を browser 側で進めません。
+let progressWidth;
 
 // Rendering only: never keep an independent player state in the browser.
 // 描画専用です。browser 側に独立した再生状態を持ちません。
@@ -148,7 +164,11 @@ function render(snapshot) {
   const fraction = Number.isInteger(position) && Number.isInteger(length) && length > 0
     ? Math.min(100, 100 * position / length)
     : 0;
-  byId('progress').style.width = `${fraction}%`;
+  const width = `${fraction}%`;
+  if (width !== progressWidth) {
+    byId('progress').style.width = width;
+    progressWidth = width;
+  }
   set('player-state', player.state || 'NO_DISC');
   showArt(snapshot.artwork?.cover);
   boot.snapshot();

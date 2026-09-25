@@ -91,6 +91,13 @@ kioskのloopback接続では操作POSTも可能。静的検証はJavaScript sand
 起動telemetryは任意であり、Custom UIが送信しなくても動作する。
 標準UIの実装を参考にする場合は[計測の定義と限界](systemd.md#起動時間の計測cage--chromium--標準ui)を参照する。
 
+## 標準Playerの更新方法
+
+標準Playerはsnapshotを受け取るたび表示値を計算するが、同じ文字列・progress width・cover URLを
+DOMへ繰り返し設定しない。これは標準UIの実装上の最適化であり、Custom UIに新しい契約を要求しない。
+API/WebSocketの内容や配信頻度、再接続、任意の起動telemetryは従来どおりである。
+CSS transitionやbrowserの合成処理は別に発生し得るため、DOM write削減をpaintやCPUの削減量と同一視しない。
+
 ## 実機確認記録
 
 2026-09-20、`ui/default/`を`/tmp/picdplayer-custom-ui`へコピーし、`--custom-ui`
