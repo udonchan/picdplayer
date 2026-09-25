@@ -3,8 +3,8 @@
 更新日: 2026-09-25。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
-現在の到達点は[実機確認済み](#実機確認済み)、次に試す項目は
-[継続する検証と開発課題](#継続する検証と開発課題)を参照する。
+現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
+[残課題とIssue一覧](backlog.md)を参照する。末尾の継続課題は検証上の根拠として残す。
 その間の日付付きの節は、条件ごとの個別実験記録である。過去のbuffer値や試験件数を
 現在の仕様として使わず、設定の正本は[機能設計](../design/functional-design.md)で確認する。
 
@@ -24,12 +24,17 @@ API有効時はJSON schema、route、technical status/Now Playing asset、loopba
 paranoiaにはlibrary呼び出しをwrapした試験がある。
 logger試験は時刻・level・component、stdout/stderrのlevel別振り分け、終了時のqueue drainを確認する。
 
+標準の再実行手順（Mac、初回はDocker imageを作成）:
+
 ```sh
-cmake --build build-direct -j1
-ctest --test-dir build-direct --output-on-failure
-cmake --build build-metadata -j1
-ctest --test-dir build-metadata --output-on-failure
+./scripts/build-container.sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
 ```
+
+2026-09-25、[CI導入PR #2](https://github.com/udonchan/picdplayer/pull/2)でPython 3をDockerfileへ追加し、
+クリーンな作業コピーとGitHub ActionsのARM64 runnerで全29件が通過した。
+内訳にはNode.jsの2件とPythonの3件を含む。PR CIは標準のmetadata/API有効・paranoia無効構成を対象とし、
+全CMake optionの組合せやhardware動作を保証しない。以下は過去の構成ごとの結果である。
 
 Phase 2基礎実装時にdirectの16/16、metadata/API buildのAPI以外21/21、
 sandbox外のAPI socket 1/1成功を確認した。
@@ -136,7 +141,7 @@ stop後の`read.activity`はIDLE、再生再開後のstatsは新しいstreamに�
 
 ## 次の確認と残課題
 
-- [読み取り信頼性の拡張設計案](../development/integrity-design.md)のPhase 1aは実装・通常CDで実機確認済み。
+- [読み取り信頼性の仕様](../design/integrity-design.md)のPhase 1aは実装・通常CDで実機確認済み。
   ReadResultからのtruthfulなevidence変換、集計、PCM blockへの伝搬、古い世代の排除、read-only能力probe、
   bounded event、ALSA再生head推定、snapshot JSONを自動試験へ追加した。C2取得は未実装。
 - Phase 1bのtechnical statusは実装・自動試験済みで、停止・通常再生、ブラウザ再読み込み、
@@ -218,7 +223,8 @@ stopをCECから操作し、音声とtechnical statusのLive更新は正常だ�
 
 初回playの先読みは4001 ms、その後のseekは162〜186 ms、nextは257〜271 msだった。初回値は停止状態で
 約100秒経過した後の一回だけの測定であり、drive再始動を含む可能性があるためlogger overheadとは断定しない。
-systemd/journald経由の確認と、意図的なqueue overflowは未確認である。
+この時点ではsystemd/journald経由と意図的なqueue overflowは未確認だった。
+後述の2026-09-25起動計測でjournaldの起動ログは確認したが、service停止時flushは確認待ちである。
 
 ### CDROMSTART一回診断
 
@@ -265,12 +271,13 @@ APIの`offset_seconds`へ`18446744073709551615`をPOSTし、`400 invalid_body`�
 当初はAPIが有効でなく接続エラーになったが、API設定とservice再起動後にページ表示を確認した。
 日本語対応fontが未導入だったため`fonts-noto-cjk`の導入を手順へ追加した。
 日本語表示の改善、CSS適用後のcursor非表示、CEC操作の画面追従、再bootとdaemon再起動後の復旧は
-明示的な確認待ちである。設定・表示の確認を、連続kiosk運転の保証とはしない。
+当時は明示的な確認待ちだった。後述の2026-09-25に日本語曲名とcold boot後の表示を確認した。
+CEC操作の画面追従、cursor、daemon再起動後の復旧は継続確認とし、連続kiosk運転の保証とはしない。
 
 レビューでTCP接続自体が待受期限を超えてblockし得る点を修正し、coreutils timeoutで
 接続処理を制限した。port/時間の範囲検査と10進数変換も追加した。2026-09-20に既存CTest
 25件を通過（API socket試験はsandbox外で再実行）。wrapperは模擬接続による起動引数、
-接続失敗、不正設定、先頭ゼロ付き数値を検証した。TV上での変更後の再確認は未実施。
+接続失敗、不正設定、先頭ゼロ付き数値を検証した。この時点ではTV上での変更後の再確認は未実施だった。後述のcold boot計測でwrapperログとTV表示を確認した。
 
 ## Mac Dockerビルドと起動telemetryの実機確認（2026-09-25）
 
@@ -367,13 +374,14 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 ### その他の課題
 
 - metadata/API有効の最新service構成で再起動から再生・API操作まで確認する。
-- 非同期loggerはforegroundで確認済み。systemd/journaldでの時刻・level・componentと終了時flushを確認する。
+- 非同期loggerはforegroundとjournaldの起動ログで確認済み。service停止時の終了ログとflushを確認する。
   queue overflowは通常運用では意図的に発生させず、発生時は`logger: dropped=N`を記録する。
 - `CDROMSTART`一回診断、TOC直後の初回要求、15秒周期、PLAYING中抑止、Pause/Stop後再開はASUS driveで
   確認済み。別drive、長期運転、ejectとstart命令が重なった場合を継続確認する。
 - LOADING中・PLAYING中のeject、重複要求、EJECT_ERROR、終了との競合を実機で継続確認する。
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。
-  正常試聴では異常を再現できておらず、復旧経路の実機確認は未完了。
+  API snapshot処理の遅延に伴うunderrunと自動復旧は上記で一度観測した。
+  傷disc・USB障害・長時間read stallによる復旧経路の実機確認は未完了。
 - direct/paranoiaの採用、性能、CPU負荷、startup/seek latencyは実測後に判断する。
 - pause再開の待ち時間、buffering表示、復旧回数上限を検討する。
 - mediaとPCMのdevice access直列化は実装済み。挿抜を含む実機回帰確認を継続する。
@@ -389,4 +397,5 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
   Buildroot imageは未実装。
 
 Piハング時は原因を確定できる前bootログがなかった。メモリ圧迫とswap I/Oは候補であり確定原因ではない。
-ビルドは-j1を維持する。障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。
+当時はPiビルドを-j1に制限した。現在はMac + Dockerでビルドし、Piは実機検証だけに使用する。
+障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。

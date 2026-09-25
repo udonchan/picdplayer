@@ -1,7 +1,7 @@
 # 機能設計
 
-この文書は現行機能を記す。QUIET/BALANCED/SECURE、C2、cache対策、offset、外部照合の追加案は
-[読み取り信頼性の拡張設計案](../development/integrity-design.md)を参照する。現行direct/paranoiaの選択や正常再生は、
+この文書は現行機能を記す。QUIET/BALANCED/SECURE、C2、cache対策、offset、外部照合の未実装要求は
+[読み取り信頼性の仕様](integrity-design.md)を参照する。現行direct/paranoiaの選択や正常再生は、
 原盤PCMとの一致やdrive cacheから独立した読み取りを保証しない。
 Phase 1aではread回数を変えず、既存ReadResultの観測、read-only drive能力probe、bounded event、
 ALSA再生headに対応する根拠の推定をsnapshotへ公開するところまで実装した。
@@ -115,7 +115,8 @@ Play/Pause/Stop/Skip Forward/Skip Backward/Fast Forward/Rewindを再生操作へ
 
 libwebsocketsを採用しmain threadからserviceする。HTTPとWebSocketを一つのoptional依存で扱う。
 既定はlistenなし。`--api-port`で127.0.0.1へlisten、`--api-listen`で数値IPを指定できる。
-外部listenでも操作POSTは実際の接続元がloopbackの場合だけ許可する。外部POSTは403。
+外部listenでも操作POSTと起動telemetryは実際の接続元がloopbackの場合だけ許可する。外部POSTは403。
+本文あり／なしの両経路で同じ接続元判定を使う。
 認証・TLSは未実装で、外部公開は信頼できる開発LANでの診断用途に限る。
 
 | Method/path | 入力・結果 |
@@ -126,8 +127,10 @@ libwebsocketsを採用しmain threadからserviceする。HTTPとWebSocketを一
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
 | GET /debug/status.css, /debug/status.js | diagnostic画面の埋め込みasset |
-| GET /player | album、track、位置、cover artを表示する読み取り専用Now Playing HTML |
-| GET /player.css, /player.js | Now Playing画面の埋め込みasset |
+| GET /player, /player/ | 選択中のUI。標準はalbum、track、位置、cover artを表示する読み取り専用Now Playing HTML |
+| GET /player.css, /player.js | 選択中のNow Playing asset（Custom UI未採用時はbuilt-in） |
+| GET /builtin/player, /builtin/player.css, /builtin/player.js | 常にbuilt-inの復旧用画面・asset |
+| POST /api/ui-boot | 任意の標準UI起動telemetry、受理204。再生commandとは独立 |
 | POST /api/play, /pause, /stop, /next, /previous | bodyなし、受理204 |
 | POST /api/seek | `{"offset_seconds":10}`、±86400秒、受理204 |
 | POST /api/track | `{"track":2}`、1〜99かつ実disc内、受理204 |
@@ -155,6 +158,19 @@ AVAILABLEならブラウザが画像として読む。URLの存在は画像binar
 画像の失敗時はプレースホルダーへ戻る。外部文字列はtechnical statusと同様にtextContentで表示する。
 HTTP responseはCSPでscript/styleをselfへ制限する。`connect-src`はselfとws:/wss:を許可し、
 画面の実装は同一hostのAPIへ接続する。cover art用の`img-src`はself、data:、HTTPSを許可する。
+
+起動telemetryの入力・イベント定義・流量上限は
+[起動時間計測](../manual/systemd.md#起動時間の計測cage--chromium--標準ui)を正とする。
+`first_render`は描画機会の近似、`ui_ready`はsnapshot反映・描画機会・WebSocket接続の成立であり、
+HDMI first pixelやCEC/CD再生準備を保証しない。送信失敗は表示や再生を止めず、Custom UIに送信義務はない。
+
+## 未実装のintegrity機能要求
+
+[横断仕様](integrity-design.md)に従い、能力と根拠、requested modeとeffective strategy、
+local比較とcache独立性、外部照合とoffset、採用PCMの由来を別々に公開する。
+検証の試行・時間・memory上限と未解決時の動作を明示し、無期限retryを避ける。
+UNKNOWNや照合できなかった範囲を成功として表示しない。新しいmode・field・endpointは
+実装と互換性試験が完了した段階で上記の現行API一覧へ追加する。
 
 ## eject
 

@@ -1,4 +1,8 @@
-# ビルド手順
+# Linux単体ビルド手順
+
+通常の開発・CIは[Mac + Docker開発手順](mac-docker-development.md)を使う。
+この文書は別の開発ホストを用意せずLinux上で直接試す場合の補助手順である。
+通常のPiはruntime/hardware検証だけに使用する。
 
 ## 必要環境
 
@@ -12,7 +16,8 @@ cmake --build build-direct -j1
 ctest --test-dir build-direct --output-on-failure
 ```
 
-Piのメモリ・CPU負荷を抑えるためビルドは常に `-j1` とする。
+Pi単体で試す場合はメモリ・CPU負荷を抑えるため `-j1` とする。
+Dockerの標準scriptはcontainerのCPU数に応じて並列ビルドする。
 `build/`・`build-*/` はGit管理対象外。
 
 ## 実行権限と基本起動
@@ -38,7 +43,8 @@ serviceを未導入なら停止操作は不要。終了はCtrl-C/SIGTERM。
 | `ENABLE_PARANOIA` | `pkg-config libcdio-paranoia-dev` | 比較用CD-DA reader |
 | `ENABLE_METADATA` | `pkg-config libdiscid-dev libcurl4-openssl-dev nlohmann-json3-dev` | MusicBrainz・Cover Art参照 |
 | `ENABLE_API` | `pkg-config libwebsockets-dev nlohmann-json3-dev` | HTTP操作・WebSocket状態配信 |
-| `INSTALL_SYSTEMD_UNIT` | systemd運用環境 | service unitのインストール |
+| `INSTALL_SYSTEMD_UNIT` | systemd運用環境 | daemon service unitのインストール |
+| `INSTALL_SYSTEMD_KIOSK_UNIT` | 実行先にCage・Chromium | kiosk unit・wrapperのインストール |
 
 metadata/API有効版の例:
 
@@ -57,7 +63,9 @@ build optionだけではmetadata/APIは起動せず、実行時optionも指定�
 APIは上の例では `http://127.0.0.1:8080` で待ち受ける。
 
 API有効buildでは`ui/default/`のHTML/CSS/JSからbuilt-in UIを生成し、同じファイルを
-`share/picdplayer/ui/default/`へinstallする。Node.js等のUI build runtimeは不要で、追加依存はない。
+`share/picdplayer/ui/default/`へinstallする。UI assetの生成にはNode.jsは不要。試験ではNode.jsがあると標準UIとwrapperの2件を追加し、
+Python 3があるとCLI・daemon試験（API有効時はUI起動試験も）を追加する。
+全試験の実行にはNode.jsとPython 3の両方を用意する。
 ユーザー編集版の指定と復旧方法は[Custom UI](custom-ui.md)を参照する。
 paranoiaを使用する場合は `ENABLE_PARANOIA=ON` でconfigureし、`--cdda-reader paranoia` を指定する。
 

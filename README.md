@@ -21,6 +21,8 @@ PiCDPlayerは、Raspberry Piと一般的な光学ドライブを使い、物理C
 設計上の目標とし、観測だけでsecureやperfectを断言しません。
 考え方は[読み取り結果について言えること](docs/guide/integrity.md)、現在の判定仕様は
 [機能設計](docs/design/functional-design.md)で説明しています。
+C2・cache対策・offset・外部照合を含む未実装の要求は[読み取り信頼性の仕様](docs/design/integrity-design.md)、
+作業の一覧は[残課題](docs/development/backlog.md)を参照してください。
 
 ## 特徴
 
@@ -52,7 +54,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | ALSA underrun自動復旧 | 実装・自動試験済み。実機の異常系評価は未完了 |
 | 読み取り状態・根拠の観測、反復一致 | 実装・通常CDで確認済み。起動中の設定切替は実機確認済み |
 | 読み取り専用technical status画面 | Phase 1bとして実装、通常再生・再読み込み・再接続をブラウザで実機確認済み |
-| CD-DA先読みbuffer設定・drive access直列化 | Phase 2を実装。通常CDで容量・開始閾値と操作応答を実機比較済み。速度制御は未実装 |
+| CD-DA先読みbuffer設定・drive access直列化 | Phase 2の基礎を実装。通常CDで容量・開始閾値と操作応答を実機比較済み。速度制御は未実装 |
 | 複数metadata候補の選択 | 未実装 |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 
@@ -61,29 +63,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 
 ## はじめる
 
-### Raspberry Pi上で直接ビルドする
-
-Raspberry Pi単体で試す場合は、
-[ビルド手順](docs/manual/build.md)で依存パッケージとデバイス権限を準備した後、次を実行します。
-既存のserviceが動作中の場合は、先に停止してください。
-
-```sh
-cmake -S . -B build-direct
-cmake --build build-direct -j1
-./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct
-```
-
-Raspberry Pi 3の負荷を抑えるため、Pi上でのビルドは `-j1` とします。終了はCtrl-Cです。
-
-この方法は初期セットアップ、単体での動作確認、開発環境を別途用意しない場合に利用できます。
-通常の開発では、Raspberry Piをビルドマシンではなく実行・ハードウェア検証環境として扱い、
-次節のMac + Docker環境を使用します。
-
-任意機能の有効化は[ビルド手順](docs/manual/build.md)、インストール・自動起動は
-[systemd運用手順](docs/manual/systemd.md)、CLI・APIは
-[操作・診断手順](docs/manual/operations.md)を参照してください。
-
-## Mac + Dockerで開発する
+### Mac + Dockerで開発する
 
 通常の開発ではApple Silicon Macで編集し、Debian Trixie arm64 Docker環境で
 Linux/aarch64向けにビルドします。`scripts/build-container.sh`が`build-container/`と
@@ -98,6 +78,13 @@ docker build -t picdplayer-build .  # 初回・Dockerfile更新時
 
 準備、CMake設定、SSH alias、staging、deploy時の注意は
 [Mac + Docker開発手順](docs/manual/mac-docker-development.md)を参照してください。
+
+### Linux単体で試す場合
+
+別の開発ホストを用意しない場合のビルドは[Linux単体ビルド](docs/manual/build.md)を参照してください。
+通常の開発・CIは上記のDocker手順を使用します。
+インストール・自動起動は[systemd運用手順](docs/manual/systemd.md)、CLI・APIは
+[操作・診断手順](docs/manual/operations.md)を参照してください。
 
 ## ドキュメント
 

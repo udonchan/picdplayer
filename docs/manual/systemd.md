@@ -9,7 +9,7 @@ SSH切断後も運転する場合はsystemdから起動する。
 端末コマンドを使う開発試験だけ`--interactive`を指定する。
 
 ```sh
-./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct --interactive
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct --interactive
 ```
 
 実行時に指定できるhardware設定は次のとおり。
@@ -30,19 +30,14 @@ serviceの`Restart=on-failure`で再試行する。CD deviceのopen失敗は同�
 
 ## Buildとinstall
 
-systemd unitはBuildroot等で不要な依存を増やさないよう、build時のinstall optionを
-既定でOFFにしている。Raspberry Pi OS用には次のように明示する。
+通常のビルド・staging・deployは[Mac + Docker開発手順](mac-docker-development.md)を使う。
+Macで`./scripts/build-container.sh`を実行すると、metadata/API・daemon/kiosk unitを有効にして
+`build-container/`と`stage/`を生成する。Piではコンパイルしない。
 
-```sh
-cmake -S . -B build-direct \
-  -DENABLE_PARANOIA=OFF \
-  -DINSTALL_SYSTEMD_UNIT=ON \
-  -DCMAKE_INSTALL_PREFIX=/usr/local \
-  -DPICDPLAYER_SERVICE_USER=picdplayer
-cmake --build build-direct -j1
-```
+CMake単体ではunitのinstall optionは既定OFFで、標準Docker scriptが明示的にONにする。
+Linux単体での補助ビルドは[ビルド手順](build.md)を参照する。
 
-生成物は`build-direct/picdplayer.service`で確認できる。install先は既定で
+生成物は`build-container/picdplayer.service`で確認できる。install先は既定で
 `/usr/local/bin/cdplayerd`と`/usr/local/lib/systemd/system/picdplayer.service`になる。
 unitの配置先は`PICDPLAYER_SYSTEMD_UNIT_DIR`で変更できる。既定はprefix相対の
 `lib/systemd/system`で、architecture別のlibrary directoryには依存しない。
@@ -59,11 +54,9 @@ sudo useradd --system --user-group --no-create-home \
 unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspberry Pi OS上で
 各groupが存在し、`/dev/cec0`、`/dev/sr0`、ALSA deviceへアクセスできることを確認する。
 
-```sh
-sudo cmake --install build-direct
-sudo systemctl daemon-reload
-sudo systemd-analyze verify picdplayer.service
-```
+ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
+scriptはkiosk、daemonの順に停止し、CMakeのstageを反映してdaemon-reload後に起動する。
+Piで`sudo systemd-analyze verify picdplayer.service picdplayer-kiosk.service`を実行してunitも確認する。
 
 ## 起動設定
 
@@ -125,15 +118,7 @@ metadata/APIを使う場合はbuild時に`ENABLE_METADATA=ON` / `ENABLE_API=ON`�
 追加依存は[ビルド手順](../manual/build.md)を参照する。`CacheDirectory=picdplayer`が
 service user用の`/var/cache/picdplayer`を作成する。
 
-metadata/API有効版をインストールする場合のconfigure例:
-
-```sh
-cmake -S . -B build-metadata -DENABLE_METADATA=ON -DENABLE_API=ON \
-  -DINSTALL_SYSTEMD_UNIT=ON \
-  -DCMAKE_INSTALL_PREFIX=/usr/local \
-  -DPICDPLAYER_SERVICE_USER=picdplayer
-cmake --build build-metadata -j1
-```
+標準Docker scriptは両機能を有効にしてビルドする。実行時には次の設定も必要である。
 
 `/etc/default/picdplayer` の追加optionは次のように設定する。
 
@@ -143,14 +128,9 @@ PICDPLAYER_EXTRA_ARGS="--metadata musicbrainz --metadata-cache /var/cache/picdpl
 
 設定変更はserviceのrestartで反映する。
 
-既存serviceの更新は停止してからinstallし、daemon-reload後にstartする。
-
-```sh
-sudo systemctl stop picdplayer.service
-sudo cmake --install build-metadata
-sudo systemctl daemon-reload
-sudo systemctl start picdplayer.service
-```
+既存serviceの更新にもMacから`./scripts/deploy.sh`を使用する。
+手動で更新する場合もkiosk→daemonの順に停止してからstaged fileをinstallし、
+daemon-reload後にdaemon→kioskの順で起動する。
 
 ## Chromium/Cage kiosk
 
@@ -169,18 +149,12 @@ kiosk service開始がuserspace +16.942秒から+9.914秒へ前倒しされた�
 wrapperと標準Web UIの起動telemetryを追加し、cold bootで記録を確認した。
 結果と未解決の起動時間短縮課題は[検証状況](../development/verification.md)を参照する。
 
-このunitは既定でinstallしない。ChromiumとCageのpackageを導入してから、kiosk unitを明示して
-configure/installする。Raspberry Pi OS/Debian系でのpackage名は次のとおりである。
+kiosk unitのCMake optionは既定OFFだが、標準Docker scriptではONにする。
+Pi側へChromium・Cage・fontを一度だけ導入し、Macでbuild/stageしてdeployする。
+Raspberry Pi OS/Debian系でPi側に導入するruntime packageは次のとおりである。
 
 ```sh
 sudo apt install chromium cage fonts-noto-cjk
-cmake -S . -B build-metadata -DENABLE_METADATA=ON -DENABLE_API=ON \
-  -DINSTALL_SYSTEMD_UNIT=ON -DINSTALL_SYSTEMD_KIOSK_UNIT=ON \
-  -DCMAKE_INSTALL_PREFIX=/usr/local -DPICDPLAYER_SERVICE_USER=picdplayer
-cmake --build build-metadata -j1
-sudo systemctl stop picdplayer-kiosk.service picdplayer.service
-sudo cmake --install build-metadata
-sudo systemctl daemon-reload
 ```
 
 日本語のalbum/track名を表示するため、`fonts-noto-cjk`も導入する。Pi OS Liteでは

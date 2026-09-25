@@ -5,8 +5,10 @@ private helperを全件転記する代わりに、機能境界と不具合に関
 
 ReadResult、PcmBlock、DaemonSnapshotにはread evidence、集計、DriveCapabilities、bounded event、
 ALSA再生headの根拠推定を持たせる。反復一致検証とtechnical statusも実装済みである。
-専用diagnostic event stream、C2/cache/offsetなどの未実装案は
-[拡張設計](../development/integrity-design.md)を参照する。
+専用diagnostic event stream、C2/cache/offsetなどの未実装要求は
+[読み取り信頼性の仕様](integrity-design.md)を参照する。区間と世代の対応、試行・memory上限、
+失効した結果の破棄、診断によるaudio backpressureの防止を拡張時も維持する。
+新しい型・公開field・protocolは実装時に確定し、既存snapshot互換性を検証する。
 
 ## 起動とmain loop
 
@@ -25,7 +27,7 @@ workerはmaskを継承し、mainのpollで停止要求を処理する。
 2. 500 ms期限で、非PLAYINGかつeject待ちでなければmedia観測を要求。
 3. media結果を回収し、TOC・controller・metadata世代を更新。
 4. metadata結果を回収し、世代とTOCが一致する場合だけ適用。
-5. 250 ms期限でCEC登録状態を確認し、`PlaybackEngine::tick()`を呼ぶ。
+5. 250 ms期限でCEC登録状態を確認する。`PlaybackEngine::tick()`は各loopで呼ぶ。
 6. API snapshotを250 ms期限で更新し、API serviceを呼ぶ。
 7. signalfd・CEC fd・任意のstdinを最大10 ms pollし、操作を適用。
 
@@ -170,11 +172,15 @@ block sizeとreaderを使う。この順序によりread途中の比較条件や
 
 [probe_drive_capabilities](../../src/drive_capabilities.cpp)はsysfsのvendor/model/revと読み取り専用の
 CDROM_GET_CAPABILITYを調べる。現段階でYES/NOを付けるのはkernelが報告するspeed controlだけで、
-DAE、C2、cache、accurate stream、offsetはUNKNOWNを維持する。MediaWorkerで非同期に実行するため、
-失敗や遅延はdisc認識と再生可能化を妨げない。
+DAE、C2、cache、accurate stream、offsetはUNKNOWNを維持する。probeはMediaWorkerで非同期に実行し、
+probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
+probeの遅延は後続のmedia観測を遅らせ得る。現在は起動時一回のprobeであり、
+hotplug/reset時の能力失効と再probeは未実装である。
 
 [route_api_request](../../src/api_server.cpp)はmethod/path/bodyを検証してhandlerへ渡す純粋な入口。
-実接続のloopback判定はApiServer callback側で行い、route単体は認証境界ではない。
+実接続のloopback判定はApiServer callbackから呼ぶ共通routeで行い、純粋なroute単体は認証境界ではない。
+本文あり／なしのHTTP経路で同じ判定を使い、操作handlerとtelemetry handlerをloopbackにだけ渡す。
+telemetryはApiServer内で重複排除・流量制限してAsyncLoggerへ記録し、PlayerControllerを変更しない。
 serviceはlws_cancel_serviceでwake-upを予約してからlws_service(context,0)を呼ぶ。
 timeout=0だけでは待受を避けられずmain loopを止めることがあったため、この順序を保つ。
 publish_stateは送信用snapshotを更新する。mainが完成済みJSONを用意し、callback内でTOCやnetworkを読まない。
@@ -188,7 +194,7 @@ track番号と時間だけを表示する。cover_art.image_urlはbrowserのimg�
 
 ## daemon logging
 
-[AsyncLogger](../../src/logger.cpp)はwall clock（UTC）、process起動後のmonotonic経過時間、level、
+[AsyncLogger](../../src/logger.cpp)はwall clock（UTC）、logger初期化後のmonotonic経過時間、level、
 component、messageを一行で出力する。INFO/DEBUGはstdout、WARN/ERRORはstderrへ送るため、systemdでは
 両方をjournaldが収集できる。診断CLIのPCMやJSON等の結果はログではなく、従来どおり直接出力する。
 
@@ -219,7 +225,9 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 
 MetadataWorker.cancel_pendingは未開始requestと保存結果を消す。実行中HTTPの中断はshutdownの
 closingフラグだけに連動する。交換時の安全性は中断ではなくMetadataSession.applyで保証する。
-同一TOCへLOADINGから戻っただけの場合、現在のsession実装はmetadataを再要求しないことがある。
+LOADINGへ遷移した時にmetadata世代を無効化し、TOC再取得後のbegin_if_neededで
+同一TOCでもmetadataを再要求する。同じLOADING状態の反復観測では世代を増やさない。
+交換を観測できなかった同一TOCの別discまでは識別しない。
 TOCが1以外の番号で始まる場合のmetadata track positionとの対応付けも未実装である。
 
 raw cacheはsize確認→read→通常parser、書き込みはtemporary file→rename。

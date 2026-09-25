@@ -66,7 +66,7 @@ seek後には古い世代のPCMと根拠を無効化する。現在の診断画�
 
 現在の判定と公開値は[機能設計](../design/functional-design.md)と
 [詳細設計](../design/detailed-design.md)を正とする。
-C2、offset、cache対策、外部照合などの[将来案](../development/integrity-design.md)は、
+C2、offset、cache対策、外部照合などの[未実装の要求](../design/integrity-design.md)は、
 現在の保証に含めない。実機で言える範囲は[検証状況](../development/verification.md)を参照する。
 
 前：[CD-DAが音になるまで](playback.md) / 次：[TOCから曲名と画像へ](metadata.md)

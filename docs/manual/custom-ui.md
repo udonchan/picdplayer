@@ -7,12 +7,13 @@ API有効buildでは編集用コピーを`/usr/local/share/picdplayer/ui/default
 
 ## 導入
 
-例としてユーザーのホーム配下にコピーする。
+deploy済みのPiで、例としてユーザーのホーム配下にインストール済みUIをコピーする。
+手動起動前に常駐serviceを停止し、同じdeviceを重複使用しない。
 
 ```sh
 mkdir -p "$HOME/PiCDPlayer"
-cp -R ui/default "$HOME/PiCDPlayer/ui"
-./build-metadata/cdplayerd --player /dev/sr0 --cdda-reader direct --api-port 8080 \
+cp -R /usr/local/share/picdplayer/ui/default "$HOME/PiCDPlayer/ui"
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct --api-port 8080 \
   --custom-ui "$HOME/PiCDPlayer/ui"
 ```
 
@@ -82,6 +83,9 @@ Custom UIは信頼するユーザーが編集するコードである。同一or
 kioskのloopback接続では操作POSTも可能。静的検証はJavaScript sandboxや権限制限ではない。
 外部UIによる大量requestやbrowserのCPU/memory消費まで、この段階で隔離・保証はしない。
 壊れたファイルによるloaderエラーをdaemon起動失敗にしないことと、悪意あるコードの隔離は別である。
+
+起動telemetryは任意であり、Custom UIが送信しなくても動作する。
+標準UIの実装を参考にする場合は[計測の定義と限界](systemd.md#起動時間の計測cage--chromium--標準ui)を参照する。
 
 ## 実機確認記録
 

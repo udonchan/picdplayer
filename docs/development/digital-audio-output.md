@@ -158,7 +158,7 @@ RESAMPLING: NONE
 この表示自体はbit-perfectの証明ではない。値が取得できない場合はUNKNOWNとして扱い、
 `BIT-PERFECT`と表示しない。CD読み取りのlocal verification、drive cache独立性、
 原盤PCMとの一致、出力経路のbit一致は別の事実であり、現在の
-[読み取り信頼性の拡張設計案](../development/integrity-design.md)の原則を維持する。
+[読み取り信頼性の仕様](../design/integrity-design.md)の原則を維持する。
 
 ## 外部I²S公開
 
