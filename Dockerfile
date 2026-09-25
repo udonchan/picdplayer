@@ -14,6 +14,7 @@ RUN apt-get update \
         libwebsockets-dev \
         file \
         nodejs \
+        python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src

@@ -365,6 +365,13 @@ When behavior changes, modify the layer that owns that behavior.
 
 ---
 
+## GitHub issues and pull requests
+
+Write issue and pull request titles in English. Write their descriptions
+in Japanese. Keep this convention when creating or editing either one.
+
+---
+
 ## Safety rules for agents
 
 Before performing deployment or other operations that modify the

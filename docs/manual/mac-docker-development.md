@@ -48,7 +48,8 @@ docker build -t picdplayer-build .
 
 `picdplayer-build` imageには、CMake、C++ compiler、ALSAやmetadata/API機能に必要な
 development packageが含まれています。`BUILD_TESTING=ON`（既定）のJavaScript動作試験用に
-Node.jsも含みます。Node.jsはPiのdaemon/kiosk実行時には不要です。
+Node.jsとPython 3も含みます。どちらもPiのdaemon/kiosk実行時には不要で、
+ハードウェアを使わないJavaScript・Python試験のために使用します。
 
 Dockerfileを変更した場合は、build imageを再作成してください。
 
@@ -209,3 +210,10 @@ test on Raspberry Pi
 Dockerは再現可能なLinux/aarch64ビルド環境として使用し、
 Raspberry Piは実際のCDドライブ、HDMI audio、CEC、TV表示、systemd起動などを
 確認するruntime targetとして扱います。
+
+## Pull RequestのCI
+
+`.github/workflows/ci.yml`はPull Requestと手動実行で`ubuntu-24.04-arm`を使い、
+上記と同じDocker image作成、`scripts/build-container.sh`によるビルド・stage、
+Docker内のCTestを実行します。実機のCD-ROM、CEC、ALSA/HDMI、TV表示やPiへのdeployは
+対象外です。releaseやRaspberry Pi OS imageの生成もこのworkflowでは行いません。
