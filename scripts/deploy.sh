@@ -47,6 +47,13 @@ LOCAL_PACKAGE="$(find "${LOCAL_PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -
 echo "==> Checking SSH connection"
 ssh "${TARGET}" true
 
+# An intentionally stopped kiosk must stay stopped after deployment.  dpkg's
+# postinst uses try-restart, so record the state before replacing files.
+DAEMON_STATE_BEFORE="$(ssh "${TARGET}" 'systemctl show -p ActiveState --value picdplayer.service')"
+KIOSK_STATE_BEFORE="$(ssh "${TARGET}" 'systemctl show -p ActiveState --value picdplayer-kiosk.service')"
+echo "    daemon    : ${DAEMON_STATE_BEFORE}"
+echo "    kiosk     : ${KIOSK_STATE_BEFORE}"
+
 # ---------------------------------------------------------------------------
 # Upload package
 # ---------------------------------------------------------------------------
@@ -79,10 +86,16 @@ ssh -tt "${TARGET}" "
 
 echo "==> Verifying services"
 
-ssh "${TARGET}" "
-    systemctl --no-pager --full status picdplayer.service
-    systemctl --no-pager --full status picdplayer-kiosk.service
-"
+DAEMON_STATE_AFTER="$(ssh "${TARGET}" 'systemctl show -p ActiveState --value picdplayer.service')"
+KIOSK_STATE_AFTER="$(ssh "${TARGET}" 'systemctl show -p ActiveState --value picdplayer-kiosk.service')"
+echo "    daemon    : ${DAEMON_STATE_BEFORE} -> ${DAEMON_STATE_AFTER}"
+echo "    kiosk     : ${KIOSK_STATE_BEFORE} -> ${KIOSK_STATE_AFTER}"
+if [[ "${DAEMON_STATE_AFTER}" != "${DAEMON_STATE_BEFORE}" ||
+      "${KIOSK_STATE_AFTER}" != "${KIOSK_STATE_BEFORE}" ]]; then
+    echo "ERROR: PiCDPlayer service state changed during deployment" >&2
+    exit 1
+fi
+ssh "${TARGET}" 'dpkg-query -W picdplayer && test -x /usr/local/bin/cdplayerd && test -x /usr/local/libexec/picdplayer-kiosk'
 
 echo
 echo "==> Deployment completed successfully"

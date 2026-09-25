@@ -46,6 +46,16 @@ direct buildの関連4件（playback_engine/read_policy/cdda_cli/player_daemon�
 policy入力、JSON、reader再生成・region変更を確認したが、実機上の切替試聴を代替しない。
 テスト名・登録条件の正規情報は[CMakeLists.txt](../../CMakeLists.txt)にある。
 
+## 開発用Debian package deploy（Issue #43、2026-09-25）
+
+Apple Silicon Macの標準Docker/aarch64手順で`picdplayer_0.1.0_arm64.deb`を生成し、
+CTest 30/30件、隔離containerでの`dpkg -i`/`dpkg -r`と`/usr/local`配置を確認した。
+Piでは限定sudoers ruleを使い、`scripts/deploy.sh`から`dpkg -i`をパスワードなしで実行した。
+`dpkg-query`は`install ok installed`を示し、`dpkg -V picdplayer`は差異を報告せず、
+`systemd-analyze verify`も対象unitに問題を報告しなかった。daemon/kioskはCPU負荷の調査のため
+意図的に停止されており、deploy前後ともinactiveだった。packageのpostinstは停止中のserviceを
+起動しない。package導入後のTV表示・CD再生・CEC操作はまだ確認していない。
+
 ## 実機確認済み
 
 | 対象 | 確認範囲 |

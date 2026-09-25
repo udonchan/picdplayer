@@ -57,7 +57,7 @@ unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspbe
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
 scriptはCMake install規則から生成したDebian packageをinstallする。package postinstは稼働中の
-daemon、kioskを順にrestartし、daemon-reloadを行う。
+daemon、kioskを順にrestartし、daemon-reloadを行う。意図的に停止したserviceは起動しない。
 Piで`sudo systemd-analyze verify picdplayer.service picdplayer-kiosk.service`を実行してunitも確認する。
 
 ## 起動設定

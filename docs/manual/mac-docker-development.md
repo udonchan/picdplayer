@@ -189,7 +189,9 @@ Pi ~/picdplayer-package/picdplayer.deb
 
 packageのpostinstは、起動済みsystemd hostだけでdaemon-reloadと`try-restart`を実行する。
 inactive serviceを新たにstart/enableせず、初回のservice user作成、runtime package導入、service enableは
-[systemd手順](systemd.md)に従って一度だけ行う。
+[systemd手順](systemd.md)に従って一度だけ行う。CPU負荷の調査などで意図的に停止中のserviceは
+deploy後も停止したままとし、deploy scriptは前後のactive stateが一致することを確認する。
+実機検証時だけ手動で起動する。
 
 ### passwordless deploy（信頼する開発者用）
 
@@ -205,14 +207,13 @@ rootで`visudo -f /etc/sudoers.d/picdplayer-deploy`を使って保存し、`visu
 そのpackageを置き換えられるため、この設定はそのaccountとMacのbuild環境にroot相当のdeploy権限を
 委譲する。複数利用者・CI・配布artifactには使わず、署名検証を含む別のrelease設計で扱う。
 
-設定後は、password promptなしで次を確認できる。
+設定後は、password promptなしで許可されたcommandを確認できる。これはinstallを実行しない。
 
 ```sh
-ssh picdplayer-pi 'sudo -n /usr/bin/dpkg -i -- ~/picdplayer-package/picdplayer.deb'
+ssh picdplayer-pi 'sudo -n -l /usr/bin/dpkg -i -- ~/picdplayer-package/picdplayer.deb'
 ```
 
-この確認は実際にpackageをinstallするため、最初に通常の`./scripts/deploy.sh`でpackage生成と
-serviceの正常性を確認してから行う。sudoers設定をしていない環境では、deploy scriptは従来どおり
+sudoers設定をしていない環境では、deploy scriptは従来どおり
 一度だけpasswordを求める。
 
 ### 日常の開発フロー
