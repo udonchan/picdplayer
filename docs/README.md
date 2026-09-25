@@ -6,6 +6,7 @@ PiCDPlayerのドキュメントは日本語を正文とする。目的に合わ�
 |---|---|
 | 仕組みと設計意図を理解したい | [Guide：はじめから読む](guide/README.md) |
 | 現在の仕様を確認・変更したい | [基本設計](design/basic-design.md) → [機能設計](design/functional-design.md) → [詳細設計](design/detailed-design.md) |
+| Mac + Dockerで開発したい | [Mac + Docker開発手順](manual/mac-docker-development.md) |
 | ビルド・運用したい | [ビルド](manual/build.md)、[操作・診断](manual/operations.md)、[systemd](manual/systemd.md) |
 | 画面をカスタマイズしたい | [Custom UI](manual/custom-ui.md)、[将来の設定基盤](development/user-configuration.md) |
 | 実装・検証状況と残課題を知りたい | [検証状況](development/verification.md) |
