@@ -8,14 +8,12 @@
 #include "read_policy.hpp"
 #include "logger.hpp"
 #ifdef ENABLE_METADATA
-#include "metadata_lookup.hpp"
-#include "metadata_worker.hpp"
-#include "metadata_session.hpp"
+#include "enrichment_service.hpp"
 #endif
 #ifdef ENABLE_API
 #include "api_server.hpp"
-#include "daemon_snapshot.hpp"
-#include "daemon_snapshot_json.hpp"
+#include "presentation_model.hpp"
+#include "presentation_json.hpp"
 #endif
 #include <charconv>
 #include <chrono>
@@ -146,19 +144,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             [&] { return probe_drive_capabilities(device); }); },
         [device, drive_access] { drive_access->invoke([&] { request_cd_start(device); }); });
 #ifdef ENABLE_METADATA
-    std::unique_ptr<MetadataWorker> metadata_worker;
-    if (metadata_enabled) {
-        MetadataOptions options{
-            .cache_directory = metadata_cache,
-            .use_cache = true,
-            .cancelled = {},
-        };
-        metadata_worker = std::make_unique<MetadataWorker>(
-            [options](const DiscToc& toc, const MetadataWorker::Cancelled& cancelled) mutable {
-                options.cancelled = cancelled;
-                return lookup_musicbrainz_disc(toc, options);
-            });
-    }
+    EnrichmentService enrichment(metadata_enabled, metadata_cache);
 #endif
     PlaybackEngine engine(controller, worker, *audio, 0);
     ReadPolicy requested_read_policy = initial_read_policy;
@@ -214,7 +200,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::vector<PlayerEvent> recent_events;
     std::uint64_t next_event_sequence = 0;
 #ifdef ENABLE_METADATA
-    MetadataSession metadata_session;
 #endif
 #ifdef ENABLE_API
     std::string api_state_json;
@@ -225,18 +210,22 @@ void run_player_session(const std::string& device, CddaBackend backend,
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
 #ifdef ENABLE_METADATA
-        if (metadata_enabled) metadata = metadata_session.snapshot();
+        if (metadata_enabled) metadata = enrichment.snapshot();
 #endif
         const auto state = controller.state();
         auto read = engine.read_diagnostics();
         read.requested_policy = requested_read_policy;
         read.effective_policy = effective_read_policy;
         read.policy_pending = read_policy_pending;
-        auto candidate = serialize_daemon_snapshot(make_daemon_snapshot(
+        bool has_cover_asset = false;
+#ifdef ENABLE_METADATA
+        if (metadata_enabled) has_cover_asset = enrichment.has_cover_asset();
+#endif
+        auto candidate = serialize_presentation_model(make_presentation_model(
             api_revision + 1, state, media_state.state(), loaded_toc, metadata,
-            media_state.error(), read, recent_events, drive_capabilities));
+            drive_capabilities, read, recent_events, has_cover_asset));
         if (!api_state_json.empty() &&
-            snapshot_json_equal_ignoring_revision(candidate, api_state_json)) return false;
+            presentation_json_equal_ignoring_revision(candidate, api_state_json)) return false;
         ++api_revision;
         api_state_json = std::move(candidate);
         return true;
@@ -273,8 +262,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     media_state.begin_eject();
                     toc_pending = false;
 #ifdef ENABLE_METADATA
-                    if (metadata_worker) metadata_worker->cancel_pending();
-                    metadata_session.invalidate();
+                    enrichment.invalidate();
 #endif
                     log_info("media") << "state=EJECTING";
                     print_state(controller);
@@ -322,9 +310,20 @@ void run_player_session(const std::string& device, CddaBackend backend,
         auto ui = UiBundle::load(custom_ui);
         if (!ui.error().empty()) log_warning("ui") << "custom_disabled reason=" << ui.error();
         else log_info("ui") << "source=" << (ui.custom() ? "custom" : "built-in");
+        ApiArtworkProvider artwork_provider;
+#ifdef ENABLE_METADATA
+        if (metadata_enabled) {
+            artwork_provider = [&]() -> std::optional<ApiResponse> {
+                const auto asset = enrichment.cover_asset();
+                if (!asset) return std::nullopt;
+                return ApiResponse{200, asset->mime_type, asset->bytes};
+            };
+        }
+#endif
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; },
-                                                 std::move(command_handler), serialize_read_policy, std::move(ui));
+                                                 std::move(command_handler), serialize_read_policy, std::move(ui),
+                                                 std::move(artwork_provider));
         auto line = log_info("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';
@@ -445,8 +444,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (after == MediaLifecycleState::loading && after != before) {
                     next_drive_start = std::chrono::steady_clock::time_point::max();
 #ifdef ENABLE_METADATA
-                    if (metadata_worker) metadata_worker->cancel_pending();
-                    metadata_session.invalidate();
+                    enrichment.invalidate();
 #endif
                     toc_pending = false;
                     toc_needs_refresh = true;
@@ -457,8 +455,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     toc_needs_refresh = true;
                     loaded_toc.reset();
 #ifdef ENABLE_METADATA
-                    if (metadata_worker) metadata_worker->cancel_pending();
-                    metadata_session.invalidate();
+                    enrichment.invalidate();
 #endif
                     if (controller.state().playback != PlaybackState::no_disc) {
                         controller.remove_disc();
@@ -490,11 +487,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 // even if the subsequent TOC identifies the same disc.
                 next_drive_start = std::chrono::steady_clock::now();
 #ifdef ENABLE_METADATA
-                if (metadata_worker) {
-                    if (const auto request = metadata_session.begin_if_needed(*loaded_toc)) {
-                        log_info("metadata") << "status=LOADING generation=" << request->generation;
-                        metadata_worker->request(*request);
-                    }
+                if (metadata_enabled) {
+                    enrichment.begin_if_needed(*loaded_toc);
+                    log_info("metadata") << "status=LOADING";
                 }
 #endif
                 toc_needs_refresh = false;
@@ -526,8 +521,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 next_drive_start = std::chrono::steady_clock::time_point::max();
                 loaded_toc.reset();
 #ifdef ENABLE_METADATA
-                if (metadata_worker) metadata_worker->cancel_pending();
-                metadata_session.invalidate();
+                enrichment.invalidate();
 #endif
                 controller.remove_disc();
                 engine.set_disc_end(0);
@@ -536,23 +530,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             }
         }
 #ifdef ENABLE_METADATA
-        if (metadata_worker) {
-            MetadataWorkerResult result{};
-            while (metadata_worker->pop(result)) {
-                const auto result_generation = result.generation;
-                if (!metadata_session.apply(std::move(result))) {
-                    log_warning("metadata") << "stale_result_discarded generation=" << result_generation;
-                    continue;
-                }
-                const auto& metadata = metadata_session.snapshot();
-                auto line = log_info("metadata");
-                line << "status=" << metadata_status_name(metadata.status)
-                     << " candidates=" << metadata.candidates.size()
-                     << " disc_id=" << metadata.disc_id
-                     << " cache=" << (metadata.from_cache ? "hit" : "miss");
-                if (!metadata.error.empty()) line << " error=\"" << metadata.error << '"';
-            }
-        }
+        if (metadata_enabled) enrichment.poll();
 #endif
         report_slow_stage("control", control_started);
         if (use_cec && now >= next_cec) {

@@ -53,6 +53,10 @@ CSS/JSの名前は現行UIに合わせた。追加fieldは無視する。
 Custom HTML内の参照は`/player.css`、`/player.js`、`/player/assets/...`のような絶対URLを使う。
 `/player`には末尾slashがないので相対URLの解釈に注意する。API/WebSocketの契約は従来どおり
 `/api/state`と`/api/events`である。API version 1はこのUI互換性の契約であり、URLにversionは付けない。
+`/api/state`と`/api/events`はprovider非依存のPresentation Modelを返す。曲名・artist・track長・
+enrichment status・same-origin artwork referenceだけを表示契約とし、MusicBrainz ID、CAA URL、
+候補index、cache pathには依存してはならない。coverがある場合の`artwork.cover.url`は
+`/api/presentation/artwork/cover`である。CSPは外部script/style/image/provider接続を許可しない。
 将来、破壊的API変更時にはrequires_apiとの対応を更新する。
 
 ## 検証とfallback

@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include "read_policy.hpp"
@@ -13,6 +14,7 @@ using ApiUiBootHandler = std::function<bool(std::string_view, std::string_view, 
 using ApiStateProvider = std::function<std::string()>;
 using ApiReadPolicyProvider = std::function<std::string()>;
 using ApiCommandHandler = std::function<bool(const ApiCommand&)>;
+using ApiArtworkProvider = std::function<std::optional<ApiResponse>()>;
 
 ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
@@ -20,13 +22,14 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               std::string_view body = {},
                               const ApiReadPolicyProvider& read_policy_provider = {},
                               const UiBundle* ui = nullptr,
-                              const ApiUiBootHandler& ui_boot_handler = {});
+                              const ApiUiBootHandler& ui_boot_handler = {},
+                              const ApiArtworkProvider& artwork_provider = {});
 
 class ApiServer {
 public:
     ApiServer(std::string listen_address, int port, ApiStateProvider state_provider,
               ApiCommandHandler command_handler = {}, ApiReadPolicyProvider read_policy_provider = {},
-              UiBundle ui = {});
+              UiBundle ui = {}, ApiArtworkProvider artwork_provider = {});
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;

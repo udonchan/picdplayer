@@ -15,6 +15,7 @@
 namespace {
 constexpr std::size_t metadata_limit = 2 * 1024 * 1024;
 constexpr std::size_t artwork_json_limit = 512 * 1024;
+constexpr std::size_t artwork_image_limit = 4 * 1024 * 1024;
 std::mutex rate_mutex;
 std::chrono::steady_clock::time_point last_musicbrainz_request{};
 
@@ -91,7 +92,31 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
         body = response.body;
         if (options.use_cache && !options.cache_directory.empty()) write_cache(path, *body);
     }
-    return parse_cover_art_response(*body);
+    auto result = parse_cover_art_response(*body);
+    if (result.status != ArtworkStatus::available || options.cache_directory.empty()) return result;
+    const auto image_path = options.cache_directory / "cover-art" / (release_id + ".image");
+    const auto valid_image = [](std::string_view bytes) -> std::optional<std::string> {
+        if (bytes.size() >= 3 && static_cast<unsigned char>(bytes[0]) == 0xff &&
+            static_cast<unsigned char>(bytes[1]) == 0xd8 && static_cast<unsigned char>(bytes[2]) == 0xff) return "image/jpeg";
+        if (bytes.size() >= 8 && bytes.substr(0, 8) == "\x89PNG\r\n\x1a\n") return "image/png";
+        if (bytes.size() >= 12 && bytes.substr(0, 4) == "RIFF" && bytes.substr(8, 4) == "WEBP") return "image/webp";
+        return std::nullopt;
+    };
+    std::optional<std::string> image;
+    if (options.use_cache) image = read_cache(image_path, artwork_image_limit);
+    if (!image) {
+        HttpClient client;
+        const auto response = client.get(result.image_url, artwork_image_limit, options.cancelled,
+                                         RedirectPolicy::follow_https);
+        if (response.status != 200) throw std::runtime_error("Cover Art image HTTP status " + std::to_string(response.status));
+        image = response.body;
+        if (!valid_image(*image)) throw std::runtime_error("Cover Art image is not JPEG, PNG, or WebP");
+        if (options.use_cache) write_cache(image_path, *image);
+    }
+    const auto mime = valid_image(*image);
+    if (!mime) throw std::runtime_error("cached Cover Art image is invalid");
+    result.mime_type = *mime;
+    return result;
 }
 void print_result(const MetadataResult& result) {
     const auto printable = [](std::string_view value) {
