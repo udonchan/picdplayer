@@ -17,7 +17,8 @@ S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試�
 
 ## Kiosk定常負荷の計測手順（Issue #52）
 
-Pi 3でのCage + Chromium kioskのCPU・温度問題は報告されているが、原因と再現条件は未確定。
+Pi 3でのCage + Chromium kioskのCPU・温度問題は、#52の実測で再生中の
+進行バーwidth transitionが有力原因と判明した。測定条件と限界は下記reportに記録する。
 過去の`get_throttled=0x60000`はbit 17/18のboot以降の履歴であり、現在throttling中を意味しない。
 現在状態はlow bitsを見る。[Raspberry Pi公式のbit定義](https://www.raspberrypi.com/documentation/computers/os.html#get_throttled)を参照。
 
@@ -59,7 +60,38 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 [kiosk基準測定レポート](reports/2026-09-25-kiosk-baseline/README.md)に記録した。
 再生中の標準Playerは全core CPU平均70.92%（54.6秒）、進行バーのCSS transitionだけを
 一時停止したPLAYING区間は10.79%（36.0秒）だった。測定時間・順序が異なるため、
-長時間の改善率ではない。#53の変更はまだPiに導入していない。
+長時間の改善率ではない。この基線は#53導入前の条件である。
+
+## 標準PlayerのDOM更新削減（Issue #53）
+
+#53は#52のbaseline測定をhard dependencyとする。最初のDOM write削減は標準Playerの
+書き込み経路の再現試験で確認した。
+変更前は`f0bf7f6`のplayer.js、変更後は本Issueのplayer.jsを、同じNode VM/DOM mockへ読み込んだ。
+[test](../../tests/ui_render_test.js)は同値代入も含めてDOM write呼び出しを数える。
+
+| 入力 | 変更前 | 変更後 |
+|---|---:|---:|
+| 同一STOPPED snapshot 60件 | 780 | 0 |
+| 15 frameずつ進むPLAYING snapshot 60件 | 780 | 72 |
+
+再生位置更新の72回はwidth 60回と秒表示12回であり、受信した再生位置を間引いた結果ではない。
+これらは合成入力で、PiのWS受信レート、実paint回数、CPU、温度の測定値ではない。
+daemonは既にrevision以外が同じPresentation Modelのpublishを抑制しているため、停止中の高負荷が
+この経路で起こるとは断定できない。その後の#52実測では、再生中の進行バーwidth transitionが
+高負荷の有力原因となったため、#53でtransitionを削除した。再生位置のsnapshot頻度と表示値は維持する。
+
+再現方法は標準Docker内で`node tests/ui_render_test.js`。変更前の比較には任意のplayer.jsのpathを
+第1引数に渡し、環境変数`PICDPLAYER_RENDER_BENCHMARK_ONLY=1`で回帰assertionを省略する。
+JSON入力はtest内に定義し、画像はfixture URLだけを使用する。測定はNode mock上でありCDP接続を伴わない。
+Docker/aarch64の標準buildとCTest 32/32件が成功し、API・Custom UI・起動telemetryの既存試験も通過した。
+packageをPiへ導入し、STOPPED/PLAYINGをCDP未接続で各5分測定した。再生中の全core CPU平均は
+変更前70.92%（54.6秒）から変更後7.10%（5分）、変更後の最高温度は62.3°C、現在のthrottlingは
+0/59 sampleだった。CDP短時間測定でもWS受信約40件/10秒を維持しながらlayout/paintが減少した。
+CPU/process/thread、memory、frequency、温度、CDP指標、journal、raw dataと限界は
+[実機改善レポート](reports/2026-09-26-kiosk-render-cost/README.md)に記録した。
+CDP screenshotで表示を確認したが、TVの肉眼・音声確認や異なるdiscでの長期反復は未実施。
+測定根拠のあるDOM/CSS改善後も持続的な高CPUや現在のthrottlingが再発した場合に、
+同条件のprofileを取り、別runtime/UI構成を検討する。現時点で置換は決定しない。
 
 ## 自動試験
 
