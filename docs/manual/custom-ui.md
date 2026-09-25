@@ -93,7 +93,7 @@ kioskのloopback接続では操作POSTも可能。静的検証はJavaScript sand
 
 ## 標準Playerの更新方法
 
-標準Playerはsnapshotを受け取るたび表示値を計算するが、同じ文字列・progress width・cover URLを
+標準Playerはsnapshotを受け取るたび表示値を計算するが、同じ文字列・progress表示値・cover URLを
 DOMへ繰り返し設定しない。これは標準UIの実装上の最適化であり、Custom UIに新しい契約を要求しない。
 API/WebSocketの内容や配信頻度、再接続、任意の起動telemetryは従来どおりである。
 CSS transitionやbrowserの合成処理は別に発生し得るため、DOM write削減をpaintやCPUの削減量と同一視しない。
@@ -113,6 +113,12 @@ snapshotを受けるたびに全要素を書き換える前に、表示文字列
 常時pan/zoomなどを重ねる場合は、Pi実機でCPU・温度・描画を測る。`transform`など別のCSS手法も
 compositeやGPU負荷を増やし得るため、計測なしに高速と決めない。cover画像はURLが同じなら
 再読込せず、変更時には古いload/error callbackが新しい画像状態を上書きしないようにする。
+
+#61のPi 3比較では、進行バーを`width`から`transform`へ変更するとCDPでのlayoutが
+39件から10件/10秒、paintが48件から12件/6秒になった。一方、CDP未接続の
+全4 core CPU平均は7.23%から7.13%（各5分）で、CPU・熱の明確な改善は確認できなかった。
+TVは電源ONでもPi画面を表示していない条件で、CDPのスクリーンショットにより
+Player描画を確認した結果である。描画経路の改善と機器全体の負荷改善は分けて判断する。
 
 daemonが再生状態の唯一の所有者である。表示を軽くするために再生位置、読み取り状態、Integrityの
 値を推定・生成しない。更新を一つの描画機会にまとめる場合も、最新snapshotを反映し、停止・
