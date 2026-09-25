@@ -213,8 +213,27 @@ rootで`visudo -f /etc/sudoers.d/picdplayer-deploy`を使って保存し、`visu
 ssh picdplayer-pi 'sudo -n -l /usr/bin/dpkg -i -- ~/picdplayer-package/picdplayer.deb'
 ```
 
-sudoers設定をしていない環境では、deploy scriptは従来どおり
-一度だけpasswordを求める。
+sudoers設定がない、または固定commandと一致しない場合、deploy scriptはpackage転送前に
+エラー終了する。password promptには進まない。
+
+実機測定でdaemonとkioskを個別に起動・停止・再起動する場合は、必要なunitだけを次のように
+追加で許可できる。`/usr/bin/systemctl`のpathはPiで`command -v systemctl`を確認する。
+
+```sudoers
+Cmnd_Alias PICDPLAYER_SERVICES = \
+    /usr/bin/systemctl start picdplayer.service, \
+    /usr/bin/systemctl stop picdplayer.service, \
+    /usr/bin/systemctl restart picdplayer.service, \
+    /usr/bin/systemctl start picdplayer-kiosk.service, \
+    /usr/bin/systemctl stop picdplayer-kiosk.service, \
+    /usr/bin/systemctl restart picdplayer-kiosk.service
+
+<development-user> ALL=(root) NOPASSWD: PICDPLAYER_SERVICES
+```
+
+既存の`dpkg -i` ruleは残す。`visudo -cf /etc/sudoers.d/picdplayer-deploy`で構文を確認し、
+起動はdaemon→kiosk、停止はkiosk→daemonの順に個別の`systemctl` commandを実行する。
+`daemon-reload`、`enable`、任意のunit名は追加しない。
 
 ### 日常の開発フロー
 

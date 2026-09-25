@@ -46,6 +46,11 @@ LOCAL_PACKAGE="$(find "${LOCAL_PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -
 
 echo "==> Checking SSH connection"
 ssh "${TARGET}" true
+echo "==> Checking passwordless package install permission"
+if ! ssh "${TARGET}" "sudo -n -l /usr/bin/dpkg -i -- ~/${REMOTE_PACKAGE_DIR}/${REMOTE_PACKAGE_NAME} >/dev/null"; then
+    echo "ERROR: configure the narrow dpkg sudoers rule described in docs/manual/mac-docker-development.md" >&2
+    exit 1
+fi
 
 # An intentionally stopped kiosk must stay stopped after deployment.  dpkg's
 # postinst uses try-restart, so record the state before replacing files.
@@ -75,9 +80,9 @@ echo "==> Installing Debian package"
 # The package postinst reloads systemd and restarts only services which were
 # active before installation.  A narrow NOPASSWD sudoers entry may permit this
 # exact dpkg invocation for the trusted development account.
-ssh -tt "${TARGET}" "
+ssh "${TARGET}" "
     set -e
-    sudo /usr/bin/dpkg -i -- ~/${REMOTE_PACKAGE_DIR}/${REMOTE_PACKAGE_NAME}
+    sudo -n /usr/bin/dpkg -i -- ~/${REMOTE_PACKAGE_DIR}/${REMOTE_PACKAGE_NAME}
 "
 
 # ---------------------------------------------------------------------------

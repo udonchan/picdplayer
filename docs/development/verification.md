@@ -54,7 +54,15 @@ Piでは限定sudoers ruleを使い、`scripts/deploy.sh`から`dpkg -i`をパ�
 `dpkg-query`は`install ok installed`を示し、`dpkg -V picdplayer`は差異を報告せず、
 `systemd-analyze verify`も対象unitに問題を報告しなかった。daemon/kioskはCPU負荷の調査のため
 意図的に停止されており、deploy前後ともinactiveだった。packageのpostinstは停止中のserviceを
-起動しない。package導入後のTV表示・CD再生・CEC操作はまだ確認していない。
+起動しない。その後、ユーザーが手動起動し、TVの標準Player表示を確認した。Piのloopback
+`GET /api/state`と`GET /player`は正常に応答し、両serviceはactiveだった。CEC Playで
+一度は`PLAYING`へ遷移したが、約2秒後に`CDDA read failed lba=390 errno=19`で停止した。
+同時刻のkernel logにはUSB hubの`over-current change`、drive disconnect、再接続があり、
+`/dev/sr0`は再作成された。ユーザーの再試行では正常動作と報告され、APIでもTrack 1の
+`PLAYING`と再生位置の進行を確認した。packageの配置・起動確認と、一時的なUSB給電/接続事象は
+分けて扱う。ユーザーが限定sudoersに各serviceのstart/stop/restartを追加した後、Macから
+非対話でkiosk→daemonの順に停止した。変更後の`deploy.sh`で同版packageを再installし、
+両serviceがinactiveのまま維持されることを確認した。給電原因の確定と長時間再生は未確認である。
 
 ## 実機確認済み
 

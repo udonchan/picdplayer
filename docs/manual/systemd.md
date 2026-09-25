@@ -305,8 +305,8 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-c
 ssh picdplayer-pi 'systemctl --no-pager --full status picdplayer.service picdplayer-kiosk.service'
 ```
 
-`deploy.sh`はPi側でsudoのパスワードが必要ならMacの端末に一度だけ入力を求める。
-非対話環境では実行せず、SSHの対話端末からinstallする。
+`deploy.sh`はPi側の限定sudoers ruleを先に検査し、password promptなしでpackageをinstallする。
+ruleがない場合は転送前にエラー終了する。設定は[Mac + Docker開発手順](mac-docker-development.md)を参照する。
 
 TV表示・CEC再生と両サービスの正常稼働を確認してから、cold bootを測る場合は
 `ssh -t picdplayer-pi 'sudo systemctl poweroff'`で安全に停止し、電源断可能な状態になってから
