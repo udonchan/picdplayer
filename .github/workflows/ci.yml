@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build Debian arm64 image
+        run: docker build -t picdplayer-build .
+      - name: Build and stage PiCDPlayer
+        run: ./scripts/build-container.sh
+      - name: Run hardware-independent tests
+        run: docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
