@@ -130,7 +130,7 @@ function mediaMessage(hasDisc, mediaState, enrichmentStatus) {
 
 // Cache only the last CSS value, never an extrapolated playback position.
 // CSS の直前の表示値だけを保持し、再生位置を browser 側で進めません。
-let progressWidth;
+let progressScale;
 
 // Rendering only: never keep an independent player state in the browser.
 // 描画専用です。browser 側に独立した再生状態を持ちません。
@@ -164,10 +164,10 @@ function render(snapshot) {
   const fraction = Number.isInteger(position) && Number.isInteger(length) && length > 0
     ? Math.min(100, 100 * position / length)
     : 0;
-  const width = `${fraction}%`;
-  if (width !== progressWidth) {
-    byId('progress').style.width = width;
-    progressWidth = width;
+  const scale = `scaleX(${fraction / 100})`;
+  if (scale !== progressScale) {
+    byId('progress').style.transform = scale;
+    progressScale = scale;
   }
   set('player-state', player.state || 'NO_DISC');
   showArt(snapshot.artwork?.cover);

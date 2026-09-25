@@ -93,6 +93,15 @@ CDP screenshotで表示を確認したが、TVの肉眼・音声確認や異な�
 測定根拠のあるDOM/CSS改善後も持続的な高CPUや現在のthrottlingが再発した場合に、
 同条件のprofileを取り、別runtime/UI構成を検討する。現時点で置換は決定しない。
 
+## 残余Player描画負荷（Issue #61、2026-09-26）
+
+進行バーを`width`更新から`transform: scaleX`更新にした比較を
+[実機A/Bレポート](reports/2026-09-26-residual-render-cost/README.md)に記録した。
+TV表示時とTV画面非表示時を分け、CDP screenshotでChromiumの描画継続を確認した。
+後者のCDPではlayout 39→10件/10秒、paint 48→12件/6秒に減った一方、
+CDP未接続の5分CPU平均は7.23→7.13%であり、CPU/温度改善とは判断しない。
+daemonのJSON生成・送信費用は未分離であり、WS頻度やCustom UI契約は変えていない。
+
 ## 自動試験
 
 CTestはCMakeの有効機能で件数が変わる。基本buildではcontroller、engine、ALSA抽象、CEC変換、
