@@ -321,6 +321,6 @@ PCMは2秒先読みする。ALSA underrunの自動復旧はhardware非依存テ�
 `--player`は標準入力を監視せず、CEC・media・signal eventで常駐する。
 端末からコマンドを入力する開発試験では`--interactive`を追加する。
 専用ユーザー、起動設定、install、unit検証手順は
-[systemd常駐運転](../systemd.md)を参照。
+[systemd常駐運転](../manual/systemd.md)を参照。
 Raspberry Pi実機でsystemdのboot時自動起動、Audio CD認識、CEC操作によるHDMI再生まで
 確認済み。

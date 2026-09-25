@@ -4,7 +4,7 @@
 # 第1段階の実機検証（2026-09-15）
 
 以下は第1段階時点の記録。現在の再生機能は[再生engine](playback-engine.md)、
-自動起動の実装・確認結果は[systemd常駐運転](../systemd.md)を参照。
+自動起動の実装・確認結果は[systemd常駐運転](../manual/systemd.md)を参照。
 
 ## 環境
 

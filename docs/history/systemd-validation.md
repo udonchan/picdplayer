@@ -1,6 +1,6 @@
 # systemd実機確認記録
 
-> 過去の実機結果です。現行の確認範囲は[検証状況](../verification.md)を参照してください。
+> 過去の実機結果です。現行の確認範囲は[検証状況](../development/verification.md)を参照してください。
 
 
 
