@@ -15,6 +15,36 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## 標準PlayerのDOM更新削減（Issue #53、実機比較待ち）
+
+#53は#52のbaseline測定をhard dependencyとする。#52全体の測定は保留中のため、以下は
+実機CPU/温度改善の完了証明ではなく、標準Playerの書き込み経路の再現試験である。
+変更前は`f0bf7f6`のplayer.js、変更後は本Issueのplayer.jsを、同じNode VM/DOM mockへ読み込んだ。
+[test](../../tests/ui_render_test.js)は同値代入も含めてDOM write呼び出しを数える。
+
+| 入力 | 変更前 | 変更後 |
+|---|---:|---:|
+| 同一STOPPED snapshot 60件 | 780 | 0 |
+| 15 frameずつ進むPLAYING snapshot 60件 | 780 | 72 |
+
+再生位置更新の72回はwidth 60回と秒表示12回であり、受信した再生位置を間引いた結果ではない。
+これらは合成入力で、PiのWS受信レート、実paint回数、CPU、温度の測定値ではない。
+daemonは既にrevision以外が同じPresentation Modelのpublishを抑制しているため、停止中の高負荷が
+この経路で起こるとは断定できない。実機での支配要因が判明するまでpublish頻度やCSSは変更しない。
+
+再現方法は標準Docker内で`node tests/ui_render_test.js`。変更前の比較には任意のplayer.jsのpathを
+第1引数に渡し、環境変数`PICDPLAYER_RENDER_BENCHMARK_ONLY=1`で回帰assertionを省略する。
+JSON入力はtest内に定義し、画像はfixture URLだけを使用する。測定はNode mock上でありCDP接続を伴わない。
+Docker/aarch64の標準buildとCTest 32/32件が成功し、API・Custom UI・起動telemetryの既存試験も通過した。
+この変更を含むpackageは生成済みだが、Piへの適用・表示確認は行っていない。
+
+残る受け入れ確認は、#52のbaselineと同条件のSTOPPED/PLAYING・CDP有無で、process/thread CPU、
+memory、frequency、温度/current throttling、WS/DOM/layout/paint、ALSA異常を比較すること。
+冷却・解像度・disc・cache・測定時間を揃え、観測負荷と生データの場所も記録する。
+同値DOM writeを除いても再現する高負荷について、静的Chromium/Cageの比較からruntime描画が
+支配的で、測定根拠のあるDOM/CSS改善でもcurrent throttlingが残る場合に、別runtime/UI構成の
+評価を提案する。現時点ではその条件を確認しておらず、置換は決定しない。
+
 ## 自動試験
 
 CTestはCMakeの有効機能で件数が変わる。基本buildではcontroller、engine、ALSA抽象、CEC変換、
