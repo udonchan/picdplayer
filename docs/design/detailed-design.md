@@ -189,7 +189,9 @@ technical statusのHTML/CSS/JavaScriptは`ui/default/`からビルド時に埋�
 snapshotから全表示を再構築する。外部文字列はtextContentへ設定し、innerHTMLへ渡さない。
 Now PlayingはPresentation Modelのplayer/disc/tracks/enrichment/artworkを表示し、現在track番号で
 tracksを検索する。metadataが不在ならtrack番号と時間をfallback表示する。
-textContentは表示文字列が変わったときだけ設定し、progress widthも直前に設定したCSS値と比較する。
+textContentは表示文字列が変わったときだけ設定する。進行バーは受信した再生位置の割合を
+`scaleX`へ変換し、直前に設定したCSS値と比較して更新する。バーの幅自体を変えないので
+再生中の進行に伴うlayoutを減らすが、ブラウザ側で再生位置を補間しない。
 frame単位の再生位置は省略せず、秒表示だけが同じ場合は文字列の書き換えを省く。
 artwork.cover.urlが変わったときだけ画像属性とhandlerを更新し、load errorではplaceholderへ戻す。
 画像切替時は旧coverを隠し、差し替え前のload/error callbackは無視する。同URLの失敗をsnapshotごとに

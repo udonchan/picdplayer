@@ -79,17 +79,17 @@ async function main() {
   }
   console.log(`Position updates (15 frames each): 60; DOM write attempts: ${playingWrites}`);
   if (process.env.PICDPLAYER_RENDER_BENCHMARK_ONLY === '1') return;
-  assert.equal(playingWrites, 72); // 60 widths + 12 displayed seconds, no lost positions.
+  assert.equal(playingWrites, 72); // 60 progress updates + 12 displayed seconds, no lost positions.
   snapshot.player.state = 'STOPPED';
   snapshot.player.position_frames = 0;
   receive(snapshot);
   assert.equal(repeatedWrites, 0);
   assert.deepEqual(receive({ ...snapshot, revision: 2, diagnostic: { counter: 99 } }), []);
   snapshot.player.position_frames = 15;
-  assert.deepEqual(receive(snapshot), ['progress.style.width']);
+  assert.deepEqual(receive(snapshot), ['progress.style.transform']);
   assert.equal(node('position').textContent, '0:00');
   snapshot.player.position_frames = 75;
-  assert.deepEqual(receive(snapshot).sort(), ['position.textContent', 'progress.style.width']);
+  assert.deepEqual(receive(snapshot).sort(), ['position.textContent', 'progress.style.transform']);
   assert.equal(node('position').textContent, '0:01');
   snapshot.tracks[0].title = '<script>literal title</script>';
   assert.deepEqual(receive(snapshot), ['track-title.textContent']);
@@ -119,7 +119,7 @@ async function main() {
   receive(snapshot);
   assert.equal(node('album').textContent, 'No disc');
   assert.equal(node('position').textContent, '0:00');
-  assert.equal(node('progress').style.width, '0%');
+  assert.equal(node('progress').style.transform, 'scaleX(0)');
   console.log('PASS: identical values, position, metadata, artwork lifecycle and disc removal');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
