@@ -2,8 +2,6 @@
 #include "logger.hpp"
 #include <chrono>
 #include <cmath>
-#include "now_playing_page.hpp"
-#include "technical_status_page.hpp"
 #include "pcm_worker.hpp"
 #include <array>
 #include <algorithm>
@@ -16,6 +14,13 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+// Both built-in pages are generated from ui/default at configure time.
+// 標準画面は ui/default だけを正本としてビルド時に埋め込みます。
+namespace {
+#include "now_playing_assets.inc"
+#include "technical_status_assets.inc"
+}
 
 ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,

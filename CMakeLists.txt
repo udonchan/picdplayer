@@ -61,7 +61,7 @@ if(ENABLE_METADATA)
 endif()
 if(ENABLE_API)
     target_sources(cdplayerd PRIVATE src/daemon_snapshot_json.cpp src/api_server.cpp
-        src/technical_status_page.cpp src/now_playing_page.cpp src/ui_bundle.cpp)
+        src/ui_bundle.cpp)
     target_include_directories(cdplayerd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
     target_compile_definitions(cdplayerd PRIVATE ENABLE_API=1)
     target_link_libraries(cdplayerd PRIVATE nlohmann_json::nlohmann_json PkgConfig::WEBSOCKETS)
@@ -154,7 +154,7 @@ if(BUILD_TESTING)
         target_link_libraries(daemon_snapshot_json_test PRIVATE nlohmann_json::nlohmann_json)
         add_test(NAME daemon_snapshot_json COMMAND daemon_snapshot_json_test)
         add_executable(api_server_test tests/api_server_test.cpp src/api_server.cpp src/logger.cpp
-                       src/technical_status_page.cpp src/now_playing_page.cpp src/ui_bundle.cpp src/repeated_read_policy.cpp
+                       src/ui_bundle.cpp src/repeated_read_policy.cpp
                        src/repeated_read_verifier.cpp)
         target_include_directories(api_server_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
         target_compile_features(api_server_test PRIVATE cxx_std_20)
@@ -164,7 +164,7 @@ if(BUILD_TESTING)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
         add_executable(ui_bundle_test tests/ui_bundle_test.cpp src/ui_bundle.cpp src/api_server.cpp src/logger.cpp
-            src/technical_status_page.cpp src/now_playing_page.cpp src/repeated_read_policy.cpp
+            src/repeated_read_policy.cpp
             src/repeated_read_verifier.cpp)
         target_include_directories(ui_bundle_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
         target_compile_features(ui_bundle_test PRIVATE cxx_std_20)

@@ -35,7 +35,7 @@ shutdownでは音声停止を先に行い、その後workerのdestructorがjoin�
 ## UI生成・選択・配信
 
 `cmake/EmbedUi.cmake`は`ui/default/`を読み、generated includeへ変換する。
-`now_playing_page.cpp`と`technical_status_page.cpp`の既存関数はこの生成物を返す。
+`api_server.cpp`が生成されたincludeを取り込み、built-in pageを配信する。
 元assetの編集でCMakeが再configureし、default用ファイルとC++文字列を二重管理しない。
 
 `UiBundle::load()`はユーザーdirectoryをcomponentごとにno-followでopenし、`collect()`が
@@ -178,10 +178,10 @@ DAE、C2、cache、accurate stream、offsetはUNKNOWNを維持する。MediaWork
 serviceはlws_cancel_serviceでwake-upを予約してからlws_service(context,0)を呼ぶ。
 timeout=0だけでは待受を避けられずmain loopを止めることがあったため、この順序を保つ。
 publish_stateは送信用snapshotを更新する。mainが完成済みJSONを用意し、callback内でTOCやnetworkを読まない。
-[technical_status_page](../../src/technical_status_page.cpp)はHTML/CSS/JavaScriptをcompile時に埋め込む。
+technical statusのHTML/CSS/JavaScriptは`ui/default/`からビルド時に埋め込み、APIから配信する。
 追加filesystemやNode runtimeを要求しない。画面はGET stateとWS eventsだけを消費し、再接続時には
 snapshotから全表示を再構築する。外部文字列はtextContentへ設定し、innerHTMLへ渡さない。
-[now_playing_page](../../src/now_playing_page.cpp)も同じ配信経路だけを使用する。metadata.selectedを
+Now Playingも同じ配信経路だけを使用する。metadata.selectedを
 candidate配列のindexとして解決し、現在track番号でTrackMetadataを探す。metadataが不在ならDiscToc由来の
 track番号と時間だけを表示する。cover_art.image_urlはbrowserのimgへ渡し、load errorでは表示を戻す。
 このpageはdaemonへの操作・metadata候補選択・画像cacheを実装しない。
