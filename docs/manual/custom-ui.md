@@ -98,6 +98,34 @@ DOMへ繰り返し設定しない。これは標準UIの実装上の最適化で
 API/WebSocketの内容や配信頻度、再接続、任意の起動telemetryは従来どおりである。
 CSS transitionやbrowserの合成処理は別に発生し得るため、DOM write削減をpaintやCPUの削減量と同一視しない。
 
+## Custom UIの描画負荷
+
+Pi 3の標準Playerでは、再生位置に合わせて約250 msごとに変わる進行バー幅へ
+`transition: width 0.2s linear`を付けた条件で、再生中の全4 core CPU平均70.92%（54.6秒）を観測した。
+同値DOM writeの削減とこのtransitionの削除を含む版では、5分間の平均が7.10%、最高温度62.3°C、
+現在のthrottlingなしだった。測定時間・順序は同一でなく、2変更の寄与率も分離していない。
+[変更前の条件とraw](../development/reports/2026-09-25-kiosk-baseline/README.md)と
+[変更後の条件とraw](../development/reports/2026-09-26-kiosk-render-cost/README.md)を参照する。
+この数値はCustom UIの性能保証や、全てのCSS transitionが遅いという意味ではない。
+
+snapshotを受けるたびに全要素を書き換える前に、表示文字列・進行幅・画像URLなどが実際に
+変わったか比較する。特に高頻度で変化する要素へlayoutを伴うtransition、全画面filter、
+常時pan/zoomなどを重ねる場合は、Pi実機でCPU・温度・描画を測る。`transform`など別のCSS手法も
+compositeやGPU負荷を増やし得るため、計測なしに高速と決めない。cover画像はURLが同じなら
+再読込せず、変更時には古いload/error callbackが新しい画像状態を上書きしないようにする。
+
+daemonが再生状態の唯一の所有者である。表示を軽くするために再生位置、読み取り状態、Integrityの
+値を推定・生成しない。更新を一つの描画機会にまとめる場合も、最新snapshotを反映し、停止・
+disc交換・警告・接続断/再接続を落とさない。画面上の秒表示と進行バーは異なる表示粒度を
+選べるが、APIの値そのものを黙って間引いたり、実際に観測していない値を表示したりしない。
+
+静的なCustom UI validationはJS実行、paint、CPU使用率を検査しない。Mac/Dockerの試験に加え、
+[実機負荷の手順](../development/verification.md#kiosk定常負荷の計測手順issue-52)に従い、
+PiでSTOPPED/PLAYINGを分け、CDP未接続のCPU・温度・現在のthrottlingを基線として測る。
+CDPのlayout/paint traceは短時間の別条件で取得し、接続による負荷を無接続値に混ぜない。
+`vcgencmd get_throttled`の現在bitとboot以降の履歴bitも区別する。高温や現在の電源・thermal制限を
+検出したら測定を中断する。標準Playerの結果が良くても、独自UIには同じ結果を仮定しない。
+
 ## 実機確認記録
 
 2026-09-20、`ui/default/`を`/tmp/picdplayer-custom-ui`へコピーし、`--custom-ui`
