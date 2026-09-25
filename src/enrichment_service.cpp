@@ -12,7 +12,9 @@ class EnrichmentService::Implementation {
 public:
     explicit Implementation(bool enabled, std::string directory) : cache_directory(std::move(directory)) {
         if (!enabled) return;
-        MetadataOptions options{.cache_directory = std::move(cache_directory), .use_cache = true, .cancelled = {}};
+        // Keep this path for serving validated same-origin artwork after the
+        // worker has finished. The worker receives its own copy.
+        MetadataOptions options{.cache_directory = cache_directory, .use_cache = true, .cancelled = {}};
         worker = std::make_unique<MetadataWorker>(
             [options = std::move(options)](const DiscToc& toc, const MetadataWorker::Cancelled& cancelled) mutable {
                 options.cancelled = cancelled;
