@@ -125,7 +125,7 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
   ctest --test-dir build-container --output-on-failure
 ```
 
-標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含めて31件を登録します。
+標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含めて32件を登録します。
 実機deviceの代わりにfake、ALSA null、存在しないCD deviceを使用する試験があり、
 loopback socket通信を許可した環境が必要です。実機の試聴・CEC・TV表示は別に確認します。
 
