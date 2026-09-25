@@ -113,7 +113,8 @@ stage/
 
 `build-container/`、`stage/`、`package-container/`は生成物であり、Gitでは管理しません。
 `stage/`はCMakeのDESTDIR install結果を検査するために残す。deployするartifactは
-`package-container/`内のDebian packageである。
+`package-container/`内のDebian packageである。ビルド開始時に前回のpackageを破棄し、
+configure/build/package検証に失敗した場合はdeploy可能な`.deb`を残さない。
 
 ### 自動試験を実行する
 
@@ -124,7 +125,7 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
   ctest --test-dir build-container --output-on-failure
 ```
 
-標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含めて30件を登録します。
+標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含めて31件を登録します。
 実機deviceの代わりにfake、ALSA null、存在しないCD deviceを使用する試験があり、
 loopback socket通信を許可した環境が必要です。実機の試聴・CEC・TV表示は別に確認します。
 
@@ -171,6 +172,9 @@ PICDPLAYER_TARGET=picdplayer-test ./scripts/deploy.sh
 `build-container.sh`はCMakeの同じ`install()`規則から、aarch64用の`.deb`を1個生成する。
 CPackが動的library依存をDebian dependencyとして算出し、dpkgは旧versionが所有するファイルを
 更新・削除する。そのためroot filesystemへのrsyncや`rsync --delete`は使わない。
+ただし初回package化より前に手動・rsyncで導入し、現在のpackageにも含まれない旧ファイルは
+管理対象にならず、自動削除しない。現在も同じpathへinstallするファイルはpackage管理へ移行する。
+`/usr/local`を維持する開発者専用packageであり、Debian公式配布向けのpackageではない。
 
 deploy scriptは概ね次の順序で処理します。
 
@@ -191,7 +195,16 @@ packageのpostinstは、起動済みsystemd hostだけでdaemon-reloadと`try-re
 inactive serviceを新たにstart/enableせず、初回のservice user作成、runtime package導入、service enableは
 [systemd手順](systemd.md)に従って一度だけ行う。CPU負荷の調査などで意図的に停止中のserviceは
 deploy後も停止したままとし、deploy scriptは前後のactive stateが一致することを確認する。
-実機検証時だけ手動で起動する。
+実機検証時だけ手動で起動する。deploy前は両serviceが`active`または`inactive`であることを
+要求し、`failed`や遷移中の状態は転送前にエラーとする。deploy後は状態の一致とpackageの
+`install ok installed`を検査する。これは観測時点の確認であり、その後のcrashやTV表示・再生の
+正常性までは保証しない。
+
+upgrade時は実行中のserviceを残してdpkgがファイルを更新し、configure後に再起動する。
+画面配信中のUIファイルも更新されるため、整合した表示を確認するのはkiosk再起動後とする。
+remove時はkiosk→daemonの順に停止し、停止に失敗したらファイル削除へ進まずエラーを返す。
+CMakeでunitのinstallを無効にしたpackageは、そのunitのrestart/stopを行わない。
+初回install時のenableや設定・cacheの削除は行わない。
 
 ### passwordless deploy（信頼する開発者用）
 

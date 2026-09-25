@@ -8,7 +8,7 @@ set -euo pipefail
 #
 # Output:
 #   build-container/   CMake build tree
-#   stage/             filesystem tree ready for deployment
+#   stage/             filesystem tree for inspection
 #   package-container/ Debian package ready for deployment
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,6 +30,12 @@ echo
 # ---------------------------------------------------------------------------
 # Preconditions
 # ---------------------------------------------------------------------------
+
+# Invalidate the previous artifact even if configure/build fails. Never leave a
+# partial package available to deploy after a failed packaging/validation step.
+rm -rf "${PACKAGE_DIR}"
+mkdir -p "${PACKAGE_DIR}"
+trap 'if [[ $? != 0 ]]; then rm -f "${PACKAGE_DIR}"/*.deb; fi' EXIT
 
 if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
     echo "ERROR: Docker image '${IMAGE}' does not exist."
@@ -107,9 +113,6 @@ find "${STAGE_DIR}" \( -type f -o -type l \) -print
 # ---------------------------------------------------------------------------
 
 echo "==> Packaging Debian artifact"
-
-rm -rf "${PACKAGE_DIR}"
-mkdir -p "${PACKAGE_DIR}"
 
 docker run --rm \
     -v "${REPO_ROOT}:/src" \

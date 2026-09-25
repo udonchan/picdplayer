@@ -58,13 +58,22 @@ DAEMON_STATE_BEFORE="$(ssh "${TARGET}" 'systemctl show -p ActiveState --value pi
 KIOSK_STATE_BEFORE="$(ssh "${TARGET}" 'systemctl show -p ActiveState --value picdplayer-kiosk.service')"
 echo "    daemon    : ${DAEMON_STATE_BEFORE}"
 echo "    kiosk     : ${KIOSK_STATE_BEFORE}"
+for state in "${DAEMON_STATE_BEFORE}" "${KIOSK_STATE_BEFORE}"; do
+    case "${state}" in
+        active|inactive) ;;
+        *)
+            echo "ERROR: service state must be stable (active or inactive) before deployment: ${state}" >&2
+            exit 1
+            ;;
+    esac
+done
 
 # ---------------------------------------------------------------------------
 # Upload package
 # ---------------------------------------------------------------------------
 
 echo "==> Preparing remote package directory"
-ssh "${TARGET}" "rm -rf ~/${REMOTE_PACKAGE_DIR} && mkdir -p ~/${REMOTE_PACKAGE_DIR}"
+ssh "${TARGET}" "mkdir -p ~/${REMOTE_PACKAGE_DIR}"
 
 echo "==> Uploading Debian package"
 rsync -av \
@@ -100,7 +109,7 @@ if [[ "${DAEMON_STATE_AFTER}" != "${DAEMON_STATE_BEFORE}" ||
     echo "ERROR: PiCDPlayer service state changed during deployment" >&2
     exit 1
 fi
-ssh "${TARGET}" 'dpkg-query -W picdplayer && test -x /usr/local/bin/cdplayerd && test -x /usr/local/libexec/picdplayer-kiosk'
+ssh "${TARGET}" "test \"\$(dpkg-query -W -f='\${Status}' picdplayer)\" = 'install ok installed' && test -x /usr/local/bin/cdplayerd && test -x /usr/local/libexec/picdplayer-kiosk"
 
 echo
 echo "==> Deployment completed successfully"

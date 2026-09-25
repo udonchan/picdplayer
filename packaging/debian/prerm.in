@@ -5,9 +5,10 @@ set -eu
 # them only when this package is actually removed.
 case "$1" in
     remove|deconfigure)
-        if [ -d /run/systemd/system ]; then
-            systemctl stop picdplayer-kiosk.service || true
-            systemctl stop picdplayer.service || true
+        if test -d /run/systemd/system; then
+            for unit in @PICDPLAYER_PACKAGE_STOP_ORDER@; do
+                systemctl stop "$unit"
+            done
         fi
         ;;
 esac

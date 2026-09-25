@@ -64,6 +64,16 @@ Piでは限定sudoers ruleを使い、`scripts/deploy.sh`から`dpkg -i`をパ�
 非対話でkiosk→daemonの順に停止した。変更後の`deploy.sh`で同版packageを再installし、
 両serviceがinactiveのまま維持されることを確認した。給電原因の確定と長時間再生は未確認である。
 
+### PR再レビューでの追加確認
+
+#43の再レビューで、失敗したbuildの古いpackage残存、unitなし構成での不要なservice操作、
+failed/transitional serviceを正常deployと扱う可能性、remove時のstop失敗の無視を修正した。
+Docker/aarch64で再生成し、CTest 31/31件（deploy/build失敗経路とmaintainer scriptの13ケースを含む）が
+成功した。unitなし構成でもscript試験が成功し、隔離containerでinstall/remove、同版更新時の
+旧package所有ファイル削除を確認した。systemdの有無・command失敗・順序はmockによる確認で、
+実際の稼働中service更新、更新失敗からの復旧、修正版のPiへの再deployは未検証である。
+上記のTV表示・再生確認は再レビュー修正前のpackageに対する結果である。
+
 ## 実機確認済み
 
 | 対象 | 確認範囲 |

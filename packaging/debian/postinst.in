@@ -3,8 +3,9 @@ set -eu
 
 # Package installation may run outside a booted system (for example, while an
 # image is assembled).  Reload and restart only on a running systemd host.
-if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
+if [ "$1" = configure ] && test -d /run/systemd/system; then
     systemctl daemon-reload
-    systemctl try-restart picdplayer.service
-    systemctl try-restart picdplayer-kiosk.service
+    for unit in @PICDPLAYER_PACKAGE_START_ORDER@; do
+        systemctl try-restart "$unit"
+    done
 fi
