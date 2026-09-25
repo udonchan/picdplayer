@@ -100,7 +100,7 @@ wake-up予約と無通信時の回帰テストを追加した。修正後は一�
 その後の観測core、technical status、反復一致読み取りの到達点は
 [検証状況](../development/verification.md)へ続く。15 frame反復時の供給不足と、
 75 frame化後の正常再生・先読み待ち比較もそこにある。
-[拡張案](../development/integrity-design.md)には未実装の検証方式も含まれる。
+[読み取り信頼性の仕様](../design/integrity-design.md)は現行設計と未実装の要求を区別して統合している。
 統合前の調査・要件・実装報告は[読み取り信頼性設計の保存版](integrity-design-before-integration.md)に残す。
 
 ## テーマから読む

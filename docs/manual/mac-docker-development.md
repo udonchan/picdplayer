@@ -47,7 +47,7 @@ docker build -t picdplayer-build .
 ```
 
 `picdplayer-build` imageには、CMake、C++ compiler、ALSAやmetadata/API機能に必要な
-development packageが含まれています。`BUILD_TESTING=ON`（既定）のJavaScript動作試験用に
+development packageが含まれています。`BUILD_TESTING=ON`（既定）の自動試験用に
 Node.jsとPython 3も含みます。どちらもPiのdaemon/kiosk実行時には不要で、
 ハードウェアを使わないJavaScript・Python試験のために使用します。
 
@@ -109,6 +109,19 @@ stage/
 原則としてCMakeのinstall ruleへ追加します。
 
 `build-container/` と `stage/` は生成物であり、Gitでは管理しません。
+
+### 自動試験を実行する
+
+ビルド後、同じimageで実行します。build script自体はCTestを実行しません。
+
+```sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
+  ctest --test-dir build-container --output-on-failure
+```
+
+標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含めて29件を登録します。
+実機deviceの代わりにfake、ALSA null、存在しないCD deviceを使用する試験があり、
+loopback socket通信を許可した環境が必要です。実機の試聴・CEC・TV表示は別に確認します。
 
 ### Raspberry Piへdeployする
 
@@ -184,10 +197,11 @@ PiCDPlayerがインストールするファイルだけを含みます。
 
 ### 日常の開発フロー
 
-Docker build imageを一度作成した後は、通常の変更では次の2コマンドが基本です。
+Docker build imageを一度作成した後は、通常の変更ではビルド、自動試験、deployの順に進めます。
 
 ```sh
 ./scripts/build-container.sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
 ./scripts/deploy.sh
 ```
 

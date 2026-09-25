@@ -3,7 +3,8 @@
 ## 目的と対象
 
 物理Audio CDを入れ、TVリモコンで操作できる据え置きプレイヤーを実現する。
-開発環境はRaspberry Pi OS Lite、C++20/CMake。将来Buildrootへ移植可能な小さなnative daemonを目指す。
+開発はApple Silicon Mac上で編集し、Debian Trixie arm64 DockerでC++20/CMakeビルドする。
+Raspberry Pi OS Liteはruntime/hardware検証環境である。将来Buildrootへ移植可能な小さなnative daemonを目指す。
 一般的な音楽ライブラリ管理、ripping、desktop操作を主用途にはしない。
 
 追加の製品目標として、再生PCMについて「観測した事実、採用理由、未確認事項」を説明できるようにする。
@@ -11,7 +12,10 @@
 出力経路のbit一致を分けて扱う。能力UNKNOWNをNOへ置き換えない。
 優先順位は正確性、事実に忠実な説明、根拠の追跡、driveへの依存の抑制、能力不足時の明示的な扱い、
 再生の連続性、静音性、拡張性、UIの単純さとする。
-未実装のtarget構成は[読み取り信頼性の拡張案](../development/integrity-design.md)に置く。
+読み取り信頼性の要求と目標構成を[横断仕様](integrity-design.md)へ統合する。
+C2/cache/offset、能力に応じたstrategy、区間provenance、外部照合は未実装の要求として扱う。
+各拡張は既存のmain/worker所有権を維持し、診断の遅延をaudioへ伝播させず、能力不足と降格理由を公開する。
+対象drive・方式・試験条件が確定するまで、実装済みのsingle/repeatの保証を広げない。
 
 | 要求 | 現在の状態 |
 |---|---|
@@ -20,7 +24,7 @@
 | metadataなし・ネットワーク障害時にも再生可能 | metadataを独立した任意機能として実装 |
 | 一回のeject操作を保持し、待機後に実行 | HTTP経由で実装。失敗はEJECT_ERRORとして公開 |
 | 非rootで常駐、signalで正常終了 | systemd・signalfdを利用 |
-| TVに曲名・ジャケット・位置表示 | 状態APIとブラウザ用Now Playingを実装。任意導入のChromium/Cage kiosk serviceを実装し、TV表示を確認済み、boot・継続運転は確認待ち |
+| TVに曲名・ジャケット・位置表示 | 状態APIとブラウザ用Now Playingを実装。任意導入のChromium/Cage kiosk serviceを実装し、cold boot後のTV表示を確認済み。起動時間短縮と長期継続運転は残課題 |
 | Linux起動画面を見せない家電起動 | kiosk serviceは実装。quiet boot・splash・専用imageは未実装 |
 | PCMの読み取り根拠・不確実性を説明する | 観測・反復一致・snapshotを実装。確認範囲は検証状況を参照 |
 
@@ -52,7 +56,7 @@ flowchart TD
 
 単一process。main threadが再生・media・metadataの正規状態を所有する。
 PlayerController、MediaStateTracker、MetadataSessionは別々の責務を持ち、
-DaemonSnapshotはそのコピーを公開する。CEC、API、将来のUIが独自の再生状態を所有しない。
+DaemonSnapshotはそのコピーを公開する。CEC、API、UIが独自の再生状態を所有しない。
 
 | 実行場所 | 責務 |
 |---|---|

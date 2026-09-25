@@ -10,7 +10,8 @@ CDを取り出す要求もdaemonが保持する。利用者が内部の読み取
 ボタンを押す必要をなくすためである。ただし故障したdriveを必ず開けられる保証ではない。
 
 中心のcdplayerdはC++20で実装した単一processである。必要なblocking処理にはworkerを使う。
-Raspberry Pi OS Liteを開発環境とし、将来専用imageへ移しやすいよう依存を限定している。
+編集はMac、ビルドはDebian arm64 Docker、実機検証はRaspberry Pi OS Liteで行う。
+将来専用imageへ移しやすいよう依存を限定している。
 Buildrootやquiet boot、TV向け本番UIは現在の完成済み機能ではない。
 
 もう一つの目標は、読み取ったPCMについて何が確認できたかを説明することにある。

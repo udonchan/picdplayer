@@ -1,13 +1,13 @@
 # 操作・診断手順
 
-ビルドは[ビルド手順](../manual/build.md)、常駐運転は[systemd手順](../manual/systemd.md)を参照する。
-以下はリポジトリrootから実行する。手動playerやdrive診断の前に既存serviceを停止する。
+ビルド・deployは[Mac + Docker手順](mac-docker-development.md)、常駐運転は[systemd手順](../manual/systemd.md)を参照する。
+以下はdeploy済みのPi上で実行する。Linux単体ビルドでは実行ファイルのパスを置き換える。手動playerやdrive診断の前に既存serviceを停止する。
 トレイ操作と試聴は人間が行い、daemonと診断でdriveを同時使用しない。
 
 ## 対話操作
 
 ```sh
-./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct --interactive
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct --interactive
 ```
 
 `play pause stop next previous track N seek SECONDS state quit`を改行で入力する。
@@ -18,7 +18,7 @@
 省略時は容量750 frame（10秒）、開始45 frame（0.6秒）。次は開始を4秒へ増やす例である。
 
 ```sh
-./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct \
   --read-buffer-frames 750 --startup-buffer-frames 300
 ```
 
@@ -27,7 +27,7 @@
 傷disc評価は未実施である。確認範囲は[検証状況](../development/verification.md)を参照する。
 
 ```sh
-./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct \
   --read-verification repeat
 ```
 
@@ -44,7 +44,7 @@ ALSA出力bufferの要求latencyは既定200 msである。main loopの一時停
 100〜2000 msを指定できる。CD先読みbufferとは別の設定である。
 
 ```sh
-./build-direct/cdplayerd --player /dev/sr0 --cdda-reader direct \
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct \
   --audio-latency-ms 500
 ```
 
@@ -73,16 +73,17 @@ technical status画面の`Read policy`は適用済みmodeを表示し、保留�
 外部listenを使うdebug構成でも、policy変更を含む操作APIはloopbackからだけ受け付ける。
 
 開始閾値は容量以下でなければならない。大きなbufferは短いread stallへの余裕を増やす一方、
-起動・seek後の待ち時間とmemory使用量を増やすため、production既定値は実機比較後に決める。
+memory使用量が増える。開始閾値を増やすとplay・seek後の待ち時間も増える。
+現行の既定750/45 frameは通常CDでの比較から採用しており、傷discでの評価は継続する。
 
 ## 一回実行の診断
 
 ```sh
-./build-direct/cdplayerd --probe-drives
-./build-direct/cdplayerd --probe-media /dev/sr0
-./build-direct/cdplayerd --probe-toc /dev/sr0
-./build-direct/cdplayerd --probe-drive-start /dev/sr0
-./build-direct/cdplayerd --probe-cdda /dev/sr0 --cdda-reader direct --track 1 --frames 75
+/usr/local/bin/cdplayerd --probe-drives
+/usr/local/bin/cdplayerd --probe-media /dev/sr0
+/usr/local/bin/cdplayerd --probe-toc /dev/sr0
+/usr/local/bin/cdplayerd --probe-drive-start /dev/sr0
+/usr/local/bin/cdplayerd --probe-cdda /dev/sr0 --cdda-reader direct --track 1 --frames 75
 ```
 
 `probe-drive-start`はLinux `CDROMSTART`を一回要求し、受理結果と所要時間を表示する。PCMは読まない。
@@ -104,9 +105,9 @@ probe-cddaは既定でPCMを捨て、再生しない。保存には`--pcm-output
 paranoia比較時はENABLE_PARANOIA=ONのbuildで`--cdda-reader paranoia`を指定する。
 
 ```sh
-./build-metadata/cdplayerd --probe-disc-id /dev/sr0
-./build-metadata/cdplayerd --probe-metadata /dev/sr0 --metadata-cache /tmp/picdplayer-cache
-./build-metadata/cdplayerd --lookup-disc '6JTbUgqHL29gzUyOH5ir60K3hz0-' --metadata-cache /tmp/picdplayer-cache
+/usr/local/bin/cdplayerd --probe-disc-id /dev/sr0
+/usr/local/bin/cdplayerd --probe-metadata /dev/sr0 --metadata-cache /tmp/picdplayer-cache
+/usr/local/bin/cdplayerd --lookup-disc '6JTbUgqHL29gzUyOH5ir60K3hz0-' --metadata-cache /tmp/picdplayer-cache
 ```
 
 lookup-discはdrive不要だが実TOCとの曲数照合は行わない。候補やcache hit、画像URL状態を確認する。
