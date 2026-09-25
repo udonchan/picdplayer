@@ -384,9 +384,20 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 - metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
 - cache期限/総容量/破損復旧、候補選択、非1始まりtrack対応、HTTP/JSON制限の強化は未実装。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
-- Now Playingはブラウザが画像を取得して表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。
-  長期継続運転と起動時間短縮を継続確認する。daemon側の画像binary取得・保存、quiet boot・read-only root・
-  Buildroot imageは未実装。
+- Now Playingはdaemonが配信するsame-origin artworkを表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。
+  長期継続運転と起動時間短縮を継続確認する。quiet boot・read-only root・Buildroot imageは未実装。
+
+### Enrichment / same-origin artwork（2026-09-25）
+
+Issue #23のPR branchで、Raspberry Pi 3の通常Audio CD（14 track）を用いて確認した。
+MusicBrainz metadataは`AVAILABLE`となり、album/artist/trackをPresentation Modelへ反映した。
+CAAの画像は`/var/cache/picdplayer/cover-art/<release-id>.image`へ保存され、`GET /api/state`の
+`artwork.cover.url`は外部URLではなく`/api/presentation/artwork/cover`を返した。同endpointは
+`200 image/jpeg`、60,740 bytesを返し、Chromium/CageのTV画面でcover artが表示された。
+
+初回実機確認ではcache directoryをworker用optionsへmoveしたため、画像は保存済みでもlocal endpointが
+見つけられず`artwork.cover`がnullになった。cache directoryをservice内に保持する修正後、上記の表示を
+確認した。metadata/artworkのネットワーク障害、破損画像、disc交換中の古い画像、長期cache運用は未確認である。
 
 Piハング時は原因を確定できる前bootログがなかった。メモリ圧迫とswap I/Oは候補であり確定原因ではない。
 ビルドは-j1を維持する。障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。
