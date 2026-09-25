@@ -71,7 +71,8 @@ failed/transitional serviceを正常deployと扱う可能性、remove時のstop�
 Docker/aarch64で再生成し、CTest 31/31件（deploy/build失敗経路とmaintainer scriptの13ケースを含む）が
 成功した。unitなし構成でもscript試験が成功し、隔離containerでinstall/remove、同版更新時の
 旧package所有ファイル削除を確認した。systemdの有無・command失敗・順序はmockによる確認で、
-実際の稼働中service更新、更新失敗からの復旧、修正版のPiへの再deployは未検証である。
+修正版をPiへ再deployし、両serviceのinactive維持と`dpkg -V`の差異なしを確認した。
+実際の稼働中service更新と更新失敗からの復旧は未検証である。
 上記のTV表示・再生確認は再レビュー修正前のpackageに対する結果である。
 
 ## 実機確認済み

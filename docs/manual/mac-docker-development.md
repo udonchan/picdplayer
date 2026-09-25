@@ -201,7 +201,8 @@ deploy後も停止したままとし、deploy scriptは前後のactive stateが�
 正常性までは保証しない。
 
 upgrade時は実行中のserviceを残してdpkgがファイルを更新し、configure後に再起動する。
-画面配信中のUIファイルも更新されるため、整合した表示を確認するのはkiosk再起動後とする。
+標準UIはdaemon内に埋め込まれ、Custom UIも起動時に読み込む。新しい配信内容と表示の確認は
+daemonとkioskの再起動後に行う。
 remove時はkiosk→daemonの順に停止し、停止に失敗したらファイル削除へ進まずエラーを返す。
 CMakeでunitのinstallを無効にしたpackageは、そのunitのrestart/stopを行わない。
 初回install時のenableや設定・cacheの削除は行わない。
