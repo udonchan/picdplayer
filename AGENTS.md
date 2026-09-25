@@ -1,413 +1,172 @@
-# PiCDPlayer Agent Guide
+# AGENTS.md
 
-This document defines the development, build, deployment, and runtime
-debugging conventions for PiCDPlayer.
+This file defines how coding agents should work in the PiCDPlayer repository.
 
-Agents working on this repository should follow these conventions unless
-the user explicitly requests otherwise.
+It is not the source of truth for product specifications or architecture.
+Use the repository documentation for those details.
 
----
+## 1. Project context
 
-## Project overview
+PiCDPlayer is a Raspberry Pi based physical audio CD player.
 
-PiCDPlayer is an appliance-style physical audio CD player built around a
-Raspberry Pi.
+Development is normally performed on macOS.
+Linux/aarch64 builds are produced in the repository's containerized
+cross-build environment.
+Raspberry Pi is the runtime and hardware-integration target.
 
-The main runtime components are:
+Do not treat successful macOS or container execution as evidence that
+hardware-dependent behavior works on the Raspberry Pi.
 
-- `cdplayerd`: C++20 CD player daemon
-- Cage: minimal Wayland compositor
-- Chromium: kiosk UI runtime
-- systemd: service management
-- Linux DRM/KMS / vc4: HDMI graphics
-- ALSA: audio output
-- Linux CEC API: TV remote / HDMI-CEC integration
+## 2. Repository and documentation
 
-The primary target currently is a Raspberry Pi 3 running 64-bit
-Raspberry Pi OS based on Debian Trixie.
+Before making changes, inspect the existing implementation and read the
+documentation relevant to the task.
 
-The target architecture is:
+Start with:
 
-    Linux/aarch64
+- `docs/README.md` — documentation index
+- `<source>` — application source
+- `<tests>` — automated tests
+- `<scripts>` — build/deployment tooling
 
-The Raspberry Pi is primarily a runtime and hardware integration target,
-not the primary development/build machine.
+Follow references from `docs/README.md` rather than relying on this file
+for architecture or product specifications.
 
----
+In particular, consult the relevant documentation before changing:
 
-## Development architecture
+- architecture or component boundaries
+- Player/CD-DA behavior
+- UI behavior or interfaces
+- enrichment/metadata behavior
+- build, packaging, installation, or deployment
+- previously documented design decisions
 
-The normal development flow is:
+## 3. Working principles
 
-    edit on Mac
-        ↓
-    build in Linux/aarch64 Docker environment
-        ↓
-    CMake install into local staging tree
-        ↓
-    deploy staging tree to Raspberry Pi
-        ↓
-    test/debug on Raspberry Pi
+Before editing:
 
-Do not replace this workflow with direct development and compilation on
-the Raspberry Pi unless explicitly requested.
+1. Understand the requested outcome and completion conditions.
+2. Inspect the relevant existing implementation.
+3. Read the applicable documentation.
+4. Identify the smallest change required.
 
-The development Mac is Apple Silicon, so the Debian arm64 Docker image
-runs as a native aarch64 environment.
+While editing:
 
----
+- Keep changes within the requested scope.
+- Do not modify unrelated code.
+- Follow existing conventions unless the task explicitly changes them.
+- Do not introduce abstractions solely for hypothetical future needs.
+- Do not invent undocumented project behavior.
 
-## Build environment
+After editing:
 
-Linux/aarch64 production builds must use the repository Docker build
-environment.
+1. Run applicable automated validation.
+2. Inspect the complete diff.
+3. Verify each requested condition explicitly.
+4. Check whether documentation needs updating.
+5. Report anything that could not be verified.
 
-The Dockerfile is located at:
+Do not infer success from the absence of errors.
+Prefer observable evidence over assumptions about what should have happened.
 
-    ./Dockerfile
+## 4. Sources of truth
 
-The standard image name is:
+Use the component that owns a behavior as its source of truth.
 
-    picdplayer-build
+- CMake defines build and installation contents.
+- Build tooling defines supported build procedures.
+- Packaging/deployment tooling defines installation and deployment behavior.
+- systemd units define service behavior.
+- Project documentation defines documented architecture and design decisions.
 
-Build the image with:
+Do not duplicate authoritative configuration in another layer merely to
+make a task pass.
 
-    docker build -t picdplayer-build .
+When behavior changes, update the layer that owns that behavior.
 
-The Docker image contains build dependencies.
+## 5. Validation
 
-Do not rely on packages or modifications installed interactively inside
-temporary containers. If a dependency is required for a normal build,
-add it to the Dockerfile.
+Use the strongest validation available for the change.
 
-The source working tree is bind-mounted into the container at:
+Examples:
 
-    /src
+- compilation/build checks for source changes
+- automated tests where available
+- static or schema validation for configuration
+- repository searches for mechanical replacements
+- `git diff` / `git diff --check` for all changes
 
-Build artifacts therefore remain in the host working tree even though
-the compiler runs inside Docker.
+A command completing successfully is not sufficient evidence that the
+requested outcome was achieved.
 
----
+When a requirement can be checked mechanically, check it mechanically.
 
-## Build configuration
+## 6. Hardware-dependent changes
 
-The production-equivalent CMake configuration currently enables:
+Containerized Linux builds validate Linux/aarch64 build compatibility,
+not Raspberry Pi hardware integration.
 
-    CMAKE_BUILD_TYPE=Release
-    ENABLE_METADATA=ON
-    ENABLE_API=ON
-    INSTALL_SYSTEMD_UNIT=ON
-    INSTALL_SYSTEMD_KIOSK_UNIT=ON
-    CMAKE_INSTALL_PREFIX=/usr/local
-    PICDPLAYER_SERVICE_USER=picdplayer
+The following require target-side verification when affected:
 
-The build directory is:
-
-    build-container/
-
-Do not use the ordinary macOS compiler to produce the Raspberry Pi
-runtime binary.
-
-Do not assume that a successful macOS-native build is equivalent to the
-Linux/aarch64 target build.
-
-When `scripts/build-container.sh` exists and supports the required build,
-prefer it over manually reconstructing Docker and CMake commands.
-
-Re-running CMake configuration before an incremental build is acceptable
-and preferred when CMake configuration may have changed.
-
----
-
-## Installation staging
-
-CMake is the authoritative source for deciding which files belong to an
-installed PiCDPlayer system and where those files are installed.
-
-Do not duplicate the CMake install manifest manually in deployment
-scripts.
-
-Installation must first be performed into a DESTDIR staging tree.
-
-The host-side staging directory is:
-
-    stage/
-
-Conceptually:
-
-    cmake --install build-container
-        ↓ DESTDIR
-    stage/
-        └── usr/local/...
-
-The staging tree currently contains items such as:
-
-    /usr/local/bin/cdplayerd
-    /usr/local/libexec/picdplayer-kiosk
-    /usr/local/lib/systemd/system/picdplayer.service
-    /usr/local/lib/systemd/system/picdplayer-kiosk.service
-    /usr/local/share/picdplayer/ui/default/...
-
-When new installed files are introduced, prefer adding appropriate
-`install()` rules to CMake rather than adding special-case copy commands
-to deployment scripts.
-
----
-
-## Raspberry Pi deployment target
-
-The Raspberry Pi is referenced through the SSH host alias:
-
-    picdplayer-pi
-
-Do not hard-code the Raspberry Pi IP address, username, SSH key path, or
-other developer-specific SSH settings in this repository.
-
-Machine-specific configuration belongs in the developer's SSH
-configuration, normally:
-
-    ~/.ssh/config
-
-Repository scripts should use:
-
-    ssh picdplayer-pi
-
-rather than an IP address.
-
-Deployment scripts may allow the target alias to be overridden using:
-
-    PICDPLAYER_TARGET
-
-For example:
-
-    PICDPLAYER_TARGET=picdplayer-test ./scripts/deploy.sh
-
----
-
-## Deployment
-
-The standard deployment script is:
-
-    ./scripts/deploy.sh
-
-It runs on the development Mac.
-
-The expected deployment flow is:
-
-    Mac stage/
-        ↓ rsync
-    Pi ~/stage/
-        ↓
-    stop kiosk
-        ↓
-    stop daemon
-        ↓
-    install staged filesystem tree
-        ↓
-    systemctl daemon-reload
-        ↓
-    start daemon
-        ↓
-    start kiosk
-        ↓
-    verify services
-
-The Raspberry Pi staging directory is:
-
-    ~/stage/
-
-The staged tree mirrors the target filesystem root.
-
-For example:
-
-    ~/stage/usr/local/bin/cdplayerd
-
-is installed as:
-
-    /usr/local/bin/cdplayerd
-
-Deployment currently uses rsync to apply the staging tree to `/`.
-
-Never use `rsync --delete` when synchronizing the staging tree to `/`.
-
-The staging tree contains only PiCDPlayer-managed files. It is not a
-complete representation of the Raspberry Pi root filesystem.
-
-Deleting files from `/` based on the staging tree would therefore be
-dangerous.
-
-The current deployment mechanism does not automatically remove obsolete
-files that were present in an older PiCDPlayer installation but were
-later removed from the CMake install rules.
-
-If obsolete installed files become a practical problem, introduce an
-explicit install manifest/uninstall mechanism or package PiCDPlayer
-(e.g. as a Debian package) rather than using broad filesystem deletion.
-
----
-
-## systemd services
-
-The primary services are:
-
-    picdplayer.service
-    picdplayer-kiosk.service
-
-The daemon should normally be started before the kiosk.
-
-When replacing installed binaries or runtime files during deployment,
-stop the kiosk first and then stop the daemon.
-
-After installing systemd unit files, run:
-
-    sudo systemctl daemon-reload
-
-Then start:
-
-    picdplayer.service
-    picdplayer-kiosk.service
-
-Do not assume that copying a new unit file automatically updates
-systemd's loaded unit definition.
-
----
-
-## Runtime debugging
-
-Runtime and hardware integration testing must be performed on the
-Raspberry Pi.
-
-Important target-specific functionality includes:
-
-- optical drive access
+- optical-drive behavior
 - CD-DA reading
-- ALSA HDMI audio
-- HDMI-CEC
-- DRM/KMS graphics
-- Cage
-- Chromium kiosk behavior
-- systemd startup ordering
+- ALSA/audio output
+- HDMI/CEC
+- DRM/KMS/display behavior
+- systemd/runtime integration
+- other hardware-dependent behavior
 
-Do not assume that Docker can meaningfully validate these hardware
-integration paths.
+Clearly distinguish:
 
-Docker is primarily the reproducible Linux/aarch64 build environment.
+- verified locally
+- verified in the Linux/aarch64 build environment
+- verified on the Raspberry Pi
+- not verified
 
----
+Never report hardware behavior as verified unless it was actually tested
+on the target.
 
-## Chromium debugging
+## 7. Safety
 
-The kiosk Chromium instance may expose the Chrome DevTools Protocol on
-the Raspberry Pi for development.
+Avoid destructive operations unless explicitly required.
 
-Remote debugging should normally be accessed from the Mac, for example
-through SSH port forwarding.
+In particular:
 
-Avoid running heavyweight development tools directly on the Raspberry
-Pi while investigating runtime performance.
+- do not use destructive synchronization such as unrestricted
+  `rsync --delete`
+- do not overwrite unrelated target files
+- do not modify host or target configuration outside the task scope
+- do not bypass repository build/deployment tooling without a documented reason
 
-In particular, the Raspberry Pi 3 has limited CPU and memory resources,
-and Chromium itself can consume a substantial fraction of them.
+Prefer reversible changes.
 
-Profiling and debugging tools can perturb performance measurements.
+## 8. Handling ambiguity and inconsistencies
 
----
+If the issue description, implementation, documentation, tests, or this
+file disagree:
 
-## Performance work
+1. Do not silently choose one.
+2. Inspect relevant implementation, documentation, and history.
+3. Identify the inconsistency explicitly.
+4. Resolve it only when there is sufficient evidence.
+5. Otherwise stop and report the ambiguity.
 
-When investigating startup or UI performance, distinguish between:
+Do not invent a project convention to resolve missing information.
 
-- system boot completion
-- first display output
-- PiCDPlayer daemon readiness
-- API readiness
-- Chromium startup
-- DOM load
-- WebSocket connection
-- first UI render
-- CD playback readiness
+## 9. Completion criteria
 
-Do not use `systemd-analyze time` alone as a measurement of perceived
-PiCDPlayer startup time.
+A task is complete only when:
 
-When changing UI update behavior, consider CPU, layout, paint, and GPU
-cost on the Raspberry Pi 3.
+- the requested behavior is implemented
+- applicable validation has passed
+- the resulting diff has been inspected
+- unrelated behavior has not intentionally changed
+- relevant documentation is consistent with the implementation
+- verification limitations are reported
 
-Avoid unnecessary high-frequency DOM updates.
+When reporting completion, summarize:
 
----
-
-## Source of truth
-
-Keep responsibilities separated:
-
-    Dockerfile
-        build environment and dependencies
-
-    CMake
-        compilation and install layout
-
-    scripts/build-container.sh
-        reproducible build/staging procedure
-
-    scripts/deploy.sh
-        transfer and target installation procedure
-
-    systemd units
-        runtime service lifecycle
-
-    AGENTS.md
-        development conventions for agents
-
-Do not copy the same installation file list into multiple layers.
-
-When behavior changes, modify the layer that owns that behavior.
-
----
-
-## GitHub issues and pull requests
-
-Write issue and pull request titles in English. Write their descriptions
-in Japanese. Keep this convention when creating or editing either one.
-
----
-
-## Safety rules for agents
-
-Before performing deployment or other operations that modify the
-Raspberry Pi:
-
-1. Build using the documented Docker/aarch64 workflow.
-2. Stage installation through CMake DESTDIR.
-3. Use the configured SSH alias rather than hard-coded network details.
-4. Stop runtime services before replacing their binaries.
-5. Never use `rsync --delete` against the Raspberry Pi root filesystem.
-6. Do not modify unrelated Raspberry Pi system configuration unless the
-   task explicitly requires it.
-7. Do not install development dependencies on the Raspberry Pi merely to
-   make a build succeed.
-8. Preserve the distinction between build-time problems and
-   target-runtime/hardware problems.
-9. Verify service state and relevant logs after deployment.
-
-If a deployment step would require broader privileges or destructive
-filesystem operations than described here, stop and inspect the
-situation rather than improvising.
-
----
-
-## Preferred workflow
-
-For normal implementation work, use:
-
-    edit
-      ↓
-    ./scripts/build-container.sh
-      ↓
-    ./scripts/deploy.sh
-      ↓
-    runtime verification on picdplayer-pi
-
-The goal is to keep the Raspberry Pi close to the actual appliance
-runtime environment while keeping compilation and development workload
-on the Mac.
+- what changed
+- what was validated
+- where it was validated
+- what remains unverified
