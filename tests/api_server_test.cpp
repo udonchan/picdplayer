@@ -80,6 +80,16 @@ int main() {
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
         check(route_api_request("GET", "/api/state", huge).status == 500);
 
+        const ApiArtworkProvider artwork = []() -> std::optional<ApiResponse> {
+            return ApiResponse{200, "image/jpeg", "\xff\xd8\xff"};
+        };
+        response = route_api_request("GET", "/api/presentation/artwork/cover", provider,
+                                     {}, {}, {}, nullptr, {}, artwork);
+        check(response.status == 200 && response.content_type == "image/jpeg" && response.body.size() == 3);
+        check(route_api_request("POST", "/api/presentation/artwork/cover", provider,
+                                {}, {}, {}, nullptr, {}, artwork).status == 405);
+        check(route_api_request("GET", "/api/presentation/artwork/cover", provider).status == 404);
+
         int boot_calls = 0;
         const ApiUiBootHandler boot = [&](std::string_view page, std::string_view event, double ms) {
             check(page == "page-1" && event == "first_render" && ms == 12.5);
@@ -208,7 +218,8 @@ int main() {
         check(received.find("200 OK") != std::string::npos);
         check(received.find(R"({"revision":7})") != std::string::npos);
         check(received.find("content-security-policy:") != std::string::npos);
-        check(received.find("img-src 'self' data: https:") != std::string::npos);
+        check(received.find("img-src 'self' data:") != std::string::npos);
+        check(received.find("img-src 'self' data: https:") == std::string::npos);
         check(received.find("x-content-type-options: nosniff") != std::string::npos);
 
         done = false;

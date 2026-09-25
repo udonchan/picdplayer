@@ -17,9 +17,10 @@ metadataは再生に追加する情報である。TOCを読めた時点で再生
 disc Aの曲名をdisc Bへ表示することを防ぐ。取消が間に合うことだけに正しさを依存させない。
 
 画像はさらに別の取得段階である。現在は単一候補のreleaseについてCover Art Archiveへ
-問い合わせ、画像URLを得る。Now Playing画面ではブラウザがそのURLから画像を読み込む。
-daemon側の画像bytesの取得・検証・保存は未実装なので、URLが得られたことと、画像が表示できたことは
-別の結果である。曲名だけ取得できた場合も、画像なしで表示と再生を続けられる。
+問い合わせ、daemonがJPEG/PNG/WebPの画像bytesを上限付きで取得・検査してcacheへ保存する。
+Now PlayingはPiCDPlayer originの`/api/presentation/artwork/cover`だけを読む。provider URLや
+cache pathはUIへ公開しない。曲名だけ取得できた場合、画像取得・cache・decodeに失敗した場合も、
+画像なしで表示と再生を続ける。
 
 cacheは繰り返しの問い合わせを減らすために使うが、書き込めなくても再生は可能である。
 現在の形式と制限は[機能設計](../design/functional-design.md)、

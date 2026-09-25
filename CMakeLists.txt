@@ -44,7 +44,7 @@ if(ENABLE_API)
 endif()
 find_package(ALSA REQUIRED)
 find_package(Threads REQUIRED)
-add_executable(cdplayerd src/main.cpp src/logger.cpp src/cec_device.cpp src/cec_input.cpp src/optical_drive.cpp src/drive_capabilities.cpp src/cd_device.cpp src/disc_toc.cpp src/cdda_reader.cpp src/repeated_read_verifier.cpp src/repeated_read_policy.cpp src/cdda_probe.cpp src/pcm_file.cpp src/player_controller.cpp src/pcm_worker.cpp src/integrity_state.cpp src/player_event.cpp src/alsa_output.cpp src/playback_engine.cpp src/player_session.cpp src/media_state.cpp src/media_worker.cpp src/daemon_snapshot.cpp)
+add_executable(cdplayerd src/main.cpp src/logger.cpp src/cec_device.cpp src/cec_input.cpp src/optical_drive.cpp src/drive_capabilities.cpp src/cd_device.cpp src/disc_toc.cpp src/cdda_reader.cpp src/repeated_read_verifier.cpp src/repeated_read_policy.cpp src/cdda_probe.cpp src/pcm_file.cpp src/player_controller.cpp src/pcm_worker.cpp src/integrity_state.cpp src/player_event.cpp src/alsa_output.cpp src/playback_engine.cpp src/player_session.cpp src/media_state.cpp src/media_worker.cpp src/daemon_snapshot.cpp src/presentation_model.cpp)
 target_include_directories(cdplayerd PRIVATE include)
 target_link_libraries(cdplayerd PRIVATE ALSA::ALSA Threads::Threads)
 if(ENABLE_PARANOIA)
@@ -55,12 +55,12 @@ endif()
 if(ENABLE_METADATA)
     target_sources(cdplayerd PRIVATE src/musicbrainz_disc_id.cpp src/metadata_probe.cpp
         src/metadata_parser.cpp src/http_client.cpp src/metadata_lookup.cpp src/metadata_worker.cpp
-        src/metadata_session.cpp)
+        src/metadata_session.cpp src/enrichment_service.cpp)
     target_compile_definitions(cdplayerd PRIVATE ENABLE_METADATA=1)
     target_link_libraries(cdplayerd PRIVATE PkgConfig::DISCID CURL::libcurl nlohmann_json::nlohmann_json)
 endif()
 if(ENABLE_API)
-    target_sources(cdplayerd PRIVATE src/daemon_snapshot_json.cpp src/api_server.cpp
+    target_sources(cdplayerd PRIVATE src/daemon_snapshot_json.cpp src/presentation_json.cpp src/api_server.cpp
         src/ui_bundle.cpp)
     target_include_directories(cdplayerd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
     target_compile_definitions(cdplayerd PRIVATE ENABLE_API=1)
@@ -144,6 +144,15 @@ if(BUILD_TESTING)
     target_compile_options(daemon_snapshot_test PRIVATE -Wall -Wextra -Wpedantic)
     add_test(NAME daemon_snapshot COMMAND daemon_snapshot_test)
     if(ENABLE_API)
+        add_executable(presentation_model_test tests/presentation_model_test.cpp
+                       src/presentation_model.cpp src/presentation_json.cpp src/daemon_snapshot_json.cpp
+                       src/disc_toc.cpp src/drive_capabilities.cpp src/integrity_state.cpp src/player_event.cpp
+                       src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
+        target_include_directories(presentation_model_test PRIVATE include)
+        target_compile_features(presentation_model_test PRIVATE cxx_std_20)
+        target_compile_options(presentation_model_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(presentation_model_test PRIVATE nlohmann_json::nlohmann_json)
+        add_test(NAME presentation_model COMMAND presentation_model_test)
         add_executable(daemon_snapshot_json_test tests/daemon_snapshot_json_test.cpp
                        src/daemon_snapshot_json.cpp src/daemon_snapshot.cpp src/disc_toc.cpp
                        src/integrity_state.cpp src/drive_capabilities.cpp src/player_event.cpp

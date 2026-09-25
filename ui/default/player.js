@@ -77,13 +77,8 @@ function setConnection(value) {
   byId('connection').textContent = value;
 }
 
-function selectedMetadata(metadata) {
-  if (!Number.isInteger(metadata?.selected)) return null;
-  return metadata.candidates?.[metadata.selected] || null;
-}
-
-function currentTrack(selected, number) {
-  return selected?.tracks?.find((track) => track.track_number === number) || null;
+function currentTrack(tracks, number) {
+  return tracks?.find((track) => track.number === number) || null;
 }
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
@@ -91,8 +86,8 @@ function currentTrack(selected, number) {
 function showArt(artwork) {
   const container = byId('art');
   const image = byId('cover');
-  const url = artwork?.status === 'AVAILABLE' && typeof artwork.image_url === 'string'
-    ? artwork.image_url
+  const url = typeof artwork?.url === 'string'
+    ? artwork.url
     : '';
 
   if (!url) {
@@ -113,11 +108,11 @@ function showArt(artwork) {
   }
 }
 
-function mediaMessage(hasDisc, mediaState, metadataStatus) {
+function mediaMessage(hasDisc, mediaState, enrichmentStatus) {
   if (!hasDisc) return mediaState === 'LOADING' ? 'READING DISC' : 'WAITING FOR DISC';
-  if (metadataStatus === 'LOADING') return 'LOOKING UP ALBUM';
-  if (metadataStatus === 'AMBIGUOUS') return 'ALBUM SELECTION REQUIRED';
-  if (metadataStatus === 'ERROR') return 'METADATA UNAVAILABLE';
+  if (enrichmentStatus === 'LOADING') return 'LOOKING UP ALBUM';
+  if (enrichmentStatus === 'UNAVAILABLE') return 'ALBUM SELECTION REQUIRED';
+  if (enrichmentStatus === 'ERROR') return 'METADATA UNAVAILABLE';
   return 'NOW PLAYING';
 }
 
@@ -125,30 +120,29 @@ function mediaMessage(hasDisc, mediaState, metadataStatus) {
 // 描画専用です。browser 側に独立した再生状態を持ちません。
 function render(snapshot) {
   const player = snapshot.player || {};
-  const media = snapshot.media || {};
-  const metadata = snapshot.metadata || {};
-  const selected = selectedMetadata(metadata);
-  const track = currentTrack(selected, player.track);
-  const hasDisc = media.state === 'AUDIO_READY';
-  const fallbackTrack = Number.isInteger(player.track)
-    ? `Track ${String(player.track).padStart(2, '0')}`
+  const disc = snapshot.disc || {};
+  const enrichment = snapshot.enrichment || {};
+  const track = currentTrack(snapshot.tracks, player.track_number);
+  const hasDisc = disc.state === 'AUDIO_READY';
+  const fallbackTrack = Number.isInteger(player.track_number)
+    ? `Track ${String(player.track_number).padStart(2, '0')}`
     : '—';
 
-  set('media-message', mediaMessage(hasDisc, media.state, metadata.status));
-  set('album', hasDisc ? (selected?.album_title || 'Audio CD') : 'No disc');
+  set('media-message', mediaMessage(hasDisc, disc.state, enrichment.status));
+  set('album', hasDisc ? (disc.title || 'Audio CD') : 'No disc');
   set('album-artist', hasDisc
-    ? (selected?.album_artist || (metadata.status === 'LOADING'
+    ? (disc.artist || (enrichment.status === 'LOADING'
       ? 'Looking up album information'
       : 'Unknown artist'))
     : 'Insert an audio CD');
-  set('track-number', Number.isInteger(player.track)
-    ? String(player.track).padStart(2, '0')
+  set('track-number', Number.isInteger(player.track_number)
+    ? String(player.track_number).padStart(2, '0')
     : '—');
   set('track-title', hasDisc ? (track?.title || fallbackTrack) : '—');
-  set('track-artist', hasDisc ? (track?.artist || selected?.album_artist || '') : '');
+  set('track-artist', hasDisc ? (track?.artist || disc.artist || '') : '');
 
-  const position = player.position_in_track_frames;
-  const length = player.current_track_length_frames;
+  const position = player.position_frames;
+  const length = player.track_duration_frames ?? track?.duration_frames;
   set('position', formatTime(position));
   set('duration', formatTime(length));
   const fraction = Number.isInteger(position) && Number.isInteger(length) && length > 0
@@ -156,7 +150,7 @@ function render(snapshot) {
     : 0;
   byId('progress').style.width = `${fraction}%`;
   set('player-state', player.state || 'NO_DISC');
-  showArt(metadata.cover_art);
+  showArt(snapshot.artwork?.cover);
   boot.snapshot();
 }
 

@@ -31,7 +31,9 @@ struct ReleaseCandidate { DiscMetadata metadata; };
 
 struct ArtworkInfo {
     ArtworkStatus status = ArtworkStatus::not_requested;
+    // Provider URL is enrichment-internal. It must not be published to UI JSON.
     std::string image_url;
+    std::string mime_type;
     std::string error;
 };
 

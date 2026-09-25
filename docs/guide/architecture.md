@@ -17,8 +17,13 @@ mainが読み取り完了を待たないことが、音声出力の進行確認�
 判断するために使う。古いPCMや、取り出したdiscのmetadataを現在の再生へ適用しない。
 処理を強制中断できるかどうかと、戻ってきた結果を採用してよいかは別の問題である。
 
-DaemonSnapshotは各状態のコピーを公開する。UIは通信が戻ったら現在のsnapshotから表示を
-復元でき、過去のeventをすべて受け取ったことを前提にしない。
+Coreはdrive/media/disc/TOC、playback/read/integrity、CEC、audio outputだけを扱う。外部
+MusicBrainz/CAA、HTTP、cache、画像検証は任意のEnrichmentに閉じ込める。`EnrichmentService`は
+TOCを入力に非同期結果を返すだけで、PlayerControllerやPlaybackEngineを変更しない。
+
+UIはprovider固有の内部結果ではなく、Core factsと任意Enrichmentから組み立てるversionedな
+Presentation Modelを読む。通信が戻ったら現在のPresentation Modelから表示を復元でき、
+過去のeventをすべて受け取ったことを前提にしない。provider ID、外部URL、cache pathはUI契約に含めない。
 
 正確な所有権とライフサイクルは[基本設計](../design/basic-design.md)、
 世代と処理順序は[詳細設計](../design/detailed-design.md)を参照する。

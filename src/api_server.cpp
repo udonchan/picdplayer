@@ -27,7 +27,14 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiCommandHandler& command_handler,
                               std::string_view body,
                               const ApiReadPolicyProvider& read_policy_provider, const UiBundle* ui,
-                              const ApiUiBootHandler& ui_boot_handler) {
+                              const ApiUiBootHandler& ui_boot_handler,
+                              const ApiArtworkProvider& artwork_provider) {
+    if (path == "/api/presentation/artwork/cover") {
+        if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
+        if (!artwork_provider) return {404, "application/json", R"({"error":"not_found"})"};
+        if (const auto asset = artwork_provider()) return *asset;
+        return {404, "application/json", R"({"error":"not_found"})"};
+    }
     if (path == "/api/ui-boot") {
         if (method != "POST") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (!ui_boot_handler) return {403, "application/json", R"({"error":"telemetry_disabled"})"};
@@ -199,6 +206,7 @@ struct ApiServer::Implementation {
     ApiStateProvider state_provider;
     ApiCommandHandler command_handler;
     ApiReadPolicyProvider read_policy_provider;
+    ApiArtworkProvider artwork_provider;
     std::string websocket_state;
     std::array<lws_protocols, 2> protocols{};
     lws_context* context = nullptr;
@@ -235,7 +243,8 @@ struct ApiServer::Implementation {
             return true;
         };
         return route_api_request(method, path, state_provider,
-            local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry);
+            local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry,
+            artwork_provider);
     }
 
     static int send_response(lws* wsi, const ApiResponse& response) {
@@ -251,7 +260,7 @@ struct ApiServer::Implementation {
         };
         if (lws_add_http_common_headers(wsi, static_cast<unsigned int>(response.status),
                 response.content_type.c_str(), response.body.size(), &cursor, end) ||
-            add_header("content-security-policy:", "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data: https:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none") ||
+            add_header("content-security-policy:", "default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none") ||
             add_header("cache-control:", "no-store") ||
             add_header("x-content-type-options:", "nosniff") ||
             add_header("referrer-policy:", "no-referrer") ||
@@ -339,9 +348,11 @@ struct ApiServer::Implementation {
     }
 
     Implementation(std::string listen_address, int listen_port, ApiStateProvider provider,
-                   ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle)
+                   ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle,
+                   ApiArtworkProvider artwork)
         : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
-          command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)) {
+          command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)),
+          artwork_provider(std::move(artwork)) {
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
         websocket_state = state_provider();
         if (port < 0 || port > 65535) throw std::invalid_argument("API port is outside 0..65535");
@@ -366,9 +377,11 @@ struct ApiServer::Implementation {
 };
 
 ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
-                     ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui)
+                     ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui,
+                     ApiArtworkProvider artwork_provider)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
-                                                        std::move(handler), std::move(policy_provider), std::move(ui))) {}
+                                                        std::move(handler), std::move(policy_provider), std::move(ui),
+                                                        std::move(artwork_provider))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

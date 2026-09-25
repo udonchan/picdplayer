@@ -120,7 +120,7 @@ libwebsocketsを採用しmain threadからserviceする。HTTPとWebSocketを一
 
 | Method/path | 入力・結果 |
 |---|---|
-| GET /api/state | DaemonSnapshotのJSON |
+| GET /api/state | provider非依存のPresentation Model JSON |
 | GET /api/read-policy | requested/effective/pendingを即時取得 |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
@@ -149,12 +149,12 @@ technical statusはeffective strategyとReadPolicyを別々に表示し、未適
 再接続するため、eventを一件ずつ完全に受信したことを状態復元の前提にしない。metadata文字列は
 DOMのtextContentとして扱い、HTMLとして解釈しない。画面から操作POSTは送信しない。
 
-`/player`も初回GETとWebSocketで同じsnapshotを消費する。selected metadataがなければ `Audio CD` と
-track番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。CAA image URLが
-AVAILABLEならブラウザが画像として読む。URLの存在は画像binaryのdaemon取得・検証完了を意味しない。
-画像の失敗時はプレースホルダーへ戻る。外部文字列はtechnical statusと同様にtextContentで表示する。
-HTTP responseはCSPでscript/styleをselfへ制限する。`connect-src`はselfとws:/wss:を許可し、
-画面の実装は同一hostのAPIへ接続する。cover art用の`img-src`はself、data:、HTTPSを許可する。
+`/player`も初回GETとWebSocketで同じPresentation Modelを消費する。title/artistがなければ
+`Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
+coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
+戻る。外部文字列はtechnical statusと同様にtextContentで表示する。HTTP responseはCSPで
+script/style/imageをselfへ制限する。`connect-src`はselfとws:/wss:を許可し、画面の実装は
+同一hostのAPIへ接続する。
 
 ## eject
 
@@ -180,10 +180,12 @@ exact Disc ID lookupのみで、TOC fuzzy検索やCD stubは使用しない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補の場合だけCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
-artwork AVAILABLEはHTTPS画像URLの存在を意味し、画像binaryの取得・検証完了ではない。
-artwork失敗はmetadata候補を破棄しない。現在はCAA処理完了後にmetadata結果全体をmainへ返す。
+artwork AVAILABLEはdaemonがJPEG/PNG/WebPのbytesを上限付きで取得し、same-origin local resourceとして
+配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。現在はCAA処理完了後に
+metadata結果全体をmainへ返す。
 
-raw JSONを`metadata/{disc-id}.json`、`cover-art/{release-id}.json`へ保存する。
+raw JSONを`metadata/{disc-id}.json`、`cover-art/{release-id}.json`へ、検証済み画像bytesを
+`cover-art/{release-id}.image`へ保存する。
 cache pathは明示指定。systemdでは/var/cache/picdplayerを利用できる。
 書き込み失敗は無視して取得結果を利用する。期限・総容量制限・破損cacheからの自動再取得は未実装。
 read-only rootへの移植時はcacheを別の書き込み可能領域へ置く。
