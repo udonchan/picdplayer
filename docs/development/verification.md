@@ -15,6 +15,66 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## Kiosk定常負荷の計測手順（Issue #27、未実施）
+
+Pi 3でのCage + Chromium kioskのCPU・温度問題は報告されているが、原因と再現条件は未確定である。
+短時間の`top`と`vcgencmd get_throttled=0x60000`は、過去にfrequency capとthermal throttlingが
+発生したsticky historyを示しただけで、その時点の継続的な高負荷や現在のthrottlingを証明しない。
+この節の手順で、Issue #27の変更前後を同じ条件で比較する。
+
+実機操作であるため、Docker/CIで代替しない。測定前にPiの電源、冷却、室温、TV/HDMI、解像度、
+network、disc、metadata cache、remote debuggingの接続有無を記録する。各条件はwarm-up後に5分以上測定し、
+平均だけでなく最大CPU、温度推移、測定中のcurrent throttled bitsを比較する。
+
+比較する条件は、少なくともdaemonのみ（kiosk停止）、標準PlayerのSTOPPED、標準PlayerのPLAYING、
+CDP未接続、CDP接続に分ける。Cageのみや静的Chromium pageを追加できる場合も、同じ記録形式を使う。
+CDP/tracing自身がPiへ負荷を与えるため、CDP未接続の結果を基線として扱う。
+
+Piで以下を実行して、任意の名前を付けたraw log directoryを作る。これらのコマンドは状態を読むだけで、
+service設定・clock・CPU governorを変更しない。`Ctrl-C`で終了する。
+
+```sh
+run="$HOME/picdplayer-kiosk-perf/$(date +%Y%m%d-%H%M%S)-stopped-no-cdp"
+mkdir -p "$run"
+systemctl --no-pager --full status picdplayer.service picdplayer-kiosk.service >"$run/services.txt"
+cat /proc/cmdline >"$run/cmdline.txt"
+for path in /sys/devices/system/cpu/cpu*/cpufreq/scaling_{governor,cur_freq}; do
+  test -r "$path" && printf '%s: ' "$path" && cat "$path"
+done >"$run/cpu-start.txt"
+
+while :; do
+  {
+    date --iso-8601=seconds
+    vcgencmd measure_temp
+    vcgencmd get_throttled
+    free -h
+    ps -e -o pid,ppid,comm,%cpu,%mem,rss,args --sort=-%cpu | head -40
+    for path in /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq; do
+      test -r "$path" && printf '%s: ' "$path" && cat "$path"
+    done
+    printf '\n'
+  } >>"$run/samples.txt"
+  sleep 5
+done
+```
+
+測定の前後に、次も同じdirectoryへ保存する。
+
+```sh
+journalctl -b --no-pager -o short-monotonic \
+  | grep -E '(picdplayer|kiosk_boot|ui_boot|underrun|slow_stage)' >"$run/journal.txt"
+curl --fail --show-error http://127.0.0.1:8080/api/state >"$run/state.json"
+```
+
+`get_throttled`はlow bitsが測定時点の状態、bit 16以上がboot以降のsticky historyである。両者を
+同じ「現在throttling中」という結果にしない。`samples.txt`にはChromium browser/renderer/GPU、Cage、
+daemonを含むprocess別の値が混在するため、必要ならPID/PPIDで分けて集計する。ALSA underrunやdaemonの
+slow stageは`journal.txt`と同じ時間軸で確認する。
+
+WebSocket送信数、browserの`render()`、style/layout/paint/compositeの比較は、CDP Performance/Tracingを
+短時間だけ接続して別測定として保存する。traceを付けた値を無接続の定常CPU値と混ぜない。raw logには
+CDP endpoint、外部metadata URL、API keyを含めない。
+
 ## 自動試験
 
 CTestはCMakeの有効機能で件数が変わる。基本buildではcontroller、engine、ALSA抽象、CEC変換、

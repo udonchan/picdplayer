@@ -15,6 +15,7 @@ integrity拡張は必要な能力・根拠モデルの成立を確認して段�
 |---|---|
 | [#3 Investigate and reduce kiosk startup latency](https://github.com/udonchan/picdplayer/issues/3) | cold boot後のTV表示とtelemetryは確認済みだが、起動短縮は未解決。2026-09-25の一回の測定ではservice→wrapper約7.8秒、Cage exec→UI script受信約22.3秒、ui_ready受信はkernel起動後47.411秒だった。支配要因とTVのfirst pixelは未確定。 |
 | [#4 Complete appliance runtime and endurance validation](https://github.com/udonchan/picdplayer/issues/4) | 通常再生とcold boot後のSTOPPED表示は確認済み。最新service構成での一連の操作、kiosk長期運転、Custom UIの再生と並行した表示には未確認項目が残る。 |
+| [#27 Investigate and reduce kiosk CPU and thermal load](https://github.com/udonchan/picdplayer/issues/27) | Cage + Chromium kioskの高CPU/thermal throttling報告を、daemonのみ・STOPPED/PLAYING・CDP接続有無で実機比較する。sticky throttling historyと測定中の状態を区別し、原因を確認してからWebSocket/DOM/CSSの変更を判断する。 |
 | [#5 Evaluate read stalls and bound playback recovery](https://github.com/udonchan/picdplayer/issues/5) | ALSA underrunは自動復旧するが回数上限はない。API snapshot遅延によるunderrunと復旧は一度観測済み。傷disc・USB reset・長いread stallによる音の欠落/重複、操作遅延は未評価。pause復帰の先読み待ちも継続評価する。 |
 | [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | direct/paranoiaの保存PCM正常再生とdirect single/repeatの限定的な比較はあるが、drive回転・cache条件をそろえたbackend性能比較は未完了。現行運用はdirect。 |
 
