@@ -66,6 +66,14 @@ After editing:
 4. Check whether documentation needs updating.
 5. Report anything that could not be verified.
 
+Before committing, compare the change with relevant design, manual, and
+verification documents and with `docs/development/backlog.md`. If an issue was
+created, completed, or split, or implementation or verification status changed,
+check that backlog links and descriptions still match the current issue state.
+Keep implemented versus planned behavior and hardware-verified versus unverified
+behavior distinct. Fix inconsistencies in scope before committing; if they
+cannot be resolved from available evidence, report them explicitly.
+
 Do not infer success from the absence of errors.
 Prefer observable evidence over assumptions about what should have happened.
 
