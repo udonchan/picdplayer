@@ -1,12 +1,13 @@
 # 残課題とIssue一覧
 
-2026-09-25のドキュメント整合性確認とintegrity仕様統合を基準にした作業一覧。
+2026-09-26時点のrepositoryとGitHub Issueを照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
 着手・進捗・完了条件は各GitHub Issueで管理する。Issueを閉じる際は仕様と検証記録も更新する。
-この一覧の順番は確約された実装順ではない。まず実機回帰確認と起動時間の要因分析を進め、
-integrity拡張は必要な能力・根拠モデルの成立を確認して段階的に実装する。
+この一覧の順番は優先順位や実装順ではない。実装済みと実機確認済み、
+測定した条件と一般的な保証を区別する。
 
-「設計を先に確定する作業」は方式を選び実装へ分割するためのIssueであり、候補方式の採用決定ではない。
+親Issueは複数の独立した成果を追跡する入口であり、子Issueの完了条件と混同しない。
+方式が未決定の項目を採用済みの仕様として扱わない。
 実機操作・再起動・試聴は手順を提示してユーザーに依頼し、ビルドと自動試験はDockerで行う。
 
 ## 実機評価・改善
@@ -15,8 +16,8 @@ integrity拡張は必要な能力・根拠モデルの成立を確認して段�
 |---|---|
 | [#3 Investigate and reduce kiosk startup latency](https://github.com/udonchan/picdplayer/issues/3) | cold boot後のTV表示とtelemetryは確認済みだが、起動短縮は未解決。2026-09-25の一回の測定ではservice→wrapper約7.8秒、Cage exec→UI script受信約22.3秒、ui_ready受信はkernel起動後47.411秒だった。支配要因とTVのfirst pixelは未確定。 |
 | [#4 Complete appliance runtime and endurance validation](https://github.com/udonchan/picdplayer/issues/4) | 通常再生とcold boot後のSTOPPED表示は確認済み。最新service構成での一連の操作、kiosk長期運転、Custom UIの再生と並行した表示には未確認項目が残る。 |
-| [#27 Investigate and reduce kiosk CPU and thermal load](https://github.com/udonchan/picdplayer/issues/27) | Cage + Chromium kioskの高CPU/thermal throttling報告を、daemonのみ・STOPPED/PLAYING・CDP接続有無で実機比較する。sticky throttling historyと測定中の状態を区別し、原因を確認してからWebSocket/DOM/CSSの変更を判断する。 |
-| [#5 Evaluate read stalls and bound playback recovery](https://github.com/udonchan/picdplayer/issues/5) | ALSA underrunは自動復旧するが回数上限はない。API snapshot遅延によるunderrunと復旧は一度観測済み。傷disc・USB reset・長いread stallによる音の欠落/重複、操作遅延は未評価。pause復帰の先読み待ちも継続評価する。 |
+| [#27 Investigate and reduce kiosk CPU and thermal load](https://github.com/udonchan/picdplayer/issues/27) | 親Issue。[#52](https://github.com/udonchan/picdplayer/issues/52)の基線測定はrepositoryへ反映済みだがIssueはOpen。[#53](https://github.com/udonchan/picdplayer/issues/53)の描画改善、[#61](https://github.com/udonchan/picdplayer/issues/61)の残余負荷測定、[#62](https://github.com/udonchan/picdplayer/issues/62)のCustom UI向け注意事項は完了済み。条件と限界は[検証状況](verification.md)を参照する。 |
+| [#5 Evaluate read stalls and bound playback recovery](https://github.com/udonchan/picdplayer/issues/5) | 親Issue。[#33 read stallの影響測定](https://github.com/udonchan/picdplayer/issues/33)と[#34 有界な再生復旧](https://github.com/udonchan/picdplayer/issues/34)に分割済み。ALSA underrun復旧とread integrityを混同しない。 |
 | [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | direct/paranoiaの保存PCM正常再生とdirect single/repeatの限定的な比較はあるが、drive回転・cache条件をそろえたbackend性能比較は未完了。現行運用はdirect。 |
 
 ## integrity仕様の実装
@@ -28,8 +29,9 @@ integrity拡張は必要な能力・根拠モデルの成立を確認して段�
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | 現行repeatは同一区間のPCM全体の反復一致だけを調べる。overlap整列とcache対策はなく、2-of-3一致でも独立した物理再読込を保証しない。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
-| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 現在はReadEvidence、stream集計、直近64件のsnapshot eventとworker queue上限256件がある。詳細attempt履歴、unique coverage、session/gap/replay、active warning復元は未実装。 |
+| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。現在のReadEvidenceと有界eventに対し、[#35](https://github.com/udonchan/picdplayer/issues/35)で詳細な根拠・coverage、[#36](https://github.com/udonchan/picdplayer/issues/36)で再接続・event gapからの診断復元を扱う。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | 取得できる値とUNKNOWN/UNSUPPORTEDを区別し、Playerに事実に基づくIntegrity表示を統合する。 |
 
 ## 障害対応・機能改善
 
@@ -37,15 +39,18 @@ integrity拡張は必要な能力・根拠モデルの成立を確認して段�
 |---|---|
 | [#14 Recover CEC device loss and bound address claiming](https://github.com/udonchan/picdplayer/issues/14) | 通常のCEC登録・操作・ARC復帰は実機確認済み。device消失後の再open、claim timeout、専有制御は未実装/検討中。 |
 | [#15 Add explicit metadata release selection](https://github.com/udonchan/picdplayer/issues/15) | 同じDisc IDに複数候補があるとAMBIGUOUSを保持する。明示的な候補選択API/UIと選択の保存は未実装。 |
-| [#16 Harden metadata caching and HTTP input handling](https://github.com/udonchan/picdplayer/issues/16) | 現行cacheはraw JSONをparse前に保存する。期限・総容量・破損時再取得、Retry-After、JSONの深さ/全field長の制限等が未実装。 |
-| [#17 Define metadata mapping for unusual TOCs and disc identity](https://github.com/udonchan/picdplayer/issues/17) | DiscTocは先頭track番号を1に固定しないがmetadata track positionとの対応は未実装。交換を観測できない同一TOCの別discは識別できない。一方、LOADING後の同一TOCへのmetadata再要求は修正・確認済み。 |
+| [#16 Harden metadata caching and HTTP input handling](https://github.com/udonchan/picdplayer/issues/16) | 親Issue。[#37 cache lifecycle](https://github.com/udonchan/picdplayer/issues/37)と[#38 HTTP応答・解析の上限](https://github.com/udonchan/picdplayer/issues/38)に分割済み。 |
+| [#17 Define metadata mapping for unusual TOCs and disc identity](https://github.com/udonchan/picdplayer/issues/17) | 親Issue。[#39 先頭trackが1でないTOC](https://github.com/udonchan/picdplayer/issues/39)と[#40 同一TOCの識別限界](https://github.com/udonchan/picdplayer/issues/40)に分割済み。 |
+| [#25 Add artist backgrounds as progressive player enrichment](https://github.com/udonchan/picdplayer/issues/25) | 親Issue。[#48 artist識別](https://github.com/udonchan/picdplayer/issues/48)、[#49 provider/cache](https://github.com/udonchan/picdplayer/issues/49)、[#50 段階的配信](https://github.com/udonchan/picdplayer/issues/50)、[#51 Player表示](https://github.com/udonchan/picdplayer/issues/51)に分割済み。 |
+| [#28 Hide the cursor in the Cage kiosk session](https://github.com/udonchan/picdplayer/issues/28) | kiosk上のcursorを非表示にする方法を調査・検証する。 |
+| [#31 Add CEC-driven controls to the Player view](https://github.com/udonchan/picdplayer/issues/31) | 親Issue。[#54 loopback操作契約](https://github.com/udonchan/picdplayer/issues/54)、[#55 CEC navigation配信](https://github.com/udonchan/picdplayer/issues/55)、[#56 Player操作UI](https://github.com/udonchan/picdplayer/issues/56)に分割済み。 |
 
 ## 設計を先に確定する作業
 
 | Issue | 主な範囲 |
 |---|---|
-| [#18 Specify persistent settings and custom UI updates](https://github.com/udonchan/picdplayer/issues/18) | Custom UIは起動時の静的検証とfallbackを実装済み。永続設定、設定API/画面、runtime JS検査、hot reload、共通bootstrap/SDKは未実装。 |
-| [#21 Plan reproducible releases and appliance images](https://github.com/udonchan/picdplayer/issues/21) | PR向けDocker/aarch64 CIは導入済み。[#43](https://github.com/udonchan/picdplayer/issues/43) の開発用Debian package deployはfeature branchで実装し、Docker試験、Pi導入、停止状態維持、TV表示、短時間の再生を確認。USB過電流による一時的なdrive切断も観測した。PRと長時間再生確認は未了。release artifact、package version運用、Pi OS/Buildroot imageは未実装。 |
+| [#18 Specify persistent settings and custom UI updates](https://github.com/udonchan/picdplayer/issues/18) | 親Issue。Custom UIの起動時静的検証とfallbackは実装済み。[#41 永続設定](https://github.com/udonchan/picdplayer/issues/41)と[#42 Custom UI更新・復旧](https://github.com/udonchan/picdplayer/issues/42)を追跡する。 |
+| [#21 Plan reproducible releases and appliance images](https://github.com/udonchan/picdplayer/issues/21) | 親Issue。PR向けDocker/aarch64 CIと[#43 開発用Debian package](https://github.com/udonchan/picdplayer/issues/43)は完了済み。残る[#44 更新・削除](https://github.com/udonchan/picdplayer/issues/44)、[#45 版付きrelease artifact](https://github.com/udonchan/picdplayer/issues/45)、[#46 image要件](https://github.com/udonchan/picdplayer/issues/46)、[#47 bootable image](https://github.com/udonchan/picdplayer/issues/47)を追跡する。最終imageに開発用`.deb`を使うかは未決定。 |
 
 ## 未実装の製品機能
 
@@ -54,6 +59,19 @@ integrity拡張は必要な能力・根拠モデルの成立を確認して段�
 | [#19 Add quiet boot with a diagnosable failure path](https://github.com/udonchan/picdplayer/issues/19) | Chromium/CageのTV表示は動作しているが、kernel/systemd画面の非表示とsplashは未実装。起動時間短縮とは別の製品上の課題。 |
 | [#20 Design and validate a read-only root deployment](https://github.com/udonchan/picdplayer/issues/20) | read-only rootは未実装。cache・Chromium profile・journal・設定・Custom UIなどの書込先を分ける必要がある。 |
 
+## OSSライセンスと配布物の追跡
+
+最終目標はソース公開だけでなく、実際に配布するbootable imageのOSS構成を継続的に追跡すること。
+現在は`stage/`と開発用`.deb`をCMake install規則から生成し、Piへdpkgで導入する。
+専用bootable imageと公開release workflowは未実装である。
+
+| Issue | 段階と残る作業 |
+|---|---|
+| [#66 Establish project licensing and audit direct dependencies](https://github.com/udonchan/picdplayer/issues/66) | Phase 1。本体のApache-2.0案、直接依存、optionalなlibcdio-paranoiaの配布条件を監査する。 |
+| [#67 Track Debian package contents and distribution metadata](https://github.com/udonchan/picdplayer/issues/67) | Phase 2。#66を入力に、`.deb`の内容・runtime依存・copyrightを追跡可能にする。 |
+| [#68 Generate compliance artifacts from bootable release images](https://github.com/udonchan/picdplayer/issues/68) | Phase 3。#67と検査可能な#47のimageを入力に、最終image実体のinventory・SBOM・notice等を生成する。 |
+| [#69 Integrate compliance metadata with an embedded build system](https://github.com/udonchan/picdplayer/issues/69) | Phase 4。Buildroot/Yocto等への移行が決まった場合のみ着手する将来候補。 |
+
 ## 採用条件が整うまで保留する候補
 
 次は現在の不具合や実装必須項目ではない。必要性と対象が決まった時点で独立Issueを作る。
@@ -61,12 +79,15 @@ integrity拡張は必要な能力・根拠モデルの成立を確認して段�
 | 候補 | 保留理由・着手条件 |
 |---|---|
 | S/PDIF・外部I²S・複数出力profile | [出力拡張案](digital-audio-output.md)。対象hardwareと利用目的が未決定。現行HDMIのbit-perfectも保証しない |
-| daemon側のジャケット画像binary cache | 現行はbrowserがHTTPS画像を表示する。offline表示等の要件、容量・検証・失敗時挙動が決まった時に検討 |
 | AsyncLoggerのlibrary置換 | 現状の要件を満たす。追加sink・runtime level・rotation等が必要になった時にサイズ・依存・queue/flushを比較 |
 | mixed-mode・負LBA・隠しtrack・CD-TEXT | 現行は音声のみのCDが対象。対応discと用途が決まった時にTOC契約・試験を追加 |
 | 外部公開APIの認証・TLS | 現行はloopback操作と信頼する開発LANの診断用途。公開範囲を拡張する要件が決まった時に設計 |
 
-## 今回の整合性確認
+ジャケット画像のbinary cacheとsame-origin配信は[#23](https://github.com/udonchan/picdplayer/issues/23)で
+実装済み。破損・容量・offline運用等の未検証事項は[検証状況](verification.md)を参照し、
+未実装候補として重複掲載しない。
+
+## 以前の整合性確認（2026-09-25）
 
 README、Guide、Design、Manual、Developmentと、History/旧パスの案内・リンクを確認した。
 履歴の当時の数値・判断は現行仕様に合わせて書き換えない。
