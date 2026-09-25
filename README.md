@@ -66,9 +66,10 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 ### Mac + Dockerで開発する
 
 通常の開発ではApple Silicon Macで編集し、Debian Trixie arm64 Docker環境で
-Linux/aarch64向けにビルドします。`scripts/build-container.sh`が`build-container/`と
-CMakeのDESTDIR installによる`stage/`を生成し、`scripts/deploy.sh`がSSH alias
-`picdplayer-pi`を使ってPiへ反映します。Piは再生・表示などの実機確認に使います。
+Linux/aarch64向けにビルドします。`scripts/build-container.sh`が`build-container/`、
+CMakeのDESTDIR installによる`stage/`、deploy用Debian packageを置く
+`package-container/`を生成します。`scripts/deploy.sh`はSSH alias `picdplayer-pi`を
+使ってそのpackageをPiへinstallします。Piは再生・表示などの実機確認に使います。
 
 ```sh
 docker build -t picdplayer-build .  # 初回・Dockerfile更新時

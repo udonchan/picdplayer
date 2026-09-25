@@ -87,6 +87,40 @@ if(INSTALL_SYSTEMD_KIOSK_UNIT)
             DESTINATION ${CMAKE_INSTALL_LIBEXECDIR})
 endif()
 
+# CPack reuses the install() rules above.  The Debian package is the deployable
+# artifact; do not maintain a second file list in scripts.
+set(CPACK_PACKAGE_NAME "picdplayer")
+set(CPACK_PACKAGE_VENDOR "PiCDPlayer")
+set(CPACK_PACKAGE_CONTACT "PiCDPlayer development")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Appliance-style physical audio CD player for Raspberry Pi")
+set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+# The deployed system has historically used /usr/local.  Keep package payloads
+# identical to the DESTDIR staging layout instead of CPack's Debian /usr default.
+set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "arm64")
+endif()
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+# Generate lifecycle scripts only for the units included by this configuration.
+set(PICDPLAYER_PACKAGE_SERVICES "")
+if(INSTALL_SYSTEMD_UNIT)
+    list(APPEND PICDPLAYER_PACKAGE_SERVICES picdplayer.service)
+endif()
+if(INSTALL_SYSTEMD_KIOSK_UNIT)
+    list(APPEND PICDPLAYER_PACKAGE_SERVICES picdplayer-kiosk.service)
+endif()
+string(JOIN " " PICDPLAYER_PACKAGE_START_ORDER ${PICDPLAYER_PACKAGE_SERVICES})
+list(REVERSE PICDPLAYER_PACKAGE_SERVICES)
+string(JOIN " " PICDPLAYER_PACKAGE_STOP_ORDER ${PICDPLAYER_PACKAGE_SERVICES})
+foreach(script postinst prerm)
+    configure_file(packaging/debian/${script}.in packaging/${script} @ONLY)
+endforeach()
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
+    "${CMAKE_CURRENT_BINARY_DIR}/packaging/postinst;${CMAKE_CURRENT_BINARY_DIR}/packaging/prerm;${CMAKE_CURRENT_SOURCE_DIR}/packaging/debian/postrm")
+set(CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION ON)
+include(CPack)
+
 include(CTest)
 if(BUILD_TESTING)
     find_program(NODE_EXECUTABLE node)
@@ -272,6 +306,9 @@ if(BUILD_TESTING)
     endif()
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
+            ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
         if(ENABLE_API)
             add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)

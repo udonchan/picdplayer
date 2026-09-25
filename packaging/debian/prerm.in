@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+# Upgrades replace files in place and postinst restarts active services.  Stop
+# them only when this package is actually removed.
+case "$1" in
+    remove|deconfigure)
+        if test -d /run/systemd/system; then
+            for unit in @PICDPLAYER_PACKAGE_STOP_ORDER@; do
+                systemctl stop "$unit"
+            done
+        fi
+        ;;
+esac

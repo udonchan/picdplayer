@@ -44,7 +44,7 @@ integrity拡張は必要な能力・根拠モデルの成立を確認して段�
 | Issue | 主な範囲 |
 |---|---|
 | [#18 Specify persistent settings and custom UI updates](https://github.com/udonchan/picdplayer/issues/18) | Custom UIは起動時の静的検証とfallbackを実装済み。永続設定、設定API/画面、runtime JS検査、hot reload、共通bootstrap/SDKは未実装。 |
-| [#21 Plan reproducible releases and appliance images](https://github.com/udonchan/picdplayer/issues/21) | PR向けDocker/aarch64 CIは導入済み。release artifact、package更新、Pi OS/Buildroot imageは未実装で、現行rsync deployは旧install fileを自動削除しない。 |
+| [#21 Plan reproducible releases and appliance images](https://github.com/udonchan/picdplayer/issues/21) | PR向けDocker/aarch64 CIは導入済み。[#43](https://github.com/udonchan/picdplayer/issues/43) の開発用Debian package deployはfeature branchで実装し、Docker試験、Pi導入、停止状態維持、TV表示、短時間の再生を確認。USB過電流による一時的なdrive切断も観測した。PRと長時間再生確認は未了。release artifact、package version運用、Pi OS/Buildroot imageは未実装。 |
 
 ## 未実装の製品機能
 

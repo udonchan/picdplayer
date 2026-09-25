@@ -19,12 +19,14 @@ Apple Silicon Mac
 ├─ Docker: Debian Trixie arm64
 │    ├─ CMake configure
 │    ├─ C++ build
-│    └─ CMake DESTDIR install
+│    ├─ CMake DESTDIR install
+│    └─ CPack Debian package
 │
 ├─ build-container/
-└─ stage/
+├─ stage/
+└─ package-container/
       │
-      │ SSH / rsync
+      │ SSH / rsync / dpkg
       ▼
 Raspberry Pi
 ├─ systemd
@@ -69,6 +71,7 @@ Dockerfileを変更した場合は、build imageを再作成してください�
 1. `picdplayer-build` container内でCMakeをconfigureする
 2. Linux/aarch64向けにビルドする
 3. CMakeのinstall ruleを使い、`stage/`へDESTDIR installする
+4. 同じinstall ruleからCPackで`package-container/`へDebian packageを生成する
 
 主なCMake設定は次の通りです。
 
@@ -108,7 +111,10 @@ stage/
 新しいruntime fileを追加するときは、deploy scriptへ個別のcopy処理を追加するのではなく、
 原則としてCMakeのinstall ruleへ追加します。
 
-`build-container/` と `stage/` は生成物であり、Gitでは管理しません。
+`build-container/`、`stage/`、`package-container/`は生成物であり、Gitでは管理しません。
+`stage/`はCMakeのDESTDIR install結果を検査するために残す。deployするartifactは
+`package-container/`内のDebian packageである。ビルド開始時に前回のpackageを破棄し、
+configure/build/package検証に失敗した場合はdeploy可能な`.deb`を残さない。
 
 ### 自動試験を実行する
 
@@ -119,7 +125,7 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
   ctest --test-dir build-container --output-on-failure
 ```
 
-標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含めて29件を登録します。
+標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含めて31件を登録します。
 実機deviceの代わりにfake、ALSA null、存在しないCD deviceを使用する試験があり、
 loopback socket通信を許可した環境が必要です。実機の試聴・CEC・TV表示は別に確認します。
 
@@ -163,37 +169,85 @@ ssh picdplayer-pi
 PICDPLAYER_TARGET=picdplayer-test ./scripts/deploy.sh
 ```
 
+`build-container.sh`はCMakeの同じ`install()`規則から、aarch64用の`.deb`を1個生成する。
+CPackが動的library依存をDebian dependencyとして算出し、dpkgは旧versionが所有するファイルを
+更新・削除する。そのためroot filesystemへのrsyncや`rsync --delete`は使わない。
+ただし初回package化より前に手動・rsyncで導入し、現在のpackageにも含まれない旧ファイルは
+管理対象にならず、自動削除しない。現在も同じpathへinstallするファイルはpackage管理へ移行する。
+`/usr/local`を維持する開発者専用packageであり、Debian公式配布向けのpackageではない。
+
 deploy scriptは概ね次の順序で処理します。
 
 ```text
-Mac stage/
+Mac package-container/picdplayer_*.deb
     │
     │ rsync
     ▼
-Pi ~/stage/
+Pi ~/picdplayer-package/picdplayer.deb
     │
-    ├─ kiosk service停止
-    ├─ daemon service停止
-    │
-    ├─ staged filesystem treeをinstall
-    │
-    ├─ systemctl daemon-reload
-    │
-    ├─ daemon service起動
-    └─ kiosk service起動
+    └─ sudo dpkg -i
+         ├─ package install
+         ├─ systemd daemon-reload
+         └─ activeだったdaemon → kioskを順にrestart
 ```
 
-`deploy.sh`はPi側の`sudo`にパスワードが必要な場合、Macの端末へ一度だけ入力を求めます。
-実行時には対話可能な端末を使います。
+packageのpostinstは、起動済みsystemd hostだけでdaemon-reloadと`try-restart`を実行する。
+inactive serviceを新たにstart/enableせず、初回のservice user作成、runtime package導入、service enableは
+[systemd手順](systemd.md)に従って一度だけ行う。CPU負荷の調査などで意図的に停止中のserviceは
+deploy後も停止したままとし、deploy scriptは前後のactive stateが一致することを確認する。
+実機検証時だけ手動で起動する。deploy前は両serviceが`active`または`inactive`であることを
+要求し、`failed`や遷移中の状態は転送前にエラーとする。deploy後は状態の一致とpackageの
+`install ok installed`を検査する。これは観測時点の確認であり、その後のcrashやTV表示・再生の
+正常性までは保証しない。
 
-`~/stage/` はRaspberry Piのroot filesystem全体を表すものではなく、
-PiCDPlayerがインストールするファイルだけを含みます。
+upgrade時は実行中のserviceを残してdpkgがファイルを更新し、configure後に再起動する。
+標準UIはdaemon内に埋め込まれ、Custom UIも起動時に読み込む。新しい配信内容と表示の確認は
+daemonとkioskの再起動後に行う。
+remove時はkiosk→daemonの順に停止し、停止に失敗したらファイル削除へ進まずエラーを返す。
+CMakeでunitのinstallを無効にしたpackageは、そのunitのrestart/stopを行わない。
+初回install時のenableや設定・cacheの削除は行わない。
 
-そのため、`~/stage/` から `/` への反映には `rsync --delete` を使用しません。
+### passwordless deploy（信頼する開発者用）
 
-現在のdeploy方式では、以前のversionではインストールされていたものの、
-後からCMakeのinstall ruleから削除された古いファイルは自動削除されません。
-これが実際の問題になった場合は、install manifestによる管理やDebian package化を検討します。
+同じ開発者がMacのsource/packageとPiのSSH accountを管理する開発環境では、初回だけPiで
+限定したsudoers ruleを設定できる。`<development-user>`を実際のlogin nameへ置き換える。
+
+```sudoers
+<development-user> ALL=(root) NOPASSWD: /usr/bin/dpkg -i -- /home/<development-user>/picdplayer-package/picdplayer.deb
+```
+
+rootで`visudo -f /etc/sudoers.d/picdplayer-deploy`を使って保存し、`visudo -cf`で構文を検査する。
+このruleは`deploy.sh`が使う固定path・固定filename・`dpkg -i`だけを許可する。SSH accountが
+そのpackageを置き換えられるため、この設定はそのaccountとMacのbuild環境にroot相当のdeploy権限を
+委譲する。複数利用者・CI・配布artifactには使わず、署名検証を含む別のrelease設計で扱う。
+
+設定後は、password promptなしで許可されたcommandを確認できる。これはinstallを実行しない。
+
+```sh
+ssh picdplayer-pi 'sudo -n -l /usr/bin/dpkg -i -- ~/picdplayer-package/picdplayer.deb'
+```
+
+sudoers設定がない、または固定commandと一致しない場合、deploy scriptはpackage転送前に
+エラー終了する。password promptには進まない。
+
+実機測定でdaemonとkioskを個別に起動・停止・再起動する場合は、必要なunitだけを次のように
+追加で許可できる。`/usr/bin/systemctl`のpathはPiで`command -v systemctl`を確認する。
+
+```sudoers
+Cmnd_Alias PICDPLAYER_SERVICES = \
+    /usr/bin/systemctl start picdplayer.service, \
+    /usr/bin/systemctl stop picdplayer.service, \
+    /usr/bin/systemctl restart picdplayer.service, \
+    /usr/bin/systemctl start picdplayer-kiosk.service, \
+    /usr/bin/systemctl stop picdplayer-kiosk.service, \
+    /usr/bin/systemctl restart picdplayer-kiosk.service
+
+<development-user> ALL=(root) NOPASSWD: PICDPLAYER_SERVICES
+```
+
+既存の`dpkg -i` ruleは残す。`visudo -cf /etc/sudoers.d/picdplayer-deploy`で構文を確認し、
+起動はdaemon→kiosk、停止はkiosk→daemonの順に個別の`systemctl` commandを実行する。
+`daemon-reload`、`enable`、任意のunit名は追加しない。
 
 ### 日常の開発フロー
 

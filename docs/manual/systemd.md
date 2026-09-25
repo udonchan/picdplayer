@@ -30,9 +30,10 @@ serviceの`Restart=on-failure`で再試行する。CD deviceのopen失敗は同�
 
 ## Buildとinstall
 
-通常のビルド・staging・deployは[Mac + Docker開発手順](mac-docker-development.md)を使う。
+通常のビルド・staging・Debian package deployは[Mac + Docker開発手順](mac-docker-development.md)を使う。
 Macで`./scripts/build-container.sh`を実行すると、metadata/API・daemon/kiosk unitを有効にして
-`build-container/`と`stage/`を生成する。Piではコンパイルしない。
+`build-container/`、`stage/`、deploy用のDebian packageを置く`package-container/`を生成する。
+Piではコンパイルしない。
 
 CMake単体ではunitのinstall optionは既定OFFで、標準Docker scriptが明示的にONにする。
 Linux単体での補助ビルドは[ビルド手順](build.md)を参照する。
@@ -55,7 +56,8 @@ unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspbe
 各groupが存在し、`/dev/cec0`、`/dev/sr0`、ALSA deviceへアクセスできることを確認する。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
-scriptはkiosk、daemonの順に停止し、CMakeのstageを反映してdaemon-reload後に起動する。
+scriptはCMake install規則から生成したDebian packageをinstallする。package postinstはdaemon-reload後に
+稼働中のdaemon、kioskを順にrestartする。意図的に停止したserviceは起動しない。
 Piで`sudo systemd-analyze verify picdplayer.service picdplayer-kiosk.service`を実行してunitも確認する。
 
 ## 起動設定
@@ -129,8 +131,9 @@ PICDPLAYER_EXTRA_ARGS="--metadata musicbrainz --metadata-cache /var/cache/picdpl
 設定変更はserviceのrestartで反映する。
 
 既存serviceの更新にもMacから`./scripts/deploy.sh`を使用する。
-手動で更新する場合もkiosk→daemonの順に停止してからstaged fileをinstallし、
-daemon-reload後にdaemon→kioskの順で起動する。
+手動で更新する場合も、`package-container/`のDebian packageをPiへ転送して
+`sudo dpkg -i -- <package>`でinstallする。packageのmaintainer scriptが稼働中serviceの
+restartとdaemon-reloadを行う。
 
 ## Chromium/Cage kiosk
 
@@ -302,8 +305,8 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-c
 ssh picdplayer-pi 'systemctl --no-pager --full status picdplayer.service picdplayer-kiosk.service'
 ```
 
-`deploy.sh`はPi側でsudoのパスワードが必要ならMacの端末に一度だけ入力を求める。
-非対話環境では実行せず、SSHの対話端末からinstallする。
+`deploy.sh`はPi側の限定sudoers ruleを先に検査し、password promptなしでpackageをinstallする。
+ruleがない場合は転送前にエラー終了する。設定は[Mac + Docker開発手順](mac-docker-development.md)を参照する。
 
 TV表示・CEC再生と両サービスの正常稼働を確認してから、cold bootを測る場合は
 `ssh -t picdplayer-pi 'sudo systemctl poweroff'`で安全に停止し、電源断可能な状態になってから
