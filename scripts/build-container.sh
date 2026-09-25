@@ -9,6 +9,7 @@ set -euo pipefail
 # Output:
 #   build-container/   CMake build tree
 #   stage/             filesystem tree ready for deployment
+#   package-container/ Debian package ready for deployment
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -16,12 +17,14 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 IMAGE="${PICDPLAYER_BUILD_IMAGE:-picdplayer-build}"
 BUILD_DIR="build-container"
 STAGE_DIR="${REPO_ROOT}/stage"
+PACKAGE_DIR="${REPO_ROOT}/package-container"
 
 echo "==> PiCDPlayer container build"
 echo "    repository : ${REPO_ROOT}"
 echo "    image      : ${IMAGE}"
 echo "    build dir  : ${REPO_ROOT}/${BUILD_DIR}"
 echo "    stage dir  : ${STAGE_DIR}"
+echo "    package dir: ${PACKAGE_DIR}"
 echo
 
 # ---------------------------------------------------------------------------
@@ -99,9 +102,38 @@ fi
 echo "==> Installed files"
 find "${STAGE_DIR}" \( -type f -o -type l \) -print
 
+# ---------------------------------------------------------------------------
+# Debian package
+# ---------------------------------------------------------------------------
+
+echo "==> Packaging Debian artifact"
+
+rm -rf "${PACKAGE_DIR}"
+mkdir -p "${PACKAGE_DIR}"
+
+docker run --rm \
+    -v "${REPO_ROOT}:/src" \
+    -w /src \
+    "${IMAGE}" \
+    cpack --config "/src/${BUILD_DIR}/CPackConfig.cmake" -G DEB -B /src/package-container
+
+PACKAGE_COUNT="$(find "${PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -print | wc -l | tr -d '[:space:]')"
+if [[ "${PACKAGE_COUNT}" != 1 ]]; then
+    echo "ERROR: expected exactly one Debian package in ${PACKAGE_DIR}, found ${PACKAGE_COUNT}" >&2
+    exit 1
+fi
+PACKAGE="$(find "${PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -print)"
+echo "==> Debian package metadata"
+docker run --rm \
+    -v "${REPO_ROOT}:/src:ro" \
+    -w /src \
+    "${IMAGE}" \
+    dpkg-deb --info "/src/${PACKAGE#${REPO_ROOT}/}"
+
 echo
 echo "==> Build completed successfully"
 echo "    staged installation: ${STAGE_DIR}"
+echo "    Debian package: ${PACKAGE}"
 echo
 echo "Deploy with:"
 echo "    ./scripts/deploy.sh"

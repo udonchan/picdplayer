@@ -30,9 +30,10 @@ serviceの`Restart=on-failure`で再試行する。CD deviceのopen失敗は同�
 
 ## Buildとinstall
 
-通常のビルド・staging・deployは[Mac + Docker開発手順](mac-docker-development.md)を使う。
+通常のビルド・staging・Debian package deployは[Mac + Docker開発手順](mac-docker-development.md)を使う。
 Macで`./scripts/build-container.sh`を実行すると、metadata/API・daemon/kiosk unitを有効にして
-`build-container/`と`stage/`を生成する。Piではコンパイルしない。
+`build-container/`、`stage/`、deploy用のDebian packageを置く`package-container/`を生成する。
+Piではコンパイルしない。
 
 CMake単体ではunitのinstall optionは既定OFFで、標準Docker scriptが明示的にONにする。
 Linux単体での補助ビルドは[ビルド手順](build.md)を参照する。
@@ -55,7 +56,8 @@ unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspbe
 各groupが存在し、`/dev/cec0`、`/dev/sr0`、ALSA deviceへアクセスできることを確認する。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
-scriptはkiosk、daemonの順に停止し、CMakeのstageを反映してdaemon-reload後に起動する。
+scriptはCMake install規則から生成したDebian packageをinstallする。package postinstは稼働中の
+daemon、kioskを順にrestartし、daemon-reloadを行う。
 Piで`sudo systemd-analyze verify picdplayer.service picdplayer-kiosk.service`を実行してunitも確認する。
 
 ## 起動設定
@@ -129,8 +131,9 @@ PICDPLAYER_EXTRA_ARGS="--metadata musicbrainz --metadata-cache /var/cache/picdpl
 設定変更はserviceのrestartで反映する。
 
 既存serviceの更新にもMacから`./scripts/deploy.sh`を使用する。
-手動で更新する場合もkiosk→daemonの順に停止してからstaged fileをinstallし、
-daemon-reload後にdaemon→kioskの順で起動する。
+手動で更新する場合も、`package-container/`のDebian packageをPiへ転送して
+`sudo dpkg -i -- <package>`でinstallする。packageのmaintainer scriptが稼働中serviceの
+restartとdaemon-reloadを行う。
 
 ## Chromium/Cage kiosk
 

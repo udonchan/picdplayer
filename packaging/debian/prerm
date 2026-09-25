@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+# Upgrades replace files in place and postinst restarts active services.  Stop
+# them only when this package is actually removed.
+case "$1" in
+    remove|deconfigure)
+        if [ -d /run/systemd/system ]; then
+            systemctl stop picdplayer-kiosk.service || true
+            systemctl stop picdplayer.service || true
+        fi
+        ;;
+esac

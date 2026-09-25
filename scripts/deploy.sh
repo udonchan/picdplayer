@@ -3,7 +3,7 @@ set -euo pipefail
 
 # PiCDPlayer deployment script
 #
-# Deploys the CMake DESTDIR staging tree to the Raspberry Pi.
+# Deploys the CMake/CPack Debian package to the Raspberry Pi.
 #
 # Default target:
 #   picdplayer-pi
@@ -15,68 +15,62 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 TARGET="${PICDPLAYER_TARGET:-picdplayer-pi}"
-LOCAL_STAGE="${REPO_ROOT}/stage"
-REMOTE_STAGE="stage"
-
-DAEMON_SERVICE="picdplayer.service"
-KIOSK_SERVICE="picdplayer-kiosk.service"
+LOCAL_PACKAGE_DIR="${REPO_ROOT}/package-container"
+REMOTE_PACKAGE_DIR="picdplayer-package"
+REMOTE_PACKAGE_NAME="picdplayer.deb"
 
 echo "==> PiCDPlayer deploy"
 echo "    repository : ${REPO_ROOT}"
 echo "    target     : ${TARGET}"
-echo "    stage      : ${LOCAL_STAGE}"
+echo "    package dir: ${LOCAL_PACKAGE_DIR}"
 echo
 
 # ---------------------------------------------------------------------------
 # Preconditions
 # ---------------------------------------------------------------------------
 
-if [[ ! -d "${LOCAL_STAGE}" ]]; then
-    echo "ERROR: staging directory does not exist:"
-    echo "  ${LOCAL_STAGE}"
+if [[ ! -d "${LOCAL_PACKAGE_DIR}" ]]; then
+    echo "ERROR: package directory does not exist:"
+    echo "  ${LOCAL_PACKAGE_DIR}"
     echo
     echo "Run the build/install step first."
     exit 1
 fi
 
-if [[ ! -x "${LOCAL_STAGE}/usr/local/bin/cdplayerd" ]]; then
-    echo "ERROR: staged cdplayerd not found or not executable:"
-    echo "  ${LOCAL_STAGE}/usr/local/bin/cdplayerd"
+PACKAGE_COUNT="$(find "${LOCAL_PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -print | wc -l | tr -d '[:space:]')"
+if [[ "${PACKAGE_COUNT}" != 1 ]]; then
+    echo "ERROR: expected exactly one Debian package in ${LOCAL_PACKAGE_DIR}, found ${PACKAGE_COUNT}" >&2
     exit 1
 fi
+LOCAL_PACKAGE="$(find "${LOCAL_PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -print)"
 
 echo "==> Checking SSH connection"
 ssh "${TARGET}" true
 
 # ---------------------------------------------------------------------------
-# Upload staging tree
+# Upload package
 # ---------------------------------------------------------------------------
 
-echo "==> Preparing remote staging directory"
-ssh "${TARGET}" 'rm -rf ~/stage && mkdir -p ~/stage'
+echo "==> Preparing remote package directory"
+ssh "${TARGET}" "rm -rf ~/${REMOTE_PACKAGE_DIR} && mkdir -p ~/${REMOTE_PACKAGE_DIR}"
 
-echo "==> Uploading staging tree"
+echo "==> Uploading Debian package"
 rsync -av \
-    "${LOCAL_STAGE}/" \
-    "${TARGET}:~/${REMOTE_STAGE}/"
+    "${LOCAL_PACKAGE}" \
+    "${TARGET}:~/${REMOTE_PACKAGE_DIR}/${REMOTE_PACKAGE_NAME}"
 
 # ---------------------------------------------------------------------------
 # Install on target
 # ---------------------------------------------------------------------------
 
-echo "==> Installing staged files and restarting PiCDPlayer"
+echo "==> Installing Debian package"
 
-# A single remote TTY lets sudo prompt once when the target requires a password.
-# Remote bash exits on an installation/reload/start error. Never delete from /.
+# The package postinst reloads systemd and restarts only services which were
+# active before installation.  A narrow NOPASSWD sudoers entry may permit this
+# exact dpkg invocation for the trusted development account.
 ssh -tt "${TARGET}" "
     set -e
-    sudo -v
-    sudo systemctl stop ${KIOSK_SERVICE} || true
-    sudo systemctl stop ${DAEMON_SERVICE} || true
-    sudo rsync -av ~/${REMOTE_STAGE}/ /
-    sudo systemctl daemon-reload
-    sudo systemctl start ${DAEMON_SERVICE}
-    sudo systemctl start ${KIOSK_SERVICE}
+    sudo /usr/bin/dpkg -i -- ~/${REMOTE_PACKAGE_DIR}/${REMOTE_PACKAGE_NAME}
 "
 
 # ---------------------------------------------------------------------------
@@ -86,8 +80,8 @@ ssh -tt "${TARGET}" "
 echo "==> Verifying services"
 
 ssh "${TARGET}" "
-    systemctl --no-pager --full status ${DAEMON_SERVICE}
-    systemctl --no-pager --full status ${KIOSK_SERVICE}
+    systemctl --no-pager --full status picdplayer.service
+    systemctl --no-pager --full status picdplayer-kiosk.service
 "
 
 echo
