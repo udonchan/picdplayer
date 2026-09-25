@@ -15,6 +15,52 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## Kiosk定常負荷の計測手順（Issue #52）
+
+Pi 3でのCage + Chromium kioskのCPU・温度問題は報告されているが、原因と再現条件は未確定。
+過去の`get_throttled=0x60000`はbit 17/18のboot以降の履歴であり、現在throttling中を意味しない。
+現在状態はlow bitsを見る。[Raspberry Pi公式のbit定義](https://www.raspberrypi.com/documentation/computers/os.html#get_throttled)を参照。
+
+同じPi、電源、冷却、室温、TV/HDMI、解像度、disc、network、metadata cacheで条件をそろえる。
+30秒warm-up後に各条件を5分以上測り、STOPPED/PLAYINGとCDP未接続/接続を区別する。
+`ps %CPU`はprocess起動以来の値なので、[計測スクリプト](../../scripts/measure-kiosk.py)は
+`/proc/stat`と各taskのCPU tick差分から5秒区間の値を計算する。process別CPUは1 core=100%、
+system CPUは全coreに対する割合。温度、現在/過去throttling、各CPU周波数、memory/swap、
+thread別上位5件、RSSと時刻をJSON Linesへ記録する。rawにはfull command line、URL、API keyを入れない。
+
+```sh
+# Macで測定スクリプトをPiのhomeへ置く。Pi上ではコンパイルしない。
+ssh picdplayer-pi 'mkdir -p ~/picdplayer-kiosk-perf/tools'
+rsync scripts/measure-kiosk.py picdplayer-pi:~/picdplayer-kiosk-perf/tools/
+ssh picdplayer-pi 'python3 ~/picdplayer-kiosk-perf/tools/measure-kiosk.py \
+  --condition services-stopped --seconds 300 --interval 5' > stopped.jsonl
+python3 scripts/summarize-kiosk.py stopped.jsonl
+```
+
+測定中にSoCが78°C以上、または現在のundervoltage・frequency cap・throttling・soft temperature
+limitが立てばsamplerは異常終了する。serviceを起動して測る場合は、その終了時に停止するtrapを設定する。
+測定によるCPU/温度増分は停止状態にもsamplerを動かして確認する。異常時は継続せず電源・冷却を確認する。
+ALSA underrun、daemon slow stage、CDDA errorは同じ時刻の`journalctl`から別途照合する。
+
+CDPはMacからSSH port forwardingで接続し、[短時間の計測スクリプト](../../scripts/measure-kiosk-cdp.py)
+でPerformance metricsと任意のtimeline trace・screenshotを取得する。CDP自身がCPU/paintに負荷を
+加えるので、未接続の5分測定と混ぜない。`Performance.getMetrics`のLayoutCountなどはrendererの
+累積値の差であり、画面に実際に表示されたpixelを保証しない。traceは最大10秒に制限する。
+
+```sh
+ssh -N -L 9222:127.0.0.1:9222 picdplayer-pi  # 別terminal
+python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
+  --screenshot /tmp/picdplayer-player.png
+```
+
+### 測定結果
+
+2026-09-25〜26のPi 3実測、raw data、未確認条件は
+[kiosk基準測定レポート](reports/2026-09-25-kiosk-baseline/README.md)に記録した。
+再生中の標準Playerは全core CPU平均70.92%（54.6秒）、進行バーのCSS transitionだけを
+一時停止したPLAYING区間は10.79%（36.0秒）だった。測定時間・順序が異なるため、
+長時間の改善率ではない。#53の変更はまだPiに導入していない。
+
 ## 自動試験
 
 CTestはCMakeの有効機能で件数が変わる。基本buildではcontroller、engine、ALSA抽象、CEC変換、
