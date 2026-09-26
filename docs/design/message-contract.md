@@ -1,8 +1,8 @@
 # 現行の再生・診断メッセージ契約
 
-対象はmaster `53ddd4d`、公開`schema_version=1`。現行実装を記述するもので、将来不変のAPIを宣言しない。
+照合対象はmaster `0f8e12f`、公開`schema_version=1`。現行実装を記述するもので、将来不変のAPIを宣言しない。
 公開メッセージのfield表は本書を正本とし、[機能設計](functional-design.md#api)は操作・動作の正本とする。
-実装と検証は別であり、異常系の残検証は#89/#90、Player統合はDraftの#24で扱う。
+実装と検証は別であり、#89/#90の自動検証は完了。実機異常系は#96、未実装のPlayer統合は#24で扱う。
 
 ## 公開経路と生成元
 
@@ -101,6 +101,10 @@ policy.requested/effectiveのfieldはmode（SINGLE/REPEAT）、region_frames、r
 maximum_attempts、time_budget_ms（いずれもuint）。pendingは要求が実効方針に未反映であることを示す。
 POSTの検証範囲・適用境界は機能設計を参照する。requested_modeとは別の概念である。
 
+block容量はworkerと同じく`floor(buffer_capacity_frames / read_block_frames)`。
+正のread量と非負の容量を検証して算出し、欠損/不正値では未取得表示にする。
+queued blocksの比率は可聴秒数やqueued framesではない。容量0では比率を算出しない。
+
 statsの全fieldはuint。read_calls、frames_requested、frames_accepted、direct_retries、
 backend_reads、backend_verifies、backend_fixups、backend_skips、backend_read_errors、backend_cache_errors、
 backend_other、verification_attempts、verification_mismatches、verified_calls、verification_failures、failed_calls。
@@ -152,6 +156,9 @@ policy revisionはworker初期構成1、reconfigureごとに増加。
 device generationはreader open成功のincarnation、disc generationはTOC再受理。未観測の交換は検出できない。
 各世代をdaemon再起動間で比較せず、session_idを先に照合する。物理hotplug完全検出は#88の別課題。
 current_playbackの根拠はPCM側に保持し、履歴evictionと独立する。
+engineは提出済みstereo frame数からoutput.delay()を差し引いた位置に対応する根拠を選ぶ。
+その位置に対応する提出済み区間がなければnull。単に最後に提出したblockではなく、
+HDMI/ARCの実可聴位置を測定した値でもない。
 active_warningは正常readやevent消費で解除せず、stream終了で消す。停止後の永続障害台帳ではない。
 
 詳細履歴応答のrootはschema_version:int=1、session_id:string、stream_generation:uint、history:object。
@@ -171,6 +178,7 @@ worker→main転送とsnapshotは同時点でなく、history.last_read_sequence
 revisionの欠番だけでread欠落を確定しない。初回first>1、前回末尾+1より先の窓、worker_dropped増加は
 未観測範囲としてUNKNOWNにする。worker_droppedはmainの64件窓の全eviction数ではない。
 
+以下は診断consumerの復元ルールであり、technical statusで実装済み。標準Playerへの統合は#24の対象。
 初回REST後にWSへ接続し、再接続時はsnapshotを取り直す。snapshotを正として警告を置換し、
 過去eventの再生で警告を再構成しない。同sessionの古い/同revisionは無視する。
 session/stream変更で古い警告・gap状態を捨て、同streamのgapは保持する。
@@ -192,5 +200,6 @@ technical statusは現在のWebSocketを識別し、退役した接続のmessage
 
 No DiscではTOCなしならtracks=[]、位置/曲長=nullとなる。PLAYINGに変わってもfield構造は同じ。
 metadata未取得はtitle/artist=null、画像なしはcover=null。null evidenceをCLEANへ変換しない。
-この文書追加ではビルドやPi試験を再実施していない。既存自動試験・実機記録との静的照合であり、
-#89/#90の完了や#24のDraft解除を意味しない。
+2026-09-26に公開serializer・生成元・API route・technical statusと再照合した。
+#89/#90はPR #94/#95で完了し、実機異常系は#96へ分離。#24正式化は実装着手条件の整理であり、
+Player UI実装済み・実機異常系検証済みという意味ではない。

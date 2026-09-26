@@ -160,11 +160,11 @@ field・単位・null・互換性の定義は[機能設計](../design/functional
 「stream coverageと根拠の世代」を参照。
 
 #35でreader/disc観測世代とstream内128件の詳細履歴を追加した。仕様と限界は機能設計の
-「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証せず、#24はBlockedを維持する。
+「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証しない（#88）。
 
 詳細履歴は常時snapshotから分離し、GET /api/read-historyで取得する。通常stateのread.session_idと
 stream_generationを照合して旧結果を捨てる。契約の正本は機能設計「詳細履歴のオンデマンド取得」。
-#36のwarning/event復元は実装済み。追加の異常系検証は#90へ移管し、#24はDraftを維持する。
+#36のwarning/event復元は実装済み。追加の異常系自動検証#90は完了。実機異常系は#96、Playerへの統合は#24で扱う。
 
 #36でread.active_warningとevent_windowを追加し、technical statusはsnapshotで警告を置換する。
 契約の正本は機能設計「診断snapshotの復元」。既存event sequenceは維持し、read_sequenceを追加。

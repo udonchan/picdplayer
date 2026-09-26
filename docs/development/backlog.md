@@ -33,12 +33,12 @@
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | 現行repeatは同一区間のPCM全体の反復一致だけを調べる。overlap整列とcache対策はなく、2-of-3一致でも独立した物理再読込を保証しない。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
-| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | #35/#36の実装と#89/#90の追加検証をPR #86/#87/#94/#95で整備。Docker36/36成功。親の完了判定は各PRのマージ・子IssueのClose後に行う。実機異常系は#96、長期評価は#4/#83へ分離する。 |
+| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | #35/#36の実装と#89/#90の追加検証をPR #86/#87/#94/#95で整備。Docker36/36成功。全子Issue完了によりClose済み。実機異常系は#96、長期評価は#4/#83へ分離する。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
-| [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90の検証と並行可能。#24の表示契約との整合も確認する。 |
+| [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90は完了。#24正式化時に公開実装と再照合済み。 |
 | [#96 Validate Integrity diagnostics under Raspberry Pi hardware faults](https://github.com/udonchan/picdplayer/issues/96) | 後日の実機異常系診断評価。傷disc/stallの再現・音声影響は#33、特殊TOCは#39/#40が担当。同じrun記録を共有し、API・警告・復元の整合だけを確認する。#24の追加blockerにはしない。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | Draftを維持。#35/#36の実装済み契約を基盤とし、#90の復元検証はPR #95、公開契約との本文照合も実施。依存完了とUI設計候補の確定を区別し、自動的に実装へ進まない。未観測値をUNKNOWN/UNSUPPORTEDと区別する。メッセージ仕様を変更するたび、関連文書と#24の現状・データソース・完了条件を同時に更新する。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | 機能目標を正式化。全disc read mapに必要な#98（TOC/世代公開）と#99（disc領域集計）によりBlocked。UIは未実装。両Issue完了時に公開契約と#24を同時更新する。 |
 
 ## 障害対応・機能改善
 
@@ -127,3 +127,10 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 
 [#88](https://github.com/udonchan/picdplayer/issues/88)で物理交換/reset検出・能力失効・再取得を追跡する。
 #7の物理lifecycle部分を分離したPending項目。#35のreader-open観測世代と混同せず、#24の追加Hard dependencyにはしない。
+
+### 全ディスクread mapの前提
+
+- [#98](https://github.com/udonchan/picdplayer/issues/98): TOC座標とdisc観測世代を公開する。
+- [#99](https://github.com/udonchan/picdplayer/issues/99): 容量を制限したdisc領域集計と取得契約を実装する。
+
+両者が#24をblockする。相互はRelatedで、#12の完了を取り消さず追加機能として管理する。

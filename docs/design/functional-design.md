@@ -239,9 +239,8 @@ PCMを最初に取得した試行番号ではない。採用理由は既存の`l
 これはwrapperの観測であり、物理再読込・cache独立性・原盤一致を保証しない。
 
 追加fieldは任意として扱い、旧payloadにない場合は未取得とする。REST/WSのsnapshot形は維持する。
-最大8件の固定配列で保持し、PCM blockと共に現在再生区間へ届く。詳細attemptの永続履歴、
-unique coverage、device/disc/stream世代とpolicy revisionの統合は#35の残作業である。
-#24はDraft / Blockedのまま、この契約に合わせて表示候補を更新する。
+最大8件の固定配列で保持し、PCM blockと共に現在再生区間へ届く。stream coverage・観測世代・有界履歴は下記の#35で実装済み。
+永続履歴は対象外。#24はこの公開契約を用いるPlayer統合の未実装Issueである。
 
 ### stream coverageと根拠の世代（#35）
 
@@ -296,7 +295,7 @@ read_sequenceはstream内でのみ比較する。保持windowより前の詳細�
 
 これ以前のPR内にあったsnapshot内regionsは未マージ契約の見直しであり、標準Playerには依存がない。
 #24の表示候補も本契約に追従する。active warning・event gap復元は下記の契約で実装済み。
-追加の異常系・非干渉検証は#90へ移管し、#24はDraftを維持する。
+追加の異常系・非干渉自動検証#90は完了。実機異常系は#96で扱う。
 
 ### 診断snapshotの復元（#36）
 
@@ -317,4 +316,4 @@ read.history.last_read_sequenceよりwindowの末尾が遅れることがある�
 technical statusは同session内の古い/同revision snapshotを無視し、stream/session変更で旧警告・
 欠落状態を消して新snapshotを反映する。欠落表示は同streamでは保持する。
 詳細履歴は必要時にHTTPで取得できるが完全なreplayではない。保持上限を越えた範囲は復元不能。
-#24はこの契約に合わせて更新するが、Draft / Blockedを維持する。
+#24のPlayer実装もこの復元契約を満たすことを完了条件とする。
