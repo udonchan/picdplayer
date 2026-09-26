@@ -588,3 +588,11 @@ CDPなし25秒のCPU平均16.85%、現在throttlingなし。先行測定とは�
 
 完全replay、停止後も残す永続障害台帳は実装していない。診断が音声を待たせないという要件は
 維持しており、現在の正常系成功やqueueの固定容量だけで非干渉を証明したとは扱わない。
+
+## #92 メッセージ契約の静的照合
+
+master 53ddd4dの公開Presentation Model、診断serializer、API route、session側のpublish、
+対応する既存テストを照合し、[現行メッセージ契約](../design/message-contract.md)へ整理した。
+公開serializerのJSON key名の掲載漏れと文書の相対ファイルリンクを機械確認した。
+これは型・意味の全自動検証ではなく、コードを読んだ照合と組み合わせた確認である。
+コード変更・Docker再ビルド・Pi再測定は行っていない。#89/#90の残検証は維持する。
