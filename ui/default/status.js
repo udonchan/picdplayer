@@ -95,8 +95,9 @@ function render(state) {
     ? `${effectivePolicy || '—'} → ${requestedPolicy || '—'} (pending)`
     : (effectivePolicy || requestedPolicy));
 
-  const capacity = Number.isInteger(read.buffer_capacity_frames) && read.read_block_frames
-    ? read.buffer_capacity_frames / read.read_block_frames
+  const capacity = Number.isSafeInteger(read.buffer_capacity_frames) && read.buffer_capacity_frames >= 0
+      && Number.isSafeInteger(read.read_block_frames) && read.read_block_frames > 0
+    ? Math.floor(read.buffer_capacity_frames / read.read_block_frames)
     : '—';
   set('queued-blocks', `${read.queued_blocks ?? '—'} / ${capacity}`
     + ` (start ${read.startup_buffer_frames ?? '—'} frames)`);
@@ -104,10 +105,10 @@ function render(state) {
   set('prebuffer-wait', read.last_prebuffer_wait_ms == null
     ? 'Pending'
     : `${read.last_prebuffer_wait_ms} ms (${read.prebuffer_target_frames ?? '—'} frames)`);
-  set('read-stats', `${stats.read_calls ?? 0} / ${stats.frames_accepted ?? 0} frames`
-    + ` · verified ${stats.verified_calls ?? 0}`);
-  set('read-errors', `${stats.direct_retries ?? 0} / ${stats.failed_calls ?? 0}`);
-  set('dropped-events', read.dropped_events ?? 0);
+  set('read-stats', `${stats.read_calls ?? '—'} / ${stats.frames_accepted ?? '—'} frames`
+    + ` · verified ${stats.verified_calls ?? '—'}`);
+  set('read-errors', `${stats.direct_retries ?? '—'} / ${stats.failed_calls ?? '—'}`);
+  set('dropped-events', read.dropped_events);
 
   set('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ')
     || drive.device || 'Unknown drive');
@@ -174,6 +175,7 @@ async function load() {
 }
 
 let retry;
+let activeSocket;
 
 // Retain a useful diagnostics page while the daemon is restarting.
 // daemon 再起動中も診断画面を復帰できるよう自動再接続します。
@@ -183,16 +185,22 @@ function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   const socket = new WebSocket(`${scheme}://${location.host}/api/events`);
 
-  socket.onopen = () => setConnection('Live', 'connected');
+  activeSocket = socket;
+  socket.onopen = () => { if (activeSocket === socket) setConnection('Live', 'connected'); };
   socket.onmessage = (message) => {
+    // Ignore callbacks from a retired connection after reconnect.
+    // 再接続後に旧接続のcallbackが新sessionを上書きしない。
+    if (activeSocket !== socket) return;
     try {
       render(JSON.parse(message.data));
     } catch {
       setConnection('Invalid snapshot', 'disconnected');
     }
   };
-  socket.onerror = () => socket.close();
+  socket.onerror = () => { if (activeSocket === socket) socket.close(); };
   socket.onclose = () => {
+    if (activeSocket !== socket) return;
+    activeSocket = null;
     setConnection('Reconnecting', 'disconnected');
     retry = setTimeout(async () => {
       await load();

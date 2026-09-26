@@ -597,6 +597,47 @@ master 53ddd4dの公開Presentation Model、診断serializer、API route、sessi
 これは型・意味の全自動検証ではなく、コードを読んだ照合と組み合わせた確認である。
 コード変更・Docker再ビルド・Pi再測定は行っていない。#89/#90の残検証は維持する。
 
+## #90 異常系診断の追加試験（PR #95）
+
+Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加した。
+
+- 停滞するstreambufをlogger sinkに接続し、sink停止中に100 submitが期限内に完了することと、
+  容量8に対して92件がdropすることを確認。書込失敗と例外設定でもshutdownが完了する。
+  sinkを解放してからjoinする。無期限に停止したsinkのshutdown完了は保証していない。
+- 実際のtechnical status再接続callbackを使い、RESTから警告復元、worker_dropped増加のUNKNOWN、
+  古いrevision拒否、新daemon sessionでの警告解除、壊れたJSONを検証。
+  旧接続のmessage/close callbackを無視するactiveSocketチェックを追加した。
+- loopback HTTP 1接続/WS 7接続の受信窓を小さくし、毎回異なる512 KiBのstateを1,200回公開する。
+  旧テストの同一JSON反復は送信省略されるため、継続送信負荷の根拠として扱わない。
+  APIとengineを同じthreadで進め、期限内のfake audio出力増加とclient切断後の進行を確認。
+  HTTP providerの実呼出しとWS 101応答を観測し、単に未接続だったケースを除外する。
+- fake workerで実際にevent dropとUNCERTAINを発生させ、直近64 eventとdiagnostic_fieldsのJSONを
+  Node上のUIへ渡し、UNKNOWNとstream警告を確認。event窓検査はPCM queue満杯を同期点とする。
+
+- 実際のengineのprebuffer_readyログをglobal loggerから停止sinkへ流した状態で、API/audioを進行させる。
+  queue overflowを観測し、sink解放を自動期限より前に行ったことを確認。解除時に書込失敗へ切り替え、
+  audio進行と実際のostream bad状態を確認する。終了時はsinkを解放しloggerをjoinしてから復元する。
+- 200回更新後を基準にRSSの最大増加を監視し、残り1,000更新で32 MiB以下という回帰検査を行う。
+  今回の直接実行では増加0 bytes。固定client数/短時間の結果で、任意接続数の総メモリ上限保証ではない。
+  全7 WSの101応答とHTTP provider呼出しを確認した。
+- 詳細履歴を現行UIは取得しないため、Custom UI文書に世代照合の参考実装を置き、実serializer出力で
+  同一世代の受理、異なるsession/stream、欠損、included=false、未知schemaの拒否を検証する。
+  要求時ではなく応答到着時の最新snapshotに照合し、世代変更で保持済み表示も破棄する契約を明記する。
+
+今回の成功は実機音声の保証ではない。実機音声・長時間運転は#4、長期負荷は#83の検証と区別する。
+#24のDraftは維持し、実際のPlayer側の履歴consumerを追加する場合は同じ条件の統合試験を必要とする。
+Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に対する再現可能な回帰検証であり、
+任意接続数への防御、無期限sink停止時のshutdown完了、real-time性能を新たに保証するものではない。
+
+### 実機異常系の担当と記録の共有
+
+[実機診断評価 #96](https://github.com/udonchan/picdplayer/issues/96)で、観測できたread異常と
+API/警告/再接続の整合を確認する。傷disc・長いread stallの再現と音声影響は#33、backend比較は#6、
+特殊TOCのmetadata対応・同一TOC識別は#39/#40、物理hotplugは#88が引き続き担当する。
+試験手順・結果はreports配下の同じrunを参照し、本Issueのために媒体試験を重複実施しない。
+本書の過去の未確認記述は当時の記録として保持し、実施後に確認範囲と参照先を更新する。
+#96は今後の課題であり、#89/#90の自動試験成功や#24の着手条件に実機確認済みという意味を追加しない。
+
 ## #89 有界provenanceの容量・overflow検証
 
 fake reader/outputによるplayback_engine自動試験を追加し、標準Docker/aarch64 buildと
@@ -614,3 +655,18 @@ CTest 34/34の成功を確認した。実装・メッセージの変更はない
 既存のcoverage重複除外・容量超過時の下限値試験、旧世代in-flight read除外も同じCTestで成功した。
 ネットワーク/ログ障害とUIへのdrop反映は#90、実機音声・耐久・物理交換は別検証のまま。
 今回はPiへdeployせず、fake outputの進行を実機可聴性やreal-time保証と混同しない。
+
+### PR #94 / #95 統合版の通常系Pi確認
+
+d8aaa21のDocker buildとCTest36/36後、既存deploy手順でPiへ導入。
+CDPで診断画面のLive・reload・PLAYING、API stop、daemon restart後の新session復帰を確認した。
+終了時はdaemon/kioskともinactive。TV実表示・試聴・異常disc・負荷測定は未確認。
+条件と結果は[通常系smoke記録](reports/2026-09-26-diagnostic-smoke/README.md)を参照。
+
+### PR #94 / #95 レビュー修正（#97）
+
+technical statusの設定buffer容量が非整除の場合の端数表示をworkerの整数切捨てへ修正し、
+欠損counterを0にせず未取得表示とした。90/75→1 block、未取得と0の区別をJS試験に追加。
+ログ障害の統合試験はwriter threadの終了で失敗を確定してからaudio進行を測る順序へ修正した。
+loggerの既存assertもRelease buildで有効な検査へ置き換えた。
+この追加修正はDockerで検証し、上記d8aaa21のPi結果を追加修正後の実機確認とは扱わない。

@@ -174,6 +174,7 @@ revisionの欠番だけでread欠落を確定しない。初回first>1、前回�
 初回REST後にWSへ接続し、再接続時はsnapshotを取り直す。snapshotを正として警告を置換し、
 過去eventの再生で警告を再構成しない。同sessionの古い/同revisionは無視する。
 session/stream変更で古い警告・gap状態を捨て、同streamのgapは保持する。
+technical statusは現在のWebSocketを識別し、退役した接続のmessage/close callbackを無視する。
 遅延した旧session応答との競合、実drop、slow client/ログ障害時のaudio非干渉の統合検証は#90で扱う。
 
 ## 照合例と検証境界

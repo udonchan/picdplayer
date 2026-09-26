@@ -39,6 +39,20 @@ assert.equal(node('cap-c2').textContent, 'UNKNOWN');
 assert.equal(node('drive-name').textContent, 'Drive');
 console.log('PASS: technical status uses presentation fields and diagnostics');
 
+// Unknown counters are not zero; capacity follows the worker's whole-block limit.
+// 未取得と0を区別し、容量はworker同様にblock単位で切り捨てる。
+context.render({ ...snapshot, read: { queued_blocks: 1, buffer_capacity_frames: 90, read_block_frames: 75 } });
+assert.match(node('queued-blocks').textContent, /^1 \/ 1 /);
+assert.equal(node('read-stats').textContent, '— / — frames · verified —');
+assert.equal(node('read-errors').textContent, '— / —');
+assert.equal(node('dropped-events').textContent, '—');
+context.render({ ...snapshot, read: { buffer_capacity_frames: 90, read_block_frames: 0,
+  stats: { read_calls: 0, frames_accepted: 0, verified_calls: 0, direct_retries: 0, failed_calls: 0 }, dropped_events: 0 } });
+assert.match(node('queued-blocks').textContent, /^— \/ — /);
+assert.equal(node('read-stats').textContent, '0 / 0 frames · verified 0');
+assert.equal(node('read-errors').textContent, '0 / 0');
+assert.equal(node('dropped-events').textContent, 0);
+
 const warning = { status: 'UNCERTAIN', start_lba: 10, frames_read: 15 };
 function diagnostic(revision, stream, active, first, last) {
   return { ...snapshot, revision, read: { ...snapshot.read, session_id: 'a', stream_generation: stream,
@@ -56,3 +70,78 @@ assert(!node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')))
 context.render({ ...diagnostic(1, 1, null, 7, 9), read: { ...diagnostic(1, 1, null, 7, 9).read, session_id: 'b' } });
 assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
 console.log('PASS: snapshot warning replacement, stale revision, gap, stream and session changes');
+
+// Exercise the actual reconnect callbacks, not only the render entry point.
+// renderの単体呼出しだけでなく、REST→WS→切断→復元の順序を確認する。
+(async () => {
+  const sockets = [];
+  const timers = [];
+  let nextSnapshot = diagnostic(20, 1, warning, 1, 4);
+  class Socket {
+    constructor() { sockets.push(this); }
+    close() { this.onclose(); }
+  }
+  const live = vm.createContext({
+    document: { getElementById: node, createElement: () => ({}) },
+    location: { protocol: 'http:', host: 'localhost' },
+    WebSocket: Socket,
+    fetch: async () => ({ ok: true, json: async () => nextSnapshot }),
+    setTimeout: fn => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../ui/default/status.js'), 'utf8'), live);
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  assert.equal(sockets.length, 1);
+  sockets[0].onopen();
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[0].close();
+  nextSnapshot = diagnostic(21, 1, warning, 1, 5);
+  nextSnapshot.read.event_window.worker_dropped = 2;
+  await timers.shift()();
+  assert.equal(sockets.length, 2);
+  assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].onmessage({ data: JSON.stringify(diagnostic(19, 1, null, 1, 2)) });
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].close();
+  nextSnapshot = diagnostic(1, 1, null, null, null);
+  nextSnapshot.read.session_id = 'restarted';
+  await timers.shift()();
+  assert.equal(sockets.length, 3);
+  assert(!node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].onmessage({ data: JSON.stringify(diagnostic(999, 1, warning, 1, 5)) });
+  assert(!node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].onclose();
+  assert.equal(timers.length, 0);
+  sockets[2].onmessage({ data: '{invalid' });
+  assert.equal(node('connection').textContent, 'Invalid snapshot');
+  console.log('PASS: reconnect restores warning, drop and daemon session');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+
+if (process.argv[2]) {
+  const output = require('node:child_process').execFileSync(process.argv[2], { encoding: 'utf8', timeout: 10000 });
+  const line = output.split('\n').find(value => value.startsWith('DIAGNOSTIC_JSON='));
+  assert(line, 'integration worker must publish its actual diagnostic snapshot');
+  const actual = JSON.parse(line.slice('DIAGNOSTIC_JSON='.length));
+  assert(actual.read.event_window.worker_dropped > 0);
+  assert.equal(actual.read.active_warning.status, 'UNCERTAIN');
+  context.render(actual);
+  assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  const historyLine = output.split('\n').find(value => value.startsWith('HISTORY_JSON='));
+  assert(historyLine);
+  const detail = JSON.parse(historyLine.slice('HISTORY_JSON='.length));
+  const manual = fs.readFileSync(path.join(__dirname, '../docs/manual/custom-ui.md'), 'utf8');
+  const example = manual.match(/```javascript\n(function matchingReadHistory[\s\S]*?)\n```/);
+  assert(example, 'documented history matching example must exist');
+  const recipe = vm.createContext({});
+  vm.runInContext(example[1], recipe);
+  assert.equal(recipe.matchingReadHistory(actual, detail), detail.history);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, session_id: 'retired' }), null);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, stream_generation: detail.stream_generation + 1 }), null);
+  assert.equal(recipe.matchingReadHistory({ schema_version: 1, read: {} }, detail), null);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, history: { ...detail.history, included: false } }), null);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, schema_version: 2 }), null);
+  console.log('PASS: worker overflow to UI and documented history generation matching');
+}
