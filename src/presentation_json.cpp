@@ -1,4 +1,5 @@
 #include "presentation_json.hpp"
+#include "diagnostics_json.hpp"
 #include "daemon_snapshot_json.hpp"
 #include <nlohmann/json.hpp>
 
@@ -24,6 +25,7 @@ std::string serialize_presentation_model(const PresentationModel& model) {
                         {"artist", optional(model.disc.artist)}}}, {"tracks", std::move(tracks)},
               {"enrichment", {{"status", metadata_name(model.enrichment.status)}}},
               {"artwork", {{"cover", model.artwork.cover_url ? Json{{"url", *model.artwork.cover_url}, {"mime_type", nullptr}, {"width", nullptr}, {"height", nullptr}} : Json(nullptr)}}}};
+    root.update(diagnostic_fields(model.drive, model.read, model.recent_events));
     return root.dump();
 }
 

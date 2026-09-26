@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-09-25。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-09-26。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -14,6 +14,25 @@
 Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
+
+## 文書・診断API・CDP監査（2026-09-26、#79 / #80 / #81）
+
+現行コードと文書を照合し、画像binary cache / same-origin配信、EnrichmentServiceと
+Presentation Modelの経路、SSHでのデプロイ・サービス操作・loopback API操作の記述を修正した。
+物理操作・cold boot・TV実表示・試聴は引き続きユーザーによる確認を区別する。
+
+Presentation ModelのJSONで欠落していた`drive`、`read`、`recent_events`を復元し、
+technical statusを現行の曲位置・disc・enrichment fieldへ合わせた。
+CDP測定は`Tracing.end`応答前に到着するtrace eventも集計し、handshake中の切断で停止する。
+
+Linux/aarch64 Dockerで`./scripts/build-container.sh`とCTestを実行し、34/34件成功。
+回帰試験では診断値・eventの公開と差分判定、statusの曲位置・No Disc能力表示、
+CDP traceの応答前後の到着順序と未完了、handshake EOF・header上限を確認した。
+今回の修正後のPi実表示・再生・性能は再検証していない。
+
+過去のtrace event件数は応答順序によって過少集計された可能性があるため、確定的な件数比較に
+使用する場合は修正版で再測定する。過去のrawデータやCPU測定値は書き換えない。
+診断値の復元で配信内容・更新頻度が変わり得るため、過去の負荷測定を修正後の保証値としない。
 
 ## Kiosk定常負荷の計測手順（Issue #52）
 

@@ -8,7 +8,10 @@
 
 親Issueは複数の独立した成果を追跡する入口であり、子Issueの完了条件と混同しない。
 方式が未決定の項目を採用済みの仕様として扱わない。
-実機操作・再起動・試聴は手順を提示してユーザーに依頼し、ビルドと自動試験はDockerで行う。
+実機への.debデプロイは`scripts/deploy.sh`を使用し、設定済みのsudoersの範囲でSSH越しのサービス停止・起動・再起動を自動実行できる。
+再生・停止等のdaemon操作は、SSH経由でPiのloopback HTTP APIへ送信できる。
+ディスクの挿入・取り出しなどの物理操作、電源断を伴うcold boot、TVの実表示確認・試聴は手順を提示してユーザーに依頼する。
+ビルドと自動試験はDockerで行い、遠隔操作の成功と実表示・音声の確認は区別する。
 
 ## 実機評価・改善
 
@@ -99,3 +102,19 @@ README、Guide、Design、Manual、Developmentと、History/旧パスの案内�
 - UI telemetryとCustom UIのAPI記述、cold boot・日本語表示・journald・underrun復旧の確認範囲を更新した。
 
 この整理で新たな実機試験を行ったことにはしない。未確認事項は各Issueの完了条件として残す。
+
+## Buildrootの適合性調査
+
+[#74](https://github.com/udonchan/picdplayer/issues/74)を親として、
+[#75 公式資料](https://github.com/udonchan/picdplayer/issues/75)、
+[#76 OSS事例比較](https://github.com/udonchan/picdplayer/issues/76)、
+[#77 現行runtime要件](https://github.com/udonchan/picdplayer/issues/77)を並行調査し、
+[#78](https://github.com/udonchan/picdplayer/issues/78)で適合性評価と必要な後続Issue作成を行う。
+Buildroot採用と最終imageへの.deb利用は未決定である。
+
+## 監査で確認した不整合・回帰
+
+[#79 文書整合](https://github.com/udonchan/picdplayer/issues/79)、
+[#80 CDP接続・trace集計](https://github.com/udonchan/picdplayer/issues/80)、
+[#81 診断API・status表示](https://github.com/udonchan/picdplayer/issues/81)を追跡する。
+修正の検証範囲は[検証状況](verification.md)を参照する。

@@ -47,17 +47,14 @@ function render(state) {
   const player = state.player || {};
   const read = state.read || {};
   const drive = state.drive || {};
-  const media = state.media || {};
+  const media = state.disc || {};
   const policy = read.policy || {};
   const stats = read.stats || {};
-  const metadata = state.metadata || {};
-  const selected = Number.isInteger(metadata.selected)
-    ? metadata.candidates?.[metadata.selected]
-    : null;
+  const enrichment = state.enrichment || {};
 
   set('player-state', player.state);
-  set('track', player.track);
-  set('position', formatFrames(player.position_in_track_frames));
+  set('track', player.track_number);
+  set('position', formatFrames(player.position_frames));
   set('integrity', media.state === 'NO_DISC' ? 'NO DISC' : formatEvidence(read.current_playback));
   set('read-activity', read.activity);
   set('read-strategy', read.effective_strategy);
@@ -100,10 +97,10 @@ function render(state) {
   probe.textContent = drive.probe_error || '';
 
   set('media-state', media.state);
-  set('disc-tracks', state.disc?.track_count);
-  set('metadata-state', metadata.status);
-  set('album', selected?.album_title);
-  set('artist', selected?.album_artist);
+  set('disc-tracks', state.tracks?.length);
+  set('metadata-state', enrichment.status);
+  set('album', state.disc?.title);
+  set('artist', state.disc?.artist);
   set('revision', state.revision);
 
   const list = byId('events');

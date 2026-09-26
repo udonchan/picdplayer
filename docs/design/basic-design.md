@@ -42,10 +42,11 @@ flowchart TD
     Reader --> Evidence[main: read診断 / bounded event]
     Engine --> Evidence
     Engine --> ALSA[ALSA / HDMI PCM]
-    Session --> Meta[MetadataWorker / MusicBrainz / CAA / cache]
+    Session --> Enrichment[EnrichmentService]
+    Enrichment --> Meta[MetadataWorker / MusicBrainz / CAA / cache]
     Meta --> MS[MetadataSession]
-    Controller --> Snapshot[DaemonSnapshot]
-    MS --> Snapshot
+    Controller --> Snapshot[Presentation Model]
+    Enrichment --> Snapshot
     Session --> Snapshot
     Evidence --> Snapshot
     Snapshot --> Events[GET state / WebSocket events]
@@ -56,7 +57,7 @@ flowchart TD
 
 単一process。main threadが再生・media・metadataの正規状態を所有する。
 PlayerController、MediaStateTracker、MetadataSessionは別々の責務を持ち、
-DaemonSnapshotはそのコピーを公開する。CEC、API、UIが独自の再生状態を所有しない。
+EnrichmentServiceがmetadataの世代・worker・cacheを管理し、Presentation Modelがprovider非依存の表示情報と診断値を公開する。CEC、API、UIが独自の再生状態を所有しない。
 
 | 実行場所 | 責務 |
 |---|---|

@@ -1,4 +1,5 @@
 #include "daemon_snapshot_json.hpp"
+#include "diagnostics_json.hpp"
 #include <nlohmann/json.hpp>
 
 using Json = nlohmann::json;
@@ -61,34 +62,27 @@ Json disc_metadata(const DiscMetadata& disc) {
 }
 }
 
-std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
+Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& read,
+                       const std::vector<PlayerEvent>& recent_events) {
     Json root;
-    root["schema_version"] = 1;
-    root["revision"] = snapshot.revision;
-    root["player"] = {{"state", playback_name(snapshot.player.playback)},
-                      {"track", optional(snapshot.player.track)},
-                      {"position_lba", optional(snapshot.player.position_lba)},
-                      {"position_in_track_frames", optional(snapshot.position_in_track_frames)},
-                      {"current_track_length_frames", optional(snapshot.current_track_length_frames)}};
-    root["media"] = {{"state", media_name(snapshot.media)}, {"error", snapshot.media_error}};
     const auto capability = [](const CapabilityFlag& value) {
         return Json{{"value", knowledge_name(value.value)},
                     {"source", capability_evidence_source_name(value.source)},
                     {"detail", value.detail}};
     };
-    root["drive"] = {{"device", snapshot.drive.device},
-                     {"vendor", snapshot.drive.vendor},
-                     {"model", snapshot.drive.model},
-                     {"firmware", snapshot.drive.firmware},
-                     {"probe_error", snapshot.drive.probe_error},
-                     {"digital_audio_extraction", capability(snapshot.drive.digital_audio_extraction)},
-                     {"c2_supported", capability(snapshot.drive.c2_supported)},
-                     {"c2_trustworthy", capability(snapshot.drive.c2_trustworthy)},
-                     {"read_cache", capability(snapshot.drive.read_cache)},
-                     {"accurate_stream", capability(snapshot.drive.accurate_stream)},
-                     {"speed_control", capability(snapshot.drive.speed_control)},
-                     {"current_speed_x", optional(snapshot.drive.current_speed_x)},
-                     {"read_offset_samples", optional(snapshot.drive.read_offset_samples)}};
+    root["drive"] = {{"device", drive.device},
+                     {"vendor", drive.vendor},
+                     {"model", drive.model},
+                     {"firmware", drive.firmware},
+                     {"probe_error", drive.probe_error},
+                     {"digital_audio_extraction", capability(drive.digital_audio_extraction)},
+                     {"c2_supported", capability(drive.c2_supported)},
+                     {"c2_trustworthy", capability(drive.c2_trustworthy)},
+                     {"read_cache", capability(drive.read_cache)},
+                     {"accurate_stream", capability(drive.accurate_stream)},
+                     {"speed_control", capability(drive.speed_control)},
+                     {"current_speed_x", optional(drive.current_speed_x)},
+                     {"read_offset_samples", optional(drive.read_offset_samples)}};
     const auto read_evidence = [](const std::optional<ReadEvidence>& source) -> Json {
         if (!source) return nullptr;
         const auto& evidence = *source;
@@ -114,7 +108,7 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                                       {"cache_errors", evidence.backend_events.cache_errors},
                                       {"other", evidence.backend_events.other}}}};
     };
-    const auto& stats = snapshot.read.stats;
+    const auto& stats = read.stats;
     const auto policy = [](const ReadPolicy& value) {
         return Json{{"mode", read_verification_mode_name(value.mode)},
                     {"region_frames", value.region_frames},
@@ -122,21 +116,21 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                     {"maximum_attempts", value.maximum_attempts},
                     {"time_budget_ms", value.time_budget_ms}};
     };
-    root["read"] = {{"activity", read_activity_name(snapshot.read.activity)},
-                    {"requested_mode", snapshot.read.requested_mode},
-                    {"effective_strategy", snapshot.read.effective_strategy},
-                    {"queued_blocks", snapshot.read.queued_blocks},
-                    {"buffer_capacity_frames", snapshot.read.buffer_capacity_frames},
-                    {"startup_buffer_frames", snapshot.read.startup_buffer_frames},
-                    {"read_block_frames", snapshot.read.read_block_frames},
-                    {"prebuffer_target_frames", snapshot.read.prebuffer_target_frames},
-                    {"last_prebuffer_wait_ms", optional(snapshot.read.last_prebuffer_wait_ms)},
-                    {"policy", {{"requested", policy(snapshot.read.requested_policy)},
-                                {"effective", policy(snapshot.read.effective_policy)},
-                                {"pending", snapshot.read.policy_pending}}},
-                    {"dropped_events", snapshot.read.dropped_events},
-                    {"latest", read_evidence(snapshot.read.latest)},
-                    {"current_playback", read_evidence(snapshot.read.current_playback)},
+    root["read"] = {{"activity", read_activity_name(read.activity)},
+                    {"requested_mode", read.requested_mode},
+                    {"effective_strategy", read.effective_strategy},
+                    {"queued_blocks", read.queued_blocks},
+                    {"buffer_capacity_frames", read.buffer_capacity_frames},
+                    {"startup_buffer_frames", read.startup_buffer_frames},
+                    {"read_block_frames", read.read_block_frames},
+                    {"prebuffer_target_frames", read.prebuffer_target_frames},
+                    {"last_prebuffer_wait_ms", optional(read.last_prebuffer_wait_ms)},
+                    {"policy", {{"requested", policy(read.requested_policy)},
+                                {"effective", policy(read.effective_policy)},
+                                {"pending", read.policy_pending}}},
+                    {"dropped_events", read.dropped_events},
+                    {"latest", read_evidence(read.latest)},
+                    {"current_playback", read_evidence(read.current_playback)},
                     {"stats", {{"read_calls", stats.read_calls},
                                {"frames_requested", stats.frames_requested},
                                {"frames_accepted", stats.frames_accepted},
@@ -154,7 +148,7 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                                {"verification_failures", stats.verification_failures},
                                {"failed_calls", stats.failed_calls}}}};
     Json events = Json::array();
-    for (const auto& event : snapshot.recent_events) {
+    for (const auto& event : recent_events) {
         events.push_back({{"sequence", event.sequence},
                           {"stream_generation", event.stream_generation},
                           {"type", player_event_type_name(event.type)},
@@ -166,6 +160,19 @@ std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
                           {"read_status", integrity_read_status_name(event.read.status)}});
     }
     root["recent_events"] = std::move(events);
+    return root;
+}
+
+std::string serialize_daemon_snapshot(const DaemonSnapshot& snapshot) {
+    Json root = diagnostic_fields(snapshot.drive, snapshot.read, snapshot.recent_events);
+    root["schema_version"] = 1;
+    root["revision"] = snapshot.revision;
+    root["player"] = {{"state", playback_name(snapshot.player.playback)},
+                      {"track", optional(snapshot.player.track)},
+                      {"position_lba", optional(snapshot.player.position_lba)},
+                      {"position_in_track_frames", optional(snapshot.position_in_track_frames)},
+                      {"current_track_length_frames", optional(snapshot.current_track_length_frames)}};
+    root["media"] = {{"state", media_name(snapshot.media)}, {"error", snapshot.media_error}};
     if (snapshot.disc) {
         Json tracks = Json::array();
         for (const auto& track : snapshot.disc->tracks)

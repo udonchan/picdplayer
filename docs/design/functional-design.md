@@ -119,6 +119,13 @@ libwebsocketsを採用しmain threadからserviceする。HTTPとWebSocketを一
 本文あり／なしの両経路で同じ接続元判定を使う。
 認証・TLSは未実装で、外部公開は信頼できる開発LANでの診断用途に限る。
 
+### Presentation Modelの診断投影
+
+`GET /api/state`とWebSocketは`drive`、`read`、`recent_events`も公開する。
+診断のJSON変換は既存snapshot serializerと共有し、provider ID/URLを追加公開しない。
+technical statusは`player.track_number/position_frames`、`disc.state/title/artist`、
+`tracks`、`enrichment.status`と上記診断値を表示する。
+
 | Method/path | 入力・結果 |
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
@@ -177,7 +184,8 @@ UNKNOWNや照合できなかった範囲を成功として表示しない。新�
 要求をdaemonで保持するため、UIの再送pollingは不要。LOADINGやNO_DISCでも202で受理する。
 EJECTING中の重複要求も202で、別のhardware操作を作らない。
 再生を停止してreader解放を待ち、MediaWorkerからunlock→eject→tray確認を実行する。
-tray openを確認できたらNO_DISC、失敗ならEJECT_ERRORとmedia.errorを公開する。
+tray openを確認できたら`disc.state=NO_DISC`、失敗なら`EJECT_ERROR`を公開する。
+現行Presentation Modelはmedia error文字列を公開しないため、詳細はdaemonのjournalで確認する。
 
 EJECTING中はAPI通常操作を拒否し、CEC・CLI再生操作も適用しない。state/quit・signalは有効。
 失敗後はTOCを保持し、再ejectを受理できる。EJECT_ERRORはaudio_disc観測では維持するが、
