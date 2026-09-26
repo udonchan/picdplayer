@@ -596,3 +596,24 @@ master 53ddd4dの公開Presentation Model、診断serializer、API route、sessi
 公開serializerのJSON key名の掲載漏れと文書の相対ファイルリンクを機械確認した。
 これは型・意味の全自動検証ではなく、コードを読んだ照合と組み合わせた確認である。
 コード変更・Docker再ビルド・Pi再測定は行っていない。#89/#90の残検証は維持する。
+
+## #90 異常系診断の追加試験（継続中）
+
+Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加した。
+
+- 停滞するstreambufをlogger sinkに接続し、sink停止中に100 submitが期限内に完了することと、
+  容量8に対して92件がdropすることを確認。書込失敗と例外設定でもshutdownが完了する。
+  sinkを解放してからjoinする。無期限に停止したsinkのshutdown完了は保証していない。
+- 実際のtechnical status再接続callbackを使い、RESTから警告復元、worker_dropped増加のUNKNOWN、
+  古いrevision拒否、新daemon sessionでの警告解除、壊れたJSONを検証。
+  旧接続のmessage/close callbackを無視するactiveSocketチェックを追加した。
+- loopback HTTP/WS clientの受信窓を小さくし、512 KiBのstateを反復公開してclientを非受信に保つ。
+  APIとengineを同じthreadで進め、期限内のfake audio出力増加とclient切断後の進行を確認。
+  HTTP providerの実呼出しとWS 101応答を観測し、単に未接続だったケースを除外する。
+- fake workerで実際にevent dropとUNCERTAINを発生させ、直近64 eventとdiagnostic_fieldsのJSONを
+  Node上のUIへ渡し、UNKNOWNとstream警告を確認。event窓検査はPCM queue満杯を同期点とする。
+
+今回の成功は実機音声の保証ではない。#90には、再生ログ経路との組合せ、接続数・継続時間を
+増やしたメモリ有界性、詳細HTTP結果とWSの世代不一致を利用側で扱う検証が残る。
+通常UIはまだ詳細履歴を取得しないため、存在しないconsumerを検証済みとはしない。
+#24のDraftは維持。Piへのdeploy・再測定は行っていない。

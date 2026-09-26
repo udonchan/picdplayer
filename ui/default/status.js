@@ -174,6 +174,7 @@ async function load() {
 }
 
 let retry;
+let activeSocket;
 
 // Retain a useful diagnostics page while the daemon is restarting.
 // daemon 再起動中も診断画面を復帰できるよう自動再接続します。
@@ -183,16 +184,22 @@ function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   const socket = new WebSocket(`${scheme}://${location.host}/api/events`);
 
-  socket.onopen = () => setConnection('Live', 'connected');
+  activeSocket = socket;
+  socket.onopen = () => { if (activeSocket === socket) setConnection('Live', 'connected'); };
   socket.onmessage = (message) => {
+    // Ignore callbacks from a retired connection after reconnect.
+    // 再接続後に旧接続のcallbackが新sessionを上書きしない。
+    if (activeSocket !== socket) return;
     try {
       render(JSON.parse(message.data));
     } catch {
       setConnection('Invalid snapshot', 'disconnected');
     }
   };
-  socket.onerror = () => socket.close();
+  socket.onerror = () => { if (activeSocket === socket) socket.close(); };
   socket.onclose = () => {
+    if (activeSocket !== socket) return;
+    activeSocket = null;
     setConnection('Reconnecting', 'disconnected');
     retry = setTimeout(async () => {
       await load();

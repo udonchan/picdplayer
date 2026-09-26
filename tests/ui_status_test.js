@@ -56,3 +56,64 @@ assert(!node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')))
 context.render({ ...diagnostic(1, 1, null, 7, 9), read: { ...diagnostic(1, 1, null, 7, 9).read, session_id: 'b' } });
 assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
 console.log('PASS: snapshot warning replacement, stale revision, gap, stream and session changes');
+
+// Exercise the actual reconnect callbacks, not only the render entry point.
+// renderの単体呼出しだけでなく、REST→WS→切断→復元の順序を確認する。
+(async () => {
+  const sockets = [];
+  const timers = [];
+  let nextSnapshot = diagnostic(20, 1, warning, 1, 4);
+  class Socket {
+    constructor() { sockets.push(this); }
+    close() { this.onclose(); }
+  }
+  const live = vm.createContext({
+    document: { getElementById: node, createElement: () => ({}) },
+    location: { protocol: 'http:', host: 'localhost' },
+    WebSocket: Socket,
+    fetch: async () => ({ ok: true, json: async () => nextSnapshot }),
+    setTimeout: fn => { timers.push(fn); return timers.length; },
+    clearTimeout: () => {},
+  });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../ui/default/status.js'), 'utf8'), live);
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  await settle();
+  assert.equal(sockets.length, 1);
+  sockets[0].onopen();
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[0].close();
+  nextSnapshot = diagnostic(21, 1, warning, 1, 5);
+  nextSnapshot.read.event_window.worker_dropped = 2;
+  await timers.shift()();
+  assert.equal(sockets.length, 2);
+  assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].onmessage({ data: JSON.stringify(diagnostic(19, 1, null, 1, 2)) });
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].close();
+  nextSnapshot = diagnostic(1, 1, null, null, null);
+  nextSnapshot.read.session_id = 'restarted';
+  await timers.shift()();
+  assert.equal(sockets.length, 3);
+  assert(!node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].onmessage({ data: JSON.stringify(diagnostic(999, 1, warning, 1, 5)) });
+  assert(!node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  sockets[1].onclose();
+  assert.equal(timers.length, 0);
+  sockets[2].onmessage({ data: '{invalid' });
+  assert.equal(node('connection').textContent, 'Invalid snapshot');
+  console.log('PASS: reconnect restores warning, drop and daemon session');
+})().catch(error => { console.error(error); process.exitCode = 1; });
+
+if (process.argv[2]) {
+  const output = require('node:child_process').execFileSync(process.argv[2], { encoding: 'utf8', timeout: 10000 });
+  const line = output.split('\n').find(value => value.startsWith('DIAGNOSTIC_JSON='));
+  assert(line, 'integration worker must publish its actual diagnostic snapshot');
+  const actual = JSON.parse(line.slice('DIAGNOSTIC_JSON='.length));
+  assert(actual.read.event_window.worker_dropped > 0);
+  assert.equal(actual.read.active_warning.status, 'UNCERTAIN');
+  context.render(actual);
+  assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
+  assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+  console.log('PASS: worker overflow and warning through serializer to UI');
+}

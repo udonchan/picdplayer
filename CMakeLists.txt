@@ -139,6 +139,7 @@ if(BUILD_TESTING)
     target_compile_options(logger_test PRIVATE -Wall -Wextra -Wpedantic)
     target_link_libraries(logger_test PRIVATE Threads::Threads)
     add_test(NAME logger COMMAND logger_test)
+    set_tests_properties(logger PROPERTIES TIMEOUT 10)
     add_executable(alsa_output_test tests/alsa_output_test.cpp src/alsa_output.cpp)
     target_include_directories(alsa_output_test PRIVATE include)
     target_compile_features(alsa_output_test PRIVATE cxx_std_20)
@@ -208,6 +209,23 @@ if(BUILD_TESTING)
                                                       nlohmann_json::nlohmann_json)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
+        add_executable(diagnostic_isolation_test tests/diagnostic_isolation_test.cpp
+            src/api_server.cpp src/logger.cpp src/ui_bundle.cpp src/repeated_read_policy.cpp
+            src/repeated_read_verifier.cpp src/pcm_worker.cpp src/integrity_state.cpp
+            src/playback_engine.cpp src/player_controller.cpp src/disc_toc.cpp
+            src/daemon_snapshot_json.cpp src/drive_capabilities.cpp src/player_event.cpp)
+        target_include_directories(diagnostic_isolation_test PRIVATE include src ${CMAKE_CURRENT_BINARY_DIR})
+        target_compile_features(diagnostic_isolation_test PRIVATE cxx_std_20)
+        target_compile_options(diagnostic_isolation_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(diagnostic_isolation_test PRIVATE PkgConfig::WEBSOCKETS Threads::Threads
+            nlohmann_json::nlohmann_json)
+        add_test(NAME diagnostic_isolation COMMAND diagnostic_isolation_test)
+        set_tests_properties(diagnostic_isolation PROPERTIES TIMEOUT 10)
+        if(NODE_EXECUTABLE)
+            add_test(NAME ui_diagnostic_integration COMMAND ${NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_status_test.js $<TARGET_FILE:diagnostic_isolation_test>)
+            set_tests_properties(ui_diagnostic_integration PROPERTIES TIMEOUT 15)
+        endif()
         add_executable(ui_bundle_test tests/ui_bundle_test.cpp src/ui_bundle.cpp src/api_server.cpp src/logger.cpp
             src/repeated_read_policy.cpp
             src/repeated_read_verifier.cpp)
