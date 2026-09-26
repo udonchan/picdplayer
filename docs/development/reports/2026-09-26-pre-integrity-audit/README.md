@@ -40,6 +40,19 @@ NodeのUI試験とPython集計試験はCTestに含む。
 
 修正後のPi再生・試聴・完走は未確認。修正版は`scripts/deploy.sh`で導入成功し、
 daemon/kioskとも`inactive → inactive`を確認した。package導入は動作検証と区別する。
+
+### 修正後の通常再生確認（2026-09-26）
+
+PR #102をmasterへ取り込んだpackageで、14曲のAudio CDが`AUDIO_READY`になることを確認した。
+loopback APIからtrack 1を通常再生し、3秒後のpositionは230 frame、13秒後は1119 frameだった。
+この間はdirect single readで、backend/read error、retry、dropped eventはいずれも0だった。
+API stop後は`STOPPED`、`current_playback=null`、queue 0へ戻った。試験時のjournalに
+underrun、failure context、recovery、ERRORは見つからなかった。daemonとkioskはともにactiveで、
+Chromium CDPは127.0.0.1:9222で待受中だった。
+
+試験中、ユーザーがTVで標準Playerの表示と音声再生を確認した。これは通常再生と停止の
+限定確認であり、終端drain完走、傷disc、物理交換、長期運転は確認していない。
+終端へseekする試験は再実施していない。
 CDP試験は遷移前のabout:blankを選んだためAPI取得に失敗しており、画像更新を実機確認した証拠にはしない。
 旧正常disc_map試験の結果は[元の記録](../2026-09-26-disc-map/README.md)に残し、今回の失敗と混同しない。
 傷disc・特殊TOC・物理交換・長期負荷は既存#33/#39/#40/#96/#4/#83の範囲を維持する。
