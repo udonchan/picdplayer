@@ -28,40 +28,38 @@ body {
 }
 
 main {
-  max-width: 1200px;
+  max-width: 1120px;
   min-height: 100vh;
   margin: auto;
-  padding: 32px 48px;
+  padding: clamp(18px, 3vh, 32px) clamp(28px, 4vw, 48px);
 }
 
-header {
+.system-status {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-bottom: 21px;
-  border-bottom: 1px solid var(--line);
-}
-
-.brand {
-  font-size: 25px;
-  font-weight: 750;
-  letter-spacing: -0.04em;
+  justify-content: end;
+  min-height: 25px;
 }
 
 .connection {
-  padding: 5px 11px;
-  border: 1px solid currentColor;
-  border-radius: 999px;
-  color: var(--accent);
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
+.connection[data-state='reconnecting'],
+.connection[data-state='offline'],
+.connection[data-state='invalid'] {
+  color: #f2c66d;
 }
 
 .now-playing {
   display: grid;
-  grid-template-columns: minmax(190px, 250px) minmax(0, 1fr);
-  gap: clamp(26px, 5vw, 64px);
+  grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);
+  gap: clamp(26px, 5vw, 58px);
   align-items: center;
-  padding-top: min(4vh, 42px);
+  padding-top: clamp(8px, 1.5vh, 18px);
 }
 
 .art {
@@ -115,14 +113,22 @@ header {
 .details h1 {
   margin: 0;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: clamp(30px, 3.6vw, 48px);
   line-height: 1.05;
   letter-spacing: -0.045em;
 }
 
 .album-artist {
-  margin: 11px 0 45px;
+  margin: 8px 0 28px;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
   color: var(--muted);
   font-size: clamp(18px, 2vw, 24px);
 }
@@ -132,7 +138,7 @@ header {
   grid-template-columns: auto minmax(0, 1fr);
   gap: 18px;
   align-items: start;
-  padding: 20px 0;
+  padding: 15px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
@@ -147,6 +153,10 @@ header {
 .track-row h2 {
   margin: 0;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   font-size: clamp(21px, 3vw, 32px);
   line-height: 1.2;
 }
@@ -154,11 +164,15 @@ header {
 .track-row p {
   margin: 4px 0 0;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
   color: var(--muted);
 }
 
 .timeline {
-  margin-top: 30px;
+  margin-top: 22px;
 }
 
 .progress {
@@ -186,12 +200,12 @@ header {
 }
 
 .state {
-  margin-top: 29px;
+  margin-top: 20px;
 }
 
 .integrity {
-  margin-top: clamp(30px, 4vh, 45px);
-  padding-top: 25px;
+  margin-top: clamp(22px, 3vh, 34px);
+  padding-top: 18px;
   border-top: 1px solid var(--line);
 }
 
@@ -207,33 +221,37 @@ header {
 .map-heading h3,
 .drive-card h3 {
   margin: 0;
-  font-size: clamp(20px, 2.7vw, 30px);
+  font-size: clamp(18px, 2.2vw, 25px);
 }
 
 .integrity-status {
-  padding: 5px 10px;
-  border: 1px solid var(--line);
+  padding: 4px 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: .08em;
 }
 
-.integrity-grid {
+.integrity-at-a-glance {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 20px;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 14px;
+  margin-top: 13px;
 }
 
 .integrity-card {
   min-width: 0;
-  padding: 20px;
+  padding: 15px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
 }
 
-.map-card { grid-column: span 2; }
+.integrity-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px 15px 15px;
+}
 
 .metrics {
   display: grid;
@@ -245,7 +263,18 @@ header {
 
 .metrics dt { color: var(--muted); }
 .metrics dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.integrity-note, .map-heading p { margin: 15px 0 0; color: var(--muted); font-size: 12px; }
+.glance-metrics {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 13px;
+  margin: 0;
+  font-size: 12px;
+}
+.glance-metrics dt { color: var(--muted); }
+.glance-metrics dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.evidence-label { margin: 13px 0 3px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.evidence-value { margin: 0; overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
+.integrity-note, .map-heading p { margin: 11px 0 0; color: var(--muted); font-size: 11px; }
 .map-heading p { margin-top: 4px; }
 .drive-name { margin: 12px 0 16px; font-size: 17px; overflow-wrap: anywhere; }
 
@@ -262,9 +291,9 @@ header {
 
 .disc-map {
   position: relative;
-  width: min(100%, 180px);
+  width: min(100%, 135px);
   aspect-ratio: 1;
-  margin: 20px auto 13px;
+  margin: 10px auto 9px;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: #202729;
@@ -296,14 +325,30 @@ header {
 
 .map-marker.current, .legend.current { background: var(--accent); }
 .map-marker.latest, .legend.latest { background: #d7e9ff; }
-.map-legend { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0; color: var(--muted); font-size: 12px; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; margin: 0; color: var(--muted); font-size: 10px; }
 .legend::before { display: inline-block; width: 9px; height: 9px; margin-right: 4px; content: ''; background: currentColor; }
-.legend.attempted { color: #7199a5; }.legend.retry { color: #f2c66d; }.legend.warning { color: #ff8c82; }
+.legend.clean { color: #7199a5; }.legend.retry { color: #f2c66d; }.legend.warning { color: #ff8c82; }
 .legend.recovered { color: #b99cff; }
+.legend.unobserved { color: #202729; }.legend.unobserved::before { border: 1px solid var(--line); }
+
+.integrity-details {
+  margin-top: 11px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 58%, transparent);
+}
+
+.integrity-details > summary {
+  padding: 10px 14px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.integrity-details[open] > summary { border-bottom: 1px solid var(--line); }
 
 @media (max-width: 900px) {
-  .integrity-grid { grid-template-columns: 1fr; }
-  .map-card { grid-column: auto; }
+  .integrity-at-a-glance, .integrity-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
@@ -314,7 +359,7 @@ header {
   .now-playing {
     grid-template-columns: 1fr;
     gap: 30px;
-    padding-top: 45px;
+    padding-top: 24px;
   }
 
   .art {

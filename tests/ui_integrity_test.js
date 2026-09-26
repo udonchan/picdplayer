@@ -56,8 +56,12 @@ async function main() {
   });
   await settle();
   while (frames.length) frames.shift()();
+  sockets[0].onopen();
+  assert.equal(node('connection').textContent, 'DAEMON · CONNECTED');
+  assert.equal(node('connection').dataset.state, 'connected');
   assert.equal(node('read-policy').textContent, 'SINGLE → REPEAT (PENDING)');
   assert.equal(node('read-buffer').textContent, '1 / 1 blocks');
+  assert.equal(node('integrity-summary').textContent, 'CURRENT READ · CLEAN');
   assert.match(node('read-current').textContent, /LBA 20–35/);
   assert.match(node('read-map-state').textContent, /2 regions/);
   assert.match(node('disc-map').style.background, /conic-gradient/);
@@ -75,10 +79,17 @@ async function main() {
   const nextSession = structuredClone(snapshot);
   nextSession.revision = 1;
   nextSession.read.session_id = 'session-b';
+  nextSession.read.current_playback = null;
+  nextSession.read.latest = null;
   nextSession.disc = { state: 'NO_DISC', layout: null };
   sockets[0].onmessage({ data: JSON.stringify(nextSession) });
   assert.match(node('read-map-state').textContent, /No accepted audio disc/);
+  assert.equal(node('integrity-summary').textContent, 'CURRENT READ · NOT AVAILABLE');
+  assert.equal(node('read-current').textContent, 'NOT AVAILABLE');
   assert.equal(node('map-current').hidden, true);
+  sockets[0].onclose();
+  assert.equal(node('connection').textContent, 'DAEMON · RECONNECTING');
+  assert.equal(node('connection').dataset.state, 'reconnecting');
   console.log('PASS: Integrity summary, bounded map, revision and session handling');
 }
 

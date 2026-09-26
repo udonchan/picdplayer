@@ -10,7 +10,7 @@
 </head>
 <body>
   <main>
-    <header><span class="brand">PiCDPlayer</span><span id="connection" class="connection">Connecting</span></header>
+    <header class="system-status"><span id="connection" class="connection" data-state="connecting">DAEMON · CONNECTING</span></header>
     <section class="now-playing" aria-live="polite">
       <div id="art" class="art placeholder"><img id="cover" alt=""><span id="art-mark">CD</span></div>
       <div class="details">
@@ -24,24 +24,19 @@
     </section>
     <section class="integrity" aria-labelledby="integrity-title">
       <div class="integrity-heading">
-        <div><p class="eyebrow">READ INTEGRITY</p><h2 id="integrity-title">Disc reading status</h2></div>
-        <span id="integrity-summary" class="integrity-status">UNKNOWN</span>
+        <div><p class="eyebrow">READ INTEGRITY</p><h2 id="integrity-title">Read observation</h2></div>
+        <span id="integrity-summary" class="integrity-status">CURRENT READ · UNKNOWN</span>
       </div>
-      <div class="integrity-grid">
-        <article class="integrity-card read-card">
-          <dl class="metrics">
+      <div class="integrity-at-a-glance">
+        <article class="integrity-card evidence-card">
+          <dl class="glance-metrics">
             <dt>Activity</dt><dd id="read-activity">—</dd>
             <dt>Read policy</dt><dd id="read-policy">—</dd>
-            <dt>Strategy</dt><dd id="read-strategy">—</dd>
             <dt>Buffer</dt><dd id="read-buffer">—</dd>
-            <dt>Current PCM</dt><dd id="read-current">—</dd>
-            <dt>Latest read</dt><dd id="read-latest">—</dd>
-            <dt>Stream warning</dt><dd id="read-warning">—</dd>
-            <dt>Observation window</dt><dd id="read-window">—</dd>
-            <dt>Read calls / accepted</dt><dd id="read-stats">—</dd>
-            <dt>Coverage</dt><dd id="read-coverage">—</dd>
           </dl>
-          <p class="integrity-note">CLEAN means no anomaly was observed by this reader. It does not prove the original PCM.</p>
+          <p class="evidence-label">PLAYBACK EVIDENCE</p><p id="read-current" class="evidence-value">—</p>
+          <p class="evidence-label">LATEST READ · MAY BE AHEAD</p><p id="read-latest" class="evidence-value">—</p>
+          <p class="integrity-note">Playback evidence follows PCM submitted for output. Latest read is a separate read-ahead observation, not a physical head or audible position.</p>
         </article>
         <article class="integrity-card map-card">
           <div class="map-heading"><div><h3>Disc read map</h3><p id="read-map-state">Waiting for an accepted disc layout</p></div><button id="refresh-read-map" type="button">Refresh map</button></div>
@@ -50,24 +45,39 @@
             <span id="map-current" class="map-marker current" hidden>P</span>
             <span class="map-hole" aria-hidden="true"></span>
           </div>
-          <p class="map-legend"><span class="legend attempted">Observed</span><span class="legend retry">Retry</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain</span><span class="legend current">PCM</span><span class="legend latest">Latest read</span></p>
-          <p class="integrity-note">The rings map TOC LBA from inner to outer. They are not a physical head position or a complete-disc health claim.</p>
-        </article>
-        <article class="integrity-card drive-card">
-          <h3>Drive capability</h3>
-          <p id="drive-name" class="drive-name">UNKNOWN DRIVE</p>
-          <dl class="metrics compact">
-            <dt>DAE</dt><dd id="cap-dae">UNKNOWN</dd>
-            <dt>C2 support</dt><dd id="cap-c2">UNKNOWN</dd>
-            <dt>C2 trust</dt><dd id="cap-c2-trust">UNKNOWN</dd>
-            <dt>Read cache</dt><dd id="cap-cache">UNKNOWN</dd>
-            <dt>Accurate stream</dt><dd id="cap-stream">UNKNOWN</dd>
-            <dt>Speed control</dt><dd id="cap-speed">UNKNOWN</dd>
-            <dt>Read offset</dt><dd id="drive-offset">UNKNOWN</dd>
-          </dl>
-          <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
+          <p class="map-legend"><span class="legend clean">Observed clean</span><span class="legend retry">Retry / repeat</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain / anomaly</span><span class="legend unobserved">Unobserved</span><span class="legend current">PCM</span><span class="legend latest">Latest read</span></p>
+          <p class="integrity-note">Colors classify recorded observations, not disc-wide correctness. The rings project TOC LBA; they are not a physical head position.</p>
         </article>
       </div>
+      <details class="integrity-details">
+        <summary>Read diagnostics and drive capability</summary>
+        <div class="integrity-grid">
+          <article class="integrity-card read-card">
+            <dl class="metrics">
+              <dt>Strategy</dt><dd id="read-strategy">—</dd>
+              <dt>Stream warning</dt><dd id="read-warning">—</dd>
+              <dt>Observation window</dt><dd id="read-window">—</dd>
+              <dt>Read calls / accepted</dt><dd id="read-stats">—</dd>
+              <dt>Coverage</dt><dd id="read-coverage">—</dd>
+            </dl>
+            <p class="integrity-note">CLEAN means no anomaly was observed by this reader for this evidence. It does not prove the original PCM.</p>
+          </article>
+          <article class="integrity-card drive-card">
+            <h3>Drive capability</h3>
+            <p id="drive-name" class="drive-name">UNKNOWN DRIVE</p>
+            <dl class="metrics compact">
+              <dt>DAE</dt><dd id="cap-dae">UNKNOWN</dd>
+              <dt>C2 support</dt><dd id="cap-c2">UNKNOWN</dd>
+              <dt>C2 trust</dt><dd id="cap-c2-trust">UNKNOWN</dd>
+              <dt>Read cache</dt><dd id="cap-cache">UNKNOWN</dd>
+              <dt>Accurate stream</dt><dd id="cap-stream">UNKNOWN</dd>
+              <dt>Speed control</dt><dd id="cap-speed">UNKNOWN</dd>
+              <dt>Read offset</dt><dd id="drive-offset">UNKNOWN</dd>
+            </dl>
+            <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
+          </article>
+        </div>
+      </details>
     </section>
   </main>
   <script src="/player.js" defer></script>

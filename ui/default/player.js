@@ -82,7 +82,17 @@ const formatTime = (frames) => {
 };
 
 function setConnection(value) {
-  set('connection', value);
+  const states = {
+    Live: ['connected', 'DAEMON · CONNECTED'],
+    Connecting: ['connecting', 'DAEMON · CONNECTING'],
+    Reconnecting: ['reconnecting', 'DAEMON · RECONNECTING'],
+    Offline: ['offline', 'DAEMON · OFFLINE'],
+    'Invalid state': ['invalid', 'DAEMON · INVALID STATE'],
+  };
+  const [state, label] = states[value] || ['unknown', 'DAEMON · UNKNOWN'];
+  const element = byId('connection');
+  if (element.dataset.state !== state) element.dataset.state = state;
+  set('connection', label);
 }
 
 function currentTrack(tracks, number) {
@@ -105,6 +115,12 @@ function formatEvidence(value) {
 function formatCapability(value) {
   if (!value || typeof value.value !== 'string') return 'UNKNOWN';
   return value.source && value.source !== 'NONE' ? `${value.value} · ${value.source}` : value.value;
+}
+
+function integritySummary(read) {
+  if (read.active_warning) return `STREAM WARNING · ${read.active_warning.status || 'UNKNOWN'}`;
+  if (!read.current_playback) return 'CURRENT READ · NOT AVAILABLE';
+  return `CURRENT READ · ${read.current_playback.status || 'UNKNOWN'}`;
 }
 
 function discLayoutKey(snapshot) {
@@ -393,7 +409,7 @@ function render(snapshot) {
     ? `${stats.read_calls} / ${stats.frames_accepted} frames` : 'NOT AVAILABLE');
   const coverage = read.coverage || {};
   set('read-coverage', `${coverage.scope || 'UNKNOWN'} · ${safeNonNegative(coverage.accepted_unique_frames) ? coverage.accepted_unique_frames : '—'} accepted unique frames`);
-  set('integrity-summary', read.active_warning ? 'WARNING' : (read.current_playback?.status || 'UNKNOWN'));
+  set('integrity-summary', integritySummary(read));
   set('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ') || drive.device || 'UNKNOWN DRIVE');
   set('cap-dae', formatCapability(drive.digital_audio_extraction));
   set('cap-c2', formatCapability(drive.c2_supported));

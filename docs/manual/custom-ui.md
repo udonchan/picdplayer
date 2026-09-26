@@ -106,6 +106,12 @@ CSS transitionやbrowserの合成処理は別に発生し得るため、DOM writ
 region flagsはbit集合で重なり得る。未観測、`observations_complete=false`、UNKNOWN、NOT_CHECKEDを
 正常値へ変換しない。bufferのblock比率は可聴秒数でもqueued frame数でもない。
 
+標準Playerは一次再生情報、Integrity概要、展開可能な詳細診断の順に配置する。Custom UIが同様の表示を
+実装する場合、`CLEAN`をdisc全体/原盤/bit-perfectの保証にしない。current playback evidenceとlatest readは
+別の観測であり、前者は出力PCM根拠、後者はread-aheadを含み得る最新readである。差から物理head位置、
+可聴位置、速度、遅延を推測しない。接続表示を置く場合はstate API/WebSocketとの接続だけを示し、
+daemonやdriveのhealthを主張しない。
+
 ## Custom UIの描画負荷
 
 Pi 3の標準Playerでは、再生位置に合わせて約250 msごとに変わる進行バー幅へ

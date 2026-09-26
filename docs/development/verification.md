@@ -725,3 +725,18 @@ underrun、recovery、failure context、ERRORはなかった。CDP接続中の2�
 
 これは通常disc・短時間・CDP接続中の確認である。TV目視・試聴、傷disc、物理交換、終端drain、
 長期運転、CDP未接続のCPU/温度比較は未確認であり、#96/#4/#83の記録と重複しない。
+
+### UI階層の再調整（2026-09-27）
+
+#24のレビューで、標準Playerをprimary playback、Integrity at a glance、展開可能な詳細診断へ再配置した。
+常時PiCDPlayerロゴを外し、右上はstate API/WebSocket接続だけを示す`DAEMON · CONNECTED`等へ変更した。
+`CURRENT READ · CLEAN`はcurrent playback evidenceの分類であり、disc全体・原盤・bit-perfect・daemon healthの
+保証ではない。current playbackとlatest readは出力PCM根拠とread-ahead観測として短く区別し、disc mapは
+observed clean、retry/repeat、recovered、UNCERTAIN/backend anomaly、unobservedのlegendを持つ。
+
+Docker/aarch64のCTest38/38成功後、Piへdeployした。通常14曲CDの短時間API再生をCDPで1920×1080に撮影し、
+折り畳み時の`document.documentElement.scrollHeight`がviewportと同じ1080 pxであることを確認した。詳細を
+展開してread/drive値が表示されることも確認し、その後は折り畳み・API stopへ戻した。同じviewportへ長い
+album/artist/track文字列を注入した表示確認でもscrollHeight=1080 pxを維持し、albumは2行で省略された。
+これはCSS layoutの確認であり、実metadata取得の網羅試験ではない。TV目視・試聴、傷disc、物理交換、終端drain、
+長期運転、CDP未接続のCPU/温度比較は未確認である。
