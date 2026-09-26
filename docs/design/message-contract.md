@@ -3,7 +3,7 @@
 基礎契約はmaster `0f8e12f`、disc.layoutはPR #101、disc_mapはPR #102の実装を対象とする。
 公開`schema_version=1`。現行実装を記述するもので、将来不変のAPIを宣言しない。
 公開メッセージのfield表は本書を正本とし、[機能設計](functional-design.md#api)は操作・動作の正本とする。
-実装と検証は別であり、#89/#90の自動検証は完了。実機異常系は#96、未実装のPlayer統合は#24で扱う。
+実装と検証は別であり、#89/#90の自動検証は完了。実機異常系は#96、標準PlayerのIntegrity統合とその通常系検証は#24で扱う。
 
 ## 公開経路と生成元
 
@@ -180,7 +180,7 @@ worker→main転送とsnapshotは同時点でなく、history.last_read_sequence
 revisionの欠番だけでread欠落を確定しない。初回first>1、前回末尾+1より先の窓、worker_dropped増加は
 未観測範囲としてUNKNOWNにする。worker_droppedはmainの64件窓の全eviction数ではない。
 
-以下は診断consumerの復元ルールであり、technical statusで実装済み。標準Playerへの統合は#24の対象。
+以下は診断consumerの復元ルールであり、technical statusで実装済み。標準Playerも#24で同じ復元契約を実装中である。
 初回REST後にWSへ接続し、再接続時はsnapshotを取り直す。snapshotを正として警告を置換し、
 過去eventの再生で警告を再構成しない。同sessionの古い/同revisionは無視する。
 session/stream変更で古い警告・gap状態を捨て、同streamのgapは保持する。
@@ -203,8 +203,8 @@ technical statusは現在のWebSocketを識別し、退役した接続のmessage
 No DiscではTOCなしならtracks=[]、位置/曲長=nullとなる。PLAYINGに変わってもfield構造は同じ。
 metadata未取得はtitle/artist=null、画像なしはcover=null。null evidenceをCLEANへ変換しない。
 2026-09-26に公開serializer・生成元・API route・technical statusと再照合した。
-#89/#90はPR #94/#95で完了し、実機異常系は#96へ分離。#24正式化は実装着手条件の整理であり、
-Player UI実装済み・実機異常系検証済みという意味ではない。
+#89/#90はPR #94/#95で完了し、実機異常系は#96へ分離。#24は公開契約に基づくPlayer UIを実装中であり、
+通常系PiのAPI/CDP照合は実施済みだが、実機異常系検証済みという意味ではない。
 
 ## Disc layout（#98）
 

@@ -98,6 +98,14 @@ DOMへ繰り返し設定しない。これは標準UIの実装上の最適化で
 API/WebSocketの内容や配信頻度、再接続、任意の起動telemetryは従来どおりである。
 CSS transitionやbrowserの合成処理は別に発生し得るため、DOM write削減をpaintやCPUの削減量と同一視しない。
 
+標準PlayerのIntegrity表示は通常snapshotにある`read`、`drive`、`disc.layout`と、
+オンデマンドの`GET /api/read-history`にある`disc_map`を使う。Custom UIはこれを実装する義務を負わない。
+実装する場合は、map responseのroot `session_id`と最新snapshot、`disc_map.disc_generation`と
+`disc.layout.disc_generation`を照合し、layout/session/disc世代の変更時は旧mapを捨てる。
+通常のWS更新で詳細履歴をpollingせず、利用者の明示操作など有界な取得機会を選ぶ。
+region flagsはbit集合で重なり得る。未観測、`observations_complete=false`、UNKNOWN、NOT_CHECKEDを
+正常値へ変換しない。bufferのblock比率は可聴秒数でもqueued frame数でもない。
+
 ## Custom UIの描画負荷
 
 Pi 3の標準Playerでは、再生位置に合わせて約250 msごとに変わる進行バー幅へ

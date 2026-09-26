@@ -22,6 +22,53 @@
         <p id="player-state" class="state">NO_DISC</p>
       </div>
     </section>
+    <section class="integrity" aria-labelledby="integrity-title">
+      <div class="integrity-heading">
+        <div><p class="eyebrow">READ INTEGRITY</p><h2 id="integrity-title">Disc reading status</h2></div>
+        <span id="integrity-summary" class="integrity-status">UNKNOWN</span>
+      </div>
+      <div class="integrity-grid">
+        <article class="integrity-card read-card">
+          <dl class="metrics">
+            <dt>Activity</dt><dd id="read-activity">—</dd>
+            <dt>Read policy</dt><dd id="read-policy">—</dd>
+            <dt>Strategy</dt><dd id="read-strategy">—</dd>
+            <dt>Buffer</dt><dd id="read-buffer">—</dd>
+            <dt>Current PCM</dt><dd id="read-current">—</dd>
+            <dt>Latest read</dt><dd id="read-latest">—</dd>
+            <dt>Stream warning</dt><dd id="read-warning">—</dd>
+            <dt>Observation window</dt><dd id="read-window">—</dd>
+            <dt>Read calls / accepted</dt><dd id="read-stats">—</dd>
+            <dt>Coverage</dt><dd id="read-coverage">—</dd>
+          </dl>
+          <p class="integrity-note">CLEAN means no anomaly was observed by this reader. It does not prove the original PCM.</p>
+        </article>
+        <article class="integrity-card map-card">
+          <div class="map-heading"><div><h3>Disc read map</h3><p id="read-map-state">Waiting for an accepted disc layout</p></div><button id="refresh-read-map" type="button">Refresh map</button></div>
+          <div id="disc-map" class="disc-map" role="img" aria-label="Disc read map">
+            <span id="map-latest" class="map-marker latest" hidden>R</span>
+            <span id="map-current" class="map-marker current" hidden>P</span>
+            <span class="map-hole" aria-hidden="true"></span>
+          </div>
+          <p class="map-legend"><span class="legend attempted">Observed</span><span class="legend retry">Retry</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain</span><span class="legend current">PCM</span><span class="legend latest">Latest read</span></p>
+          <p class="integrity-note">The rings map TOC LBA from inner to outer. They are not a physical head position or a complete-disc health claim.</p>
+        </article>
+        <article class="integrity-card drive-card">
+          <h3>Drive capability</h3>
+          <p id="drive-name" class="drive-name">UNKNOWN DRIVE</p>
+          <dl class="metrics compact">
+            <dt>DAE</dt><dd id="cap-dae">UNKNOWN</dd>
+            <dt>C2 support</dt><dd id="cap-c2">UNKNOWN</dd>
+            <dt>C2 trust</dt><dd id="cap-c2-trust">UNKNOWN</dd>
+            <dt>Read cache</dt><dd id="cap-cache">UNKNOWN</dd>
+            <dt>Accurate stream</dt><dd id="cap-stream">UNKNOWN</dd>
+            <dt>Speed control</dt><dd id="cap-speed">UNKNOWN</dd>
+            <dt>Read offset</dt><dd id="drive-offset">UNKNOWN</dd>
+          </dl>
+          <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
+        </article>
+      </div>
+    </section>
   </main>
   <script src="/player.js" defer></script>
 </body>
