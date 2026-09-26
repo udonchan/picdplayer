@@ -360,11 +360,11 @@ field・単位・null・互換性の定義は[機能設計](functional-design.md
 「stream coverageと根拠の世代」を参照。
 
 #35でreader/disc観測世代とstream内128件の詳細履歴を追加した。仕様と限界は機能設計の
-「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証せず、#24はBlockedを維持する。
+「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証しない（#88）。
 
 詳細履歴は常時snapshotから分離し、GET /api/read-historyで取得する。通常stateのread.session_idと
 stream_generationを照合して旧結果を捨てる。契約の正本は機能設計「詳細履歴のオンデマンド取得」。
-#36のwarning/event復元は実装済み。追加の異常系検証は#90へ移管し、#24はDraftを維持する。
+#36のwarning/event復元は実装済み。追加の異常系自動検証#90は完了。実機異常系は#96、Playerへの統合は#24で扱う。
 
 #36でread.active_warningとevent_windowを追加し、technical statusはsnapshotで警告を置換する。
 契約の正本は機能設計「診断snapshotの復元」。既存event sequenceは維持し、read_sequenceを追加。
@@ -372,10 +372,13 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 
 ## Player UI統合案の管理（#24）
 
-#24はDraft / Blockedを維持する。#35（根拠・coverage）と#36（診断復元）の実装は完了し、
-現行の公開仕様は[メッセージ契約](message-contract.md)に整理した。
-復元検証のHard dependencyは#90へ引き継いだ。検証結果と公開仕様・Issue本文を整合させ、
-Draft解除を判断するまでUI実装に着手しない。現行fieldの表示が可能なことと、UI統合仕様の確定を区別する。
+#24は現行APIと#98/#99の追加契約を利用する実装Issueとして正式化した（UI実装は未着手）。
+#35/#36と追加検証#89/#90は完了。公開仕様の正本は[メッセージ契約](message-contract.md)。
+主表示を維持してcurrent/latest、stream警告、方針、buffer、drive能力を統合する。
+全ディスク円盤read mapを必須成果物とし、TOC/世代公開#98とdisc領域集計#99をHard dependencyとする。
+両Issueが完了するまで#24はBlocked。現行の128件履歴だけで全disc履歴を表示しない。
+詳細履歴はオンデマンド取得し、最新session/stream照合と有界保持を必須にする。
+具体的なレイアウト・色・描画方式は実装時に決めるが、未観測値を生成しない条件を維持する。
 
 メッセージのfield・型・単位・意味・世代・順序・欠落・互換性を変更する際は、
 同じ変更作業で本仕様、関連する機能/API/Custom UI文書、および#24のCurrent state・Data sources・
