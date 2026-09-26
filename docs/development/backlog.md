@@ -35,8 +35,8 @@
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
 | [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。#35/#36の根拠・coverage・有界履歴・復元契約はPR #86/#87でマージ済み。未完了検証を[#89](https://github.com/udonchan/picdplayer/issues/89)（容量・drop・再生中の根拠保持）と[#90](https://github.com/udonchan/picdplayer/issues/90)（異常系復元・slow client/ログ障害時のaudio非干渉）へ移管。親はOpenを維持する。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
-| [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理。レビュー待ち。#89/#90の検証と並行可能。#24の表示契約との整合も確認する。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | Draftを維持。#35/#36の実装済み契約を基盤とし、#90の復元検証と公開契約・文書の整合確認後に着手可否を判断する。未観測値をUNKNOWN/UNSUPPORTEDと区別する。 |
+| [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90の検証と並行可能。#24の表示契約との整合も確認する。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | Draftを維持。#35/#36の実装済み契約を基盤とし、#90の復元検証と公開契約・文書の整合確認後に着手可否を判断する。未観測値をUNKNOWN/UNSUPPORTEDと区別する。メッセージ仕様を変更するたび、関連文書と#24の現状・データソース・完了条件を同時に更新する。 |
 
 ## 障害対応・機能改善
 

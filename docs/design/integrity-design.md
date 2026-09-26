@@ -369,3 +369,16 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 #36でread.active_warningとevent_windowを追加し、technical statusはsnapshotで警告を置換する。
 契約の正本は機能設計「診断snapshotの復元」。既存event sequenceは維持し、read_sequenceを追加。
 欠落はUNKNOWN、stream/session変更で旧状態を破棄する。完全なreplayは提供しない。
+
+## Player UI統合案の管理（#24）
+
+#24はDraft / Blockedを維持する。#35（根拠・coverage）と#36（診断復元）の実装は完了し、
+現行の公開仕様は[メッセージ契約](message-contract.md)に整理した。
+復元検証のHard dependencyは#90へ引き継いだ。検証結果と公開仕様・Issue本文を整合させ、
+Draft解除を判断するまでUI実装に着手しない。現行fieldの表示が可能なことと、UI統合仕様の確定を区別する。
+
+メッセージのfield・型・単位・意味・世代・順序・欠落・互換性を変更する際は、
+同じ変更作業で本仕様、関連する機能/API/Custom UI文書、および#24のCurrent state・Data sources・
+Acceptance criteriaを更新する。実装済み契約と提案中の項目を混在させない。
+#7〜#13全体の完成を一律の前提にはせず、親#12を重複したblockerにしない。
+容量・根拠保持の追加検証#89はRelatedとして扱う。
