@@ -85,16 +85,23 @@ function currentTrack(tracks, number) {
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
 // ジャケットは任意の付加情報です。画像読込失敗でアルバム情報を消しません。
-function showArt(artwork) {
+function showArt(artwork, layout, session) {
   const container = byId('art');
   const image = byId('cover');
   const url = typeof artwork?.url === 'string'
     ? artwork.url
     : '';
 
+  const identity = url ? JSON.stringify([url, layout?.session_id || session || null,
+    layout?.disc_generation ?? null]) : '';
+
   // Compare image identity before touching attributes or event handlers.
   // 同じ画像なら属性・handler を書き換えず、失敗時も毎回再試行しません。
-  if ((image.dataset.url || '') === url) return;
+  if ((image.dataset.identity || '') === identity) return;
+  // Same endpoint can now serve a different disc after reconnect.
+  // 同URLでもdisc/session変更時は旧画像を破棄して再取得する。
+  if (url && image.dataset.url === url) image.removeAttribute('src');
+  image.dataset.identity = identity;
   image.dataset.url = url;
   if (container.classList.contains('has-cover')) container.classList.remove('has-cover');
 
@@ -108,11 +115,11 @@ function showArt(artwork) {
   image.onload = () => {
     // Ignore completion from a replaced image and avoid repeated class writes.
     // 差し替え前の画像完了を無視し、同じ class を繰り返し設定しません。
-    if (image.dataset.url === url && image.complete && image.naturalWidth > 0 &&
+    if (image.dataset.identity === identity && image.complete && image.naturalWidth > 0 &&
         !container.classList.contains('has-cover')) container.classList.add('has-cover');
   };
   image.onerror = () => {
-    if (image.dataset.url === url && container.classList.contains('has-cover')) {
+    if (image.dataset.identity === identity && container.classList.contains('has-cover')) {
       container.classList.remove('has-cover');
     }
   };
@@ -170,7 +177,7 @@ function render(snapshot) {
     progressScale = scale;
   }
   set('player-state', player.state || 'NO_DISC');
-  showArt(snapshot.artwork?.cover);
+  showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id);
   boot.snapshot();
 }
 

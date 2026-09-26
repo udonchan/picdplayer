@@ -93,7 +93,7 @@ kioskのloopback接続では操作POSTも可能。静的検証はJavaScript sand
 
 ## 標準Playerの更新方法
 
-標準Playerはsnapshotを受け取るたび表示値を計算するが、同じ文字列・progress表示値・cover URLを
+標準Playerはsnapshotを受け取るたび表示値を計算するが、同じ文字列・progress表示値・同一世代のcover URLを
 DOMへ繰り返し設定しない。これは標準UIの実装上の最適化であり、Custom UIに新しい契約を要求しない。
 API/WebSocketの内容や配信頻度、再接続、任意の起動telemetryは従来どおりである。
 CSS transitionやbrowserの合成処理は別に発生し得るため、DOM write削減をpaintやCPUの削減量と同一視しない。
@@ -111,8 +111,10 @@ Pi 3の標準Playerでは、再生位置に合わせて約250 msごとに変わ�
 snapshotを受けるたびに全要素を書き換える前に、表示文字列・進行幅・画像URLなどが実際に
 変わったか比較する。特に高頻度で変化する要素へlayoutを伴うtransition、全画面filter、
 常時pan/zoomなどを重ねる場合は、Pi実機でCPU・温度・描画を測る。`transform`など別のCSS手法も
-compositeやGPU負荷を増やし得るため、計測なしに高速と決めない。cover画像はURLが同じなら
-再読込せず、変更時には古いload/error callbackが新しい画像状態を上書きしないようにする。
+compositeやGPU負荷を増やし得るため、計測なしに高速と決めない。cover画像はURLだけでなく
+`disc.layout.session_id`と`disc_generation`も比較し、世代が変われば同じURLでも再取得する。
+layoutがない旧payloadでは`read.session_id`を補助キーにするが、disc交換の識別は保証できない。
+変更時には古いload/error callbackが新しい画像状態を上書きしないようにする。
 
 #61のPi 3比較では、進行バーを`width`から`transform`へ変更するとCDPでのlayoutが
 39件から10件/10秒、paintが48件から12件/6秒になった。一方、CDP未接続の
@@ -172,7 +174,8 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 
 ### 詳細履歴とsnapshotの世代照合
 
-`GET /api/read-history`は通常snapshotとは別時点の応答である。詳細履歴を使用するUIは、
+`GET /api/read-history`は通常snapshotとは別時点の応答である。以下はSTREAM historyの照合例であり、
+DISC集計には末尾の別照合条件を適用する。詳細履歴を使用するUIは、
 **応答到着時の最新snapshot**とsession/streamを照合してから利用する。要求開始時のsnapshotだけで
 照合すると、待機中のstop/restartを見逃す。現在の標準UIはこのendpointを取得しない。
 以下は採用可否の参考実装であり、共通bootstrapやSDKを追加するものではない。
@@ -204,4 +207,10 @@ nullは未取得/不一致であり、空履歴や正常という意味ではな
 
 TOC座標は`disc.layout`で取得する。fieldとnull条件は[メッセージ契約](../design/message-contract.md#disc-layout98)を参照。
 同session/disc世代以外の根拠を重ねず、nullや世代変更時は旧mapを破棄する。
-#99のdisc領域集計は未実装であり、layoutだけでは全期間のread mapを復元できない。
+#99のdisc領域集計は下記のオンデマンド契約を使用する。layoutだけではread mapを復元できない。
+
+### Disc単位の読み取り区間（#99）
+
+GET /api/read-historyのdisc_mapはDISC scope。STREAM historyと照合条件を分け、
+root session_idと最新layoutのdisc_generationを照合する。最大256区間、容量超過時は不完全な下限として凍結。
+詳細fieldとflagsはメッセージ契約を参照。stop/seekでは保持、TOC再受理・daemon再起動ではresetする。

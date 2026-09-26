@@ -73,6 +73,37 @@ int main() {
         full.observe(ReadResult{0, 1500, 1500, ReadStatus::ok, 0, 0});
         check(full.accepted_unique_frames == 128);
 
+        DiscReadMap map;
+        map.disc_generation = 3;
+        for (int i = 0; i < 300; ++i) map.observe(ReadResult{i * 15, 15, 15, ReadStatus::ok, 0, 0});
+        check(map.size == 1 && map.regions[0].end == 4500 && map.revision == 300);
+        map.observe(ReadResult{10, 15, 0, ReadStatus::read_error, EIO, 1});
+        check(map.size == 2 && !(map.regions[1].flags & DiscReadMap::accepted));
+        check(map.regions[1].flags & DiscReadMap::retry);
+        map.observe(ReadResult{20, 15, 7, ReadStatus::read_error, EIO, 1});
+        check(map.size == 2 && map.regions[1].end == 35); // same facts, overlapping requests
+        ReadResult repeated{100, 15, 15, ReadStatus::ok, 0, 0};
+        repeated.verification.attempts = 3;
+        repeated.verification.matching_reads = 2;
+        repeated.verification.mismatches = 1;
+        repeated.paranoia.fixups = 1;
+        map.observe(repeated);
+        check((map.regions[map.size - 1].flags & (DiscReadMap::repeated | DiscReadMap::recovered | DiscReadMap::backend_anomaly))
+            == (DiscReadMap::repeated | DiscReadMap::recovered | DiscReadMap::backend_anomaly));
+        DiscReadMap limited;
+        limited.disc_generation = 1;
+        for (unsigned i = 0; i < DiscReadMap::capacity; ++i)
+            limited.observe(ReadResult{static_cast<int>(i * 2), 1, 1, ReadStatus::ok, 0, 0});
+        limited.observe(ReadResult{1000, 1, 1, ReadStatus::ok, 0, 0});
+        check(!limited.complete && limited.size == DiscReadMap::capacity);
+        auto revision = limited.revision;
+        limited.observe(ReadResult{0, 1500, 1500, ReadStatus::ok, 0, 0});
+        check(limited.revision == revision && limited.regions[0].end == 1);
+        DiscReadMap invalid;
+        invalid.disc_generation = 1;
+        invalid.observe(ReadResult{-1, 1, 1, ReadStatus::ok, 0, 0});
+        check(!invalid.complete && invalid.size == 0);
+
         std::cout << "PASS: truthful read evidence and aggregate counters\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

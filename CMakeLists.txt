@@ -326,6 +326,8 @@ if(BUILD_TESTING)
     endif()
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME summarize_kiosk COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
         add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
         add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}

@@ -36,7 +36,7 @@ def summarize(path):
         "system_cpu_pct_all_cores": {"mean": round(statistics.mean(cpu), 2), "max": max(cpu)} if cpu else None,
         "temp_c": {"start": temperatures[0], "end": temperatures[-1], "max": max(temperatures)} if temperatures else None,
         "current_throttle_samples": sum(value != 0 for value in current),
-        "history_throttle_hex": hex(rows[-1]["throttled"] & ~0xFFFF) if current else None,
+        "history_throttle_hex": hex(rows[-1]["throttled"] & ~0xFFFF) if rows[-1]["throttled"] is not None else None,
         "frequency_khz": {"min": min(frequencies), "max": max(frequencies)} if frequencies else None,
         "mem_available_kib_min": min(row["memory"].get("MemAvailable_kib", 0) for row in rows),
         "swap_in_pages_delta": rows[-1]["swap_io"].get("pswpin", 0) - rows[0]["swap_io"].get("pswpin", 0),

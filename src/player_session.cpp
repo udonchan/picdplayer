@@ -342,7 +342,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                                      return nlohmann::json{{"schema_version", 1},
                                                          {"session_id", diagnostic_session_id},
                                                          {"stream_generation", read.stream_generation},
-                                                         {"history", result["history"]}}.dump();
+                                                         {"history", result["history"]},
+                                                         {"disc_map", !toc_needs_refresh && loaded_toc &&
+                                                             media_state.state() == MediaLifecycleState::audio_ready &&
+                                                             result.contains("disc_map") ? result["disc_map"] : nlohmann::json(nullptr)}}.dump();
                                                  });
         auto line = log_info("api");
         line << "listening=http://";

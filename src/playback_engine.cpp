@@ -96,6 +96,10 @@ void PlaybackEngine::tick() {
                               << " last_read_us=" << status.last_read_us
                               << " read_inflight_us=" << status.read_inflight_us;
         try {
+            // No unread PCM remains at disc end. Retrying end_-1 would loop.
+            // 終端では再読せずエラー停止し、通常のdrain成功とは区別する。
+            if (draining_ || submitted_ >= (static_cast<std::int64_t>(end_) - start_) * 588)
+                throw;
             // At XRUN ALSA has consumed everything it accepted. Resume at the
             // last whole CD frame submitted, avoiding a large audible repeat.
             const auto resume = static_cast<std::int32_t>(std::min<std::int64_t>(
@@ -123,6 +127,8 @@ void PlaybackEngine::tick() {
         } catch (...) {
             controller_.stop();
             active_ = false;
+            submitted_evidence_.clear(); current_evidence_.reset();
+            block_ = {}; offset_ = 0;
             worker_.cancel();
             worker_.discard_reader();
             try { output_.reset(); } catch (...) {}
@@ -138,6 +144,8 @@ void PlaybackEngine::tick() {
                               << " read_inflight_us=" << status.read_inflight_us;
         controller_.stop();
         active_ = false;
+        submitted_evidence_.clear(); current_evidence_.reset();
+        block_ = {}; offset_ = 0;
         worker_.cancel();
         // A USB reset or media change can leave the open drive handle unusable.
         // Recreate it on the worker thread before a later Play command.

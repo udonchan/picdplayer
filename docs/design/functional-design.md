@@ -131,7 +131,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | Method/path | 入力・結果 |
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
-| GET /api/read-history | session/stream付きの有界詳細履歴。通常snapshotとは別取得 |
+| GET /api/read-history | STREAM詳細履歴とDISC領域集計。通常snapshotとは別取得 |
 | GET /api/read-policy | requested/effective/pendingを即時取得 |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
@@ -284,11 +284,12 @@ JSONサイズ・Pi負荷は実機未検証。完全なdisc履歴やevent replay�
 通常の`GET /api/state`と`WS /api/events`は`read.history.regions`を送らず、`included=false`と
 上限・破棄数・`last_read_sequence`を送る。latest/current_playbackは維持する。詳細取得は
 `GET /api/read-history`で行い、`schema_version=1`、`session_id`、`stream_generation`、
-`history`（included=true、regionsを含む）を返す。最大128件でpagination/replayは提供しない。
+`history`（included=true、regionsを含む）と`disc_map`（下記DISC集計、null可能）を返す。
+historyは最大128件でpagination/replayは提供しない。
 GET以外は405、providerがない場合は503。読み取り専用で既存state GETと同じlisten境界を使う。
 
 session IDはdaemon起動時に生成する不透明な識別子で、通常snapshotでは`read.session_id`に置く。
-ID不一致時は旧履歴を破棄する。同sessionでもstream_generationが異なれば併合せずstateを再取得する。
+ID不一致時は旧履歴を破棄する。STREAM historyは同sessionでもstream_generationが異なれば併合せずstateを再取得する。
 HTTP取得と定期snapshotは同時点を保証せず、同streamの詳細がsnapshotより先へ進んでいてもよい。
 read_sequenceはstream内でのみ比較する。保持windowより前の詳細は取得不能であり、未観測を成功と扱わない。
 常時pollingせず詳細画面表示時などに取得する。field欠損・503では未取得として表示する。
@@ -322,4 +323,10 @@ technical statusは同session内の古い/同revision snapshotを無視し、str
 
 TOC座標は`disc.layout`で取得する。fieldとnull条件は[メッセージ契約](message-contract.md#disc-layout98)を参照。
 同session/disc世代以外の根拠を重ねず、nullや世代変更時は旧mapを破棄する。
-#99のdisc領域集計は未実装であり、layoutだけでは全期間のread mapを復元できない。
+#99のdisc領域集計は下記のオンデマンド契約を使用する。layoutだけではread mapを復元できない。
+
+### Disc単位の読み取り区間（#99）
+
+GET /api/read-historyのdisc_mapはDISC scope。STREAM historyと照合条件を分け、
+root session_idと最新layoutのdisc_generationを照合する。最大256区間、容量超過時は不完全な下限として凍結。
+詳細fieldとflagsはメッセージ契約を参照。stop/seekでは保持、TOC再受理・daemon再起動ではresetする。

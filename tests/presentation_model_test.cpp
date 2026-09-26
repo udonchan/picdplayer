@@ -62,10 +62,23 @@ int main() {
         check(!diagnostic["read"]["history"].contains("regions"));
         auto detailed = diagnostic_model;
         detailed.read.history_included = true;
+        detailed.read.disc_map = DiscReadMap{};
+        detailed.read.disc_map->disc_generation = 5;
+        detailed.read.disc_map->observe(accepted);
         detailed.read.recent_reads.push_back(*detailed.read.latest);
         const auto detail_json = nlohmann::json::parse(serialize_presentation_model(detailed));
         check(detail_json["read"]["history"]["regions"].size() == 1);
         check(detail_json["read"]["history"]["included"] == true);
+        check(detail_json["read"]["disc_map"]["scope"] == "DISC");
+        check(detail_json["read"]["disc_map"]["regions"][0]["start_lba"] == 150);
+        check(!diagnostic["read"].contains("disc_map"));
+        detailed.read.disc_map = DiscReadMap{};
+        detailed.read.disc_map->disc_generation = 5;
+        for (unsigned i = 0; i < DiscReadMap::capacity; ++i)
+            detailed.read.disc_map->observe(ReadResult{static_cast<int>(i * 2), 1, 1, ReadStatus::ok, 0, 0});
+        const auto bounded = nlohmann::json::parse(serialize_presentation_model(detailed));
+        check(bounded["read"]["disc_map"]["regions"].size() == 256);
+        check(bounded["read"]["disc_map"].dump().size() < 64 * 1024);
         const auto& verification = diagnostic["read"]["latest"]["verification"];
         check(verification["attempt_details"][0]["candidate"] == 1);
         check(verification["accepted_candidate"] == 1);

@@ -93,6 +93,7 @@ private:
     std::chrono::steady_clock::time_point read_started_{};
     std::int64_t last_read_us_ = 0;
     ReadDiagnostics diagnostics_;
+    DiscReadMap disc_map_;
     std::uint64_t dropped_events_ = 0;
     std::uint64_t generation_ = 0;
     std::uint64_t device_generation_ = 0, disc_generation_ = 0;

@@ -38,7 +38,7 @@
 | [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90は完了。#24正式化時に公開実装と再照合済み。 |
 | [#96 Validate Integrity diagnostics under Raspberry Pi hardware faults](https://github.com/udonchan/picdplayer/issues/96) | 後日の実機異常系診断評価。傷disc/stallの再現・音声影響は#33、特殊TOCは#39/#40が担当。同じrun記録を共有し、API・警告・復元の整合だけを確認する。#24の追加blockerにはしない。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | 機能目標を正式化。全disc read mapに必要な#98（TOC/世代公開）と#99（disc領域集計）によりBlocked。UIは未実装。両Issue完了時に公開契約と#24を同時更新する。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | 機能目標を正式化。全disc read mapの前提#98はマージ済み。#99（disc領域集計、PR #102レビュー中）によりBlocked。UIは未実装。両Issue完了時に公開契約と#24を同時更新する。 |
 
 ## 障害対応・機能改善
 
@@ -130,7 +130,18 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 
 ### 全ディスクread mapの前提
 
-- [#98](https://github.com/udonchan/picdplayer/issues/98): TOC座標とdisc観測世代をdisc.layoutとして公開する実装を作業中。Docker36/36成功、通常PiのTOC/REST/WS照合済み。PRレビュー待ち。
-- [#99](https://github.com/udonchan/picdplayer/issues/99): 容量を制限したdisc領域集計と取得契約を実装する。
+- [#98](https://github.com/udonchan/picdplayer/issues/98): TOC座標とdisc観測世代のdisc.layout公開はPR #101でマージ済み。Docker36/36、通常PiのTOC/REST/WS照合済み。
+- [#99](https://github.com/udonchan/picdplayer/issues/99): 最大256区間のDISC集計を実装。Docker36/36、Piで140 read超・stop/resume保持・daemon restart resetを確認、PRレビュー待ち。
 
-両者が#24をblockする。相互はRelatedで、#12の完了を取り消さず追加機能として管理する。
+#98は完了済みの前提、現在#99が#24をblockする。相互はRelatedで、#12の完了を取り消さず追加機能として管理する。
+
+## #24着手前の監査修正（PR #102）
+
+- [#103](https://github.com/udonchan/picdplayer/issues/103): stream終了時の旧再生根拠・欠落counter破棄。
+- [#104](https://github.com/udonchan/picdplayer/issues/104): disc/session変更時の同URL artwork再取得。
+- [#105](https://github.com/udonchan/picdplayer/issues/105): 最終throttled sample欠損時の集計。
+- [#106](https://github.com/udonchan/picdplayer/issues/106): 終端underrunの再seek防止。
+
+いずれも修正・回帰試験を追加済み、未マージ。Docker37/37成功。
+実機では終端試験が失敗したため追加再生を中止し、修正後は未再確認。
+[監査記録](reports/2026-09-26-pre-integrity-audit/README.md)を参照する。

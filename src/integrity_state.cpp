@@ -144,3 +144,37 @@ void ReadCoverage::observe(const ReadResult& result) {
     regions[first] = merged;
     accepted_unique_frames += merged.end - merged.begin;
 }
+
+void DiscReadMap::observe(const ReadResult& result) {
+    if (!disc_generation || !complete) return;
+    if (revision == std::numeric_limits<std::uint64_t>::max()) { complete = false; return; }
+    ++revision;
+    if (result.start_lba < 0 || !result.frames_requested || result.frames_read > result.frames_requested ||
+        result.frames_requested > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max() - result.start_lba)) {
+        complete = false;
+        return;
+    }
+    unsigned flags = attempted;
+    if (result.status == ReadStatus::ok && result.frames_read == result.frames_requested) flags |= accepted;
+    if (result.retries) flags |= retry;
+    if (result.verification.attempts > 1) flags |= repeated;
+    const auto evidence = make_read_evidence(result);
+    if (evidence.status == IntegrityReadStatus::recovered) flags |= recovered;
+    if (evidence.status == IntegrityReadStatus::uncertain) flags |= uncertain;
+    if (result.paranoia.fixups || result.paranoia.skips || result.paranoia.read_errors || result.paranoia.cache_errors)
+        flags |= backend_anomaly;
+    Region merged{result.start_lba, result.start_lba + static_cast<std::int64_t>(result.frames_requested), flags};
+    // Only merge identical facts. Different observations can overlap.
+    // 異なる観測の重なりを最終結果一つに置き換えない。
+    for (std::size_t i = 0; i < size;) {
+        const auto region = regions[i];
+        if (region.flags == flags && region.begin <= merged.end && merged.begin <= region.end) {
+            merged.begin = std::min(merged.begin, region.begin);
+            merged.end = std::max(merged.end, region.end);
+            regions[i] = regions[--size];
+            i = 0;
+        } else ++i;
+    }
+    if (size == capacity) { complete = false; return; }
+    regions[size++] = merged;
+}

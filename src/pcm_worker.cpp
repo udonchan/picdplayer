@@ -1,6 +1,7 @@
 #include "pcm_worker.hpp"
 #include <algorithm>
 #include <stdexcept>
+#include <limits>
 
 void validate_pcm_buffer_config(const PcmBufferConfig& config) {
     if (config.capacity_cd_frames < pcm_block_cd_frames ||
@@ -97,7 +98,7 @@ void PcmWorker::cancel() {
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
-    events_.clear();
+    events_.clear(); dropped_events_ = 0;
     changed_.notify_all();
 }
 void PcmWorker::discard_reader() {
@@ -112,7 +113,7 @@ void PcmWorker::discard_reader() {
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
-    events_.clear();
+    events_.clear(); dropped_events_ = 0;
     discard_reader_ = true;
     changed_.notify_all();
 }
@@ -137,6 +138,8 @@ void PcmWorker::set_disc_generation(std::uint64_t generation) {
     std::lock_guard lock(mutex_);
     if (active_) throw std::logic_error("disc generation change requires stopped worker");
     disc_generation_ = generation;
+    disc_map_ = {};
+    disc_map_.disc_generation = generation;
 }
 WorkerStatus PcmWorker::status(bool include_history) {
     std::lock_guard lock(mutex_);
@@ -146,6 +149,7 @@ WorkerStatus PcmWorker::status(bool include_history) {
     auto diagnostics = diagnostics_;
     diagnostics.history_included = include_history;
     if (include_history) {
+        if (disc_map_.disc_generation) diagnostics.disc_map = disc_map_;
         diagnostics.recent_reads.reserve(history_size_);
         for (std::size_t i = 0; i < history_size_; ++i)
             diagnostics.recent_reads.push_back(history_[(history_begin_ + i) % read_history_capacity]);
@@ -183,6 +187,7 @@ void PcmWorker::run() {
         const auto capacity_blocks = capacity_blocks_;
         const auto read_block_cd_frames = read_block_cd_frames_;
         lock.unlock();
+        bool unobserved_read = false;
         try {
             if (!reader) {
                 lock.lock(); drive_call_inflight_ = true; lock.unlock();
@@ -220,6 +225,7 @@ void PcmWorker::run() {
                     static_cast<std::int32_t>(read_block_cd_frames), end - position);
                 PcmBlock block{generation, position,
                                std::vector<std::int16_t>(frames * cdda_samples_per_frame), {}};
+                unobserved_read = true;
                 const auto result = drive_access_
                     ? drive_access_->invoke([&] { return reader->read(block.samples); })
                     : reader->read(block.samples);
@@ -228,6 +234,8 @@ void PcmWorker::run() {
                     std::chrono::steady_clock::now() - read_started_).count();
                 reading_ = false;
                 drive_call_inflight_ = false;
+                unobserved_read = false;
+                if (disc_generation == disc_generation_) disc_map_.observe(result);
                 if (generation == generation_) {
                     observe_read(diagnostics_.stats, result);
                     diagnostics_.coverage.observe(result);
@@ -284,6 +292,10 @@ void PcmWorker::run() {
             if (drive_access_) drive_access_->invoke([&] { reader.reset(); });
             else reader.reset();
             if (!lock.owns_lock()) lock.lock();
+            if (unobserved_read && disc_generation == disc_generation_ && disc_map_.complete) {
+                disc_map_.complete = false;
+                if (disc_map_.revision != std::numeric_limits<std::uint64_t>::max()) ++disc_map_.revision;
+            }
             reader_open_ = false;
             reading_ = false;
             drive_call_inflight_ = false;
