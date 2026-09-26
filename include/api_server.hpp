@@ -23,13 +23,15 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiReadPolicyProvider& read_policy_provider = {},
                               const UiBundle* ui = nullptr,
                               const ApiUiBootHandler& ui_boot_handler = {},
-                              const ApiArtworkProvider& artwork_provider = {});
+                              const ApiArtworkProvider& artwork_provider = {},
+                              const ApiStateProvider& read_history_provider = {});
 
 class ApiServer {
 public:
     ApiServer(std::string listen_address, int port, ApiStateProvider state_provider,
               ApiCommandHandler command_handler = {}, ApiReadPolicyProvider read_policy_provider = {},
-              UiBundle ui = {}, ApiArtworkProvider artwork_provider = {});
+              UiBundle ui = {}, ApiArtworkProvider artwork_provider = {},
+              ApiStateProvider read_history_provider = {});
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;

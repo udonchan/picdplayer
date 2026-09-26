@@ -576,3 +576,11 @@ Piの再生・CPU/メモリ・JSON転送量は未検証。#35を完了扱いに�
 [provenance実機結果](reports/2026-09-26-read-provenance/README.md)に履歴上限、stop/reset、repeat候補、
 service再起動と短時間負荷を記録した。session復元は#36で未実装、物理hotplugは#88でPending。
 TV実表示・試聴・長期運転は未検証。snapshot約96KBとCDP混在CPU平均20.4%の負荷評価は#83へ引き継ぐ。
+
+### 詳細履歴オンデマンド化（#35/#36）
+
+通常snapshotから履歴regionsを省き、GET /api/read-historyとsession識別を追加。
+Docker build/CTest34件成功。Piでstate16437 bytes、履歴128件取得、stop/reset、restartでsession変更を確認。
+CDPなし25秒のCPU平均16.85%、現在throttlingなし。条件差があり性能改善率は確定しない。
+詳細・rawは[provenance実機結果](reports/2026-09-26-read-provenance/README.md)を参照。
+warning/gap復元は#36で未実装、#24はBlockedを維持。

@@ -129,6 +129,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | Method/path | 入力・結果 |
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
+| GET /api/read-history | session/stream付きの有界詳細履歴。通常snapshotとは別取得 |
 | GET /api/read-policy | requested/effective/pendingを即時取得 |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
@@ -267,11 +268,28 @@ reader handleのincarnationであり、物理hotplugを完全に検出した意�
 discはTOC refreshを含めて更新し、同一TOCの再挿入を同じ観測世代として扱わない。ただし未観測の
 交換は検出できない。識別子はdaemon内だけ有効で、再起動を跨ぐ識別は#36で扱う。
 
-`read.history`は`scope=STREAM`、`capacity=128`、`storage_bytes`（固定配列のnative byte数）、
-`evicted`、`regions`を公開する。成功・失敗readの詳細を最大128件保持し、古い順に破棄する。
+履歴は`scope=STREAM`、`capacity=128`、`storage_bytes`（固定配列のnative byte数）、
+`evicted`を持つ。詳細`regions`は下記のオンデマンドendpointだけで公開する。成功・失敗readの詳細を最大128件保持し、古い順に破棄する。
 各regionはlatestと同じevidence形。採用PCMに付随する根拠は別コピーで保持されるため、historyから
 破棄されてもcurrent_playbackの詳細は残る。detail_availableはそのevidenceの保持状態であり、
 全backend試行を観測済みという意味ではない。返されない過去領域の詳細は取得不能とする。
 start/cancel/discardで履歴とevictedをリセットする。通常のengine tickは履歴コピーをせず、
-API投影時だけ同一lock内で統計と履歴を取得する。slow clientによる履歴保持延長や同期disk書込みはない。
+詳細履歴のHTTP取得時だけ同一lock内で統計と履歴を取得する。slow clientによる履歴保持延長や同期disk書込みはない。
 JSONサイズ・Pi負荷は実機未検証。完全なdisc履歴やevent replayは提供しない。
+
+### 詳細履歴のオンデマンド取得（#35/#36、PR #87）
+
+通常の`GET /api/state`と`WS /api/events`は`read.history.regions`を送らず、`included=false`と
+上限・破棄数・`last_read_sequence`を送る。latest/current_playbackは維持する。詳細取得は
+`GET /api/read-history`で行い、`schema_version=1`、`session_id`、`stream_generation`、
+`history`（included=true、regionsを含む）を返す。最大128件でpagination/replayは提供しない。
+GET以外は405、providerがない場合は503。読み取り専用で既存state GETと同じlisten境界を使う。
+
+session IDはdaemon起動時に生成する不透明な識別子で、通常snapshotでは`read.session_id`に置く。
+ID不一致時は旧履歴を破棄する。同sessionでもstream_generationが異なれば併合せずstateを再取得する。
+HTTP取得と定期snapshotは同時点を保証せず、同streamの詳細がsnapshotより先へ進んでいてもよい。
+read_sequenceはstream内でのみ比較する。保持windowより前の詳細は取得不能であり、未観測を成功と扱わない。
+常時pollingせず詳細画面表示時などに取得する。field欠損・503では未取得として表示する。
+
+これ以前のPR内にあったsnapshot内regionsは未マージ契約の見直しであり、標準Playerには依存がない。
+#24の表示候補も本契約に追従する。active warning・event gap復元はまだ#36で未実装。

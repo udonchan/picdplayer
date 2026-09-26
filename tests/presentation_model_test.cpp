@@ -58,6 +58,13 @@ int main() {
         check(diagnostic["recent_events"][0]["sequence"] == 42);
         check(!presentation_json_equal_ignoring_revision(rendered, diagnostic.dump()));
         check(!diagnostic.contains("metadata"));
+        check(!diagnostic["read"]["history"].contains("regions"));
+        auto detailed = diagnostic_model;
+        detailed.read.history_included = true;
+        detailed.read.recent_reads.push_back(*detailed.read.latest);
+        const auto detail_json = nlohmann::json::parse(serialize_presentation_model(detailed));
+        check(detail_json["read"]["history"]["regions"].size() == 1);
+        check(detail_json["read"]["history"]["included"] == true);
         const auto& verification = diagnostic["read"]["latest"]["verification"];
         check(verification["attempt_details"][0]["candidate"] == 1);
         check(verification["accepted_candidate"] == 1);

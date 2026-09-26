@@ -66,6 +66,8 @@ struct ReadCoverage {
 
 inline constexpr std::size_t read_history_capacity = 128;
 struct ReadDiagnostics {
+    std::string session_id;
+    bool history_included = false;
     std::vector<ReadEvidence> recent_reads; // populated only for API projection
     std::uint64_t history_evicted = 0;
     std::uint64_t stream_generation = 0;

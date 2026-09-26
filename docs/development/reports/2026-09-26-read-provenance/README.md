@@ -38,3 +38,16 @@ CPUはscripts/measure-kiosk.py、集計はscripts/summarize-kiosk.pyを使用。
 API検査はplay、5秒間隔9回のstate、stop、再play、stop。別runでread-policy repeat、play、
 8秒後state、stop、systemctl restart、STOPPED/track認識後stateを照合した。
 Pi再起動・cold boot・物理disc交換は行っていない。
+
+## 詳細履歴分離後の確認（同日、PR #87追加変更）
+
+通常snapshotからregionsを除き、GET /api/read-historyで取得する版を同じDocker手順でbuild/deploy。
+stateは16437 bytes、詳細responseは79410 bytes（128件、evicted=61）。session/stream一致を確認。
+stop後の履歴消去、service restart後のsession ID変更もAPIで確認した。これは#36全体の復元試験ではない。
+
+CDP未接続の25秒・5 sampleは全core CPU平均16.85%、最大18.96%、daemon1core平均9.96%。
+温度最大61.2°C、現在throttlingなし。前runはCDP接続あり、周波数・温度・タイミングも異なるので
+CPU低減率の確定比較にしない。snapshotサイズの縮小は実測できたが、定常性能は#83で継続評価する。
+終了時は両service inactive。終了直後3分のdaemon journal検索でunderrun/slow_stage/read failed/
+failure_contextは見つからなかった。on-demand-runtime/cpu.jsonl.gzにrawを保存。
+TV実表示・試聴は行っていない。runtime試験は30秒再生後にstate/履歴を取得し、35秒後にstop/restart。

@@ -137,10 +137,12 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                     {"maximum_attempts", value.maximum_attempts},
                     {"time_budget_ms", value.time_budget_ms}};
     };
-    root["read"] = {{"history", {{"scope", "STREAM"},
+    root["read"] = {{"session_id", read.session_id}, {"history", {{"scope", "STREAM"},
                                  {"capacity", read_history_capacity},
                                  {"storage_bytes", sizeof(ReadEvidence) * read_history_capacity},
                                  {"evicted", read.history_evicted},
+                                 {"included", read.history_included},
+                                 {"last_read_sequence", read.stats.read_calls},
                                  {"regions", std::move(history)}}},
                     {"stream_generation", read.stream_generation},
                     {"policy_revision", read.policy_revision},
@@ -179,6 +181,7 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                {"verified_calls", stats.verified_calls},
                                {"verification_failures", stats.verification_failures},
                                {"failed_calls", stats.failed_calls}}}};
+    if (!read.history_included) root["read"]["history"].erase("regions");
     Json events = Json::array();
     for (const auto& event : recent_events) {
         events.push_back({{"sequence", event.sequence},

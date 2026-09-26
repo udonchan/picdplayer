@@ -141,6 +141,7 @@ WorkerStatus PcmWorker::status(bool include_history) {
         std::chrono::steady_clock::now() - read_started_).count() : 0;
     diagnostics_.dropped_events = dropped_events_;
     auto diagnostics = diagnostics_;
+    diagnostics.history_included = include_history;
     if (include_history) {
         diagnostics.recent_reads.reserve(history_size_);
         for (std::size_t i = 0; i < history_size_; ++i)
