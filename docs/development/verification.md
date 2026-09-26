@@ -81,6 +81,10 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 一時停止したPLAYING区間は10.79%（36.0秒）だった。測定時間・順序が異なるため、
 長時間の改善率ではない。この基線は#53導入前の条件である。
 
+#52のクローズに向け、[完了判定と制約](reports/2026-09-25-kiosk-baseline/README.md#完了判定の整理2026-09-26追記)を追記した。
+既存rawを再集計し、新規測定は行っていない。Cage単独は改善対象の特定に不要として省略し、
+過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、長期運転・実表示・音声は#4で別途確認する。
+
 ## 標準PlayerのDOM更新削減（Issue #53）
 
 #53は#52のbaseline測定をhard dependencyとする。最初のDOM write削減は標準Playerの

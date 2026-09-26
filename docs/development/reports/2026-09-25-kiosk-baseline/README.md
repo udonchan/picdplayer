@@ -1,5 +1,51 @@
 # Kiosk CPU・描画・温度の基準測定（Issue #52）
 
+## 完了判定の整理（2026-09-26追記）
+
+#52の成果は、当時のkiosk負荷の基線と改善対象の特定である。以下の原記録と、
+[#53の改善検証](../2026-09-26-kiosk-render-cost/README.md)、
+[#61の残余負荷検証](../2026-09-26-residual-render-cost/README.md)を合わせて完了を判断する。
+本追記では保存済みgzip/JSON Linesを読み直して集計を照合した。新規実機測定・再デプロイは行っていない。
+
+| #52の要件 | 根拠と判定 |
+|---|---|
+| CPU/thread、memory、frequency、温度、current/history throttling | 各条件のsampler rawに時刻付きで保存済み。下記の表と集計対象を参照。 |
+| WS/render/paint、ALSA異常 | 短時間CDPのWS/render・Performance metricsと、測定時間帯のjournal検索結果を原記録に保存。trace Paint/Layoutの件数は下記の制約あり。全指標を一つの同時測定値として扱わない。 |
+| 生データの所在・計測負荷 | このdirectoryおよび上記後続reportにrawを保存。CDPあり/なしを分離し、samplerを停止条件にも使用。計測器の負荷を完全には分離していない。 |
+| 改善対象の特定 | daemonのみ・静的Chromiumでは低負荷で、標準Playerの再生時のみ高負荷。transition一時停止と#53の実機検証が描画経路の改善を支持する。 |
+
+### 計測の限界と省略する追加測定
+
+- `player-playing-during-cdp.jsonl.gz`の9 sampleはすべてPLAYINGで、全core CPU平均72.60%、
+  温度最大74.1°C。無接続の先頭10 sampleは70.92%だが、同時刻・同開始温度の対比較ではなく、
+  接続runにはCDP操作前後も含み得る。この差をCDPだけの負荷増分とはしない。
+- 停止条件の0.29%もsamplerを含むシステム全体の値であり、sampler単体のoverheadではない。
+  低頻度採取と条件分離による観測であり、計測の影響ゼロとは主張しない。
+- #80で`Tracing.end`応答前のイベント取りこぼしを修正した。過去のtrace Paint/Layout件数は
+  過少集計の可能性があるため、定量的な削減率の根拠から外す。rawと原記録は保存する。
+  別経路のPerformance metrics、無接続CPU、transition切り分けの結果はこの集計バグの対象ではない。
+- Cage単独は未測定。Cageを含む静的Chromiumで低負荷、同じ構成のPlayerで高負荷という比較で
+  今回の改善対象は特定できたため、独立したCageの寄与率測定は省略する。
+  Cageの負荷ゼロや、Chromiumとの相互作用がないという意味ではない。
+- 旧版PLAYINGの5分測定は高温のため中断した。#53後には5分の測定があり、旧版を再加熱して
+  同時間にそろえる試験は追加しない。#61には逆順を含む比較があるが、TV・温度条件の制約があり、
+  厳密な反復比較や普遍的な改善率は主張しない。
+
+### 引き継ぐ確認範囲
+
+#81（PR #82）で診断値の配信を復元した現行masterは、この基線と異なる。
+現行masterのCPU・配信量・更新頻度は未測定であり、本Issueの完了をその性能保証とはしない。
+最新構成の負荷、修正版CDP、Cage単独、計測負荷分離と反復比較は
+[#83](https://github.com/udonchan/picdplayer/issues/83)で追跡する。Cage単独の省略は#52内の判断であり、残測定としては維持する。
+長期運転、TV肉眼表示・音声・異なるdiscの確認は
+[#4](https://github.com/udonchan/picdplayer/issues/4)のruntime検証に引き継ぐ。
+今後高負荷が再発した場合は[#27](https://github.com/udonchan/picdplayer/issues/27)の観点で
+修正版CDPと無接続CPUを比較する。今回の基線測定を無期限に延長しない。
+
+以下は測定当時の記録である。「未実施」「#53導入前」は当時の条件を指す。
+
+## 原記録
+
 測定日: 2026-09-25〜26。Raspberry Pi 3、Debian Trixie arm64、kernel 6.18.50+rpt-rpi-v8。
 Piは純正ケース、ファン・ヒートシンクなし。室温はユーザー申告25.5°C、TVは通電・起動中。
 CDは挿入済みで、STOPPEDではAPIがAUDIO_READYを返した。標準Playerを1920×1080で表示し、
