@@ -230,6 +230,77 @@ int main() {
             wait_for([&] { return history.status().done; });
             check(history.status(true).diagnostics.recent_reads.front().disc_generation == 8);
         }
+        // Pause diagnostic consumption, not PCM: overflow must never stall reads.
+        // 診断consumerだけを止め、PCM進行と破棄順序・世代境界を確認する。
+        {
+            PcmWorker overflow([] { return std::make_unique<FakeReader>(); });
+            overflow.set_disc_generation(20);
+            const auto generation = overflow.start(0, 15 * 300);
+            PcmBlock block;
+            ReadDiagnostics retained;
+            for (unsigned i = 1; i <= 300; ++i) {
+                wait_for([&] { return overflow.pop(block); });
+                check(block.evidence.read_sequence == i);
+                check(block.generation == generation);
+                check(block.evidence.disc_generation == 20);
+                const auto ordinary = overflow.status();
+                check(ordinary.queued <= overflow.buffer_capacity_blocks());
+                check(ordinary.diagnostics.recent_reads.empty());
+                if (i == 1) retained = overflow.status(true).diagnostics;
+            }
+            wait_for([&] { return overflow.status().done; });
+            const auto detailed = overflow.status(true).diagnostics;
+            check(detailed.stats.read_calls == 300 && detailed.dropped_events == 44);
+            check(detailed.history_evicted == 172 && detailed.recent_reads.size() == 128);
+            check(detailed.recent_reads.front().read_sequence == 173);
+            check(detailed.recent_reads.back().read_sequence == 300);
+            check(detailed.coverage.accepted_unique_frames == 4500 && detailed.coverage.complete);
+            // A consumer may hold its copied snapshot indefinitely without pinning the worker.
+            // 取得済みsnapshotの保持はworker側の保存領域を固定しない。
+            check(retained.recent_reads.front().read_sequence == 1);
+            check(retained.recent_reads.size() <= read_history_capacity);
+            PlayerEvent event;
+            for (unsigned sequence = 45; sequence <= 300; ++sequence) {
+                check(overflow.pop_event(event));
+                check(event.read.read_sequence == sequence && event.stream_generation == generation);
+            }
+            check(!overflow.pop_event(event));
+            overflow.cancel();
+            overflow.set_disc_generation(21);
+            const auto next = overflow.start(9000, 9015);
+            wait_for([&] { return overflow.status().done; });
+            const auto reset = overflow.status(true).diagnostics;
+            check(next != generation && reset.dropped_events == 0 && reset.history_evicted == 0);
+            check(reset.recent_reads.size() == 1 && reset.recent_reads[0].read_sequence == 1);
+            check(reset.recent_reads[0].disc_generation == 21 && reset.recent_reads[0].start_lba == 9000);
+            check(reset.coverage.accepted_unique_frames == 15);
+            check(overflow.pop_event(event) && event.stream_generation == next && !overflow.pop_event(event));
+        }
+        // Max supported prefetch can evict evidence before its PCM reaches output.
+        // 最大先読みで履歴から消えても、engineの再生根拠はPCMから復元される。
+        {
+            PcmWorker prefetched([] { return std::make_unique<FakeReader>(); }, "test", {2250, 15});
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 2250));
+            FakeOutput output;
+            PlaybackEngine playback(controller, prefetched, output, 2250);
+            controller.play(); playback.synchronize();
+            wait_for([&] { return prefetched.status().done; });
+            const auto history = playback.read_diagnostics(true);
+            check(history.history_evicted == 22 && history.recent_reads.front().read_sequence == 23);
+            playback.tick();
+            check(output.total > 0);
+            const auto current = playback.read_diagnostics();
+            check(current.current_playback && current.current_playback->read_sequence == 1);
+            check(current.current_playback->start_lba == 0 && current.latest->read_sequence == 150);
+            check(current.recent_reads.empty());
+            output.pending = 0;
+            playback.tick();
+            check(output.total > 12 * 588);
+            check(playback.read_diagnostics().current_playback->start_lba == 0);
+            controller.stop(); playback.synchronize();
+            check(!playback.read_diagnostics().current_playback);
+        }
         // Media work using the same coordinator cannot overlap a PCM read.
         {
             auto coordinated_gate = std::make_shared<Gate>();
