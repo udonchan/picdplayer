@@ -33,9 +33,10 @@
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | 現行repeatは同一区間のPCM全体の反復一致だけを調べる。overlap整列とcache対策はなく、2-of-3一致でも独立した物理再読込を保証しない。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
-| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。現在のReadEvidenceと有界eventに対し、[#35](https://github.com/udonchan/picdplayer/issues/35)で詳細な根拠・coverage（repeat試行・採用候補、有界stream coverageとstream/policy識別子を実装中。reader/disc観測世代・128件履歴とオンデマンド取得APIも実装中。実機検証と#36のsession契約は未完了）、[#36](https://github.com/udonchan/picdplayer/issues/36)で再接続・event gapからの診断復元を扱う。session ID・stream警告・event窓とtechnical statusの復元を実装中。自動試験済み。Piでpage reload・daemon再起動後の新session追従を確認。実機の異常read警告は未検証。 |
+| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。#35/#36の根拠・coverage・有界履歴・復元契約はPR #86/#87でマージ済み。未完了検証を[#89](https://github.com/udonchan/picdplayer/issues/89)（容量・drop・再生中の根拠保持）と[#90](https://github.com/udonchan/picdplayer/issues/90)（異常系復元・slow client/ログ障害時のaudio非干渉）へ移管。親はOpenを維持する。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | 取得できる値とUNKNOWN/UNSUPPORTEDを区別し、Playerに事実に基づくIntegrity表示を統合する。 |
+| [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を実装と照合して仕様化する。#89/#90の検証と並行可能。#24の表示契約との整合も確認する。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | Draftを維持。#35/#36の実装済み契約を基盤とし、#90の復元検証と公開契約・文書の整合確認後に着手可否を判断する。未観測値をUNKNOWN/UNSUPPORTEDと区別する。 |
 
 ## 障害対応・機能改善
 

@@ -550,51 +550,41 @@ Piハング時は原因を確定できる前bootログがなかった。メモ�
 当時はPiビルドを-j1に制限した。現在はMac + Dockerでビルドし、Piは実機検証だけに使用する。
 障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。
 
-## #35 repeat試行根拠の初期実装（2026-09-26）
+## #35 / #36 実装済み範囲と後続検証（2026-09-26）
 
-wrapperの最大8試行を固定容量で記録し、candidateと閾値到達attemptをlatest/current_playbackへ
-追加公開する。A/B/B、全不一致、失敗後の一致、8試行上限、未取得時の空配列/null、JSONへの投影を
-自動試験する。Docker/aarch64標準buildとCTest 34/34件成功。Piでの再生・性能は未検証。
-coverage・世代別履歴・policy revision・evictionは未実装で、#35は継続中、#24はブロックを維持する。
+PR #86/#87はmasterへマージ済み（8b84acb）。#35/#36は実装済み部分と実施済み検証を
+完了範囲として整理し、未完了の異常系・非干渉要件を#89/#90へ移管した。
+移管は検証成功を意味しない。親#12はOpen、Player統合#24はDraftを維持する。
+#24の復元契約検証待ちは#90へ引き継ぐ。
 
-### #35 続き: stream coverage・世代（2026-09-26）
+### 自動試験で確認した範囲
 
-固定128区間の和集合で採用CD frameを一意に集計し、上限時は下限を固定する。
-重複・overlap・隣接区間、失敗read、容量超過、policy更新、旧世代readの除外、cancel後のreset、
-JSON公開を試験した。Docker/aarch64でbuild/package生成・CTest 34/34件成功。
-Pi実機の再生・メモリ/負荷は未検証。device/disc世代、詳細履歴のeviction/detail_availableは残作業。
+Docker/aarch64 build/package生成とCTest 34/34成功。
 
-### #35 reader/disc観測世代・履歴の追加（2026-09-26）
+- repeatの最大8試行、A/B/B、全不一致、失敗後の一致、未観測時の空配列/null、JSON投影。
+- coverageの重複・overlap・隣接区間、失敗read、容量超過時の下限値、policy/stream切替。
+- 128件履歴の140 read時のeviction（12件、sequence 13〜140）、通常statusの履歴コピー抑制、resetとdisc世代更新。
+- fake readerによるUNCERTAIN保持、正常read/event消費後の保持、cancelによる解除。
+- 旧stream event除外、window公開、JSの古いrevision拒否、gapのUNKNOWN表示、stream/session変更時の解除。
 
-reader再生成の世代、disc観測世代、128件の固定容量履歴を追加。140 readで12件破棄、
-保持sequence 13〜140、通常statusの履歴コピー抑制、cancel/reset、disc世代更新を自動試験した。
-Docker/aarch64 build/package生成・CTest 34/34件成功。物理hotplugの完全検出とsession復元は対象外。
-Piの再生・CPU/メモリ・JSON転送量は未検証。#35を完了扱いにせず、#24もBlockedのままとする。
+### Piで確認した範囲
 
-### #35のPi実機検証（2026-09-26）
+[provenance実機結果](reports/2026-09-26-read-provenance/README.md)に条件とrawを保存。
+通常CDで履歴上限、stop/reset、repeat候補、詳細履歴API、service再起動後のsession変更を確認した。
+CDPでは診断画面のPLAYING/session一致、page reload、stop後の旧event消去、daemon restart後の
+新sessionへの自動再接続を確認した。両サービスは確認終了時に停止した。
 
-[provenance実機結果](reports/2026-09-26-read-provenance/README.md)に履歴上限、stop/reset、repeat候補、
-service再起動と短時間負荷を記録した。session復元は#36で未実装、物理hotplugは#88でPending。
-TV実表示・試聴・長期運転は未検証。snapshot約96KBとCDP混在CPU平均20.4%の負荷評価は#83へ引き継ぐ。
+通常snapshotから詳細regionsを分離した後、stateは16,437 bytes、詳細は128件取得できた。
+CDPなし25秒のCPU平均16.85%、現在throttlingなし。先行測定とは条件が異なるため改善率は確定しない。
+負荷の継続評価は#83。TV実表示・試聴・長期運転、実機でのUNCERTAIN誘発は未確認。
 
-### 詳細履歴オンデマンド化（#35/#36）
+### 移管した残課題
 
-通常snapshotから履歴regionsを省き、GET /api/read-historyとsession識別を追加。
-Docker build/CTest34件成功。Piでstate16437 bytes、履歴128件取得、stop/reset、restartでsession変更を確認。
-CDPなし25秒のCPU平均16.85%、現在throttlingなし。条件差があり性能改善率は確定しない。
-詳細・rawは[provenance実機結果](reports/2026-09-26-read-provenance/README.md)を参照。
-warning/gap復元は#36で未実装、#24はBlockedを維持。
+- [#89](https://github.com/udonchan/picdplayer/issues/89): 実際のworker queue overflow/drop、遅い診断consumer、
+  eviction後のcurrent_playback根拠保持、世代切替を組み合わせた自動試験と必要な修正。
+- [#90](https://github.com/udonchan/picdplayer/issues/90): UNCERTAINを伴う再接続、実dropからUNKNOWNまで、
+  旧session応答等の順序境界、slow HTTP/WS client・ログsink遅延/障害時のaudio非干渉を検証する。
+- #88: 物理hotplug・能力失効（Pending）。#35のreader-open観測世代とは別責務。
 
-### #36 snapshotによる診断復元（2026-09-26）
-
-stream内の最後のUNCERTAINをactive_warningとして保持し、正常read/event消費で消えず、cancelで
-解除されることをfake readerで確認。JSONでは旧stream eventの除外とwindowを確認した。
-JS試験は古いrevisionの拒否、gapのUNKNOWN表示、stream/session変更での警告・gap解除を検証。
-Docker/aarch64 build/package生成とCTest34/34成功。今回の警告・gap追加後のPi実機再接続は未検証。
-完全なevent replay、停止後に残す障害警告台帳、物理hotplugは含まない。
-
-### #36 Pi再接続の確認（2026-09-26、03b7e21）
-
-診断画面のPLAYING/session一致、page reload、stop後の旧event消去、daemon restart後の新sessionへの
-自動再接続をCDPで確認した。rawは[provenance report](reports/2026-09-26-read-provenance/README.md)。
-UNCERTAINを実機で誘発していないため警告の異常系は自動試験のみ。両サービスは停止済み。
+完全replay、停止後も残す永続障害台帳は実装していない。診断が音声を待たせないという要件は
+維持しており、現在の正常系成功やqueueの固定容量だけで非干渉を証明したとは扱わない。
