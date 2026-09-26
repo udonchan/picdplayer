@@ -35,7 +35,9 @@ int main() {
                                "CDROM_GET_CAPABILITY CDC_SELECT_SPEED"};
         PlayerEvent event;
         event.sequence = 7; event.stream_generation = 3;
+        read.stream_generation = 3;
         event.read = *read.latest;
+        event.read.read_sequence = 7;
         const auto snapshot = make_daemon_snapshot(42,
             {PlaybackState::playing, 1, 75}, MediaLifecycleState::audio_ready, toc, metadata,
             {}, read, {event}, drive);
@@ -70,6 +72,12 @@ int main() {
         check(json["drive"]["speed_control"]["value"] == "YES");
         check(json["recent_events"][0]["sequence"] == 7);
         check(json["recent_events"][0]["type"] == "READ_OBSERVED");
+        check(json["read"]["event_window"]["first_sequence"] == 7);
+        auto changed = snapshot;
+        changed.read.stream_generation = 4;
+        const auto reset = nlohmann::json::parse(serialize_daemon_snapshot(changed));
+        check(reset["recent_events"].empty());
+        check(reset["read"]["event_window"]["first_sequence"].is_null());
         const auto next_revision = serialize_daemon_snapshot(make_daemon_snapshot(43,
             {PlaybackState::playing, 1, 75}, MediaLifecycleState::audio_ready, toc, metadata,
             {}, read, {event}, drive));

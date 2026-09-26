@@ -1,4 +1,6 @@
 #include "integrity_state.hpp"
+#include <algorithm>
+#include <limits>
 
 namespace {
 bool backend_reported_verification(const ParanoiaEvents& events) {
@@ -106,4 +108,39 @@ const char* offset_status_name(OffsetStatus value) {
     case OffsetStatus::corrected: return "CORRECTED";
     }
     return "UNKNOWN";
+}
+
+void ReadCoverage::observe(const ReadResult& result) {
+    if (!complete || result.status != ReadStatus::ok || !result.frames_requested ||
+        result.frames_read != result.frames_requested) return;
+    if (result.start_lba < 0 || result.frames_read >
+        static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max() - result.start_lba)) {
+        complete = false;
+        return;
+    }
+    Region merged{result.start_lba, result.start_lba + static_cast<std::int64_t>(result.frames_read)};
+    std::size_t first = 0;
+    while (first < size && regions[first].end < merged.begin) ++first;
+    std::size_t last = first;
+    while (last < size && regions[last].begin <= merged.end) {
+        merged.begin = std::min(merged.begin, regions[last].begin);
+        merged.end = std::max(merged.end, regions[last].end);
+        ++last;
+    }
+    if (first == last && size == capacity) {
+        complete = false; // Freeze the lower bound rather than forgetting and double-counting.
+        return;
+    }
+    for (auto i = first; i < last; ++i)
+        accepted_unique_frames -= regions[i].end - regions[i].begin;
+    if (first == last) {
+        for (auto i = size; i > first; --i) regions[i] = regions[i - 1];
+        ++size;
+    } else {
+        const auto removed = last - first - 1;
+        for (auto i = last; i < size; ++i) regions[i - removed] = regions[i];
+        size -= removed;
+    }
+    regions[first] = merged;
+    accepted_unique_frames += merged.end - merged.begin;
 }

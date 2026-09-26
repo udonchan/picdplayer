@@ -54,6 +54,25 @@ int main() {
         check(make_read_evidence(unresolved).status == IntegrityReadStatus::uncertain);
         observe_read(stats, unresolved);
         check(stats.verification_failures == 1);
+        ReadCoverage coverage;
+        coverage.observe(ReadResult{100, 20, 20, ReadStatus::ok, 0, 0});
+        coverage.observe(ReadResult{110, 20, 20, ReadStatus::ok, 0, 0});
+        coverage.observe(ReadResult{100, 20, 20, ReadStatus::ok, 0, 3});
+        check(coverage.accepted_unique_frames == 30 && coverage.size == 1);
+        coverage.observe(ReadResult{90, 5, 5, ReadStatus::ok, 0, 0});
+        coverage.observe(ReadResult{95, 5, 5, ReadStatus::ok, 0, 0});
+        check(coverage.accepted_unique_frames == 40 && coverage.size == 1);
+        coverage.observe(ReadResult{200, 15, 7, ReadStatus::read_error, EIO, 0});
+        check(coverage.accepted_unique_frames == 40);
+        ReadCoverage full;
+        for (unsigned i = 0; i < ReadCoverage::capacity; ++i)
+            full.observe(ReadResult{static_cast<int>(i * 2), 1, 1, ReadStatus::ok, 0, 0});
+        check(full.complete && full.accepted_unique_frames == 128);
+        full.observe(ReadResult{1000, 1, 1, ReadStatus::ok, 0, 0});
+        check(!full.complete && full.accepted_unique_frames == 128);
+        full.observe(ReadResult{0, 1500, 1500, ReadStatus::ok, 0, 0});
+        check(full.accepted_unique_frames == 128);
+
         std::cout << "PASS: truthful read evidence and aggregate counters\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

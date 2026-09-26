@@ -81,6 +81,10 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 一時停止したPLAYING区間は10.79%（36.0秒）だった。測定時間・順序が異なるため、
 長時間の改善率ではない。この基線は#53導入前の条件である。
 
+#52のクローズに向け、[完了判定と制約](reports/2026-09-25-kiosk-baseline/README.md#完了判定の整理2026-09-26追記)を追記した。
+既存rawを再集計し、新規測定は行っていない。Cage単独は改善対象の特定に不要として省略し、
+過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、長期運転・実表示・音声は#4で別途確認する。
+
 ## 標準PlayerのDOM更新削減（Issue #53）
 
 #53は#52のbaseline測定をhard dependencyとする。最初のDOM write削減は標準Playerの
@@ -545,3 +549,50 @@ CAAの画像は`/var/cache/picdplayer/cover-art/<release-id>.image`へ保存さ�
 Piハング時は原因を確定できる前bootログがなかった。メモリ圧迫とswap I/Oは候補であり確定原因ではない。
 当時はPiビルドを-j1に制限した。現在はMac + Dockerでビルドし、Piは実機検証だけに使用する。
 障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。
+
+## #35 / #36 実装済み範囲と後続検証（2026-09-26）
+
+PR #86/#87はmasterへマージ済み（8b84acb）。#35/#36は実装済み部分と実施済み検証を
+完了範囲として整理し、未完了の異常系・非干渉要件を#89/#90へ移管した。
+移管は検証成功を意味しない。親#12はOpen、Player統合#24はDraftを維持する。
+#24の復元契約検証待ちは#90へ引き継ぐ。
+
+### 自動試験で確認した範囲
+
+Docker/aarch64 build/package生成とCTest 34/34成功。
+
+- repeatの最大8試行、A/B/B、全不一致、失敗後の一致、未観測時の空配列/null、JSON投影。
+- coverageの重複・overlap・隣接区間、失敗read、容量超過時の下限値、policy/stream切替。
+- 128件履歴の140 read時のeviction（12件、sequence 13〜140）、通常statusの履歴コピー抑制、resetとdisc世代更新。
+- fake readerによるUNCERTAIN保持、正常read/event消費後の保持、cancelによる解除。
+- 旧stream event除外、window公開、JSの古いrevision拒否、gapのUNKNOWN表示、stream/session変更時の解除。
+
+### Piで確認した範囲
+
+[provenance実機結果](reports/2026-09-26-read-provenance/README.md)に条件とrawを保存。
+通常CDで履歴上限、stop/reset、repeat候補、詳細履歴API、service再起動後のsession変更を確認した。
+CDPでは診断画面のPLAYING/session一致、page reload、stop後の旧event消去、daemon restart後の
+新sessionへの自動再接続を確認した。両サービスは確認終了時に停止した。
+
+通常snapshotから詳細regionsを分離した後、stateは16,437 bytes、詳細は128件取得できた。
+CDPなし25秒のCPU平均16.85%、現在throttlingなし。先行測定とは条件が異なるため改善率は確定しない。
+負荷の継続評価は#83。TV実表示・試聴・長期運転、実機でのUNCERTAIN誘発は未確認。
+
+### 移管した残課題
+
+- [#89](https://github.com/udonchan/picdplayer/issues/89): 実際のworker queue overflow/drop、遅い診断consumer、
+  eviction後のcurrent_playback根拠保持、世代切替を組み合わせた自動試験と必要な修正。
+- [#90](https://github.com/udonchan/picdplayer/issues/90): UNCERTAINを伴う再接続、実dropからUNKNOWNまで、
+  旧session応答等の順序境界、slow HTTP/WS client・ログsink遅延/障害時のaudio非干渉を検証する。
+- #88: 物理hotplug・能力失効（Pending）。#35のreader-open観測世代とは別責務。
+
+完全replay、停止後も残す永続障害台帳は実装していない。診断が音声を待たせないという要件は
+維持しており、現在の正常系成功やqueueの固定容量だけで非干渉を証明したとは扱わない。
+
+## #92 メッセージ契約の静的照合
+
+master 53ddd4dの公開Presentation Model、診断serializer、API route、session側のpublish、
+対応する既存テストを照合し、[現行メッセージ契約](../design/message-contract.md)へ整理した。
+公開serializerのJSON key名の掲載漏れと文書の相対ファイルリンクを機械確認した。
+これは型・意味の全自動検証ではなく、コードを読んだ照合と組み合わせた確認である。
+コード変更・Docker再ビルド・Pi再測定は行っていない。#89/#90の残検証は維持する。

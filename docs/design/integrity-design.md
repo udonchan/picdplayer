@@ -351,13 +351,34 @@ ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能に�
 実機でC2の信頼性やoffsetを未確認のままTESTEDにしない。ビルド・自動試験は
 [Mac + Docker手順](../manual/mac-docker-development.md)を使い、Piではruntime/hardware検証を行う。
 
+### repeat試行根拠の追加（#35）
+
+`read.latest/current_playback.verification`に有界な試行詳細と採用候補を追加する。
+field・単位・null・互換性の定義は[機能設計](functional-design.md#有界なrepeat試行根拠35の初期実装)を参照。
+旧payloadの欠損は未取得として扱い、試行やcandidateを生成しない。wrapperのPCM一致は
+物理再読込・cache独立性の証明ではない。stream単位の有界coverageとstream/policy識別子を追加した。詳細は機能設計の
+「stream coverageと根拠の世代」を参照。
+
+#35でreader/disc観測世代とstream内128件の詳細履歴を追加した。仕様と限界は機能設計の
+「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証せず、#24はBlockedを維持する。
+
+詳細履歴は常時snapshotから分離し、GET /api/read-historyで取得する。通常stateのread.session_idと
+stream_generationを照合して旧結果を捨てる。契約の正本は機能設計「詳細履歴のオンデマンド取得」。
+#36のwarning/event復元は実装済み。追加の異常系検証は#90へ移管し、#24はDraftを維持する。
+
+#36でread.active_warningとevent_windowを追加し、technical statusはsnapshotで警告を置換する。
+契約の正本は機能設計「診断snapshotの復元」。既存event sequenceは維持し、read_sequenceを追加。
+欠落はUNKNOWN、stream/session変更で旧状態を破棄する。完全なreplayは提供しない。
+
 ## Player UI統合案の管理（#24）
 
-#24はIntegrity仕様と公開メッセージ契約が未確定のためDraft / Blockedとする。
-Hard dependencyである#35（根拠・coverage）と#36（再接続・gap復元）が完了し、公開仕様とIssue本文を整合させるまでUI実装に着手しない。
-現行fieldの表示が可能であることと、UI統合仕様が確定したことを区別する。
+#24はDraft / Blockedを維持する。#35（根拠・coverage）と#36（診断復元）の実装は完了し、
+現行の公開仕様は[メッセージ契約](message-contract.md)に整理した。
+復元検証のHard dependencyは#90へ引き継いだ。検証結果と公開仕様・Issue本文を整合させ、
+Draft解除を判断するまでUI実装に着手しない。現行fieldの表示が可能なことと、UI統合仕様の確定を区別する。
 
 メッセージのfield・型・単位・意味・世代・順序・欠落・互換性を変更する際は、
 同じ変更作業で本仕様、関連する機能/API/Custom UI文書、および#24のCurrent state・Data sources・
 Acceptance criteriaを更新する。実装済み契約と提案中の項目を混在させない。
-#7〜#13全体の完成を一律の前提にはせず、必須依存は#35と#36に限定する。両Issueは並行可能で、親#12を重複したblockerにしない。
+#7〜#13全体の完成を一律の前提にはせず、親#12を重複したblockerにしない。
+容量・根拠保持の追加検証#89はRelatedとして扱う。

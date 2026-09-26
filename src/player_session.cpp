@@ -14,6 +14,8 @@
 #include "api_server.hpp"
 #include "presentation_model.hpp"
 #include "presentation_json.hpp"
+#include "diagnostics_json.hpp"
+#include <random>
 #endif
 #include <charconv>
 #include <chrono>
@@ -192,6 +194,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     drive_capabilities.device = device;
     (void)media_worker.request(MediaWork::probe_drive);
     std::optional<DiscToc> loaded_toc;
+    std::uint64_t disc_generation = 0;
     bool toc_pending = false;
     bool toc_needs_refresh = true;
     constexpr auto drive_start_interval = std::chrono::seconds(15);
@@ -203,6 +206,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
 #ifdef ENABLE_API
     std::string api_state_json;
+    const auto diagnostic_session_id = [] {
+        std::random_device random;
+        std::ostringstream id;
+        id << std::hex;
+        for (int i = 0; i < 4; ++i) { id.width(8); id.fill('0'); id << random(); }
+        return id.str();
+    }();
     std::uint64_t api_revision = 0;
     bool api_eject_pending = false;
     bool api_eject_inflight = false;
@@ -214,6 +224,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
         const auto state = controller.state();
         auto read = engine.read_diagnostics();
+        read.session_id = diagnostic_session_id;
         read.requested_policy = requested_read_policy;
         read.effective_policy = effective_read_policy;
         read.policy_pending = read_policy_pending;
@@ -323,7 +334,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; },
                                                  std::move(command_handler), serialize_read_policy, std::move(ui),
-                                                 std::move(artwork_provider));
+                                                 std::move(artwork_provider), [&] {
+                                                     auto read = engine.read_diagnostics(true);
+                                                     read.session_id = diagnostic_session_id;
+                                                     auto result = diagnostic_fields({}, read, {})["read"];
+                                                     return nlohmann::json{{"schema_version", 1},
+                                                         {"session_id", diagnostic_session_id},
+                                                         {"stream_generation", read.stream_generation},
+                                                         {"history", result["history"]}}.dump();
+                                                 });
         auto line = log_info("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';
@@ -474,10 +493,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (media_state.state() != MediaLifecycleState::audio_ready || !media_result.toc)
                     continue;
                 if (!loaded_toc || !same_toc(*loaded_toc, *media_result.toc) ||
-                    controller.state().playback == PlaybackState::no_disc) {
+                    controller.state().playback == PlaybackState::no_disc || toc_needs_refresh) {
                     controller.load_disc(*media_result.toc);
                     engine.set_disc_end(media_result.toc->leadout_lba);
                     engine.synchronize();
+                    worker.set_disc_generation(++disc_generation);
                     loaded_toc = *media_result.toc;
                     log_info("media") << "audio_disc tracks=" << loaded_toc->tracks.size()
                                       << " leadout_lba=" << loaded_toc->leadout_lba;

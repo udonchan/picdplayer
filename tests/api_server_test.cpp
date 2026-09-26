@@ -15,6 +15,13 @@ int main() {
     try {
         int calls = 0;
         const ApiStateProvider provider = [&] { ++calls; return std::string(R"({"revision":7})"); };
+        int history_calls = 0;
+        ApiStateProvider history = [&] { ++history_calls; return std::string(R"({"history":{"regions":[]}})"); };
+        check(route_api_request("GET", "/api/read-history", provider).status == 503);
+        check(route_api_request("POST", "/api/read-history", provider, {}, {}, {}, nullptr, {}, {}, history).status == 405);
+        check(history_calls == 0);
+        check(route_api_request("GET", "/api/read-history", provider, {}, {}, {}, nullptr, {}, {}, history).body == R"({"history":{"regions":[]}})");
+        check(history_calls == 1);
         auto response = route_api_request("GET", "/api/state", provider);
         check(response.status == 200 && response.content_type == "application/json");
         check(response.body == R"({"revision":7})" && calls == 1);

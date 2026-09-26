@@ -27,6 +27,7 @@ PcmWorker::PcmWorker(Factory factory, std::string strategy, PcmBufferConfig buff
     capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
     startup_blocks_ = std::min(capacity_blocks_,
         (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) / read_block_cd_frames_);
+    diagnostics_.policy_revision++;
     diagnostics_.effective_strategy = std::move(strategy);
     diagnostics_.requested_mode = std::move(requested_mode);
     diagnostics_.buffer_capacity_frames = buffer_config_.capacity_cd_frames;
@@ -48,6 +49,11 @@ std::uint64_t PcmWorker::start(std::int32_t begin, std::int32_t end) {
     diagnostics_.activity = ReadActivity::buffering;
     diagnostics_.latest.reset();
     diagnostics_.stats = {};
+    diagnostics_.stream_generation = generation_;
+    diagnostics_.coverage = {};
+    diagnostics_.active_warning.reset();
+    history_begin_ = history_size_ = 0;
+    diagnostics_.history_evicted = 0;
     events_.clear(); dropped_events_ = 0;
     changed_.notify_all();
     return generation_;
@@ -63,6 +69,7 @@ void PcmWorker::reconfigure(std::string strategy, std::string requested_mode,
     capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
     startup_blocks_ = std::min(capacity_blocks_,
         (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) / read_block_cd_frames_);
+    diagnostics_.policy_revision++;
     diagnostics_.effective_strategy = std::move(strategy);
     diagnostics_.requested_mode = std::move(requested_mode);
     diagnostics_.read_block_frames = read_block_cd_frames_;
@@ -81,6 +88,12 @@ std::size_t PcmWorker::read_block_cd_frames() const {
 void PcmWorker::cancel() {
     std::lock_guard lock(mutex_);
     ++generation_; active_ = false; done_ = false;
+    diagnostics_.stream_generation = generation_;
+    diagnostics_.coverage = {};
+    diagnostics_.active_warning.reset();
+    history_begin_ = history_size_ = 0;
+    diagnostics_.history_evicted = 0;
+    diagnostics_.stats = {};
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
@@ -90,6 +103,12 @@ void PcmWorker::cancel() {
 void PcmWorker::discard_reader() {
     std::lock_guard lock(mutex_);
     ++generation_; active_ = false; done_ = false;
+    diagnostics_.stream_generation = generation_;
+    diagnostics_.coverage = {};
+    diagnostics_.active_warning.reset();
+    history_begin_ = history_size_ = 0;
+    diagnostics_.history_evicted = 0;
+    diagnostics_.stats = {};
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
@@ -114,12 +133,24 @@ bool PcmWorker::pop_event(PlayerEvent& event) {
     events_.pop_front();
     return true;
 }
-WorkerStatus PcmWorker::status() {
+void PcmWorker::set_disc_generation(std::uint64_t generation) {
+    std::lock_guard lock(mutex_);
+    if (active_) throw std::logic_error("disc generation change requires stopped worker");
+    disc_generation_ = generation;
+}
+WorkerStatus PcmWorker::status(bool include_history) {
     std::lock_guard lock(mutex_);
     const auto inflight = reading_ ? std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - read_started_).count() : 0;
     diagnostics_.dropped_events = dropped_events_;
-    return {queue_.size(), done_, error_, last_read_us_, inflight, diagnostics_};
+    auto diagnostics = diagnostics_;
+    diagnostics.history_included = include_history;
+    if (include_history) {
+        diagnostics.recent_reads.reserve(history_size_);
+        for (std::size_t i = 0; i < history_size_; ++i)
+            diagnostics.recent_reads.push_back(history_[(history_begin_ + i) % read_history_capacity]);
+    }
+    return {queue_.size(), done_, error_, last_read_us_, inflight, std::move(diagnostics)};
 }
 void PcmWorker::run() {
     std::unique_ptr<CddaReader> reader;
@@ -141,6 +172,8 @@ void PcmWorker::run() {
             continue; // Recheck shutdown and any newer Start after slow close.
         }
         const auto generation = generation_;
+        const auto policy_revision = diagnostics_.policy_revision;
+        const auto disc_generation = disc_generation_;
         auto position = begin_;
         const auto end = end_;
         // A configuration is immutable for the lifetime of this stream
@@ -157,6 +190,7 @@ void PcmWorker::run() {
                 lock.lock();
                 drive_call_inflight_ = false;
                 reader_open_ = static_cast<bool>(reader);
+                if (reader_open_) ++device_generation_;
                 lock.unlock();
             }
             if (!reader) throw std::runtime_error("reader factory returned null");
@@ -196,8 +230,22 @@ void PcmWorker::run() {
                 drive_call_inflight_ = false;
                 if (generation == generation_) {
                     observe_read(diagnostics_.stats, result);
+                    diagnostics_.coverage.observe(result);
                     block.evidence = make_read_evidence(result);
+                    block.evidence.stream_generation = generation;
+                    block.evidence.policy_revision = policy_revision;
+                    block.evidence.device_generation = device_generation_;
+                    block.evidence.disc_generation = disc_generation;
+                    block.evidence.read_sequence = diagnostics_.stats.read_calls;
+                    if (history_size_ == read_history_capacity) {
+                        history_begin_ = (history_begin_ + 1) % read_history_capacity;
+                        --history_size_;
+                        ++diagnostics_.history_evicted;
+                    }
+                    history_[(history_begin_ + history_size_++) % read_history_capacity] = block.evidence;
                     diagnostics_.latest = block.evidence;
+                    if (block.evidence.status == IntegrityReadStatus::uncertain)
+                        diagnostics_.active_warning = block.evidence;
                     diagnostics_.activity = ReadActivity::buffering;
                     PlayerEvent event;
                     event.stream_generation = generation;

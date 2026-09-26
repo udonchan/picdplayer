@@ -18,8 +18,9 @@
 | Issue | 主な範囲 |
 |---|---|
 | [#3 Investigate and reduce kiosk startup latency](https://github.com/udonchan/picdplayer/issues/3) | cold boot後のTV表示とtelemetryは確認済みだが、起動短縮は未解決。2026-09-25の一回の測定ではservice→wrapper約7.8秒、Cage exec→UI script受信約22.3秒、ui_ready受信はkernel起動後47.411秒だった。支配要因とTVのfirst pixelは未確定。 |
-| [#4 Complete appliance runtime and endurance validation](https://github.com/udonchan/picdplayer/issues/4) | 通常再生とcold boot後のSTOPPED表示は確認済み。最新service構成での一連の操作、kiosk長期運転、Custom UIの再生と並行した表示には未確認項目が残る。 |
-| [#27 Investigate and reduce kiosk CPU and thermal load](https://github.com/udonchan/picdplayer/issues/27) | 親Issue。[#52](https://github.com/udonchan/picdplayer/issues/52)の基線測定はrepositoryへ反映済みだがIssueはOpen。[#53](https://github.com/udonchan/picdplayer/issues/53)の描画改善、[#61](https://github.com/udonchan/picdplayer/issues/61)の残余負荷測定、[#62](https://github.com/udonchan/picdplayer/issues/62)のCustom UI向け注意事項は完了済み。条件と限界は[検証状況](verification.md)を参照する。 |
+| [#4 Complete appliance runtime and endurance validation](https://github.com/udonchan/picdplayer/issues/4) | 通常再生とcold boot後のSTOPPED表示は確認済み。診断配信を復元したPR #82後の負荷・配信頻度は#83で測定し、本Issueでは結果を参照する。最新service構成での一連の操作、kiosk長期運転、Custom UIの再生と並行した表示には未確認項目が残る。 |
+| [#27 Investigate and reduce kiosk CPU and thermal load](https://github.com/udonchan/picdplayer/issues/27) | 親Issue。[#52](https://github.com/udonchan/picdplayer/issues/52)の基線測定・完了判定の根拠は[測定記録](reports/2026-09-25-kiosk-baseline/README.md)へ反映済み。Cage単独の省略理由とtrace件数の制約を明示し、クローズ対象として整理した。[#53](https://github.com/udonchan/picdplayer/issues/53)の描画改善、[#61](https://github.com/udonchan/picdplayer/issues/61)の残余負荷測定、[#62](https://github.com/udonchan/picdplayer/issues/62)のCustom UI向け注意事項は完了済み。条件と限界は[検証状況](verification.md)を参照する。 |
+| [#83 Complete outstanding kiosk performance measurements](https://github.com/udonchan/picdplayer/issues/83) | 最新masterのSTOPPED/PLAYING、修正版CDP、Cage単独、計測器負荷と条件をそろえた反復比較。#52の未完了測定を引き継ぐ。長期耐久・実表示・試聴は#4。 |
 | [#5 Evaluate read stalls and bound playback recovery](https://github.com/udonchan/picdplayer/issues/5) | 親Issue。[#33 read stallの影響測定](https://github.com/udonchan/picdplayer/issues/33)と[#34 有界な再生復旧](https://github.com/udonchan/picdplayer/issues/34)に分割済み。ALSA underrun復旧とread integrityを混同しない。 |
 | [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | direct/paranoiaの保存PCM正常再生とdirect single/repeatの限定的な比較はあるが、drive回転・cache条件をそろえたbackend性能比較は未完了。現行運用はdirect。 |
 
@@ -32,9 +33,10 @@
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | 現行repeatは同一区間のPCM全体の反復一致だけを調べる。overlap整列とcache対策はなく、2-of-3一致でも独立した物理再読込を保証しない。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
-| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。現在のReadEvidenceと有界eventに対し、[#35](https://github.com/udonchan/picdplayer/issues/35)で詳細な根拠・coverage、[#36](https://github.com/udonchan/picdplayer/issues/36)で再接続・event gapからの診断復元を扱う。 |
+| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。#35/#36の根拠・coverage・有界履歴・復元契約はPR #86/#87でマージ済み。未完了検証を[#89](https://github.com/udonchan/picdplayer/issues/89)（容量・drop・再生中の根拠保持）と[#90](https://github.com/udonchan/picdplayer/issues/90)（異常系復元・slow client/ログ障害時のaudio非干渉）へ移管。親はOpenを維持する。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | **Draft / Blocked**。Hard dependencyの#35（根拠・coverage）と#36（診断復元）の完了待ち。現時点でUI実装には着手しない。メッセージ仕様の変更ごとに関連設計/API/Custom UI文書と#24の現状・データソース・完了条件を同時に更新する。先行作業と契約・文書の整合確認後にブロックを解除する。 |
+| [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90の検証と並行可能。#24の表示契約との整合も確認する。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | Draftを維持。#35/#36の実装済み契約を基盤とし、#90の復元検証と公開契約・文書の整合確認後に着手可否を判断する。未観測値をUNKNOWN/UNSUPPORTEDと区別する。メッセージ仕様を変更するたび、関連文書と#24の現状・データソース・完了条件を同時に更新する。 |
 
 ## 障害対応・機能改善
 
@@ -118,3 +120,8 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 [#80 CDP接続・trace集計](https://github.com/udonchan/picdplayer/issues/80)、
 [#81 診断API・status表示](https://github.com/udonchan/picdplayer/issues/81)を追跡する。
 修正の検証範囲は[検証状況](verification.md)を参照する。
+
+## 物理drive hotplug（保留）
+
+[#88](https://github.com/udonchan/picdplayer/issues/88)で物理交換/reset検出・能力失効・再取得を追跡する。
+#7の物理lifecycle部分を分離したPending項目。#35のreader-open観測世代と混同せず、#24の追加Hard dependencyにはしない。
