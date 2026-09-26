@@ -241,12 +241,12 @@ PCMを最初に取得した試行番号ではない。採用理由は既存の`l
 unique coverage、device/disc/stream世代とpolicy revisionの統合は#35の残作業である。
 #24はDraft / Blockedのまま、この契約に合わせて表示候補を更新する。
 
-### stream coverageと根拠の世代（#35、実装途中）
+### stream coverageと根拠の世代（#35）
 
 `read.stream_generation`と`read.policy_revision`を追加し、`latest/current_playback`の各evidenceにも
 同名fieldを保持する。streamはworkerのstart/cancel/discardで更新し、policy revisionはworkerの
 初期設定を1としてreconfigureごとに増加する。これはdaemon内だけの識別子であり、再起動間の比較は
-できない。device/disc世代・daemon session IDはまだ未実装である。
+できない。device/disc世代とdaemon session IDは以下の契約で公開する。
 
 `read.coverage`は`scope=STREAM`、`accepted_unique_frames`（CD frame単位）、
 `observations_complete`、`region_capacity=128`を持つ。完全に成功して採用されたread区間の和集合を
@@ -257,10 +257,11 @@ unique coverage、device/disc/stream世代とpolicy revisionの統合は#35の�
 履歴を捨てて二重加算する方式は使わない。集計領域は固定配列で追加heap割当を必要としない。
 start/cancel/discard時はcoverage・stream統計をリセットし、旧世代の遅延readは加算しない。
 
-既存UIは追加fieldを無視できる。field欠損時は未取得とする。discを跨ぐcoverage、詳細履歴の
-保持・eviction・detail_available、およびdevice/disc世代の統合は引き続き#35の残作業。
+既存UIは追加fieldを無視できる。field欠損時は未取得とする。discを跨ぐcoverageは提供しない。
+詳細履歴の保持・eviction・detail_availableとdevice/disc世代は下記の契約で公開する。
+容量・drop・根拠保持の追加検証は#89で扱う。
 
-### reader/disc世代と詳細履歴（#35、実装途中）
+### reader/disc世代と詳細履歴（#35）
 
 各evidenceに`device_generation`（reader open成功ごと）、`disc_generation`（TOC再受理ごと）、
 `read_sequence`（stream内1始まり）と`detail_available=true`を追加する。device世代は
@@ -295,7 +296,7 @@ read_sequenceはstream内でのみ比較する。保持windowより前の詳細�
 #24の表示候補も本契約に追従する。active warning・event gap復元は下記の契約で実装済み。
 追加の異常系・非干渉検証は#90へ移管し、#24はDraftを維持する。
 
-### 診断snapshotの復元（#36、実装途中）
+### 診断snapshotの復元（#36）
 
 `read.active_warning`は現在streamで最後に観測したUNCERTAINのevidence、なければnull。
 後続の正常readやhistory evictionでは消さず、start/cancel/discardによるstream終了で解除する。
