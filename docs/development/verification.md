@@ -597,7 +597,7 @@ master 53ddd4dの公開Presentation Model、診断serializer、API route、sessi
 これは型・意味の全自動検証ではなく、コードを読んだ照合と組み合わせた確認である。
 コード変更・Docker再ビルド・Pi再測定は行っていない。#89/#90の残検証は維持する。
 
-## #90 異常系診断の追加試験（PRレビュー待ち）
+## #90 異常系診断の追加試験（PR #95）
 
 Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加した。
 
