@@ -697,3 +697,9 @@ daemon restart後の新sessionと空集計を確認。再起動直後の接続�
 修正後のDocker build/packageとCTest37/37は成功した。終端の実機試験では
 監査中の未コミット変更で146回の末尾復帰を観測して中止した。修正後のPi再生は未確認であり、
 従前の通常disc_map試験と区別する。drain中の位置は最後の観測値を保持する。
+
+PR #102のmaster取り込み後、修正版でtrack 1の通常再生をAPIから約13秒間確認した。
+positionは230から1119 frameへ進み、read error/retry/dropped eventとjournalのunderrunは0だった。
+API stop後はSTOPPED、current_playback=null、queue 0へ戻った。daemon/kioskはactive、
+Chromium CDPも待受中だった。音の試聴、TVの目視、終端drain完走は未確認であり、詳細は
+[#24着手前の監査記録](reports/2026-09-26-pre-integrity-audit/README.md)を参照する。

@@ -142,6 +142,7 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 - [#105](https://github.com/udonchan/picdplayer/issues/105): 最終throttled sample欠損時の集計。
 - [#106](https://github.com/udonchan/picdplayer/issues/106): 終端underrunの再seek防止。
 
-いずれも修正・回帰試験を追加済み、未マージ。Docker37/37成功。
-実機では終端試験が失敗したため追加再生を中止し、修正後は未再確認。
+いずれもPR #102でマージ済み。Docker37/37成功。
+実機では修正前の終端試験が失敗したため、その後の通常再生だけを確認した。修正版で13秒間の
+通常再生・API stop・エラーなしは確認済みだが、終端drain、試聴、TVの目視は未確認。
 [監査記録](reports/2026-09-26-pre-integrity-audit/README.md)を参照する。
