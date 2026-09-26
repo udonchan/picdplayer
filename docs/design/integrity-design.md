@@ -350,3 +350,10 @@ ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能に�
 傷disc、cache defeat、速度変更、長時間readはコマンド・期待結果を提示してユーザーが実行する。
 実機でC2の信頼性やoffsetを未確認のままTESTEDにしない。ビルド・自動試験は
 [Mac + Docker手順](../manual/mac-docker-development.md)を使い、Piではruntime/hardware検証を行う。
+
+### repeat試行根拠の追加（#35）
+
+`read.latest/current_playback.verification`に有界な試行詳細と採用候補を追加する。
+field・単位・null・互換性の定義は[機能設計](functional-design.md#有界なrepeat試行根拠35の初期実装)を参照。
+旧payloadの欠損は未取得として扱い、試行やcandidateを生成しない。wrapperのPCM一致は
+物理再読込・cache独立性の証明ではない。coverage・世代統合は未完了で、#24は引き続きDraft / Blocked。

@@ -72,6 +72,12 @@ int main() {
         check(result.status == ReadStatus::ok && pcm.front() == 2);
         check(result.verification.attempts == 3 && result.verification.matching_reads == 2);
         check(result.verification.mismatches == 1);
+        check(result.verification.detail_count == 3);
+        check(result.verification.details[0].candidate == 1);
+        check(result.verification.details[1].candidate == 2);
+        check(result.verification.details[2].candidate == 2);
+        check(result.verification.accepted_candidate == 2);
+        check(result.verification.accepted_attempt == 3);
 
         auto unresolved = make_repeated_read_verifier(
             std::make_unique<ScriptedReader>(std::vector<Reply>{{1}, {2}, {3}}));
@@ -81,6 +87,7 @@ int main() {
         check(result.status == ReadStatus::read_error && result.frames_read == 0);
         check(result.verification.attempts == 3 && result.verification.mismatches == 2);
         check(pcm.front() == -1);
+        check(!result.verification.accepted_candidate && !result.verification.accepted_attempt);
         rejects([&] { unresolved->read(pcm); });
 
         auto after_error = make_repeated_read_verifier(
@@ -90,6 +97,10 @@ int main() {
         result = after_error->read(pcm);
         check(result.status == ReadStatus::ok && result.verification.attempts == 3);
         check(result.verification.complete_reads == 2 && pcm.front() == 9);
+        check(!result.verification.details[0].complete);
+        check(result.verification.details[0].native_error == EIO);
+        check(!result.verification.details[0].candidate);
+        check(result.verification.accepted_candidate == 1);
 
         auto time = std::chrono::steady_clock::time_point{};
         auto budget = make_repeated_read_verifier(
@@ -103,6 +114,14 @@ int main() {
         result = budget->read(pcm);
         check(result.status == ReadStatus::read_error);
         check(result.verification.attempts == 1 && result.verification.time_budget_exhausted);
+
+        auto bounded = make_repeated_read_verifier(
+            std::make_unique<ScriptedReader>(std::vector<Reply>{{1},{2},{3},{4},{5},{6},{7},{8}}),
+            {2, 8, std::chrono::milliseconds(10000)});
+        bounded->seek(0);
+        result = bounded->read(pcm);
+        check(result.verification.detail_count == maximum_verification_attempts);
+        check(!result.verification.accepted_candidate);
 
         std::cout << "PASS: bounded repeated reads, full PCM consensus and fail-closed output\n";
     } catch (const std::exception& error) {

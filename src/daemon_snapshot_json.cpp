@@ -86,6 +86,15 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
     const auto read_evidence = [](const std::optional<ReadEvidence>& source) -> Json {
         if (!source) return nullptr;
         const auto& evidence = *source;
+        Json attempts = Json::array();
+        const auto& verification = evidence.verification;
+        for (unsigned i = 0; i < verification.detail_count && i < maximum_verification_attempts; ++i) {
+            const auto& attempt = verification.details[i];
+            attempts.push_back({{"attempt", i + 1}, {"frames_read", attempt.frames_read},
+                               {"complete", attempt.complete}, {"native_error", attempt.native_error},
+                               {"direct_retries", attempt.direct_retries},
+                               {"candidate", optional(attempt.candidate)}});
+        }
         return {{"start_lba", evidence.start_lba},
                   {"frames_requested", evidence.frames_requested},
                   {"frames_read", evidence.frames_read},
@@ -95,6 +104,10 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                   {"offset_status", offset_status_name(evidence.offset_status)},
                   {"direct_retries", evidence.direct_retries},
                   {"verification", {{"attempts", evidence.verification.attempts},
+                                    {"attempt_details", std::move(attempts)},
+                                    {"detail_capacity", maximum_verification_attempts},
+                                    {"accepted_candidate", optional(verification.accepted_candidate)},
+                                    {"accepted_attempt", optional(verification.accepted_attempt)},
                                     {"complete_reads", evidence.verification.complete_reads},
                                     {"matching_reads", evidence.verification.matching_reads},
                                     {"mismatches", evidence.verification.mismatches},

@@ -222,3 +222,20 @@ parserは必須構造を検査するが、任意文字列の欠落や型違い�
 
 Buildrootへの移植は未実施。過去の依存・license・package調査は
 [metadata調査記録](../history/metadata-design.md)を参照し、移植時に対象revisionで再確認する。
+
+### 有界なrepeat試行根拠（#35の初期実装）
+
+`read.latest.verification`および`read.current_playback.verification`に
+`attempt_details`、`detail_capacity`（8）、`accepted_candidate`、`accepted_attempt`を追加する。
+各detailは1始まりの`attempt`、`frames_read`（CD frame）、`complete`、`native_error`、
+`direct_retries`、`candidate`を持つ。candidateは同一read呼出内のPCM bytes一致による1始まりのIDで、
+別区間・世代では比較しない。`accepted_attempt`は一致閾値へ到達した試行番号であり、
+PCMを最初に取得した試行番号ではない。採用理由は既存の`local_verification=MULTIPLE_MATCH`に対応する。
+失敗試行にcandidateを割り当てず、採用なしはnullとする。single/backend内部の試行詳細は観測しておらず、
+配列は空・採用IDはnullとなる。空配列を試行ゼロの保証と解釈しない。
+これはwrapperの観測であり、物理再読込・cache独立性・原盤一致を保証しない。
+
+追加fieldは任意として扱い、旧payloadにない場合は未取得とする。REST/WSのsnapshot形は維持する。
+最大8件の固定配列で保持し、PCM blockと共に現在再生区間へ届く。詳細attemptの永続履歴、
+unique coverage、device/disc/stream世代とpolicy revisionの統合は#35の残作業である。
+#24はDraft / Blockedのまま、この契約に合わせて表示候補を更新する。
