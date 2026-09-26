@@ -15,6 +15,8 @@ enum class C2Status { unknown, not_available, not_checked, clean, reported };
 enum class OffsetStatus { unknown, uncorrected, corrected };
 
 struct ReadEvidence {
+    std::uint64_t stream_generation = 0;
+    std::uint64_t policy_revision = 0;
     std::int32_t start_lba = 0;
     std::size_t frames_requested = 0;
     std::size_t frames_read = 0;
@@ -46,7 +48,22 @@ struct IntegrityStats {
     std::uint64_t verification_failures = 0;
 };
 
+// Fixed-memory union of accepted CD-frame intervals, scoped to one stream.
+// 採用区間の和集合。上限到達後は下限値を固定し、未観測領域を成功扱いしない。
+struct ReadCoverage {
+    struct Region { std::int64_t begin = 0, end = 0; };
+    static constexpr std::size_t capacity = 128;
+    std::array<Region, capacity> regions{};
+    std::size_t size = 0;
+    std::uint64_t accepted_unique_frames = 0;
+    bool complete = true; // all accepted observations counted, not whole-disc coverage
+    void observe(const ReadResult& result);
+};
+
 struct ReadDiagnostics {
+    std::uint64_t stream_generation = 0;
+    std::uint64_t policy_revision = 0;
+    ReadCoverage coverage;
     ReadActivity activity = ReadActivity::idle;
     std::string requested_mode = "LEGACY";
     std::string effective_strategy = "legacy";

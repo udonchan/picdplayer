@@ -552,3 +552,10 @@ wrapperの最大8試行を固定容量で記録し、candidateと閾値到達att
 追加公開する。A/B/B、全不一致、失敗後の一致、8試行上限、未取得時の空配列/null、JSONへの投影を
 自動試験する。Docker/aarch64標準buildとCTest 34/34件成功。Piでの再生・性能は未検証。
 coverage・世代別履歴・policy revision・evictionは未実装で、#35は継続中、#24はブロックを維持する。
+
+### #35 続き: stream coverage・世代（2026-09-26）
+
+固定128区間の和集合で採用CD frameを一意に集計し、上限時は下限を固定する。
+重複・overlap・隣接区間、失敗read、容量超過、policy更新、旧世代readの除外、cancel後のreset、
+JSON公開を試験した。Docker/aarch64でbuild/package生成・CTest 34/34件成功。
+Pi実機の再生・メモリ/負荷は未検証。device/disc世代、詳細履歴のeviction/detail_availableは残作業。

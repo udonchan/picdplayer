@@ -27,6 +27,7 @@ PcmWorker::PcmWorker(Factory factory, std::string strategy, PcmBufferConfig buff
     capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
     startup_blocks_ = std::min(capacity_blocks_,
         (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) / read_block_cd_frames_);
+    diagnostics_.policy_revision++;
     diagnostics_.effective_strategy = std::move(strategy);
     diagnostics_.requested_mode = std::move(requested_mode);
     diagnostics_.buffer_capacity_frames = buffer_config_.capacity_cd_frames;
@@ -48,6 +49,8 @@ std::uint64_t PcmWorker::start(std::int32_t begin, std::int32_t end) {
     diagnostics_.activity = ReadActivity::buffering;
     diagnostics_.latest.reset();
     diagnostics_.stats = {};
+    diagnostics_.stream_generation = generation_;
+    diagnostics_.coverage = {};
     events_.clear(); dropped_events_ = 0;
     changed_.notify_all();
     return generation_;
@@ -63,6 +66,7 @@ void PcmWorker::reconfigure(std::string strategy, std::string requested_mode,
     capacity_blocks_ = buffer_config_.capacity_cd_frames / read_block_cd_frames_;
     startup_blocks_ = std::min(capacity_blocks_,
         (buffer_config_.startup_cd_frames + read_block_cd_frames_ - 1) / read_block_cd_frames_);
+    diagnostics_.policy_revision++;
     diagnostics_.effective_strategy = std::move(strategy);
     diagnostics_.requested_mode = std::move(requested_mode);
     diagnostics_.read_block_frames = read_block_cd_frames_;
@@ -81,6 +85,9 @@ std::size_t PcmWorker::read_block_cd_frames() const {
 void PcmWorker::cancel() {
     std::lock_guard lock(mutex_);
     ++generation_; active_ = false; done_ = false;
+    diagnostics_.stream_generation = generation_;
+    diagnostics_.coverage = {};
+    diagnostics_.stats = {};
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
@@ -90,6 +97,9 @@ void PcmWorker::cancel() {
 void PcmWorker::discard_reader() {
     std::lock_guard lock(mutex_);
     ++generation_; active_ = false; done_ = false;
+    diagnostics_.stream_generation = generation_;
+    diagnostics_.coverage = {};
+    diagnostics_.stats = {};
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
@@ -141,6 +151,7 @@ void PcmWorker::run() {
             continue; // Recheck shutdown and any newer Start after slow close.
         }
         const auto generation = generation_;
+        const auto policy_revision = diagnostics_.policy_revision;
         auto position = begin_;
         const auto end = end_;
         // A configuration is immutable for the lifetime of this stream
@@ -196,7 +207,10 @@ void PcmWorker::run() {
                 drive_call_inflight_ = false;
                 if (generation == generation_) {
                     observe_read(diagnostics_.stats, result);
+                    diagnostics_.coverage.observe(result);
                     block.evidence = make_read_evidence(result);
+                    block.evidence.stream_generation = generation;
+                    block.evidence.policy_revision = policy_revision;
                     diagnostics_.latest = block.evidence;
                     diagnostics_.activity = ReadActivity::buffering;
                     PlayerEvent event;

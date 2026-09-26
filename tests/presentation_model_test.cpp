@@ -34,6 +34,8 @@ int main() {
         auto diagnostic_model = model;
         diagnostic_model.drive.vendor = "Test drive";
         diagnostic_model.read.stats.direct_retries = 7;
+        diagnostic_model.read.stream_generation = 9;
+        diagnostic_model.read.coverage.observe(ReadResult{10, 15, 15, ReadStatus::ok, 0, 0});
         ReadResult accepted{150, 15, 15, ReadStatus::ok, 0, 0};
         accepted.verification.attempts = 2;
         accepted.verification.complete_reads = 2;
@@ -50,6 +52,9 @@ int main() {
         const auto diagnostic = nlohmann::json::parse(serialize_presentation_model(diagnostic_model));
         check(diagnostic["drive"]["vendor"] == "Test drive");
         check(diagnostic["read"]["stats"]["direct_retries"] == 7);
+        check(diagnostic["read"]["stream_generation"] == 9);
+        check(diagnostic["read"]["coverage"]["accepted_unique_frames"] == 15);
+        check(diagnostic["read"]["coverage"]["scope"] == "STREAM");
         check(diagnostic["recent_events"][0]["sequence"] == 42);
         check(!presentation_json_equal_ignoring_revision(rendered, diagnostic.dump()));
         check(!diagnostic.contains("metadata"));
