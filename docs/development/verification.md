@@ -570,3 +570,9 @@ reader再生成の世代、disc観測世代、128件の固定容量履歴を追�
 保持sequence 13〜140、通常statusの履歴コピー抑制、cancel/reset、disc世代更新を自動試験した。
 Docker/aarch64 build/package生成・CTest 34/34件成功。物理hotplugの完全検出とsession復元は対象外。
 Piの再生・CPU/メモリ・JSON転送量は未検証。#35を完了扱いにせず、#24もBlockedのままとする。
+
+### #35のPi実機検証（2026-09-26）
+
+[provenance実機結果](reports/2026-09-26-read-provenance/README.md)に履歴上限、stop/reset、repeat候補、
+service再起動と短時間負荷を記録した。session復元は#36で未実装、物理hotplugは#88でPending。
+TV実表示・試聴・長期運転は未検証。snapshot約96KBとCDP混在CPU平均20.4%の負荷評価は#83へ引き継ぐ。

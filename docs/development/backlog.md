@@ -119,3 +119,8 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 [#80 CDP接続・trace集計](https://github.com/udonchan/picdplayer/issues/80)、
 [#81 診断API・status表示](https://github.com/udonchan/picdplayer/issues/81)を追跡する。
 修正の検証範囲は[検証状況](verification.md)を参照する。
+
+## 物理drive hotplug（保留）
+
+[#88](https://github.com/udonchan/picdplayer/issues/88)で物理交換/reset検出・能力失効・再取得を追跡する。
+#7の物理lifecycle部分を分離したPending項目。#35のreader-open観測世代と混同せず、#24の追加Hard dependencyにはしない。
