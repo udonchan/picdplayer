@@ -164,7 +164,8 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                 {"pending", read.policy_pending}}},
                     {"dropped_events", read.dropped_events},
                     {"latest", read_evidence(read.latest)},
-                    {"current_playback", read_evidence(read.current_playback)},
+                    { "current_playback", read_evidence(read.current_playback)},
+                    {"active_warning", read_evidence(read.active_warning)},
                     {"stats", {{"read_calls", stats.read_calls},
                                {"frames_requested", stats.frames_requested},
                                {"frames_accepted", stats.frames_accepted},
@@ -184,7 +185,9 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
     if (!read.history_included) root["read"]["history"].erase("regions");
     Json events = Json::array();
     for (const auto& event : recent_events) {
+        if (event.stream_generation != read.stream_generation) continue;
         events.push_back({{"sequence", event.sequence},
+                          {"read_sequence", event.read.read_sequence},
                           {"stream_generation", event.stream_generation},
                           {"type", player_event_type_name(event.type)},
                           {"severity", event_severity_name(event.severity)},
@@ -194,6 +197,12 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                                   static_cast<std::int32_t>(event.read.frames_read)}}},
                           {"read_status", integrity_read_status_name(event.read.status)}});
     }
+    root["read"]["event_window"] = {
+        {"scope", "STREAM"},
+        {"first_sequence", events.empty() ? Json(nullptr) : events.front()["read_sequence"]},
+        {"last_sequence", events.empty() ? Json(nullptr) : events.back()["read_sequence"]},
+        {"worker_dropped", read.dropped_events},
+        {"replay_available", false}};
     root["recent_events"] = std::move(events);
     return root;
 }

@@ -584,3 +584,11 @@ Docker build/CTest34件成功。Piでstate16437 bytes、履歴128件取得、sto
 CDPなし25秒のCPU平均16.85%、現在throttlingなし。条件差があり性能改善率は確定しない。
 詳細・rawは[provenance実機結果](reports/2026-09-26-read-provenance/README.md)を参照。
 warning/gap復元は#36で未実装、#24はBlockedを維持。
+
+### #36 snapshotによる診断復元（2026-09-26）
+
+stream内の最後のUNCERTAINをactive_warningとして保持し、正常read/event消費で消えず、cancelで
+解除されることをfake readerで確認。JSONでは旧stream eventの除外とwindowを確認した。
+JS試験は古いrevisionの拒否、gapのUNKNOWN表示、stream/session変更での警告・gap解除を検証。
+Docker/aarch64 build/package生成とCTest34/34成功。今回の警告・gap追加後のPi実機再接続は未検証。
+完全なevent replay、停止後に残す障害警告台帳、物理hotplugは含まない。

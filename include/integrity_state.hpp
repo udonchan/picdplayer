@@ -78,6 +78,7 @@ struct ReadDiagnostics {
     std::string effective_strategy = "legacy";
     std::optional<ReadEvidence> latest;
     std::optional<ReadEvidence> current_playback;
+    std::optional<ReadEvidence> active_warning; // last uncertain read in this stream
     std::size_t queued_blocks = 0;
     std::size_t buffer_capacity_frames = 0;
     std::size_t startup_buffer_frames = 0;

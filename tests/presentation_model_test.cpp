@@ -48,6 +48,7 @@ int main() {
         diagnostic_model.read.latest = make_read_evidence(accepted);
         PlayerEvent event;
         event.sequence = 42;
+        event.stream_generation = diagnostic_model.read.stream_generation;
         diagnostic_model.recent_events.push_back(event);
         const auto diagnostic = nlohmann::json::parse(serialize_presentation_model(diagnostic_model));
         check(diagnostic["drive"]["vendor"] == "Test drive");

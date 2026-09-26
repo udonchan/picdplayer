@@ -51,6 +51,19 @@ struct FakeOutput : AudioOutput {
     }
     bool drain() override { return drain_allowed; }
 };
+class WarningReader final : public CddaReader {
+    int position_ = 0;
+public:
+    void seek(std::int32_t lba) override { position_ = lba; }
+    ReadResult read(std::span<std::int16_t> pcm) override {
+        const auto frames = pcm.size() / cdda_samples_per_frame;
+        ReadResult r{position_, frames, frames, ReadStatus::ok, 0, position_ == 0 ? 1u : 0u};
+        std::fill(pcm.begin(), pcm.end(), 0);
+        position_ += frames;
+        return r;
+    }
+};
+
 int main() {
     try {
         const PcmBufferConfig defaults;
@@ -178,6 +191,19 @@ int main() {
             check(block.evidence.stream_generation == block.generation);
             check(reconfigured.status().diagnostics.effective_strategy == "repeat-test");
             reconfigured.cancel();
+        }
+        {
+            PcmWorker warnings([] { return std::make_unique<WarningReader>(); });
+            warnings.start(0, 30);
+            wait_for([&] { return warnings.status().done; });
+            const auto state = warnings.status().diagnostics;
+            check(state.latest->status == IntegrityReadStatus::clean);
+            check(state.active_warning && state.active_warning->start_lba == 0);
+            PlayerEvent ignored;
+            while (warnings.pop_event(ignored)) {}
+            check(warnings.status().diagnostics.active_warning.has_value());
+            warnings.cancel();
+            check(!warnings.status().diagnostics.active_warning);
         }
         // Bounded history is independent of event draining and PCM consumption.
         {

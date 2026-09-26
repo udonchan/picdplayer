@@ -51,6 +51,7 @@ std::uint64_t PcmWorker::start(std::int32_t begin, std::int32_t end) {
     diagnostics_.stats = {};
     diagnostics_.stream_generation = generation_;
     diagnostics_.coverage = {};
+    diagnostics_.active_warning.reset();
     history_begin_ = history_size_ = 0;
     diagnostics_.history_evicted = 0;
     events_.clear(); dropped_events_ = 0;
@@ -89,6 +90,7 @@ void PcmWorker::cancel() {
     ++generation_; active_ = false; done_ = false;
     diagnostics_.stream_generation = generation_;
     diagnostics_.coverage = {};
+    diagnostics_.active_warning.reset();
     history_begin_ = history_size_ = 0;
     diagnostics_.history_evicted = 0;
     diagnostics_.stats = {};
@@ -103,6 +105,7 @@ void PcmWorker::discard_reader() {
     ++generation_; active_ = false; done_ = false;
     diagnostics_.stream_generation = generation_;
     diagnostics_.coverage = {};
+    diagnostics_.active_warning.reset();
     history_begin_ = history_size_ = 0;
     diagnostics_.history_evicted = 0;
     diagnostics_.stats = {};
@@ -241,6 +244,8 @@ void PcmWorker::run() {
                     }
                     history_[(history_begin_ + history_size_++) % read_history_capacity] = block.evidence;
                     diagnostics_.latest = block.evidence;
+                    if (block.evidence.status == IntegrityReadStatus::uncertain)
+                        diagnostics_.active_warning = block.evidence;
                     diagnostics_.activity = ReadActivity::buffering;
                     PlayerEvent event;
                     event.stream_generation = generation;

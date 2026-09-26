@@ -293,3 +293,24 @@ read_sequenceはstream内でのみ比較する。保持windowより前の詳細�
 
 これ以前のPR内にあったsnapshot内regionsは未マージ契約の見直しであり、標準Playerには依存がない。
 #24の表示候補も本契約に追従する。active warning・event gap復元はまだ#36で未実装。
+
+### 診断snapshotの復元（#36、実装途中）
+
+`read.active_warning`は現在streamで最後に観測したUNCERTAINのevidence、なければnull。
+後続の正常readやhistory evictionでは消さず、start/cancel/discardによるstream終了で解除する。
+過去の失敗全件やdevice障害全体の警告台帳ではなく、stop後も警告を保持する契約ではない。
+current_playbackの状態と先読みで観測したstream警告を区別する。再接続時はsnapshot値で置換し、
+古いeventから警告を再生成しない。通常stream警告はworker内の固定1件であり、event queueのdropと独立する。
+
+公開recent_eventsは現在streamのみに限定する。既存sequenceはdaemon内のevent配信順序を維持し、
+追加のread_sequenceはstream内のread順序を示す。`read.event_window`はscope=STREAM、
+first_sequence/last_sequence（保持eventのread_sequence、空ならnull）、worker_dropped、
+replay_available=falseを持つ。workerからmainへの移動とsnapshot時刻は一致せず、
+read.history.last_read_sequenceよりwindowの末尾が遅れることがある。未来のevent到着を保証しない。
+再接続/初回にfirst_sequence>1、連続受信時に前回末尾+1より先からwindowが始まる、
+またはworker_droppedが増えた場合は欠落をUNKNOWNとして示す。欠落履歴を成功で補完しない。
+
+technical statusは同session内の古い/同revision snapshotを無視し、stream/session変更で旧警告・
+欠落状態を消して新snapshotを反映する。欠落表示は同streamでは保持する。
+詳細履歴は必要時にHTTPで取得できるが完全なreplayではない。保持上限を越えた範囲は復元不能。
+#24はこの契約に合わせて更新するが、Draft / Blockedを維持する。
