@@ -357,14 +357,14 @@ ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能に�
 field・単位・null・互換性の定義は[機能設計](functional-design.md#有界なrepeat試行根拠35の初期実装)を参照。
 旧payloadの欠損は未取得として扱い、試行やcandidateを生成しない。wrapperのPCM一致は
 物理再読込・cache独立性の証明ではない。stream単位の有界coverageとstream/policy識別子を追加した。詳細は機能設計の
-「stream coverageと根拠の世代」を参照。disc/device世代・履歴は未完了で、#24は引き続きDraft / Blocked。
+「stream coverageと根拠の世代」を参照。
 
 #35でreader/disc観測世代とstream内128件の詳細履歴を追加した。仕様と限界は機能設計の
 「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証せず、#24はBlockedを維持する。
 
 詳細履歴は常時snapshotから分離し、GET /api/read-historyで取得する。通常stateのread.session_idと
 stream_generationを照合して旧結果を捨てる。契約の正本は機能設計「詳細履歴のオンデマンド取得」。
-#36のwarning/event復元は未実装、#24はDraft / Blockedを維持する。
+#36のwarning/event復元は実装済み。追加の異常系検証は#90へ移管し、#24はDraftを維持する。
 
 #36でread.active_warningとevent_windowを追加し、technical statusはsnapshotで警告を置換する。
 契約の正本は機能設計「診断snapshotの復元」。既存event sequenceは維持し、read_sequenceを追加。

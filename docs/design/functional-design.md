@@ -292,7 +292,8 @@ read_sequenceはstream内でのみ比較する。保持windowより前の詳細�
 常時pollingせず詳細画面表示時などに取得する。field欠損・503では未取得として表示する。
 
 これ以前のPR内にあったsnapshot内regionsは未マージ契約の見直しであり、標準Playerには依存がない。
-#24の表示候補も本契約に追従する。active warning・event gap復元はまだ#36で未実装。
+#24の表示候補も本契約に追従する。active warning・event gap復元は下記の契約で実装済み。
+追加の異常系・非干渉検証は#90へ移管し、#24はDraftを維持する。
 
 ### 診断snapshotの復元（#36、実装途中）
 

@@ -1,5 +1,8 @@
 # Read provenance実機確認（#35 / PR #87）
 
+以下は段階別の実測記録。PR #87はマージ済みで、初期段階の「未公開・未検証」は後段の
+追加確認と区別する。最新の検証範囲と残課題#89/#90は[検証状況](../../verification.md)を参照。
+
 2026-09-26、revision 3f379cbのDocker/aarch64 packageをscripts/deploy.shでPiへ導入。
 導入前後はdaemon/kioskともinactive、dpkg -Vの差異なし。Piでのcompileは行っていない。
 既存CD、ASUS SDRW-08D2S-Uを使用。今回の室温・冷却・TV実表示は再確認していない。
