@@ -115,5 +115,19 @@ if (process.argv[2]) {
   context.render(actual);
   assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
   assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
-  console.log('PASS: worker overflow and warning through serializer to UI');
+  const historyLine = output.split('\n').find(value => value.startsWith('HISTORY_JSON='));
+  assert(historyLine);
+  const detail = JSON.parse(historyLine.slice('HISTORY_JSON='.length));
+  const manual = fs.readFileSync(path.join(__dirname, '../docs/manual/custom-ui.md'), 'utf8');
+  const example = manual.match(/```javascript\n(function matchingReadHistory[\s\S]*?)\n```/);
+  assert(example, 'documented history matching example must exist');
+  const recipe = vm.createContext({});
+  vm.runInContext(example[1], recipe);
+  assert.equal(recipe.matchingReadHistory(actual, detail), detail.history);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, session_id: 'retired' }), null);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, stream_generation: detail.stream_generation + 1 }), null);
+  assert.equal(recipe.matchingReadHistory({ schema_version: 1, read: {} }, detail), null);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, history: { ...detail.history, included: false } }), null);
+  assert.equal(recipe.matchingReadHistory(actual, { ...detail, schema_version: 2 }), null);
+  console.log('PASS: worker overflow to UI and documented history generation matching');
 }

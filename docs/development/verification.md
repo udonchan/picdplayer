@@ -597,7 +597,7 @@ master 53ddd4dの公開Presentation Model、診断serializer、API route、sessi
 これは型・意味の全自動検証ではなく、コードを読んだ照合と組み合わせた確認である。
 コード変更・Docker再ビルド・Pi再測定は行っていない。#89/#90の残検証は維持する。
 
-## #90 異常系診断の追加試験（継続中）
+## #90 異常系診断の追加試験（PRレビュー待ち）
 
 Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加した。
 
@@ -607,13 +607,24 @@ Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加し�
 - 実際のtechnical status再接続callbackを使い、RESTから警告復元、worker_dropped増加のUNKNOWN、
   古いrevision拒否、新daemon sessionでの警告解除、壊れたJSONを検証。
   旧接続のmessage/close callbackを無視するactiveSocketチェックを追加した。
-- loopback HTTP/WS clientの受信窓を小さくし、512 KiBのstateを反復公開してclientを非受信に保つ。
+- loopback HTTP 1接続/WS 7接続の受信窓を小さくし、毎回異なる512 KiBのstateを1,200回公開する。
+  旧テストの同一JSON反復は送信省略されるため、継続送信負荷の根拠として扱わない。
   APIとengineを同じthreadで進め、期限内のfake audio出力増加とclient切断後の進行を確認。
   HTTP providerの実呼出しとWS 101応答を観測し、単に未接続だったケースを除外する。
 - fake workerで実際にevent dropとUNCERTAINを発生させ、直近64 eventとdiagnostic_fieldsのJSONを
   Node上のUIへ渡し、UNKNOWNとstream警告を確認。event窓検査はPCM queue満杯を同期点とする。
 
-今回の成功は実機音声の保証ではない。#90には、再生ログ経路との組合せ、接続数・継続時間を
-増やしたメモリ有界性、詳細HTTP結果とWSの世代不一致を利用側で扱う検証が残る。
-通常UIはまだ詳細履歴を取得しないため、存在しないconsumerを検証済みとはしない。
-#24のDraftは維持。Piへのdeploy・再測定は行っていない。
+- 実際のengineのprebuffer_readyログをglobal loggerから停止sinkへ流した状態で、API/audioを進行させる。
+  queue overflowを観測し、sink解放を自動期限より前に行ったことを確認。解除時に書込失敗へ切り替え、
+  audio進行と実際のostream bad状態を確認する。終了時はsinkを解放しloggerをjoinしてから復元する。
+- 200回更新後を基準にRSSの最大増加を監視し、残り1,000更新で32 MiB以下という回帰検査を行う。
+  今回の直接実行では増加0 bytes。固定client数/短時間の結果で、任意接続数の総メモリ上限保証ではない。
+  全7 WSの101応答とHTTP provider呼出しを確認した。
+- 詳細履歴を現行UIは取得しないため、Custom UI文書に世代照合の参考実装を置き、実serializer出力で
+  同一世代の受理、異なるsession/stream、欠損、included=false、未知schemaの拒否を検証する。
+  要求時ではなく応答到着時の最新snapshotに照合し、世代変更で保持済み表示も破棄する契約を明記する。
+
+今回の成功は実機音声の保証ではない。実機音声・長時間運転は#4、長期負荷は#83の検証と区別する。
+#24のDraftは維持し、実際のPlayer側の履歴consumerを追加する場合は同じ条件の統合試験を必要とする。
+Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に対する再現可能な回帰検証であり、
+任意接続数への防御、無期限sink停止時のshutdown完了、real-time性能を新たに保証するものではない。

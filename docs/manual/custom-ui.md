@@ -169,3 +169,29 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 #36でread.active_warningとevent_windowを追加し、technical statusはsnapshotで警告を置換する。
 契約の正本は機能設計「診断snapshotの復元」。既存event sequenceは維持し、read_sequenceを追加。
 欠落はUNKNOWN、stream/session変更で旧状態を破棄する。完全なreplayは提供しない。
+
+### 詳細履歴とsnapshotの世代照合
+
+`GET /api/read-history`は通常snapshotとは別時点の応答である。詳細履歴を使用するUIは、
+**応答到着時の最新snapshot**とsession/streamを照合してから利用する。要求開始時のsnapshotだけで
+照合すると、待機中のstop/restartを見逃す。現在の標準UIはこのendpointを取得しない。
+以下は採用可否の参考実装であり、共通bootstrapやSDKを追加するものではない。
+
+```javascript
+function matchingReadHistory(snapshot, detail) {
+  const read = snapshot?.read;
+  if (snapshot?.schema_version !== 1 || detail?.schema_version !== 1
+      || typeof read?.session_id !== 'string' || !read.session_id
+      || read.session_id !== detail.session_id
+      || !Number.isSafeInteger(read.stream_generation)
+      || read.stream_generation !== detail.stream_generation
+      || detail.history?.scope !== 'STREAM' || detail.history.included !== true
+      || !Array.isArray(detail.history.regions)) return null;
+  return detail.history;
+}
+```
+
+nullは未取得/不一致であり、空履歴や正常という意味ではない。古い結果を捨て、必要なら最新snapshotを
+取得して再要求する。同一session/streamでも同時点や完全replayは保証しない。
+保持済みの履歴も新snapshotでsession/streamが変わったら表示から除く。
+検証不能な世代値（安全整数範囲外を含む）も併合しない。
