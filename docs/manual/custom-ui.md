@@ -195,3 +195,7 @@ nullは未取得/不一致であり、空履歴や正常という意味ではな
 取得して再要求する。同一session/streamでも同時点や完全replayは保証しない。
 保持済みの履歴も新snapshotでsession/streamが変わったら表示から除く。
 検証不能な世代値（安全整数範囲外を含む）も併合しない。
+
+診断counterの欠損/nullは未取得として表示し、0件と区別する。workerの設定上のbuffer block容量は
+`floor(buffer_capacity_frames / read_block_frames)`（有効な正のread block量の場合）である。
+端数はblockとして確保されず、例えば90/75は1 block。これは設定容量であり可聴時間ではない。

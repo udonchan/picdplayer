@@ -1,6 +1,5 @@
 #include "logger.hpp"
 
-#include <cassert>
 #include <condition_variable>
 #include <future>
 #include <mutex>
@@ -43,9 +42,9 @@ int main() {
     }
     const auto info = normal.str();
     const auto warning = errors.str();
-    assert(info.find("Z +") != std::string::npos);
-    assert(info.find(" INFO player: state=PLAYING") != std::string::npos);
-    assert(warning.find(" WARN player: main_loop_stall stage=test") != std::string::npos);
+    require(info.find("Z +") != std::string::npos);
+    require(info.find(" INFO player: state=PLAYING") != std::string::npos);
+    require(warning.find(" WARN player: main_loop_stall stage=test") != std::string::npos);
 
     {
         StalledSink buffer;
@@ -81,5 +80,5 @@ int main() {
     bool rejected = false;
     try { AsyncLogger invalid(normal, errors, 0); }
     catch (const std::invalid_argument&) { rejected = true; }
-    assert(rejected);
+    require(rejected);
 }

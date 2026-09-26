@@ -39,6 +39,20 @@ assert.equal(node('cap-c2').textContent, 'UNKNOWN');
 assert.equal(node('drive-name').textContent, 'Drive');
 console.log('PASS: technical status uses presentation fields and diagnostics');
 
+// Unknown counters are not zero; capacity follows the worker's whole-block limit.
+// 未取得と0を区別し、容量はworker同様にblock単位で切り捨てる。
+context.render({ ...snapshot, read: { queued_blocks: 1, buffer_capacity_frames: 90, read_block_frames: 75 } });
+assert.match(node('queued-blocks').textContent, /^1 \/ 1 /);
+assert.equal(node('read-stats').textContent, '— / — frames · verified —');
+assert.equal(node('read-errors').textContent, '— / —');
+assert.equal(node('dropped-events').textContent, '—');
+context.render({ ...snapshot, read: { buffer_capacity_frames: 90, read_block_frames: 0,
+  stats: { read_calls: 0, frames_accepted: 0, verified_calls: 0, direct_retries: 0, failed_calls: 0 }, dropped_events: 0 } });
+assert.match(node('queued-blocks').textContent, /^— \/ — /);
+assert.equal(node('read-stats').textContent, '0 / 0 frames · verified 0');
+assert.equal(node('read-errors').textContent, '0 / 0');
+assert.equal(node('dropped-events').textContent, 0);
+
 const warning = { status: 'UNCERTAIN', start_lba: 10, frames_read: 15 };
 function diagnostic(revision, stream, active, first, last) {
   return { ...snapshot, revision, read: { ...snapshot.read, session_id: 'a', stream_generation: stream,

@@ -37,6 +37,7 @@
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
 | [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90の検証と並行可能。#24の表示契約との整合も確認する。 |
 | [#96 Validate Integrity diagnostics under Raspberry Pi hardware faults](https://github.com/udonchan/picdplayer/issues/96) | 後日の実機異常系診断評価。傷disc/stallの再現・音声影響は#33、特殊TOCは#39/#40が担当。同じrun記録を共有し、API・警告・復元の整合だけを確認する。#24の追加blockerにはしない。 |
+| [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しレビュー待ち。 |
 | [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | Draftを維持。#35/#36の実装済み契約を基盤とし、#90の復元検証と公開契約・文書の整合確認後に着手可否を判断する。未観測値をUNKNOWN/UNSUPPORTEDと区別する。メッセージ仕様を変更するたび、関連文書と#24の現状・データソース・完了条件を同時に更新する。 |
 
 ## 障害対応・機能改善

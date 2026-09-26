@@ -95,8 +95,9 @@ function render(state) {
     ? `${effectivePolicy || '—'} → ${requestedPolicy || '—'} (pending)`
     : (effectivePolicy || requestedPolicy));
 
-  const capacity = Number.isInteger(read.buffer_capacity_frames) && read.read_block_frames
-    ? read.buffer_capacity_frames / read.read_block_frames
+  const capacity = Number.isSafeInteger(read.buffer_capacity_frames) && read.buffer_capacity_frames >= 0
+      && Number.isSafeInteger(read.read_block_frames) && read.read_block_frames > 0
+    ? Math.floor(read.buffer_capacity_frames / read.read_block_frames)
     : '—';
   set('queued-blocks', `${read.queued_blocks ?? '—'} / ${capacity}`
     + ` (start ${read.startup_buffer_frames ?? '—'} frames)`);
@@ -104,10 +105,10 @@ function render(state) {
   set('prebuffer-wait', read.last_prebuffer_wait_ms == null
     ? 'Pending'
     : `${read.last_prebuffer_wait_ms} ms (${read.prebuffer_target_frames ?? '—'} frames)`);
-  set('read-stats', `${stats.read_calls ?? 0} / ${stats.frames_accepted ?? 0} frames`
-    + ` · verified ${stats.verified_calls ?? 0}`);
-  set('read-errors', `${stats.direct_retries ?? 0} / ${stats.failed_calls ?? 0}`);
-  set('dropped-events', read.dropped_events ?? 0);
+  set('read-stats', `${stats.read_calls ?? '—'} / ${stats.frames_accepted ?? '—'} frames`
+    + ` · verified ${stats.verified_calls ?? '—'}`);
+  set('read-errors', `${stats.direct_retries ?? '—'} / ${stats.failed_calls ?? '—'}`);
+  set('dropped-events', read.dropped_events);
 
   set('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ')
     || drive.device || 'Unknown drive');

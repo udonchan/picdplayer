@@ -159,11 +159,11 @@ int main() {
             logs.buffer.released = true;
         }
         logs.buffer.changed.notify_all();
-        const auto before_failure = output.total;
-        for (int i = 0; i < 20; ++i) { api.service(); engine.tick(); }
-        shutdown_logger();
+        shutdown_logger(); // Join proves the failed write has actually occurred.
         const bool failed_write = std::cout.bad();
         logs.release();
+        const auto before_failure = output.total;
+        for (int i = 0; i < 20; ++i) { api.service(); engine.tick(); }
         require(failed_write && output.total > before_failure);
         std::cout << "MEMORY_GROWTH=" << (peak_memory - warm_memory) << '\n';
         char response[256]{};

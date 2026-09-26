@@ -662,3 +662,11 @@ d8aaa21のDocker buildとCTest36/36後、既存deploy手順でPiへ導入。
 CDPで診断画面のLive・reload・PLAYING、API stop、daemon restart後の新session復帰を確認した。
 終了時はdaemon/kioskともinactive。TV実表示・試聴・異常disc・負荷測定は未確認。
 条件と結果は[通常系smoke記録](reports/2026-09-26-diagnostic-smoke/README.md)を参照。
+
+### PR #94 / #95 レビュー修正（#97）
+
+technical statusの設定buffer容量が非整除の場合の端数表示をworkerの整数切捨てへ修正し、
+欠損counterを0にせず未取得表示とした。90/75→1 block、未取得と0の区別をJS試験に追加。
+ログ障害の統合試験はwriter threadの終了で失敗を確定してからaudio進行を測る順序へ修正した。
+loggerの既存assertもRelease buildで有効な検査へ置き換えた。
+この追加修正はDockerで検証し、上記d8aaa21のPi結果を追加修正後の実機確認とは扱わない。
