@@ -354,10 +354,10 @@ ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能に�
 ## Player UI統合案の管理（#24）
 
 #24はIntegrity仕様と公開メッセージ契約が未確定のためDraft / Blockedとする。
-先行する契約整備（#35/#36等）が完了し、公開仕様とIssue本文を整合させるまでUI実装に着手しない。
+Hard dependencyである#35（根拠・coverage）と#36（再接続・gap復元）が完了し、公開仕様とIssue本文を整合させるまでUI実装に着手しない。
 現行fieldの表示が可能であることと、UI統合仕様が確定したことを区別する。
 
 メッセージのfield・型・単位・意味・世代・順序・欠落・互換性を変更する際は、
 同じ変更作業で本仕様、関連する機能/API/Custom UI文書、および#24のCurrent state・Data sources・
 Acceptance criteriaを更新する。実装済み契約と提案中の項目を混在させない。
-#7〜#13全体の完成を一律の前提にはせず、具体的な必須依存は契約の担当Issueに対応させる。
+#7〜#13全体の完成を一律の前提にはせず、必須依存は#35と#36に限定する。両Issueは並行可能で、親#12を重複したblockerにしない。

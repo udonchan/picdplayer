@@ -34,7 +34,7 @@
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
 | [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。現在のReadEvidenceと有界eventに対し、[#35](https://github.com/udonchan/picdplayer/issues/35)で詳細な根拠・coverage、[#36](https://github.com/udonchan/picdplayer/issues/36)で再接続・event gapからの診断復元を扱う。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | **Draft / Blocked**。Integrity仕様・メッセージ契約を確定する先行作業の完了待ち。現時点でUI実装には着手しない。メッセージ仕様の変更ごとに関連設計/API/Custom UI文書と#24の現状・データソース・完了条件を同時に更新する。先行作業と契約・文書の整合確認後にブロックを解除する。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | **Draft / Blocked**。Hard dependencyの#35（根拠・coverage）と#36（診断復元）の完了待ち。現時点でUI実装には着手しない。メッセージ仕様の変更ごとに関連設計/API/Custom UI文書と#24の現状・データソース・完了条件を同時に更新する。先行作業と契約・文書の整合確認後にブロックを解除する。 |
 
 ## 障害対応・機能改善
 
