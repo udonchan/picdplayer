@@ -637,3 +637,21 @@ API/警告/再接続の整合を確認する。傷disc・長いread stallの再�
 試験手順・結果はreports配下の同じrunを参照し、本Issueのために媒体試験を重複実施しない。
 本書の過去の未確認記述は当時の記録として保持し、実施後に確認範囲と参照先を更新する。
 #96は今後の課題であり、#89/#90の自動試験成功や#24の着手条件に実機確認済みという意味を追加しない。
+
+## #89 有界provenanceの容量・overflow検証
+
+fake reader/outputによるplayback_engine自動試験を追加し、標準Docker/aarch64 buildと
+CTest 34/34の成功を確認した。実装・メッセージの変更はない。
+
+- 診断eventを消費せずPCMだけを300 read消費し、worker drop=44、残存event sequence=45〜300を確認。
+  詳細履歴は128件、evicted=172、read sequence=173〜300、coverage=4500 CD frames。
+- 取得済み履歴snapshotをconsumer側で保持してもworkerのreadが完了する。通常statusは詳細をコピーせず、
+  PCM queueと詳細履歴の件数上限を維持する。これはHTTP送信やログsink遅延の試験ではない。
+- overflow後のcancel/startとdisc世代変更で、drop/eviction/coverageとevent/historyが新streamに切り替わる。
+- 許容最大buffer 2250 CD framesで150 read先読みし、最初の22件がevictされた状態からengineが出力を進める。
+  current_playbackはread sequence=1、latestは150であり、currentの根拠は履歴から独立して保持される。
+  stop後にcurrentが解除されることも確認。
+
+既存のcoverage重複除外・容量超過時の下限値試験、旧世代in-flight read除外も同じCTestで成功した。
+ネットワーク/ログ障害とUIへのdrop反映は#90、実機音声・耐久・物理交換は別検証のまま。
+今回はPiへdeployせず、fake outputの進行を実機可聴性やreal-time保証と混同しない。
