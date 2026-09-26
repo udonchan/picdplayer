@@ -95,7 +95,11 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                {"direct_retries", attempt.direct_retries},
                                {"candidate", optional(attempt.candidate)}});
         }
-        return {{"stream_generation", evidence.stream_generation},
+        return {{"device_generation", evidence.device_generation},
+                  {"disc_generation", evidence.disc_generation},
+                  {"read_sequence", evidence.read_sequence},
+                  {"detail_available", true},
+                  {"stream_generation", evidence.stream_generation},
                   {"policy_revision", evidence.policy_revision},
                   {"start_lba", evidence.start_lba},
                   {"frames_requested", evidence.frames_requested},
@@ -123,6 +127,8 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                       {"cache_errors", evidence.backend_events.cache_errors},
                                       {"other", evidence.backend_events.other}}}};
     };
+    Json history = Json::array();
+    for (const auto& evidence : read.recent_reads) history.push_back(read_evidence(evidence));
     const auto& stats = read.stats;
     const auto policy = [](const ReadPolicy& value) {
         return Json{{"mode", read_verification_mode_name(value.mode)},
@@ -131,7 +137,12 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                     {"maximum_attempts", value.maximum_attempts},
                     {"time_budget_ms", value.time_budget_ms}};
     };
-    root["read"] = {{"stream_generation", read.stream_generation},
+    root["read"] = {{"history", {{"scope", "STREAM"},
+                                 {"capacity", read_history_capacity},
+                                 {"storage_bytes", sizeof(ReadEvidence) * read_history_capacity},
+                                 {"evicted", read.history_evicted},
+                                 {"regions", std::move(history)}}},
+                    {"stream_generation", read.stream_generation},
                     {"policy_revision", read.policy_revision},
                     {"coverage", {{"scope", "STREAM"},
                                   {"accepted_unique_frames", read.coverage.accepted_unique_frames},

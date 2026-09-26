@@ -358,3 +358,6 @@ field・単位・null・互換性の定義は[機能設計](functional-design.md
 旧payloadの欠損は未取得として扱い、試行やcandidateを生成しない。wrapperのPCM一致は
 物理再読込・cache独立性の証明ではない。stream単位の有界coverageとstream/policy識別子を追加した。詳細は機能設計の
 「stream coverageと根拠の世代」を参照。disc/device世代・履歴は未完了で、#24は引き続きDraft / Blocked。
+
+#35でreader/disc観測世代とstream内128件の詳細履歴を追加した。仕様と限界は機能設計の
+「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証せず、#24はBlockedを維持する。

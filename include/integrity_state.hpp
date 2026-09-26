@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 // Observable facts about the current read stream. These types deliberately do
 // not claim that successfully returned PCM is the original disc PCM.
@@ -15,6 +16,9 @@ enum class C2Status { unknown, not_available, not_checked, clean, reported };
 enum class OffsetStatus { unknown, uncorrected, corrected };
 
 struct ReadEvidence {
+    std::uint64_t device_generation = 0; // successful reader-open incarnation, not hardware identity
+    std::uint64_t disc_generation = 0;
+    std::uint64_t read_sequence = 0;
     std::uint64_t stream_generation = 0;
     std::uint64_t policy_revision = 0;
     std::int32_t start_lba = 0;
@@ -60,7 +64,10 @@ struct ReadCoverage {
     void observe(const ReadResult& result);
 };
 
+inline constexpr std::size_t read_history_capacity = 128;
 struct ReadDiagnostics {
+    std::vector<ReadEvidence> recent_reads; // populated only for API projection
+    std::uint64_t history_evicted = 0;
     std::uint64_t stream_generation = 0;
     std::uint64_t policy_revision = 0;
     ReadCoverage coverage;

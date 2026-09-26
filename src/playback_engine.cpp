@@ -148,7 +148,7 @@ void PlaybackEngine::tick() {
 }
 
 ReadDiagnostics PlaybackEngine::read_diagnostics() {
-    const auto status = worker_.status();
+    const auto status = worker_.status(true);
     auto result = status.diagnostics;
     result.current_playback = current_evidence_;
     result.queued_blocks = status.queued;

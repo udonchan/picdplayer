@@ -563,3 +563,10 @@ coverage・世代別履歴・policy revision・evictionは未実装で、#35は�
 重複・overlap・隣接区間、失敗read、容量超過、policy更新、旧世代readの除外、cancel後のreset、
 JSON公開を試験した。Docker/aarch64でbuild/package生成・CTest 34/34件成功。
 Pi実機の再生・メモリ/負荷は未検証。device/disc世代、詳細履歴のeviction/detail_availableは残作業。
+
+### #35 reader/disc観測世代・履歴の追加（2026-09-26）
+
+reader再生成の世代、disc観測世代、128件の固定容量履歴を追加。140 readで12件破棄、
+保持sequence 13〜140、通常statusの履歴コピー抑制、cancel/reset、disc世代更新を自動試験した。
+Docker/aarch64 build/package生成・CTest 34/34件成功。物理hotplugの完全検出とsession復元は対象外。
+Piの再生・CPU/メモリ・JSON転送量は未検証。#35を完了扱いにせず、#24もBlockedのままとする。

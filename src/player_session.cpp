@@ -192,6 +192,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     drive_capabilities.device = device;
     (void)media_worker.request(MediaWork::probe_drive);
     std::optional<DiscToc> loaded_toc;
+    std::uint64_t disc_generation = 0;
     bool toc_pending = false;
     bool toc_needs_refresh = true;
     constexpr auto drive_start_interval = std::chrono::seconds(15);
@@ -474,10 +475,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (media_state.state() != MediaLifecycleState::audio_ready || !media_result.toc)
                     continue;
                 if (!loaded_toc || !same_toc(*loaded_toc, *media_result.toc) ||
-                    controller.state().playback == PlaybackState::no_disc) {
+                    controller.state().playback == PlaybackState::no_disc || toc_needs_refresh) {
                     controller.load_disc(*media_result.toc);
                     engine.set_disc_end(media_result.toc->leadout_lba);
                     engine.synchronize();
+                    worker.set_disc_generation(++disc_generation);
                     loaded_toc = *media_result.toc;
                     log_info("media") << "audio_disc tracks=" << loaded_toc->tracks.size()
                                       << " leadout_lba=" << loaded_toc->leadout_lba;

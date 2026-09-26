@@ -258,3 +258,20 @@ start/cancel/discard時はcoverage・stream統計をリセットし、旧世代�
 
 既存UIは追加fieldを無視できる。field欠損時は未取得とする。discを跨ぐcoverage、詳細履歴の
 保持・eviction・detail_available、およびdevice/disc世代の統合は引き続き#35の残作業。
+
+### reader/disc世代と詳細履歴（#35、実装途中）
+
+各evidenceに`device_generation`（reader open成功ごと）、`disc_generation`（TOC再受理ごと）、
+`read_sequence`（stream内1始まり）と`detail_available=true`を追加する。device世代は
+reader handleのincarnationであり、物理hotplugを完全に検出した意味ではない。能力probeの失効は#7。
+discはTOC refreshを含めて更新し、同一TOCの再挿入を同じ観測世代として扱わない。ただし未観測の
+交換は検出できない。識別子はdaemon内だけ有効で、再起動を跨ぐ識別は#36で扱う。
+
+`read.history`は`scope=STREAM`、`capacity=128`、`storage_bytes`（固定配列のnative byte数）、
+`evicted`、`regions`を公開する。成功・失敗readの詳細を最大128件保持し、古い順に破棄する。
+各regionはlatestと同じevidence形。採用PCMに付随する根拠は別コピーで保持されるため、historyから
+破棄されてもcurrent_playbackの詳細は残る。detail_availableはそのevidenceの保持状態であり、
+全backend試行を観測済みという意味ではない。返されない過去領域の詳細は取得不能とする。
+start/cancel/discardで履歴とevictedをリセットする。通常のengine tickは履歴コピーをせず、
+API投影時だけ同一lock内で統計と履歴を取得する。slow clientによる履歴保持延長や同期disk書込みはない。
+JSONサイズ・Pi負荷は実機未検証。完全なdisc履歴やevent replayは提供しない。
