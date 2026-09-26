@@ -670,3 +670,12 @@ technical statusの設定buffer容量が非整除の場合の端数表示をwork
 ログ障害の統合試験はwriter threadの終了で失敗を確定してからaudio進行を測る順序へ修正した。
 loggerの既存assertもRelease buildで有効な検査へ置き換えた。
 この追加修正はDockerで検証し、上記d8aaa21のPi結果を追加修正後の実機確認とは扱わない。
+
+## #98 公開disc layout
+
+Docker/aarch64 build/package生成とCTest36/36成功。公開Presentation Model試験で非1開始track、
+先頭150 LBA、最終曲、TOC不在、LOADING等のnull、disc世代/session変更を確認した。
+Piへ導入し通常14曲CDの`--probe-toc /dev/sr0`とREST/WSの全track半開区間・leadoutを機械的照合。
+start=0、leadout=242334、disc_generation=1。REST/WSのlayoutは同一でsessionもreadと一致した。
+試験後はdaemon/kioskとも停止。再生・試聴・特殊媒体・物理交換・TV表示は今回の検証対象外。
+#98はPRレビュー待ち。#99のdisc領域集計と#24のmap描画は未実装。

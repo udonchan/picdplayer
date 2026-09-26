@@ -234,7 +234,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
         auto candidate = serialize_presentation_model(make_presentation_model(
             api_revision + 1, state, media_state.state(), loaded_toc, metadata,
-            drive_capabilities, read, recent_events, has_cover_asset));
+            drive_capabilities, read, recent_events, has_cover_asset,
+            toc_needs_refresh ? std::nullopt : std::optional<std::uint64_t>(disc_generation)));
         if (!api_state_json.empty() &&
             presentation_json_equal_ignoring_revision(candidate, api_state_json)) return false;
         ++api_revision;

@@ -75,6 +75,34 @@ int main() {
         const auto single_json = nlohmann::json::parse(serialize_presentation_model(single));
         check(single_json["read"]["latest"]["verification"]["attempt_details"].empty());
         check(single_json["read"]["latest"]["verification"]["accepted_candidate"].is_null());
+        ReadDiagnostics identity;
+        identity.session_id = "session-a";
+        const DiscToc unusual{{{3, 150, 750}, {4, 900, 1500}}, 2400};
+        const auto layout_json = [&](MediaLifecycleState state, std::optional<DiscToc> disc,
+                                     std::optional<std::uint64_t> generation) {
+            return nlohmann::json::parse(serialize_presentation_model(make_presentation_model(
+                8, player, state, disc, {}, {}, identity, {}, false, generation)));
+        };
+        auto exposed = layout_json(MediaLifecycleState::audio_ready, unusual, 2);
+        check(exposed["disc"]["layout"]["start_lba"] == 150);
+        check(exposed["disc"]["layout"]["leadout_lba"] == 2400);
+        check(exposed["disc"]["layout"]["tracks"][0]["number"] == 3);
+        check(exposed["disc"]["layout"]["tracks"][0]["end_lba"] == 900);
+        check(exposed["disc"]["layout"]["tracks"][1]["end_lba"] == 2400);
+        check(exposed["disc"]["layout"]["disc_generation"] == 2);
+        check(exposed["disc"]["layout"]["session_id"] == "session-a");
+        for (auto state : {MediaLifecycleState::no_disc, MediaLifecycleState::loading,
+                           MediaLifecycleState::unsupported, MediaLifecycleState::ejecting,
+                           MediaLifecycleState::eject_error})
+            check(layout_json(state, unusual, 2)["disc"]["layout"].is_null());
+        check(layout_json(MediaLifecycleState::audio_ready, unusual, std::nullopt)["disc"]["layout"].is_null());
+        check(layout_json(MediaLifecycleState::audio_ready, std::nullopt, 2)["disc"]["layout"].is_null());
+        check(layout_json(MediaLifecycleState::audio_ready, DiscToc{}, 2)["disc"]["layout"].is_null());
+        check(layout_json(MediaLifecycleState::audio_ready, unusual, 3)["disc"]["layout"]["disc_generation"] == 3);
+        identity.session_id = "session-b";
+        check(layout_json(MediaLifecycleState::audio_ready, unusual, 2)["disc"]["layout"]["session_id"] == "session-b");
+        identity.session_id.clear();
+        check(layout_json(MediaLifecycleState::audio_ready, unusual, 2)["disc"]["layout"].is_null());
         std::cout << "PASS: provider-neutral presentation model\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

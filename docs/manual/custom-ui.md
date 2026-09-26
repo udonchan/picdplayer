@@ -199,3 +199,9 @@ nullは未取得/不一致であり、空履歴や正常という意味ではな
 診断counterの欠損/nullは未取得として表示し、0件と区別する。workerの設定上のbuffer block容量は
 `floor(buffer_capacity_frames / read_block_frames)`（有効な正のread block量の場合）である。
 端数はblockとして確保されず、例えば90/75は1 block。これは設定容量であり可聴時間ではない。
+
+## Disc layoutの利用（#98）
+
+TOC座標は`disc.layout`で取得する。fieldとnull条件は[メッセージ契約](../design/message-contract.md#disc-layout98)を参照。
+同session/disc世代以外の根拠を重ねず、nullや世代変更時は旧mapを破棄する。
+#99のdisc領域集計は未実装であり、layoutだけでは全期間のread mapを復元できない。

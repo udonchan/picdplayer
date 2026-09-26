@@ -18,7 +18,7 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
                                            MediaLifecycleState media, const std::optional<DiscToc>& disc,
                                            const MetadataResult& enrichment, DriveCapabilities drive,
                                            ReadDiagnostics read, std::vector<PlayerEvent> recent_events,
-                                           bool has_cover_asset) {
+                                           bool has_cover_asset, std::optional<std::uint64_t> disc_generation) {
     PresentationModel result;
     result.revision = revision;
     result.player = player;
@@ -35,6 +35,19 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
         if (!metadata->album_artist.empty()) result.disc.artist = metadata->album_artist;
     }
     if (!disc) return result;
+    // Only a currently accepted audio TOC can anchor a map.
+    // 再取得中や世代不明のTOCを現在の読み取りに結び付けない。
+    if (media == MediaLifecycleState::audio_ready && disc_generation && *disc_generation > 0
+        && !result.read.session_id.empty() && !disc->tracks.empty()) {
+        bool valid = disc->tracks.front().start_lba >= 0;
+        for (std::size_t i = 0; i < disc->tracks.size(); ++i) {
+            const auto& track = disc->tracks[i];
+            const auto end = i + 1 < disc->tracks.size() ? disc->tracks[i + 1].start_lba : disc->leadout_lba;
+            valid = valid && track.number > 0 && end > track.start_lba
+                && track.length_frames == static_cast<std::int64_t>(end) - track.start_lba;
+        }
+        if (valid) result.disc.layout = PresentationDiscLayout{*disc, result.read.session_id, *disc_generation};
+    }
     result.tracks.reserve(disc->tracks.size());
     for (const auto& track : disc->tracks) {
         PresentationTrack item;

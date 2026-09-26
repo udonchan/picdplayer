@@ -61,7 +61,7 @@ N/A等のUIラベルを新しいwire enumとみなさない。
 | drive, read | object | 以下の診断情報 |
 | recent_events | array | 以下の有界event窓 |
 
-TOC start LBA、disc ID、provider候補/ID、metadata内部エラー、media errorは現行公開snapshotにない。
+disc ID、provider候補/ID、metadata内部エラー、media errorは現行公開snapshotにない。
 残り時間は曲長と位置の表示上の差から計算できるが、音声出力遅延の実測ではない。
 metadata/artworkの到着は再生開始とは独立し、再生状態だけから取得完了を推定しない。
 
@@ -203,3 +203,24 @@ metadata未取得はtitle/artist=null、画像なしはcover=null。null evidenc
 2026-09-26に公開serializer・生成元・API route・technical statusと再照合した。
 #89/#90はPR #94/#95で完了し、実機異常系は#96へ分離。#24正式化は実装着手条件の整理であり、
 Player UI実装済み・実機異常系検証済みという意味ではない。
+
+## Disc layout（#98）
+
+`disc.layout`はnullまたは次のobject。既存tracks/player fieldは変更しない。
+
+| field | 型 | 意味 |
+|---|---|---|
+| session_id | string | read.session_idと同じdaemon session |
+| disc_generation | uint | 受理済みTOCの観測世代。evidence.disc_generationと照合 |
+| start_lba | int | 最初のaudio trackの開始LBA |
+| leadout_lba | int | 最終trackの終了LBA（含まない） |
+| tracks | array | TOC順のnumber:int、start_lba:int、end_lba:int |
+
+範囲は[start_lba, end_lba)。先頭以前のpregap/lead-inを表さず、非audio領域の測定済み宣言ではない。
+受理済みの有効TOCがありAUDIO_READY、再取得不要、session/世代既知のときだけ公開する。
+NO_DISC/LOADING/UNSUPPORTED/EJECTING/EJECT_ERROR、再取得中、TOC不在ではnull。
+metadata未取得でも公開する。旧tracksが一時保持されてもlayout=nullを現在座標の不在として優先する。
+同sessionかつ同disc_generationのevidenceだけを対応させる。device_generationはreader open単位で、
+TOC識別子ではない。reader再openだけでTOC座標が変わるとは限らず、物理交換検出は#88の範囲。
+現在曲のstart_lbaにplayer.position_framesを加えれば表示用の絶対進捗になるが、
+対応曲なし/null/範囲外は位置不明として扱い、物理ヘッド位置や実可聴位置とは呼ばない。
