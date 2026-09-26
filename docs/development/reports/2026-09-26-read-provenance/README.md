@@ -51,3 +51,13 @@ CPU低減率の確定比較にしない。snapshotサイズの縮小は実測で
 終了時は両service inactive。終了直後3分のdaemon journal検索でunderrun/slow_stage/read failed/
 failure_contextは見つからなかった。on-demand-runtime/cpu.jsonl.gzにrawを保存。
 TV実表示・試聴は行っていない。runtime試験は30秒再生後にstate/履歴を取得し、35秒後にstop/restart。
+
+## #36 診断画面の再接続確認（同日、03b7e21）
+
+scripts/deploy.shで最新packageを導入し、CDPから/debug/statusを表示した。
+API再生後、画面PLAYINGとsession一致、event windowのfirst=27/last=90・worker_dropped=0を確認。
+ページreload後に同sessionへ復帰、stop後にactive_warning=nullとrecent_events空を確認した。
+daemon service restart後、STOPPED・track認識を待ち、新session IDへ診断画面が自動追従した。
+終了時に/playerへ戻し、daemon/kioskを停止した。recovery-runtime.jsonl.gzにassertion結果を保存。
+今回のPiでUNCERTAINは発生していないため、warning保持・正常read後も維持・stream終了時解除は
+fake worker/JS自動試験の結果である。物理hotplug、異常disc、試聴、TV実表示、長期負荷は未確認。

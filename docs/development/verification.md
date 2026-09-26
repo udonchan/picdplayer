@@ -592,3 +592,9 @@ stream内の最後のUNCERTAINをactive_warningとして保持し、正常read/e
 JS試験は古いrevisionの拒否、gapのUNKNOWN表示、stream/session変更での警告・gap解除を検証。
 Docker/aarch64 build/package生成とCTest34/34成功。今回の警告・gap追加後のPi実機再接続は未検証。
 完全なevent replay、停止後に残す障害警告台帳、物理hotplugは含まない。
+
+### #36 Pi再接続の確認（2026-09-26、03b7e21）
+
+診断画面のPLAYING/session一致、page reload、stop後の旧event消去、daemon restart後の新sessionへの
+自動再接続をCDPで確認した。rawは[provenance report](reports/2026-09-26-read-provenance/README.md)。
+UNCERTAINを実機で誘発していないため警告の異常系は自動試験のみ。両サービスは停止済み。
