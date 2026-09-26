@@ -317,3 +317,9 @@ technical statusは同session内の古い/同revision snapshotを無視し、str
 欠落状態を消して新snapshotを反映する。欠落表示は同streamでは保持する。
 詳細履歴は必要時にHTTPで取得できるが完全なreplayではない。保持上限を越えた範囲は復元不能。
 #24のPlayer実装もこの復元契約を満たすことを完了条件とする。
+
+## Disc layoutの利用（#98）
+
+TOC座標は`disc.layout`で取得する。fieldとnull条件は[メッセージ契約](message-contract.md#disc-layout98)を参照。
+同session/disc世代以外の根拠を重ねず、nullや世代変更時は旧mapを破棄する。
+#99のdisc領域集計は未実装であり、layoutだけでは全期間のread mapを復元できない。

@@ -12,8 +12,15 @@ struct PresentationTrack {
     std::optional<std::string> artist;
 };
 
+struct PresentationDiscLayout {
+    DiscToc toc;
+    std::string session_id;
+    std::uint64_t disc_generation = 0;
+};
+
 struct PresentationDisc {
     MediaLifecycleState state = MediaLifecycleState::no_disc;
+    std::optional<PresentationDiscLayout> layout;
     std::optional<std::string> title;
     std::optional<std::string> artist;
 };
@@ -48,4 +55,5 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
                                            MediaLifecycleState media, const std::optional<DiscToc>& disc,
                                            const MetadataResult& enrichment, DriveCapabilities drive,
                                            ReadDiagnostics read, std::vector<PlayerEvent> recent_events,
-                                           bool has_cover_asset = false);
+                                           bool has_cover_asset = false,
+                                           std::optional<std::uint64_t> disc_generation = std::nullopt);
