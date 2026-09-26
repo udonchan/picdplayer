@@ -68,7 +68,8 @@ public:
     bool device_released();
     bool pop(PcmBlock& block);
     bool pop_event(PlayerEvent& event);
-    WorkerStatus status();
+    WorkerStatus status(bool include_history = false);
+    void set_disc_generation(std::uint64_t generation);
     std::size_t buffer_capacity_blocks() const;
     std::size_t startup_buffer_blocks() const;
     std::size_t read_block_cd_frames() const;
@@ -94,6 +95,9 @@ private:
     ReadDiagnostics diagnostics_;
     std::uint64_t dropped_events_ = 0;
     std::uint64_t generation_ = 0;
+    std::uint64_t device_generation_ = 0, disc_generation_ = 0;
+    std::array<ReadEvidence, read_history_capacity> history_{};
+    std::size_t history_begin_ = 0, history_size_ = 0;
     std::int32_t begin_ = 0, end_ = 0;
     std::string error_;
     std::thread thread_;

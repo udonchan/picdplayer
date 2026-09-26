@@ -14,7 +14,7 @@ public:
     // Call once after a position/state command; invalidates all old PCM.
     void synchronize();
     void tick();
-    ReadDiagnostics read_diagnostics();
+    ReadDiagnostics read_diagnostics(bool include_history = false);
 private:
     PlayerController& controller_;
     PcmWorker& worker_;

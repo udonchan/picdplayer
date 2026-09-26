@@ -43,7 +43,37 @@ function setConnection(label, kind) {
 
 // This view intentionally issues no control commands.
 // この画面は意図的に操作コマンドを送信しません。
+// Snapshot is authoritative; events never reconstruct active warnings.
+// 警告はsnapshotから置換し、古いイベントから再生成しない。
+let diagnosticSession = null;
+let diagnosticRevision = -1;
+let diagnosticStream = null;
+let diagnosticSequence = null;
+let diagnosticDropped = 0;
+let diagnosticGap = false;
+
 function render(state) {
+  const session = state.read?.session_id;
+  const revision = state.revision;
+  if (session && session === diagnosticSession && Number.isInteger(revision)
+      && revision <= diagnosticRevision) return;
+  if (session !== diagnosticSession || state.read?.stream_generation !== diagnosticStream) {
+    diagnosticSequence = null;
+    diagnosticDropped = 0;
+    diagnosticGap = false;
+    diagnosticRevision = -1;
+  }
+  diagnosticSession = session;
+  diagnosticStream = state.read?.stream_generation;
+  if (Number.isInteger(revision)) diagnosticRevision = revision;
+  const window = state.read?.event_window;
+  if (window) {
+    if ((diagnosticSequence === null && window.first_sequence > 1)
+        || (diagnosticSequence !== null && window.first_sequence > diagnosticSequence + 1)
+        || window.worker_dropped > diagnosticDropped) diagnosticGap = true;
+    if (window.last_sequence !== null) diagnosticSequence = window.last_sequence;
+    diagnosticDropped = window.worker_dropped;
+  }
   const player = state.player || {};
   const read = state.read || {};
   const drive = state.drive || {};
@@ -105,6 +135,17 @@ function render(state) {
 
   const list = byId('events');
   list.replaceChildren();
+  if (diagnosticGap || (window && diagnosticSequence === null)) {
+    const item = document.createElement('li');
+    item.textContent = 'UNKNOWN: observation history is incomplete';
+    list.append(item);
+  }
+  if (read.active_warning) {
+    const item = document.createElement('li');
+    item.className = 'WARNING';
+    item.textContent = `Stream warning: ${formatEvidence(read.active_warning)}`;
+    list.append(item);
+  }
   const events = (state.recent_events || []).slice(-8).reverse();
   if (!events.length) {
     const item = document.createElement('li');

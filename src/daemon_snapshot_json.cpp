@@ -95,7 +95,13 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                {"direct_retries", attempt.direct_retries},
                                {"candidate", optional(attempt.candidate)}});
         }
-        return {{"start_lba", evidence.start_lba},
+        return {{"device_generation", evidence.device_generation},
+                  {"disc_generation", evidence.disc_generation},
+                  {"read_sequence", evidence.read_sequence},
+                  {"detail_available", true},
+                  {"stream_generation", evidence.stream_generation},
+                  {"policy_revision", evidence.policy_revision},
+                  {"start_lba", evidence.start_lba},
                   {"frames_requested", evidence.frames_requested},
                   {"frames_read", evidence.frames_read},
                   {"status", integrity_read_status_name(evidence.status)},
@@ -121,6 +127,8 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                       {"cache_errors", evidence.backend_events.cache_errors},
                                       {"other", evidence.backend_events.other}}}};
     };
+    Json history = Json::array();
+    for (const auto& evidence : read.recent_reads) history.push_back(read_evidence(evidence));
     const auto& stats = read.stats;
     const auto policy = [](const ReadPolicy& value) {
         return Json{{"mode", read_verification_mode_name(value.mode)},
@@ -129,7 +137,20 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                     {"maximum_attempts", value.maximum_attempts},
                     {"time_budget_ms", value.time_budget_ms}};
     };
-    root["read"] = {{"activity", read_activity_name(read.activity)},
+    root["read"] = {{"session_id", read.session_id}, {"history", {{"scope", "STREAM"},
+                                 {"capacity", read_history_capacity},
+                                 {"storage_bytes", sizeof(ReadEvidence) * read_history_capacity},
+                                 {"evicted", read.history_evicted},
+                                 {"included", read.history_included},
+                                 {"last_read_sequence", read.stats.read_calls},
+                                 {"regions", std::move(history)}}},
+                    {"stream_generation", read.stream_generation},
+                    {"policy_revision", read.policy_revision},
+                    {"coverage", {{"scope", "STREAM"},
+                                  {"accepted_unique_frames", read.coverage.accepted_unique_frames},
+                                  {"observations_complete", read.coverage.complete},
+                                  {"region_capacity", ReadCoverage::capacity}}},
+                    {"activity", read_activity_name(read.activity)},
                     {"requested_mode", read.requested_mode},
                     {"effective_strategy", read.effective_strategy},
                     {"queued_blocks", read.queued_blocks},
@@ -143,7 +164,8 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                 {"pending", read.policy_pending}}},
                     {"dropped_events", read.dropped_events},
                     {"latest", read_evidence(read.latest)},
-                    {"current_playback", read_evidence(read.current_playback)},
+                    { "current_playback", read_evidence(read.current_playback)},
+                    {"active_warning", read_evidence(read.active_warning)},
                     {"stats", {{"read_calls", stats.read_calls},
                                {"frames_requested", stats.frames_requested},
                                {"frames_accepted", stats.frames_accepted},
@@ -160,9 +182,12 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                {"verified_calls", stats.verified_calls},
                                {"verification_failures", stats.verification_failures},
                                {"failed_calls", stats.failed_calls}}}};
+    if (!read.history_included) root["read"]["history"].erase("regions");
     Json events = Json::array();
     for (const auto& event : recent_events) {
+        if (event.stream_generation != read.stream_generation) continue;
         events.push_back({{"sequence", event.sequence},
+                          {"read_sequence", event.read.read_sequence},
                           {"stream_generation", event.stream_generation},
                           {"type", player_event_type_name(event.type)},
                           {"severity", event_severity_name(event.severity)},
@@ -172,6 +197,12 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                                   static_cast<std::int32_t>(event.read.frames_read)}}},
                           {"read_status", integrity_read_status_name(event.read.status)}});
     }
+    root["read"]["event_window"] = {
+        {"scope", "STREAM"},
+        {"first_sequence", events.empty() ? Json(nullptr) : events.front()["read_sequence"]},
+        {"last_sequence", events.empty() ? Json(nullptr) : events.back()["read_sequence"]},
+        {"worker_dropped", read.dropped_events},
+        {"replay_available", false}};
     root["recent_events"] = std::move(events);
     return root;
 }

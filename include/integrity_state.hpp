@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 // Observable facts about the current read stream. These types deliberately do
 // not claim that successfully returned PCM is the original disc PCM.
@@ -15,6 +16,11 @@ enum class C2Status { unknown, not_available, not_checked, clean, reported };
 enum class OffsetStatus { unknown, uncorrected, corrected };
 
 struct ReadEvidence {
+    std::uint64_t device_generation = 0; // successful reader-open incarnation, not hardware identity
+    std::uint64_t disc_generation = 0;
+    std::uint64_t read_sequence = 0;
+    std::uint64_t stream_generation = 0;
+    std::uint64_t policy_revision = 0;
     std::int32_t start_lba = 0;
     std::size_t frames_requested = 0;
     std::size_t frames_read = 0;
@@ -46,12 +52,33 @@ struct IntegrityStats {
     std::uint64_t verification_failures = 0;
 };
 
+// Fixed-memory union of accepted CD-frame intervals, scoped to one stream.
+// 採用区間の和集合。上限到達後は下限値を固定し、未観測領域を成功扱いしない。
+struct ReadCoverage {
+    struct Region { std::int64_t begin = 0, end = 0; };
+    static constexpr std::size_t capacity = 128;
+    std::array<Region, capacity> regions{};
+    std::size_t size = 0;
+    std::uint64_t accepted_unique_frames = 0;
+    bool complete = true; // all accepted observations counted, not whole-disc coverage
+    void observe(const ReadResult& result);
+};
+
+inline constexpr std::size_t read_history_capacity = 128;
 struct ReadDiagnostics {
+    std::string session_id;
+    bool history_included = false;
+    std::vector<ReadEvidence> recent_reads; // populated only for API projection
+    std::uint64_t history_evicted = 0;
+    std::uint64_t stream_generation = 0;
+    std::uint64_t policy_revision = 0;
+    ReadCoverage coverage;
     ReadActivity activity = ReadActivity::idle;
     std::string requested_mode = "LEGACY";
     std::string effective_strategy = "legacy";
     std::optional<ReadEvidence> latest;
     std::optional<ReadEvidence> current_playback;
+    std::optional<ReadEvidence> active_warning; // last uncertain read in this stream
     std::size_t queued_blocks = 0;
     std::size_t buffer_capacity_frames = 0;
     std::size_t startup_buffer_frames = 0;

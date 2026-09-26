@@ -556,3 +556,45 @@ wrapperの最大8試行を固定容量で記録し、candidateと閾値到達att
 追加公開する。A/B/B、全不一致、失敗後の一致、8試行上限、未取得時の空配列/null、JSONへの投影を
 自動試験する。Docker/aarch64標準buildとCTest 34/34件成功。Piでの再生・性能は未検証。
 coverage・世代別履歴・policy revision・evictionは未実装で、#35は継続中、#24はブロックを維持する。
+
+### #35 続き: stream coverage・世代（2026-09-26）
+
+固定128区間の和集合で採用CD frameを一意に集計し、上限時は下限を固定する。
+重複・overlap・隣接区間、失敗read、容量超過、policy更新、旧世代readの除外、cancel後のreset、
+JSON公開を試験した。Docker/aarch64でbuild/package生成・CTest 34/34件成功。
+Pi実機の再生・メモリ/負荷は未検証。device/disc世代、詳細履歴のeviction/detail_availableは残作業。
+
+### #35 reader/disc観測世代・履歴の追加（2026-09-26）
+
+reader再生成の世代、disc観測世代、128件の固定容量履歴を追加。140 readで12件破棄、
+保持sequence 13〜140、通常statusの履歴コピー抑制、cancel/reset、disc世代更新を自動試験した。
+Docker/aarch64 build/package生成・CTest 34/34件成功。物理hotplugの完全検出とsession復元は対象外。
+Piの再生・CPU/メモリ・JSON転送量は未検証。#35を完了扱いにせず、#24もBlockedのままとする。
+
+### #35のPi実機検証（2026-09-26）
+
+[provenance実機結果](reports/2026-09-26-read-provenance/README.md)に履歴上限、stop/reset、repeat候補、
+service再起動と短時間負荷を記録した。session復元は#36で未実装、物理hotplugは#88でPending。
+TV実表示・試聴・長期運転は未検証。snapshot約96KBとCDP混在CPU平均20.4%の負荷評価は#83へ引き継ぐ。
+
+### 詳細履歴オンデマンド化（#35/#36）
+
+通常snapshotから履歴regionsを省き、GET /api/read-historyとsession識別を追加。
+Docker build/CTest34件成功。Piでstate16437 bytes、履歴128件取得、stop/reset、restartでsession変更を確認。
+CDPなし25秒のCPU平均16.85%、現在throttlingなし。条件差があり性能改善率は確定しない。
+詳細・rawは[provenance実機結果](reports/2026-09-26-read-provenance/README.md)を参照。
+warning/gap復元は#36で未実装、#24はBlockedを維持。
+
+### #36 snapshotによる診断復元（2026-09-26）
+
+stream内の最後のUNCERTAINをactive_warningとして保持し、正常read/event消費で消えず、cancelで
+解除されることをfake readerで確認。JSONでは旧stream eventの除外とwindowを確認した。
+JS試験は古いrevisionの拒否、gapのUNKNOWN表示、stream/session変更での警告・gap解除を検証。
+Docker/aarch64 build/package生成とCTest34/34成功。今回の警告・gap追加後のPi実機再接続は未検証。
+完全なevent replay、停止後に残す障害警告台帳、物理hotplugは含まない。
+
+### #36 Pi再接続の確認（2026-09-26、03b7e21）
+
+診断画面のPLAYING/session一致、page reload、stop後の旧event消去、daemon restart後の新sessionへの
+自動再接続をCDPで確認した。rawは[provenance report](reports/2026-09-26-read-provenance/README.md)。
+UNCERTAINを実機で誘発していないため警告の異常系は自動試験のみ。両サービスは停止済み。

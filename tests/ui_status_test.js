@@ -38,3 +38,21 @@ assert.equal(node('integrity').textContent, 'NO DISC');
 assert.equal(node('cap-c2').textContent, 'UNKNOWN');
 assert.equal(node('drive-name').textContent, 'Drive');
 console.log('PASS: technical status uses presentation fields and diagnostics');
+
+const warning = { status: 'UNCERTAIN', start_lba: 10, frames_read: 15 };
+function diagnostic(revision, stream, active, first, last) {
+  return { ...snapshot, revision, read: { ...snapshot.read, session_id: 'a', stream_generation: stream,
+    active_warning: active, event_window: { first_sequence: first, last_sequence: last, worker_dropped: 0 } } };
+}
+context.render(diagnostic(10, 1, warning, 1, 1));
+assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+context.render(diagnostic(9, 1, null, 1, 1)); // stale snapshot must not clear the warning
+assert(node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+context.render(diagnostic(11, 1, warning, 5, 8));
+assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
+context.render(diagnostic(12, 2, null, 1, 1));
+assert(!node('events').children.some(x => x.textContent.startsWith('Stream warning:')));
+assert(!node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
+context.render({ ...diagnostic(1, 1, null, 7, 9), read: { ...diagnostic(1, 1, null, 7, 9).read, session_id: 'b' } });
+assert(node('events').children.some(x => x.textContent.startsWith('UNKNOWN:')));
+console.log('PASS: snapshot warning replacement, stale revision, gap, stream and session changes');

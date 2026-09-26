@@ -51,6 +51,19 @@ struct FakeOutput : AudioOutput {
     }
     bool drain() override { return drain_allowed; }
 };
+class WarningReader final : public CddaReader {
+    int position_ = 0;
+public:
+    void seek(std::int32_t lba) override { position_ = lba; }
+    ReadResult read(std::span<std::int16_t> pcm) override {
+        const auto frames = pcm.size() / cdda_samples_per_frame;
+        ReadResult r{position_, frames, frames, ReadStatus::ok, 0, position_ == 0 ? 1u : 0u};
+        std::fill(pcm.begin(), pcm.end(), 0);
+        position_ += frames;
+        return r;
+    }
+};
+
 int main() {
     try {
         const PcmBufferConfig defaults;
@@ -173,8 +186,49 @@ int main() {
             check(block.lba == 100 && block.evidence.frames_requested == 75 &&
                   block.samples.size() == 75 * cdda_samples_per_frame);
             check(readers_created == 2);
+            check(block.evidence.policy_revision == 2);
+            check(block.evidence.device_generation == 2);
+            check(block.evidence.stream_generation == block.generation);
             check(reconfigured.status().diagnostics.effective_strategy == "repeat-test");
             reconfigured.cancel();
+        }
+        {
+            PcmWorker warnings([] { return std::make_unique<WarningReader>(); });
+            warnings.start(0, 30);
+            wait_for([&] { return warnings.status().done; });
+            const auto state = warnings.status().diagnostics;
+            check(state.latest->status == IntegrityReadStatus::clean);
+            check(state.active_warning && state.active_warning->start_lba == 0);
+            PlayerEvent ignored;
+            while (warnings.pop_event(ignored)) {}
+            check(warnings.status().diagnostics.active_warning.has_value());
+            warnings.cancel();
+            check(!warnings.status().diagnostics.active_warning);
+        }
+        // Bounded history is independent of event draining and PCM consumption.
+        {
+            PcmWorker history([] { return std::make_unique<FakeReader>(); });
+            history.set_disc_generation(7);
+            const auto generation = history.start(0, 15 * 140);
+            PcmBlock block;
+            for (int i = 0; i < 140; ++i) {
+                wait_for([&] { return history.pop(block); });
+                check(block.evidence.disc_generation == 7);
+                check(block.evidence.device_generation == 1);
+                check(block.evidence.stream_generation == generation);
+            }
+            wait_for([&] { return history.status().done; });
+            const auto snapshot = history.status(true).diagnostics;
+            check(snapshot.recent_reads.size() == 128 && snapshot.history_evicted == 12);
+            check(snapshot.recent_reads.front().read_sequence == 13);
+            check(snapshot.recent_reads.back().read_sequence == 140);
+            check(history.status().diagnostics.recent_reads.empty());
+            history.cancel();
+            check(history.status(true).diagnostics.recent_reads.empty());
+            history.set_disc_generation(8);
+            history.start(0, 15);
+            wait_for([&] { return history.status().done; });
+            check(history.status(true).diagnostics.recent_reads.front().disc_generation == 8);
         }
         // Media work using the same coordinator cannot overlap a PCM read.
         {
@@ -227,6 +281,11 @@ int main() {
             PlayerEvent event;
             check(w.pop_event(event) && event.stream_generation == current);
             check(event.read.start_lba == 100 && !w.pop_event(event));
+            check(w.status().diagnostics.coverage.accepted_unique_frames == 15);
+            check(w.status().diagnostics.stream_generation == current);
+            check(b.evidence.stream_generation == current);
+            w.cancel();
+            check(w.status().diagnostics.coverage.accepted_unique_frames == 0);
             check(!w.pop(b));
             w.start(0, 1000);
             wait_for([&] { return w.status().queued == pcm_queue_capacity_blocks; });

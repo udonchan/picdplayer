@@ -129,6 +129,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | Method/path | 入力・結果 |
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
+| GET /api/read-history | session/stream付きの有界詳細履歴。通常snapshotとは別取得 |
 | GET /api/read-policy | requested/effective/pendingを即時取得 |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
@@ -239,3 +240,77 @@ PCMを最初に取得した試行番号ではない。採用理由は既存の`l
 最大8件の固定配列で保持し、PCM blockと共に現在再生区間へ届く。詳細attemptの永続履歴、
 unique coverage、device/disc/stream世代とpolicy revisionの統合は#35の残作業である。
 #24はDraft / Blockedのまま、この契約に合わせて表示候補を更新する。
+
+### stream coverageと根拠の世代（#35、実装途中）
+
+`read.stream_generation`と`read.policy_revision`を追加し、`latest/current_playback`の各evidenceにも
+同名fieldを保持する。streamはworkerのstart/cancel/discardで更新し、policy revisionはworkerの
+初期設定を1としてreconfigureごとに増加する。これはdaemon内だけの識別子であり、再起動間の比較は
+できない。device/disc世代・daemon session IDはまだ未実装である。
+
+`read.coverage`は`scope=STREAM`、`accepted_unique_frames`（CD frame単位）、
+`observations_complete`、`region_capacity=128`を持つ。完全に成功して採用されたread区間の和集合を
+固定128区間で集計し、overlap・retryを重複加算しない。失敗/部分readは加算しない。
+これは先読みを含む採用PCMの観測範囲であり、実再生済み・全disc検証済み・原盤一致ではない。
+`observations_complete=true`は採用観測を欠落なく集計できた意味であり、disc全域を読んだ意味ではない。
+区間容量超過または不正な範囲を検出するとfalseにし、次のstreamまで下限値を固定する。
+履歴を捨てて二重加算する方式は使わない。集計領域は固定配列で追加heap割当を必要としない。
+start/cancel/discard時はcoverage・stream統計をリセットし、旧世代の遅延readは加算しない。
+
+既存UIは追加fieldを無視できる。field欠損時は未取得とする。discを跨ぐcoverage、詳細履歴の
+保持・eviction・detail_available、およびdevice/disc世代の統合は引き続き#35の残作業。
+
+### reader/disc世代と詳細履歴（#35、実装途中）
+
+各evidenceに`device_generation`（reader open成功ごと）、`disc_generation`（TOC再受理ごと）、
+`read_sequence`（stream内1始まり）と`detail_available=true`を追加する。device世代は
+reader handleのincarnationであり、物理hotplugを完全に検出した意味ではない。能力probeの失効は#7。
+discはTOC refreshを含めて更新し、同一TOCの再挿入を同じ観測世代として扱わない。ただし未観測の
+交換は検出できない。識別子はdaemon内だけ有効で、再起動を跨ぐ識別は#36で扱う。
+
+履歴は`scope=STREAM`、`capacity=128`、`storage_bytes`（固定配列のnative byte数）、
+`evicted`を持つ。詳細`regions`は下記のオンデマンドendpointだけで公開する。成功・失敗readの詳細を最大128件保持し、古い順に破棄する。
+各regionはlatestと同じevidence形。採用PCMに付随する根拠は別コピーで保持されるため、historyから
+破棄されてもcurrent_playbackの詳細は残る。detail_availableはそのevidenceの保持状態であり、
+全backend試行を観測済みという意味ではない。返されない過去領域の詳細は取得不能とする。
+start/cancel/discardで履歴とevictedをリセットする。通常のengine tickは履歴コピーをせず、
+詳細履歴のHTTP取得時だけ同一lock内で統計と履歴を取得する。slow clientによる履歴保持延長や同期disk書込みはない。
+JSONサイズ・Pi負荷は実機未検証。完全なdisc履歴やevent replayは提供しない。
+
+### 詳細履歴のオンデマンド取得（#35/#36、PR #87）
+
+通常の`GET /api/state`と`WS /api/events`は`read.history.regions`を送らず、`included=false`と
+上限・破棄数・`last_read_sequence`を送る。latest/current_playbackは維持する。詳細取得は
+`GET /api/read-history`で行い、`schema_version=1`、`session_id`、`stream_generation`、
+`history`（included=true、regionsを含む）を返す。最大128件でpagination/replayは提供しない。
+GET以外は405、providerがない場合は503。読み取り専用で既存state GETと同じlisten境界を使う。
+
+session IDはdaemon起動時に生成する不透明な識別子で、通常snapshotでは`read.session_id`に置く。
+ID不一致時は旧履歴を破棄する。同sessionでもstream_generationが異なれば併合せずstateを再取得する。
+HTTP取得と定期snapshotは同時点を保証せず、同streamの詳細がsnapshotより先へ進んでいてもよい。
+read_sequenceはstream内でのみ比較する。保持windowより前の詳細は取得不能であり、未観測を成功と扱わない。
+常時pollingせず詳細画面表示時などに取得する。field欠損・503では未取得として表示する。
+
+これ以前のPR内にあったsnapshot内regionsは未マージ契約の見直しであり、標準Playerには依存がない。
+#24の表示候補も本契約に追従する。active warning・event gap復元はまだ#36で未実装。
+
+### 診断snapshotの復元（#36、実装途中）
+
+`read.active_warning`は現在streamで最後に観測したUNCERTAINのevidence、なければnull。
+後続の正常readやhistory evictionでは消さず、start/cancel/discardによるstream終了で解除する。
+過去の失敗全件やdevice障害全体の警告台帳ではなく、stop後も警告を保持する契約ではない。
+current_playbackの状態と先読みで観測したstream警告を区別する。再接続時はsnapshot値で置換し、
+古いeventから警告を再生成しない。通常stream警告はworker内の固定1件であり、event queueのdropと独立する。
+
+公開recent_eventsは現在streamのみに限定する。既存sequenceはdaemon内のevent配信順序を維持し、
+追加のread_sequenceはstream内のread順序を示す。`read.event_window`はscope=STREAM、
+first_sequence/last_sequence（保持eventのread_sequence、空ならnull）、worker_dropped、
+replay_available=falseを持つ。workerからmainへの移動とsnapshot時刻は一致せず、
+read.history.last_read_sequenceよりwindowの末尾が遅れることがある。未来のevent到着を保証しない。
+再接続/初回にfirst_sequence>1、連続受信時に前回末尾+1より先からwindowが始まる、
+またはworker_droppedが増えた場合は欠落をUNKNOWNとして示す。欠落履歴を成功で補完しない。
+
+technical statusは同session内の古い/同revision snapshotを無視し、stream/session変更で旧警告・
+欠落状態を消して新snapshotを反映する。欠落表示は同streamでは保持する。
+詳細履歴は必要時にHTTPで取得できるが完全なreplayではない。保持上限を越えた範囲は復元不能。
+#24はこの契約に合わせて更新するが、Draft / Blockedを維持する。
