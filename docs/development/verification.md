@@ -690,3 +690,10 @@ Pi通常CDで140 read超の集計、API stop後の保持とSTREAM history reset�
 daemon restart後の新sessionと空集計を確認。再起動直後の接続不可は再試行して確認した。
 終了時daemon/kiosk停止。試聴・異常disc・物理交換・TV表示は未検証。詳細は
 [disc map実機記録](reports/2026-09-26-disc-map/README.md)参照。
+
+## #24着手前の境界条件監査（2026-09-26）
+
+[#103〜#106の監査記録](reports/2026-09-26-pre-integrity-audit/README.md)を参照する。
+修正後のDocker build/packageとCTest37/37は成功した。終端の実機試験では
+監査中の未コミット変更で146回の末尾復帰を観測して中止した。修正後のPi再生は未確認であり、
+従前の通常disc_map試験と区別する。drain中の位置は最後の観測値を保持する。

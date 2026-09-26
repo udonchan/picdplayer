@@ -110,6 +110,25 @@ async function main() {
   assert(!node('art').classList.contains('has-cover'));
   node('cover').onerror();
   assert.deepEqual(receive(snapshot), []); // No retry storm after a failed image.
+  // Same URL after a missed disc removal must load the new disc's cover.
+  // 切断中のdisc交換でも同URLの旧画像を保持しない。
+  snapshot.read = { session_id: 'session-a' };
+  snapshot.disc.layout = { session_id: 'session-a', disc_generation: 1 };
+  receive(snapshot);
+  snapshot.disc.layout.disc_generation = 2;
+  assert(receive(snapshot).includes('cover.src'), 'same-URL cover must reload after disc generation change');
+  assert.deepEqual(receive(snapshot), []);
+  const retiredLoad = node('cover').onload;
+  snapshot.read.session_id = 'session-b';
+  snapshot.disc.layout.session_id = 'session-b';
+  assert(receive(snapshot).includes('cover.src'));
+  node('cover').complete = true; node('cover').naturalWidth = 100;
+  retiredLoad();
+  assert(!node('art').classList.contains('has-cover'));
+  node('cover').onload();
+  snapshot.disc.state = 'LOADING';
+  receive(snapshot);
+  assert(!node('art').classList.contains('has-cover'));
   snapshot.artwork.cover = null;
   receive(snapshot);
   assert(!node('art').classList.contains('has-cover'));

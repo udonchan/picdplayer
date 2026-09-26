@@ -98,7 +98,7 @@ void PcmWorker::cancel() {
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
-    events_.clear();
+    events_.clear(); dropped_events_ = 0;
     changed_.notify_all();
 }
 void PcmWorker::discard_reader() {
@@ -113,7 +113,7 @@ void PcmWorker::discard_reader() {
     queue_.clear(); error_.clear();
     diagnostics_.activity = ReadActivity::idle;
     diagnostics_.latest.reset();
-    events_.clear();
+    events_.clear(); dropped_events_ = 0;
     discard_reader_ = true;
     changed_.notify_all();
 }

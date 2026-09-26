@@ -134,3 +134,14 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 - [#99](https://github.com/udonchan/picdplayer/issues/99): 最大256区間のDISC集計を実装。Docker36/36、Piで140 read超・stop/resume保持・daemon restart resetを確認、PRレビュー待ち。
 
 #98は完了済みの前提、現在#99が#24をblockする。相互はRelatedで、#12の完了を取り消さず追加機能として管理する。
+
+## #24着手前の監査修正（PR #102）
+
+- [#103](https://github.com/udonchan/picdplayer/issues/103): stream終了時の旧再生根拠・欠落counter破棄。
+- [#104](https://github.com/udonchan/picdplayer/issues/104): disc/session変更時の同URL artwork再取得。
+- [#105](https://github.com/udonchan/picdplayer/issues/105): 最終throttled sample欠損時の集計。
+- [#106](https://github.com/udonchan/picdplayer/issues/106): 終端underrunの再seek防止。
+
+いずれも修正・回帰試験を追加済み、未マージ。Docker37/37成功。
+実機では終端試験が失敗したため追加再生を中止し、修正後は未再確認。
+[監査記録](reports/2026-09-26-pre-integrity-audit/README.md)を参照する。

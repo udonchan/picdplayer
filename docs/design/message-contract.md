@@ -258,3 +258,14 @@ TOC再受理時にresetする。未検出の物理交換は#88の範囲で、永
 STREAM historyは従来どおりstream_generationも照合する。mapだけをstream変更でresetしない。
 同discで古いmap revisionへの巻戻りを拒否し、layout=null/世代変更では旧mapを破棄する。
 取得は詳細展開/明示更新時を基本とし、常時pollingしない。最大256区間のdisc_map objectはテストで64 KiB未満を検査する。historyを含む応答全体の上限ではない。
+
+### stream終了と音声出力の終了待ち
+
+`read.current_playback`は出力エラーでstreamを終了した場合も破棄する。
+workerのcancel/discardではevent queueと`dropped_events`を同時にリセットし、
+旧streamの欠落件数を新streamの診断へ持ち越さない。disc_mapは別のdisc世代寿命に従う。
+
+nonblocking drain中は追加のALSA delay照会を行わず、位置・根拠は最後に取得した値を保持する。
+この間のcurrent_playbackを刻々の実音声位置として扱わない。正常drain完了時に停止・破棄する。
+drain中または全PCM提出後のunderrunはエラー停止とし、最終sectorへ再seekしない。
+途中のunderrun復帰と異なり、正常完走したという保証にはしない。

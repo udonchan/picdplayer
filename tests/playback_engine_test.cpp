@@ -66,8 +66,85 @@ public:
 
 int main() {
     try {
+        // A failed output must not publish evidence from the cancelled stream.
+        // 出力失敗後に旧streamの再生根拠を残さない。
+        {
+            PcmWorker worker([] { return std::make_unique<FakeReader>(); });
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 300));
+            FakeOutput output;
+            PlaybackEngine engine(controller, worker, output, 300);
+            controller.play(); engine.synchronize();
+            wait_for([&] { return worker.status().done; });
+            engine.tick();
+            check(engine.read_diagnostics().current_playback.has_value());
+            output.fail = true;
+            bool failed = false;
+            try { engine.tick(); } catch (const std::runtime_error&) { failed = true; }
+            check(failed);
+            if (engine.read_diagnostics().current_playback)
+                throw std::runtime_error("stale current_playback after output failure");
+        }
         const PcmBufferConfig defaults;
         check(defaults.capacity_cd_frames == 750 && defaults.startup_cd_frames == 45);
+        // ALSA delay need not be available after nonblocking drain starts.
+        // drain開始後はdelayを照会せず、末尾のunderrunでは再seekしない。
+        for (const bool terminal_error : {false, true}) {
+            struct DrainOutput : FakeOutput {
+                bool started = false, terminal_error = false;
+                std::int64_t delay() override {
+                    if (started) throw AudioUnderrun("delay after drain");
+                    return FakeOutput::delay();
+                }
+                bool drain() override {
+                    started = true;
+                    if (terminal_error) throw AudioUnderrun("terminal drain underrun");
+                    return drain_allowed;
+                }
+            } output;
+            output.terminal_error = terminal_error;
+            PcmWorker worker([] { return std::make_unique<FakeReader>(); });
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 30));
+            PlaybackEngine engine(controller, worker, output, 30);
+            controller.play(); engine.synchronize();
+            wait_for([&] { return worker.status().done; });
+            bool failed = false;
+            try { engine.tick(); engine.tick(); engine.tick(); }
+            catch (const AudioUnderrun&) { failed = true; }
+            check(output.started && failed == terminal_error);
+            if (!terminal_error) {
+                for (int i = 0; i < 5; ++i) engine.tick();
+                output.drain_allowed = true;
+                engine.tick();
+            }
+            check(controller.state().playback == PlaybackState::stopped);
+            check(!engine.read_diagnostics().current_playback);
+            const auto total = output.total;
+            for (int i = 0; i < 5; ++i) engine.tick();
+            check(output.total == total);
+        }
+        // Final write may report XRUN before drain has started.
+        // drain前の最終delay失敗でも末尾へ戻らない。
+        {
+            struct FinalOutput : FakeOutput {
+                std::int64_t delay() override {
+                    if (total == 588) throw AudioUnderrun("final write underrun");
+                    return FakeOutput::delay();
+                }
+            } output;
+            PcmWorker worker([] { return std::make_unique<FakeReader>(); });
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 1));
+            PlaybackEngine engine(controller, worker, output, 1);
+            controller.play(); engine.synchronize();
+            wait_for([&] { return worker.status().done; });
+            bool failed = false;
+            try { engine.tick(); } catch (const AudioUnderrun&) { failed = true; }
+            check(failed && controller.state().playback == PlaybackState::stopped);
+            for (int i = 0; i < 5; ++i) engine.tick();
+            check(output.total == 588 && !engine.read_diagnostics().current_playback);
+        }
         // Removal must release the reader even if no further Play arrives.
         std::atomic<int> destroyed{0};
         struct ClosingReader : FakeReader {
@@ -237,7 +314,7 @@ int main() {
         }
         // Pause diagnostic consumption, not PCM: overflow must never stall reads.
         // 診断consumerだけを止め、PCM進行と破棄順序・世代境界を確認する。
-        {
+        for (const bool discard : {false, true}) {
             PcmWorker overflow([] { return std::make_unique<FakeReader>(); });
             overflow.set_disc_generation(20);
             const auto generation = overflow.start(0, 15 * 300);
@@ -270,7 +347,9 @@ int main() {
                 check(event.read.read_sequence == sequence && event.stream_generation == generation);
             }
             check(!overflow.pop_event(event));
-            overflow.cancel();
+            if (discard) overflow.discard_reader(); else overflow.cancel();
+            if (overflow.status().diagnostics.dropped_events != 0)
+                throw std::runtime_error("old dropped_events after cancel");
             overflow.set_disc_generation(21);
             const auto next = overflow.start(9000, 9015);
             wait_for([&] { return overflow.status().done; });
@@ -334,9 +413,10 @@ int main() {
             wait_for([&] { return coordinated.status().done; });
         }
         // An in-flight old read must not publish after a new range is requested.
-        auto gate = std::make_shared<Gate>();
-        {
+        for (const bool new_disc : {false, true}) {
+            auto gate = std::make_shared<Gate>();
             PcmWorker w([gate] { return std::make_unique<FakeReader>(gate); });
+            w.set_disc_generation(7);
             w.start(0, 15);
             {
                 std::unique_lock lock(gate->mutex);
@@ -345,6 +425,7 @@ int main() {
                 }
             }
             w.cancel();
+            if (new_disc) w.set_disc_generation(8);
             const auto current = w.start(100, 115);
             { std::lock_guard lock(gate->mutex); gate->release = true; }
             gate->cv.notify_all();
@@ -353,6 +434,10 @@ int main() {
             check(w.pop(b) && b.generation == current && b.lba == 100 && b.samples[0] == 100);
             check(b.evidence.start_lba == 100 && b.evidence.frames_read == 15);
             check(b.evidence.local_verification == LocalVerification::single_read);
+            const auto map = w.status(true).diagnostics.disc_map;
+            check(map && map->disc_generation == (new_disc ? 8 : 7));
+            check(map->size == (new_disc ? 1 : 2));
+            if (new_disc) check(map->regions[0].begin == 100);
             check(w.status().diagnostics.stats.read_calls == 1); // Superseded read is not current evidence.
             PlayerEvent event;
             check(w.pop_event(event) && event.stream_generation == current);
