@@ -31,6 +31,18 @@ int main() {
         check(rendered.find("provider-private") == std::string::npos &&
               rendered.find("recording-private") == std::string::npos);
         check(json["artwork"]["cover"].is_null());
+        auto diagnostic_model = model;
+        diagnostic_model.drive.vendor = "Test drive";
+        diagnostic_model.read.stats.direct_retries = 7;
+        PlayerEvent event;
+        event.sequence = 42;
+        diagnostic_model.recent_events.push_back(event);
+        const auto diagnostic = nlohmann::json::parse(serialize_presentation_model(diagnostic_model));
+        check(diagnostic["drive"]["vendor"] == "Test drive");
+        check(diagnostic["read"]["stats"]["direct_retries"] == 7);
+        check(diagnostic["recent_events"][0]["sequence"] == 42);
+        check(!presentation_json_equal_ignoring_revision(rendered, diagnostic.dump()));
+        check(!diagnostic.contains("metadata"));
         std::cout << "PASS: provider-neutral presentation model\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

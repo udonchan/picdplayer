@@ -24,19 +24,28 @@ class WebSocket:
         address, path = host_path.split("/", 1)
         host, port = address.split(":", 1)
         self.socket = socket.create_connection((host, int(port)), timeout=15)
-        self.socket.settimeout(20)
-        key = base64.b64encode(os.urandom(16)).decode()
-        request = (f"GET /{path} HTTP/1.1\r\nHost: {address}\r\nUpgrade: websocket\r\n"
-                   f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
-        self.socket.sendall(request.encode())
-        reply = b""
-        while b"\r\n\r\n" not in reply:
-            reply += self.socket.recv(4096)
-        header, self.pending = reply.split(b"\r\n\r\n", 1)
-        expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest())
-        if not header.startswith(b"HTTP/1.1 101 ") or expected.lower() not in header.lower():
-            raise RuntimeError("CDP WebSocket handshake rejected: " +
-                               header.split(b"\r\n", 1)[0].decode(errors="replace"))
+        try:
+            self.socket.settimeout(20)
+            key = base64.b64encode(os.urandom(16)).decode()
+            request = (f"GET /{path} HTTP/1.1\r\nHost: {address}\r\nUpgrade: websocket\r\n"
+                       f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+            self.socket.sendall(request.encode())
+            reply = b""
+            while b"\r\n\r\n" not in reply:
+                data = self.socket.recv(4096)
+                if not data:
+                    raise RuntimeError("CDP socket closed during handshake")
+                reply += data
+                if len(reply.split(b"\r\n\r\n", 1)[0]) > 16384:
+                    raise RuntimeError("CDP handshake header too large")
+            header, self.pending = reply.split(b"\r\n\r\n", 1)
+            expected = base64.b64encode(hashlib.sha1((key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode()).digest())
+            if not header.startswith(b"HTTP/1.1 101 ") or expected.lower() not in header.lower():
+                raise RuntimeError("CDP WebSocket handshake rejected: " +
+                                   header.split(b"\r\n", 1)[0].decode(errors="replace"))
+        except Exception:
+            self.socket.close()
+            raise
         self.next_id = 0
         self.events = {}
 
@@ -67,7 +76,7 @@ class WebSocket:
             raise RuntimeError("Unexpected CDP message type")
         return json.loads(body)
 
-    def call(self, method, params=None):
+    def call(self, method, params=None, on_event=None):
         self.next_id += 1
         payload = json.dumps({"id": self.next_id, "method": method, "params": params or {}}).encode()
         mask = os.urandom(4)
@@ -80,10 +89,38 @@ class WebSocket:
             if "method" in message:
                 name = message["method"]
                 self.events[name] = self.events.get(name, 0) + 1
+                if on_event is not None:
+                    on_event(message)
             if message.get("id") == self.next_id:
                 if "error" in message:
                     raise RuntimeError(message["error"])
                 return message.get("result", {})
+
+
+def finish_trace(websocket):
+    """Collect events even when Chromium sends them before the end response."""
+    counts = {}
+    complete = False
+
+    def collect(message):
+        nonlocal complete
+        if message.get("method") == "Tracing.dataCollected":
+            for event in message.get("params", {}).get("value", []):
+                name = event.get("name", "")
+                if name in ("Paint", "Layout", "RecalculateStyles", "CompositeLayers"):
+                    counts[name] = counts.get(name, 0) + 1
+        elif message.get("method") == "Tracing.tracingComplete":
+            complete = True
+
+    websocket.call("Tracing.end", on_event=collect)
+    deadline = time.monotonic() + 20
+    while not complete:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("CDP trace did not complete")
+        websocket.socket.settimeout(remaining)
+        collect(websocket.receive())
+    return counts
 
 
 def main():
@@ -179,18 +216,7 @@ def main():
             websocket.call("Tracing.start", {"categories": "devtools.timeline",
                                                "transferMode": "ReportEvents"})
             time.sleep(args.trace_seconds)
-            websocket.call("Tracing.end")
-            counts = {}
-            deadline = time.monotonic() + 20
-            while time.monotonic() < deadline:
-                message = websocket.receive()
-                if message.get("method") == "Tracing.dataCollected":
-                    for event in message.get("params", {}).get("value", []):
-                        name = event.get("name", "")
-                        if name in ("Paint", "Layout", "RecalculateStyles", "CompositeLayers"):
-                            counts[name] = counts.get(name, 0) + 1
-                if message.get("method") == "Tracing.tracingComplete":
-                    break
+            counts = finish_trace(websocket)
             print(json.dumps({"trace_connected_seconds": args.trace_seconds,
                               "timeline_event_counts": counts}))
     finally:

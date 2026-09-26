@@ -126,6 +126,7 @@ if(BUILD_TESTING)
     find_program(NODE_EXECUTABLE node)
     if(NODE_EXECUTABLE)
         add_test(NAME ui_boot_javascript COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_boot_test.js)
+        add_test(NAME ui_status_javascript COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_status_test.js)
         add_test(NAME ui_render_javascript COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_render_test.js)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(NAME kiosk_boot_wrapper COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/kiosk_boot_test.js)
@@ -307,6 +308,8 @@ if(BUILD_TESTING)
     endif()
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
+        add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
         add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
             ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")

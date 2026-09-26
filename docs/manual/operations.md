@@ -125,8 +125,8 @@ curl -i -X POST http://127.0.0.1:8080/api/eject
 ```
 
 pause/stop/next/previousもplayと同じbodyなしPOST。ejectは202が受付、完了は
-GETまたは`ws://127.0.0.1:8080/api/events`でmedia.stateを確認する。
-EJECTINGなら要求を保持している。EJECT_ERRORならmedia.errorを確認してから再試行する。
+GETまたは`ws://127.0.0.1:8080/api/events`で`disc.state`を確認する。
+EJECTINGなら要求を保持している。EJECT_ERRORならdaemonのjournalにあるmediaエラーを確認してから再試行する。
 
 別PCからの状態照会は`--api-listen 0.0.0.0 --api-port 8080`を追加し、
 `http://PI_ADDRESS:8080/api/state`へ接続する。外部からの操作POSTは403であり仕様どおり。
@@ -146,7 +146,7 @@ http://PI_ADDRESS:8080/player
 `/player`は読み取り専用のNow Playing画面である。album/artist/track titleはselected metadataが
 AVAILABLEの場合に表示する。metadataを有効にするには起動時に`--metadata musicbrainz`と必要なら
 `--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
-再生位置は表示できる。CAA image URLが得られた場合はブラウザがジャケットを読み、失敗時はCDの
+再生位置は表示できる。daemonが取得・cacheした画像をsame-originの`/api/presentation/artwork/cover`から読み、失敗時はCDの
 プレースホルダーを表示する。この画面は操作を送らない。任意のChromium/Cage kioskによる
 tty1への自動表示は[systemd常駐運転](systemd.md#chromiumcage-kiosk)を参照する。
 
