@@ -204,4 +204,10 @@ nullは未取得/不一致であり、空履歴や正常という意味ではな
 
 TOC座標は`disc.layout`で取得する。fieldとnull条件は[メッセージ契約](../design/message-contract.md#disc-layout98)を参照。
 同session/disc世代以外の根拠を重ねず、nullや世代変更時は旧mapを破棄する。
-#99のdisc領域集計は未実装であり、layoutだけでは全期間のread mapを復元できない。
+#99のdisc領域集計は下記のオンデマンド契約を使用する。layoutだけではread mapを復元できない。
+
+### Disc単位の読み取り区間（#99）
+
+GET /api/read-historyのdisc_mapはDISC scope。STREAM historyと照合条件を分け、
+root session_idと最新layoutのdisc_generationを照合する。最大256区間、容量超過時は不完全な下限として凍結。
+詳細fieldとflagsはメッセージ契約を参照。stop/seekでは保持、TOC再受理・daemon再起動ではresetする。

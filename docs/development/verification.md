@@ -679,3 +679,13 @@ Piへ導入し通常14曲CDの`--probe-toc /dev/sr0`とREST/WSの全track半開�
 start=0、leadout=242334、disc_generation=1。REST/WSのlayoutは同一でsessionもreadと一致した。
 試験後はdaemon/kioskとも停止。再生・試聴・特殊媒体・物理交換・TV表示は今回の検証対象外。
 #98はPRレビュー待ち。#99のdisc領域集計と#24のmap描画は未実装。
+
+## #99 Disc領域集計
+
+Docker/aarch64 CTest36/36成功。300 readの区間結合、重複/異常/部分失敗、256区間上限と凍結、
+STREAM reset後の保持・disc世代変更reset、最大JSON 64 KiB未満を検証。
+既存slow client/logger障害とfake audio進行試験でもdisc集計を有効にした。
+Pi通常CDで140 read超の集計、API stop後の保持とSTREAM history reset、再開後の更新、
+daemon restart後の新sessionと空集計を確認。再起動直後の接続不可は再試行して確認した。
+終了時daemon/kiosk停止。試聴・異常disc・物理交換・TV表示は未検証。詳細は
+[disc map実機記録](reports/2026-09-26-disc-map/README.md)参照。

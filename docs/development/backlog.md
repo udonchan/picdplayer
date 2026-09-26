@@ -130,7 +130,7 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 
 ### 全ディスクread mapの前提
 
-- [#98](https://github.com/udonchan/picdplayer/issues/98): TOC座標とdisc観測世代をdisc.layoutとして公開する実装を作業中。Docker36/36成功、通常PiのTOC/REST/WS照合済み。PRレビュー待ち。
-- [#99](https://github.com/udonchan/picdplayer/issues/99): 容量を制限したdisc領域集計と取得契約を実装する。
+- [#98](https://github.com/udonchan/picdplayer/issues/98): TOC座標とdisc観測世代のdisc.layout公開はPR #101でマージ済み。Docker36/36、通常PiのTOC/REST/WS照合済み。
+- [#99](https://github.com/udonchan/picdplayer/issues/99): 最大256区間のDISC集計を実装。Docker36/36、Piで140 read超・stop/resume保持・daemon restart resetを確認、PRレビュー待ち。
 
 両者が#24をblockする。相互はRelatedで、#12の完了を取り消さず追加機能として管理する。

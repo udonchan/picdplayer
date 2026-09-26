@@ -182,6 +182,18 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                {"verified_calls", stats.verified_calls},
                                {"verification_failures", stats.verification_failures},
                                {"failed_calls", stats.failed_calls}}}};
+    if (read.disc_map) {
+        const auto& map = *read.disc_map;
+        Json regions = Json::array();
+        for (std::size_t i = 0; i < map.size; ++i) {
+            const auto& r = map.regions[i];
+            regions.push_back({{"start_lba", r.begin}, {"end_lba", r.end}, {"flags", r.flags}});
+        }
+        root["read"]["disc_map"] = {{"scope", "DISC"}, {"disc_generation", map.disc_generation},
+            {"revision", map.revision}, {"observations_complete", map.complete},
+            {"capacity", DiscReadMap::capacity}, {"storage_bytes", sizeof(DiscReadMap)},
+            {"regions", std::move(regions)}};
+    }
     if (!read.history_included) root["read"]["history"].erase("regions");
     Json events = Json::array();
     for (const auto& event : recent_events) {

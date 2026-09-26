@@ -107,6 +107,7 @@ int main() {
         http.send_request("GET /api/state HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
         ws.send_request("GET /api/events HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");
         PcmWorker worker([] { return std::make_unique<Reader>(); });
+        worker.set_disc_generation(1);
         PlayerController controller;
         controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 1500000));
         Output output;
@@ -200,6 +201,7 @@ int main() {
         payload["disc"] = {{"state", "AUDIO_READY"}};
         std::cout << "DIAGNOSTIC_JSON=" << payload.dump() << '\n';
         const auto detailed = engine.read_diagnostics(true);
+        require(detailed.disc_map && detailed.disc_map->size <= DiscReadMap::capacity);
         auto history_payload = diagnostic_fields({}, detailed, {})["read"]["history"];
         std::cout << "HISTORY_JSON=" << nlohmann::json{{"schema_version", 1},
             {"session_id", diagnostics.session_id}, {"stream_generation", detailed.stream_generation},

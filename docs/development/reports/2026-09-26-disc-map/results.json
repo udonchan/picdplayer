@@ -1,0 +1,95 @@
+{
+  "initial": {
+    "session_id": "48bb9c18841fa17d7617adff393d73ca",
+    "stream_generation": 1,
+    "history_count": 0,
+    "history_last_read_sequence": 0,
+    "disc_map": {
+      "capacity": 256,
+      "disc_generation": 1,
+      "observations_complete": true,
+      "regions": [],
+      "revision": 0,
+      "scope": "DISC",
+      "storage_bytes": 6176
+    }
+  },
+  "playing": {
+    "session_id": "48bb9c18841fa17d7617adff393d73ca",
+    "stream_generation": 3,
+    "history_count": 128,
+    "history_last_read_sequence": 143,
+    "disc_map": {
+      "capacity": 256,
+      "disc_generation": 1,
+      "observations_complete": true,
+      "regions": [
+        {
+          "end_lba": 2145,
+          "flags": 3,
+          "start_lba": 0
+        }
+      ],
+      "revision": 143,
+      "scope": "DISC",
+      "storage_bytes": 6176
+    }
+  },
+  "stopped": {
+    "session_id": "48bb9c18841fa17d7617adff393d73ca",
+    "stream_generation": 4,
+    "history_count": 0,
+    "history_last_read_sequence": 0,
+    "disc_map": {
+      "capacity": 256,
+      "disc_generation": 1,
+      "observations_complete": true,
+      "regions": [
+        {
+          "end_lba": 2160,
+          "flags": 3,
+          "start_lba": 0
+        }
+      ],
+      "revision": 144,
+      "scope": "DISC",
+      "storage_bytes": 6176
+    }
+  },
+  "resumed": {
+    "session_id": "48bb9c18841fa17d7617adff393d73ca",
+    "stream_generation": 7,
+    "history_count": 0,
+    "history_last_read_sequence": 0,
+    "disc_map": {
+      "capacity": 256,
+      "disc_generation": 1,
+      "observations_complete": true,
+      "regions": [
+        {
+          "end_lba": 2160,
+          "flags": 3,
+          "start_lba": 0
+        }
+      ],
+      "revision": 163,
+      "scope": "DISC",
+      "storage_bytes": 6176
+    }
+  },
+  "restarted": {
+    "session_id": "494ebdd4b2153c8ee9e29234c85c421b",
+    "stream_generation": 1,
+    "history_count": 0,
+    "history_last_read_sequence": 0,
+    "disc_map": {
+      "capacity": 256,
+      "disc_generation": 1,
+      "observations_complete": true,
+      "regions": [],
+      "revision": 0,
+      "scope": "DISC",
+      "storage_bytes": 6176
+    }
+  }
+}

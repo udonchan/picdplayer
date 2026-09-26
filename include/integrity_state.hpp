@@ -64,9 +64,24 @@ struct ReadCoverage {
     void observe(const ReadResult& result);
 };
 
+// Bounded, disc-scoped observations. Flags describe facts on exact intervals.
+// ディスク世代内の区間観測。上限超過時は下限の保持内容を固定する。
+struct DiscReadMap {
+    struct Region { std::int64_t begin = 0, end = 0; unsigned flags = 0; };
+    static constexpr std::size_t capacity = 256;
+    enum Flag : unsigned { attempted = 1, accepted = 2, retry = 4, repeated = 8,
+                           recovered = 16, uncertain = 32, backend_anomaly = 64 };
+    std::array<Region, capacity> regions{};
+    std::size_t size = 0;
+    std::uint64_t disc_generation = 0, revision = 0;
+    bool complete = true;
+    void observe(const ReadResult& result);
+};
+
 inline constexpr std::size_t read_history_capacity = 128;
 struct ReadDiagnostics {
     std::string session_id;
+    std::optional<DiscReadMap> disc_map; // on-demand only; independent of stream history
     bool history_included = false;
     std::vector<ReadEvidence> recent_reads; // populated only for API projection
     std::uint64_t history_evicted = 0;

@@ -223,9 +223,14 @@ int main() {
             check(snapshot.recent_reads.front().read_sequence == 13);
             check(snapshot.recent_reads.back().read_sequence == 140);
             check(history.status().diagnostics.recent_reads.empty());
+            check(snapshot.disc_map && snapshot.disc_map->size == 1);
+            check(snapshot.disc_map->regions[0].end == 2100);
+            check(!history.status().diagnostics.disc_map);
             history.cancel();
+            check(history.status(true).diagnostics.disc_map->regions[0].end == 2100);
             check(history.status(true).diagnostics.recent_reads.empty());
             history.set_disc_generation(8);
+            check(history.status(true).diagnostics.disc_map->size == 0);
             history.start(0, 15);
             wait_for([&] { return history.status().done; });
             check(history.status(true).diagnostics.recent_reads.front().disc_generation == 8);
