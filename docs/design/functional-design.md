@@ -239,3 +239,22 @@ PCMを最初に取得した試行番号ではない。採用理由は既存の`l
 最大8件の固定配列で保持し、PCM blockと共に現在再生区間へ届く。詳細attemptの永続履歴、
 unique coverage、device/disc/stream世代とpolicy revisionの統合は#35の残作業である。
 #24はDraft / Blockedのまま、この契約に合わせて表示候補を更新する。
+
+### stream coverageと根拠の世代（#35、実装途中）
+
+`read.stream_generation`と`read.policy_revision`を追加し、`latest/current_playback`の各evidenceにも
+同名fieldを保持する。streamはworkerのstart/cancel/discardで更新し、policy revisionはworkerの
+初期設定を1としてreconfigureごとに増加する。これはdaemon内だけの識別子であり、再起動間の比較は
+できない。device/disc世代・daemon session IDはまだ未実装である。
+
+`read.coverage`は`scope=STREAM`、`accepted_unique_frames`（CD frame単位）、
+`observations_complete`、`region_capacity=128`を持つ。完全に成功して採用されたread区間の和集合を
+固定128区間で集計し、overlap・retryを重複加算しない。失敗/部分readは加算しない。
+これは先読みを含む採用PCMの観測範囲であり、実再生済み・全disc検証済み・原盤一致ではない。
+`observations_complete=true`は採用観測を欠落なく集計できた意味であり、disc全域を読んだ意味ではない。
+区間容量超過または不正な範囲を検出するとfalseにし、次のstreamまで下限値を固定する。
+履歴を捨てて二重加算する方式は使わない。集計領域は固定配列で追加heap割当を必要としない。
+start/cancel/discard時はcoverage・stream統計をリセットし、旧世代の遅延readは加算しない。
+
+既存UIは追加fieldを無視できる。field欠損時は未取得とする。discを跨ぐcoverage、詳細履歴の
+保持・eviction・detail_available、およびdevice/disc世代の統合は引き続き#35の残作業。

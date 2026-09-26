@@ -173,6 +173,8 @@ int main() {
             check(block.lba == 100 && block.evidence.frames_requested == 75 &&
                   block.samples.size() == 75 * cdda_samples_per_frame);
             check(readers_created == 2);
+            check(block.evidence.policy_revision == 2);
+            check(block.evidence.stream_generation == block.generation);
             check(reconfigured.status().diagnostics.effective_strategy == "repeat-test");
             reconfigured.cancel();
         }
@@ -227,6 +229,11 @@ int main() {
             PlayerEvent event;
             check(w.pop_event(event) && event.stream_generation == current);
             check(event.read.start_lba == 100 && !w.pop_event(event));
+            check(w.status().diagnostics.coverage.accepted_unique_frames == 15);
+            check(w.status().diagnostics.stream_generation == current);
+            check(b.evidence.stream_generation == current);
+            w.cancel();
+            check(w.status().diagnostics.coverage.accepted_unique_frames == 0);
             check(!w.pop(b));
             w.start(0, 1000);
             wait_for([&] { return w.status().queued == pcm_queue_capacity_blocks; });
@@ -269,7 +276,9 @@ int main() {
         a.fail = false;
         c.play(); engine.synchronize();
         wait_for([&] { return w.status().done; });
-        check(readers_created == 2); // Playback error invalidated the old device handle.
+        check(readers_created == 2);
+            check(block.evidence.policy_revision == 2);
+            check(block.evidence.stream_generation == block.generation); // Playback error invalidated the old device handle.
         a.underrun_delay = true;
         engine.tick();
         check(c.state().playback == PlaybackState::playing);

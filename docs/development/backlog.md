@@ -33,7 +33,7 @@
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | 現行repeatは同一区間のPCM全体の反復一致だけを調べる。overlap整列とcache対策はなく、2-of-3一致でも独立した物理再読込を保証しない。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
-| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。現在のReadEvidenceと有界eventに対し、[#35](https://github.com/udonchan/picdplayer/issues/35)で詳細な根拠・coverage（repeat試行と採用候補の固定容量記録を初期実装、coverage・世代統合は未完了）、[#36](https://github.com/udonchan/picdplayer/issues/36)で再接続・event gapからの診断復元を扱う。 |
+| [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | 親Issue。現在のReadEvidenceと有界eventに対し、[#35](https://github.com/udonchan/picdplayer/issues/35)で詳細な根拠・coverage（repeat試行・採用候補、有界stream coverageとstream/policy識別子を実装中。disc/device世代・詳細履歴は未完了）、[#36](https://github.com/udonchan/picdplayer/issues/36)で再接続・event gapからの診断復元を扱う。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | MusicBrainz metadataはPCM照合ではない。外部checksum照合は未実装で、利用するサービス・protocol・依存は未決定。 |
 | [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | 取得できる値とUNKNOWN/UNSUPPORTEDを区別し、Playerに事実に基づくIntegrity表示を統合する。 |
 

@@ -95,7 +95,9 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                {"direct_retries", attempt.direct_retries},
                                {"candidate", optional(attempt.candidate)}});
         }
-        return {{"start_lba", evidence.start_lba},
+        return {{"stream_generation", evidence.stream_generation},
+                  {"policy_revision", evidence.policy_revision},
+                  {"start_lba", evidence.start_lba},
                   {"frames_requested", evidence.frames_requested},
                   {"frames_read", evidence.frames_read},
                   {"status", integrity_read_status_name(evidence.status)},
@@ -129,7 +131,13 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                     {"maximum_attempts", value.maximum_attempts},
                     {"time_budget_ms", value.time_budget_ms}};
     };
-    root["read"] = {{"activity", read_activity_name(read.activity)},
+    root["read"] = {{"stream_generation", read.stream_generation},
+                    {"policy_revision", read.policy_revision},
+                    {"coverage", {{"scope", "STREAM"},
+                                  {"accepted_unique_frames", read.coverage.accepted_unique_frames},
+                                  {"observations_complete", read.coverage.complete},
+                                  {"region_capacity", ReadCoverage::capacity}}},
+                    {"activity", read_activity_name(read.activity)},
                     {"requested_mode", read.requested_mode},
                     {"effective_strategy", read.effective_strategy},
                     {"queued_blocks", read.queued_blocks},
