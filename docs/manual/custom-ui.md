@@ -148,3 +148,10 @@ manifestが正しくても`unsupported asset extension`でfallbackする。編�
 起動前にUIディレクトリを完成した一組にしておく。
 
 将来の設定基盤は[ユーザー設定の拡張案](../development/user-configuration.md)を参照する。
+
+### repeat試行根拠の追加（#35）
+
+`read.latest/current_playback.verification`に有界な試行詳細と採用候補を追加する。
+field・単位・null・互換性の定義は[機能設計](../design/functional-design.md#有界なrepeat試行根拠35の初期実装)を参照。
+旧payloadの欠損は未取得として扱い、試行やcandidateを生成しない。wrapperのPCM一致は
+物理再読込・cache独立性の証明ではない。coverage・世代統合は未完了で、#24は引き続きDraft / Blocked。

@@ -545,3 +545,10 @@ CAAの画像は`/var/cache/picdplayer/cover-art/<release-id>.image`へ保存さ�
 Piハング時は原因を確定できる前bootログがなかった。メモリ圧迫とswap I/Oは候補であり確定原因ではない。
 当時はPiビルドを-j1に制限した。現在はMac + Dockerでビルドし、Piは実機検証だけに使用する。
 障害調査と実機結果の原記録は[履歴](../history/README.md)に保存する。
+
+## #35 repeat試行根拠の初期実装（2026-09-26）
+
+wrapperの最大8試行を固定容量で記録し、candidateと閾値到達attemptをlatest/current_playbackへ
+追加公開する。A/B/B、全不一致、失敗後の一致、8試行上限、未取得時の空配列/null、JSONへの投影を
+自動試験する。Docker/aarch64標準buildとCTest 34/34件成功。Piでの再生・性能は未検証。
+coverage・世代別履歴・policy revision・evictionは未実装で、#35は継続中、#24はブロックを維持する。

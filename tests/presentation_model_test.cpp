@@ -34,6 +34,16 @@ int main() {
         auto diagnostic_model = model;
         diagnostic_model.drive.vendor = "Test drive";
         diagnostic_model.read.stats.direct_retries = 7;
+        ReadResult accepted{150, 15, 15, ReadStatus::ok, 0, 0};
+        accepted.verification.attempts = 2;
+        accepted.verification.complete_reads = 2;
+        accepted.verification.matching_reads = 2;
+        accepted.verification.detail_count = 2;
+        accepted.verification.details[0] = {15, true, 0, 0, 1};
+        accepted.verification.details[1] = {15, true, 0, 0, 1};
+        accepted.verification.accepted_candidate = 1;
+        accepted.verification.accepted_attempt = 2;
+        diagnostic_model.read.latest = make_read_evidence(accepted);
         PlayerEvent event;
         event.sequence = 42;
         diagnostic_model.recent_events.push_back(event);
@@ -43,6 +53,15 @@ int main() {
         check(diagnostic["recent_events"][0]["sequence"] == 42);
         check(!presentation_json_equal_ignoring_revision(rendered, diagnostic.dump()));
         check(!diagnostic.contains("metadata"));
+        const auto& verification = diagnostic["read"]["latest"]["verification"];
+        check(verification["attempt_details"][0]["candidate"] == 1);
+        check(verification["accepted_candidate"] == 1);
+        check(verification["detail_capacity"] == 8);
+        auto single = model;
+        single.read.latest = make_read_evidence(ReadResult{150, 15, 15, ReadStatus::ok, 0, 0});
+        const auto single_json = nlohmann::json::parse(serialize_presentation_model(single));
+        check(single_json["read"]["latest"]["verification"]["attempt_details"].empty());
+        check(single_json["read"]["latest"]["verification"]["accepted_candidate"].is_null());
         std::cout << "PASS: provider-neutral presentation model\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

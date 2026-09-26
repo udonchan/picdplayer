@@ -56,6 +56,11 @@ public:
             std::vector<std::int16_t> sample(pcm.size());
             const auto result = reader_->read(sample);
             ++combined.verification.attempts;
+            auto& detail = combined.verification.details[combined.verification.detail_count++];
+            detail.frames_read = result.frames_read;
+            detail.complete = result.status == ReadStatus::ok && result.frames_read == frames;
+            detail.native_error = result.native_error;
+            detail.direct_retries = result.retries;
             combined.retries += result.retries;
             add(combined.paranoia, result.paranoia);
             if (result.native_error) combined.native_error = result.native_error;
@@ -72,9 +77,12 @@ public:
             } else {
                 ++found->matches;
             }
+            detail.candidate = static_cast<unsigned>(std::distance(candidates.begin(), found)) + 1;
             combined.verification.matching_reads = std::max(combined.verification.matching_reads,
                                                              found->matches);
             if (found->matches >= policy_.required_matches) {
+                combined.verification.accepted_candidate = detail.candidate;
+                combined.verification.accepted_attempt = combined.verification.attempts;
                 std::copy(found->pcm.begin(), found->pcm.end(), pcm.begin());
                 combined.frames_read = frames;
                 combined.status = ReadStatus::ok;
@@ -100,7 +108,7 @@ private:
 
 void validate_repeated_read_policy(const RepeatedReadPolicy& policy) {
     if (policy.required_matches < 2 || policy.maximum_attempts < policy.required_matches ||
-        policy.maximum_attempts > 8 || policy.time_budget.count() < 1 ||
+        policy.maximum_attempts > maximum_verification_attempts || policy.time_budget.count() < 1 ||
         policy.time_budget > std::chrono::seconds(60))
         throw std::invalid_argument(
             "repeated read policy requires 2..8 matches/attempts and a 1..60000ms budget");

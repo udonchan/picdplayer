@@ -1,5 +1,7 @@
 #pragma once
 #include <cstdint>
+#include <array>
+#include <optional>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -17,12 +19,27 @@ struct ParanoiaEvents {
     unsigned reads = 0, verifies = 0, fixups = 0, skips = 0;
     unsigned read_errors = 0, cache_errors = 0, other = 0;
 };
+// One wrapper read attempt, not an individual drive ioctl or physical reread.
+// wrapper単位の試行。backend内部のretryやcache独立性は表さない。
+inline constexpr unsigned maximum_verification_attempts = 8;
+struct ReadAttemptEvidence {
+    std::size_t frames_read = 0;
+    bool complete = false;
+    int native_error = 0;
+    unsigned direct_retries = 0;
+    std::optional<unsigned> candidate; // 1-based, local to this read call
+};
 struct LocalReadVerification {
     unsigned attempts = 0;
     unsigned complete_reads = 0;
     unsigned matching_reads = 0;
     unsigned mismatches = 0;
     bool time_budget_exhausted = false;
+    std::array<ReadAttemptEvidence, maximum_verification_attempts> details{};
+    unsigned detail_count = 0;
+    std::optional<unsigned> accepted_candidate;
+    std::optional<unsigned> accepted_attempt; // threshold-reaching attempt, 1-based
+
 };
 struct ReadResult {
     std::int32_t start_lba;
