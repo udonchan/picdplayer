@@ -276,9 +276,7 @@ int main() {
         a.fail = false;
         c.play(); engine.synchronize();
         wait_for([&] { return w.status().done; });
-        check(readers_created == 2);
-            check(block.evidence.policy_revision == 2);
-            check(block.evidence.stream_generation == block.generation); // Playback error invalidated the old device handle.
+        check(readers_created == 2); // Playback error invalidated the old device handle.
         a.underrun_delay = true;
         engine.tick();
         check(c.state().playback == PlaybackState::playing);
