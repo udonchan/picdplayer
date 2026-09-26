@@ -655,3 +655,10 @@ CTest 34/34の成功を確認した。実装・メッセージの変更はない
 既存のcoverage重複除外・容量超過時の下限値試験、旧世代in-flight read除外も同じCTestで成功した。
 ネットワーク/ログ障害とUIへのdrop反映は#90、実機音声・耐久・物理交換は別検証のまま。
 今回はPiへdeployせず、fake outputの進行を実機可聴性やreal-time保証と混同しない。
+
+### PR #94 / #95 統合版の通常系Pi確認
+
+d8aaa21のDocker buildとCTest36/36後、既存deploy手順でPiへ導入。
+CDPで診断画面のLive・reload・PLAYING、API stop、daemon restart後の新session復帰を確認した。
+終了時はdaemon/kioskともinactive。TV実表示・試聴・異常disc・負荷測定は未確認。
+条件と結果は[通常系smoke記録](reports/2026-09-26-diagnostic-smoke/README.md)を参照。

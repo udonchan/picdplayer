@@ -1,0 +1,23 @@
+[
+  {
+    "initial_live": true
+  },
+  {
+    "reload_same_session": true
+  },
+  {
+    "playing_visible": true
+  },
+  {
+    "api_stop": true
+  },
+  {
+    "restart_new_session": true
+  },
+  {
+    "final_states": [
+      "inactive",
+      "inactive"
+    ]
+  }
+]
