@@ -1,6 +1,7 @@
 # 現行の再生・診断メッセージ契約
 
-照合対象はmaster `0f8e12f`、公開`schema_version=1`。現行実装を記述するもので、将来不変のAPIを宣言しない。
+基礎契約はmaster `0f8e12f`、disc.layoutはPR #101、disc_mapはPR #102の実装を対象とする。
+公開`schema_version=1`。現行実装を記述するもので、将来不変のAPIを宣言しない。
 公開メッセージのfield表は本書を正本とし、[機能設計](functional-design.md#api)は操作・動作の正本とする。
 実装と検証は別であり、#89/#90の自動検証は完了。実機異常系は#96、未実装のPlayer統合は#24で扱う。
 
@@ -10,7 +11,7 @@
 |---|---|
 | GET /api/state | 最後に公開したPresentation Model全体 |
 | WS /api/events | 接続時と状態変更時の同じ全体snapshot。差分event protocolではない |
-| GET /api/read-history | 要求時の有界履歴。stateとは独立した取得 |
+| GET /api/read-history | 要求時のSTREAM履歴とDISC集計。stateとは独立した取得 |
 | GET /api/read-policy | requested/effective/pending。設定操作の契約は機能設計参照 |
 
 `PlayerSession` → `make_presentation_model` → `serialize_presentation_model`が公開経路。
@@ -161,8 +162,9 @@ engineは提出済みstereo frame数からoutput.delay()を差し引いた位置
 HDMI/ARCの実可聴位置を測定した値でもない。
 active_warningは正常readやevent消費で解除せず、stream終了で消す。停止後の永続障害台帳ではない。
 
-詳細履歴応答のrootはschema_version:int=1、session_id:string、stream_generation:uint、history:object。
-revisionは持たない。取得中にsession/streamが変わった結果をstateへ併合せず、必要なら再取得する。
+詳細応答rootはschema_version:int=1、session_id:string、stream_generation:uint、history:object、disc_map:object?。
+rootにはrevisionを持たず、disc_mapは独自revisionを持つ。STREAM historyはsession/stream、
+DISC集計はsession/disc世代を照合する。stream変更だけでDISC集計を破棄しない。
 詳細HTTPとWSは同時点保証なし。常時詳細pollingを前提としない。
 
 ## Eventsと復元
@@ -235,7 +237,7 @@ layout公開条件を満たさないとnull。従来historyはSTREAMのままで
 | scope | string: DISC | 現在受理したdisc観測世代 |
 | disc_generation | uint | disc.layoutと対応する世代 |
 | revision | uint | 観測更新番号。disc世代変更で0へreset |
-| observations_complete | bool | 容量超過/不正結果/結果未取得例外なし。全disc読取済みの意味ではない |
+| observations_complete | bool | 容量超過/不正結果/結果未取得例外/revision飽和なし。全disc読取済みの意味ではない |
 | capacity | uint:256 | 最大区間数 |
 | storage_bytes | uint | native集計構造体サイズ。JSON長ではない |
 | regions | array | start_lba:int、end_lba:int、flags:uint。半開区間 |
@@ -246,7 +248,7 @@ flagsはbit集合: 1=request attempted、2=全要求frame取得成功、4=direct
 取得済みと塗らない。部分取得の正確な場所は推測しない。個数・時系列・独立物理再読込の保証ではない。
 同じflagsの隣接/重複だけ結合し、異なる観測は重なる。最後の成功で過去異常を消さない。
 未保持領域は未観測であって未読/正常ではない。regionはソート順を保証しない。
-上限超過/不正結果ではcomplete=falseで保持内容を凍結する。読取例外で結果が得られない場合も同様。
+上限超過/不正結果ではobservations_complete=falseで保持内容を凍結する。読取例外で結果が得られない場合も同様。
 revision上限時も凍結しwrapしない。既存区間は下限の観測情報で、完全な履歴ではない。
 
 workerの一次read結果から集計しevent queue dropと独立。stop/seek/曲変更/policy変更では保持する。
@@ -255,4 +257,4 @@ TOC再受理時にresetする。未検出の物理交換は#88の範囲で、永
 詳細応答rootのsession_idとmap.disc_generationを最新disc.layoutに照合し、不一致なら捨てる。
 STREAM historyは従来どおりstream_generationも照合する。mapだけをstream変更でresetしない。
 同discで古いmap revisionへの巻戻りを拒否し、layout=null/世代変更では旧mapを破棄する。
-取得は詳細展開/明示更新時を基本とし、常時pollingしない。最大256区間のJSONはテストで64 KiB以下を検査する。
+取得は詳細展開/明示更新時を基本とし、常時pollingしない。最大256区間のdisc_map objectはテストで64 KiB未満を検査する。historyを含む応答全体の上限ではない。

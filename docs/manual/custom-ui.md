@@ -172,7 +172,8 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 
 ### 詳細履歴とsnapshotの世代照合
 
-`GET /api/read-history`は通常snapshotとは別時点の応答である。詳細履歴を使用するUIは、
+`GET /api/read-history`は通常snapshotとは別時点の応答である。以下はSTREAM historyの照合例であり、
+DISC集計には末尾の別照合条件を適用する。詳細履歴を使用するUIは、
 **応答到着時の最新snapshot**とsession/streamを照合してから利用する。要求開始時のsnapshotだけで
 照合すると、待機中のstop/restartを見逃す。現在の標準UIはこのendpointを取得しない。
 以下は採用可否の参考実装であり、共通bootstrapやSDKを追加するものではない。
