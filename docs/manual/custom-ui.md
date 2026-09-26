@@ -149,6 +149,8 @@ manifestが正しくても`unsupported asset extension`でfallbackする。編�
 
 将来の設定基盤は[ユーザー設定の拡張案](../development/user-configuration.md)を参照する。
 
+公開fieldの一覧と互換性は[現行メッセージ契約](../design/message-contract.md)を参照する。
+
 ### repeat試行根拠の追加（#35）
 
 `read.latest/current_playback.verification`に有界な試行詳細と採用候補を追加する。

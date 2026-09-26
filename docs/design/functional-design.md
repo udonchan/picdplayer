@@ -119,6 +119,8 @@ libwebsocketsを採用しmain threadからserviceする。HTTPとWebSocketを一
 本文あり／なしの両経路で同じ接続元判定を使う。
 認証・TLSは未実装で、外部公開は信頼できる開発LANでの診断用途に限る。
 
+公開field・型・単位・世代・復元の一覧は[現行メッセージ契約](message-contract.md)を正本とする。
+
 ### Presentation Modelの診断投影
 
 `GET /api/state`とWebSocketは`drive`、`read`、`recent_events`も公開する。
