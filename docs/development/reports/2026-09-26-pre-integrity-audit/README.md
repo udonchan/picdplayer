@@ -50,8 +50,9 @@ API stop後は`STOPPED`、`current_playback=null`、queue 0へ戻った。試験
 underrun、failure context、recovery、ERRORは見つからなかった。daemonとkioskはともにactiveで、
 Chromium CDPは127.0.0.1:9222で待受中だった。
 
-これは通常再生と停止の限定確認であり、音の試聴、TVの目視、終端drain完走、傷disc、
-物理交換、長期運転は確認していない。終端へseekする試験は再実施していない。
+試験中、ユーザーがTVで標準Playerの表示と音声再生を確認した。これは通常再生と停止の
+限定確認であり、終端drain完走、傷disc、物理交換、長期運転は確認していない。
+終端へseekする試験は再実施していない。
 CDP試験は遷移前のabout:blankを選んだためAPI取得に失敗しており、画像更新を実機確認した証拠にはしない。
 旧正常disc_map試験の結果は[元の記録](../2026-09-26-disc-map/README.md)に残し、今回の失敗と混同しない。
 傷disc・特殊TOC・物理交換・長期負荷は既存#33/#39/#40/#96/#4/#83の範囲を維持する。
