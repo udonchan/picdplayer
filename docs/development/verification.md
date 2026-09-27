@@ -15,6 +15,23 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## C2 capability probe（#7、Docker確認）
+
+起動時のread-only capability probeにMMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）を追加した。
+CD Read Featureが不在、またはC2 Flagsを受け取れた場合だけ`drive.c2_supported`をDRIVE_REPORTEDのYES/NOとして公開する。
+これはC2 error pointerの対応をdriveが報告したという意味に限り、実際のC2取得、reportの正確さ、
+read integrity、bit-perfect再生を示さない。失敗または不正応答はUNKNOWNと`probe_error`に残し、
+再生可能化の条件にはしない。hotplug/reset後の失効・再probeは#88の未実装範囲である。
+
+Linux/aarch64 Dockerで`./scripts/build-container.sh`とCTest 38件を実行し、C2 FlagsのYES/NO、
+Feature不在のNO、command error、不正応答でUNKNOWNを維持するunit testを確認した。
+
+2026-09-27にPi 3 Model B上のASUS SDRW-08D2S-U（firmware F601）へ.debを導入した。daemon起動時の
+read-only probeは512 byteのfeature descriptor一覧を取得し、`drive.c2_supported`を
+DRIVE_REPORTED/YES、`drive.c2_trustworthy`をUNKNOWN、`probe_error`を空として公開した。
+service再起動後もdaemon/kioskはactiveで、通常CD（14 track）の認識まで確認した。この結果はdriveの
+C2 error pointer対応宣言を確認しただけであり、C2 reportの正確さ、傷disc上のC2観測、trust、read integrityは未確認である。
+
 ## 文書・診断API・CDP監査（2026-09-26、#79 / #80 / #81）
 
 現行コードと文書を照合し、画像binary cache / same-origin配信、EnrichmentServiceと

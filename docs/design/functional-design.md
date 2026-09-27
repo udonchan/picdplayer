@@ -302,7 +302,7 @@ start/cancel/discard時はcoverage・stream統計をリセットし、旧世代�
 
 各evidenceに`device_generation`（reader open成功ごと）、`disc_generation`（TOC再受理ごと）、
 `read_sequence`（stream内1始まり）と`detail_available=true`を追加する。device世代は
-reader handleのincarnationであり、物理hotplugを完全に検出した意味ではない。能力probeの失効は#7。
+reader handleのincarnationであり、物理hotplugを完全に検出した意味ではない。能力probeの失効は#88。
 discはTOC refreshを含めて更新し、同一TOCの再挿入を同じ観測世代として扱わない。ただし未観測の
 交換は検出できない。識別子はdaemon内だけ有効で、再起動を跨ぐ識別は#36で扱う。
 
