@@ -38,7 +38,8 @@ MediaWorkerの速度要求、JSONのnull/成功値、標準Playerの表示を自
 `requested_speed_x`は1、`speed_request_error`は空、`current_speed_x`はnullだった。その後loopback APIで
 20秒再生し、PLAYING・track 1・position 1468 frame、`queued_blocks=50`、`dropped_events=0`を確認した。
 停止APIは204を返し、STOPPED/AUDIO_READYへ戻った。該当journalにはALSA underrun、read failure、
-main loop stall、eject errorを検出しなかった。
+main loop stall、eject errorを検出しなかった。外部album artworkを含めないCDP表示キャプチャと手順は
+[drive speed request実機記録](reports/2026-09-27-drive-speed-request/README.md)に保存した。
 
 この結果はioctl受理と短時間のAPI再生を示すだけである。音質・騒音の主観比較、CEC操作、temperature・
 undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認であり、既定速度との同条件比較を含めて
