@@ -15,7 +15,7 @@
 |---|---|
 | 実装済み | read-only能力probe、UNKNOWNモデル、区間付きReadEvidence、stream世代、ALSA再生head推定、bounded event、technical status |
 | 実装済み | 先読み容量・開始閾値、drive access直列化、single/repeat、ReadPolicyの停止境界でのruntime適用 |
-| 未実装の要求 | 速度設定、overlap/cache対策、C2のread時利用とtrust評価、offset、能力別strategy、詳細provenance/coverage、外部照合 |
+| 未実装の要求 | cache軽減を伴う独立性、C2のread時利用とtrust評価、offset、能力別strategy、外部照合 |
 | 未確定の詳細 | cache対策手順、mode既定値、詳細履歴の容量、診断protocol、照合サービス・依存library |
 
 現在の公開型は[ReadEvidence / ReadDiagnostics](../../include/integrity_state.hpp)、
@@ -209,7 +209,10 @@ PCM単体は176400 bytes/秒なので10秒約1.68 MiB、30秒約5.05 MiB。
 比較用候補・overlap・provenance・ALSA bufferの予算も別途上限を持つ。
 buffered時間はqueue・engine未送信分・ALSA delayを分け、二重計上しない。
 
-Phase 3では既存seek/readを包むverification layerから必要な前後区間を読む。
+現行repeat verifierは既存seek/readを包み、最初の論理block以外で直前に採用した15 CD frameを先行overlapとして読む。
+overlapは出力に含めず、直前PCMとの一致を確認する。比較対象がないstream開始/seek直後は`STREAM_BOUNDARY`、
+不一致はfail-closedである。候補PCMは最大8、overlapは最大75 CD frameに制限する。
+今後cache軽減を実装する場合も既存seek/readを包むverification layerから必要な前後区間を読む。
 paranoiaの連続読み取り状態を壊すstateless read_regionへの全面変更は行わない。
 overlap/複数readを提供できるbackendの組合せを明示し、使えないstrategyは降格する。
 比較前にbyte order・サンプル位置・offset条件を統一し、overlap分を二重再生しない。
@@ -227,7 +230,7 @@ stateDiagram-v2
 
 UNCERTAINからSTOPするpolicyもある。overlap不一致は不連続の疑いであり、欠落/重複の原因を即断しない。
 CRCは候補グループ化・診断用。可能なら最終的な一致判定はPCM全bytesで行い、CRC衝突を同一視しない。
-「3回一致」は回数と比較条件を示す。cacheを排除できないreadの独立性はUNKNOWN/CACHE_POSSIBLE。
+「3回一致」は回数と比較条件を示す。single readの独立性はUNKNOWN、現行repeat verifierの採用結果はCACHE_POSSIBLEである。
 cache defeatやdistant readをしただけで物理再読込を保証したとはしない。
 
 offsetは正負付きstereo sample frame単位（両channelで同じ時間位置）とする。
@@ -318,8 +321,8 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 |---|---|---|
 | 1a Observable core | 能力のUNKNOWNモデル、既存read統計、PCM世代/区間との対応、snapshot/event・診断ログ | 実装・通常CDで実機確認済み。read-only能力probe、bounded event、ALSA再生head推定を含む |
 | 1b Observable presentation | NO DISC能力表示、technical statusの小さなrenderer、event受信 | 実装・自動試験済み。通常再生、再読み込み、再接続をbrowserで実機確認済み。NO DISC表示の実機確認は継続 |
-| 2 Buffered Reader | 既存queueの容量/閾値設定、device I/O調停、速度設定と失敗fallback | 容量/閾値と直列化を実装し、通常CDで実機比較済み。速度設定は未実装。傷disc・長時間stall評価は未完了 |
-| 3 Checked Reading | overlap・候補比較・bounded recovery・provenance、BALANCED | 反復一致の現行範囲は機能設計、測定結果は検証状況を参照。overlap/cache対策とBALANCEDは未実装 |
+| 2 Buffered Reader | 既存queueの容量/閾値設定、device I/O調停、速度設定と失敗fallback | 容量/閾値と直列化を実装し、通常CDで実機比較済み。速度要求はPiでioctl受理と短時間API再生まで確認。傷disc・長時間stall評価は未完了 |
+| 3 Checked Reading | overlap・候補比較・bounded recovery・provenance、BALANCED | 反復候補比較と先行overlapを実装し、hardware非依存試験済み。cache軽減、Pi再生、BALANCEDは未完了 |
 | 4 Drive-aware Secure | MMC/C2、cache評価/対策、offset、strategy選択、SECURE | 対応driveと根拠を実測、非対応は明示降格。QUIETもpolicyとして確認 |
 | 5 External Verification | checksum/照合、confidence・coverage、遅延結果 | 部分再生/交換/外部障害を誤ってMATCHにしない |
 

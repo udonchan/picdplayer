@@ -181,6 +181,10 @@ field・単位・null・互換性の定義は[機能設計](../design/functional
 物理再読込・cache独立性の証明ではない。stream単位の有界coverageとstream/policy識別子を追加した。詳細は機能設計の
 「stream coverageと根拠の世代」を参照。
 
+repeat evidenceでは`read_independence`と`verification.overlap`も公開する。`CACHE_POSSIBLE`は
+drive cacheを排除していないこと、`STREAM_BOUNDARY`はstream開始または明示seek直後で比較対象がないことを示す。
+Custom UIはこれらを成功保証へ読み替えず、欠損時は値を生成しない。
+
 #35でreader/disc観測世代とstream内128件の詳細履歴を追加した。仕様と限界は機能設計の
 「reader/disc世代と詳細履歴」を参照。物理hotplug検出や再起動間の識別を保証しない（#88）。
 

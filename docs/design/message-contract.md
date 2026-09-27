@@ -130,16 +130,20 @@ latest/current_playback/active_warning/history.regions[]は同一形式。
 | frames_requested, frames_read | uint | 要求/取得CD frame数。区間は[start_lba, start_lba+frames_read) |
 | status | string | UNKNOWN / CLEAN / RECOVERED / UNCERTAIN |
 | local_verification | string | NONE / SINGLE_READ / BACKEND_REPORTED / MULTIPLE_MATCH |
+| read_independence | string | UNKNOWN / CACHE_POSSIBLE / CACHE_MITIGATED。現行repeatはCACHE_POSSIBLEで、物理再読込は保証しない |
 | c2_status | string | UNKNOWN / NOT_AVAILABLE / NOT_CHECKED / CLEAN / REPORTED。現行readerはNOT_CHECKED |
 | offset_status | string | UNKNOWN / UNCORRECTED / CORRECTED。現行readerはUNKNOWN |
 | direct_retries | uint | 当該readの直接retry回数 |
 | backend_events | object | reads/verifies/fixups/skips/read_errors/cache_errors/other、すべてuint |
 | verification | object | 以下 |
 
-verification: attempts、complete_reads、matching_reads、mismatchesはuint、time_budget_exhaustedはbool。
+verification: attempts、complete_reads、matching_reads、mismatches、overlap_frames_requested、overlap_frames_comparedはuint、
+overlapはNOT_REQUESTED / STREAM_BOUNDARY / MATCHED / MISMATCHED、time_budget_exhaustedはbool。
 detail_capacityは8。accepted_candidate/accepted_attemptはuint?、attempt_detailsは最大8件の配列。
 各attemptはattempt（1始まりuint）、frames_read（uint）、complete（bool）、native_error（int）、
-direct_retries（uint）、candidate（uint?）。candidateは同じread内のみ比較する。
+direct_retries（uint）、candidate（uint?）、physical_start_lba（int）、observed_start_lba（int）、physical_frames_requested（uint）。
+candidateは同じread内のみ比較する。top-levelのstart_lba/frames_requested/frames_readは出力論理区間、
+attemptのphysical値は先行overlapを含むbackend要求範囲である。
 accepted_attemptは一致閾値を満たした試行。single/backend内部の未観測試行は空配列/nullとなる。
 
 不完全readはUNCERTAIN。完全readでも直接retry/skips/read_errors/cache_errorsはUNCERTAINの根拠となる。

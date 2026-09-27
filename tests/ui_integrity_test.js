@@ -32,7 +32,8 @@ async function main() {
       policy: { pending: true, requested: { mode: 'REPEAT' }, effective: { mode: 'SINGLE' } },
       history: { included: false, capacity: 128 }, event_window: { first_sequence: 1, last_sequence: 2, worker_dropped: 0 },
       current_playback: { status: 'CLEAN', local_verification: 'SINGLE_READ', start_lba: 20, frames_read: 15,
-        disc_generation: 2, direct_retries: 0, verification: { attempts: 0 } },
+        disc_generation: 2, direct_retries: 0, read_independence: 'CACHE_POSSIBLE',
+        verification: { attempts: 0, overlap: 'MATCHED' } },
       latest: { status: 'UNCERTAIN', local_verification: 'SINGLE_READ', start_lba: 50, frames_read: 15,
         disc_generation: 2, direct_retries: 1, verification: { attempts: 0 } }, active_warning: null },
   };
@@ -66,6 +67,8 @@ async function main() {
   assert.equal(node('read-buffer').textContent, '1 / 1 blocks');
   assert.equal(node('integrity-summary').textContent, 'CURRENT READ · CLEAN');
   assert.match(node('read-current').textContent, /LBA 20–35/);
+  assert.match(node('read-current').textContent, /CACHE_POSSIBLE/);
+  assert.match(node('read-current').textContent, /overlap MATCHED/);
   assert.match(node('read-map-state').textContent, /2 regions/);
   assert.match(node('disc-map').style.background, /conic-gradient/);
   assert.equal(node('map-current').hidden, false);

@@ -109,7 +109,11 @@ function formatEvidence(value) {
     ? ` · retry ${value.direct_retries}` : '';
   const repeat = safeNonNegative(verification.attempts) && verification.attempts > 0
     ? ` · ${verification.matching_reads ?? '—'}/${verification.attempts} match` : '';
-  return `${value.status || 'UNKNOWN'} · ${value.local_verification || 'UNKNOWN'} · LBA ${value.start_lba}–${value.start_lba + value.frames_read}${suffix}${repeat}`;
+  const independence = typeof value.read_independence === 'string'
+    ? ` · ${value.read_independence}` : '';
+  const overlap = typeof verification.overlap === 'string' && verification.overlap !== 'NOT_REQUESTED'
+    ? ` · overlap ${verification.overlap}` : '';
+  return `${value.status || 'UNKNOWN'} · ${value.local_verification || 'UNKNOWN'} · LBA ${value.start_lba}–${value.start_lba + value.frames_read}${suffix}${repeat}${independence}${overlap}`;
 }
 
 function formatCapability(value) {

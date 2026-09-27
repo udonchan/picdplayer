@@ -15,6 +15,10 @@ CddaBackend parse_cdda_backend(std::string_view name);
 void require_cdda_backend(CddaBackend backend);
 
 enum class ReadStatus { ok, read_error };
+// Repeated PCM equality does not prove an independent physical reread: a
+// backend or drive may return cached data.
+enum class ReadIndependence { unknown, cache_possible, cache_mitigated };
+enum class OverlapVerification { not_requested, stream_boundary, matched, mismatched };
 struct ParanoiaEvents {
     unsigned reads = 0, verifies = 0, fixups = 0, skips = 0;
     unsigned read_errors = 0, cache_errors = 0, other = 0;
@@ -28,6 +32,9 @@ struct ReadAttemptEvidence {
     int native_error = 0;
     unsigned direct_retries = 0;
     std::optional<unsigned> candidate; // 1-based, local to this read call
+    std::int32_t physical_start_lba = 0;
+    std::int32_t observed_start_lba = 0;
+    std::size_t physical_frames_requested = 0;
 };
 struct LocalReadVerification {
     unsigned attempts = 0;
@@ -39,7 +46,9 @@ struct LocalReadVerification {
     unsigned detail_count = 0;
     std::optional<unsigned> accepted_candidate;
     std::optional<unsigned> accepted_attempt; // threshold-reaching attempt, 1-based
-
+    unsigned overlap_frames_requested = 0;
+    unsigned overlap_frames_compared = 0;
+    OverlapVerification overlap = OverlapVerification::not_requested;
 };
 struct ReadResult {
     std::int32_t start_lba;
@@ -50,12 +59,15 @@ struct ReadResult {
     unsigned retries; // direct application retries only
     ParanoiaEvents paranoia{}; // callback counts, not sector/retry counts
     LocalReadVerification verification{};
+    ReadIndependence read_independence = ReadIndependence::unknown;
 };
 
 struct RepeatedReadPolicy {
     unsigned required_matches = 2;
     unsigned maximum_attempts = 3;
     std::chrono::milliseconds time_budget{10000};
+    // The first block after seek has no preceding accepted block to compare.
+    unsigned overlap_frames = 15;
 };
 using SteadyNow = std::function<std::chrono::steady_clock::time_point()>;
 void validate_repeated_read_policy(const RepeatedReadPolicy& policy);

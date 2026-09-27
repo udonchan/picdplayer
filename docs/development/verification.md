@@ -45,6 +45,19 @@ main loop stall、eject errorを検出しなかった。外部album artworkを�
 undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認であり、既定速度との同条件比較を含めて
 #8の完了条件として残る。
 
+## Repeat overlap and cache evidence（#9、Docker確認）
+
+repeat verifierは、最初のblock以外で直前に採用した15 CD frameを先行overlapとして再読し、出力へ
+重複させずに直前PCMとの連続性を確認する。stream開始/明示seek直後は比較対象がないため
+`STREAM_BOUNDARY`、一致しないoverlapまたはbackendが要求開始LBAと異なる結果を返した場合は
+fail-closedでPCMを採用しない。反復一致・overlap一致ともcacheを無効化しないため、公開値は
+`CACHE_POSSIBLE`であり、物理的に独立した再読を示さない。
+
+Linux/aarch64 Dockerで`./scripts/build-container.sh`とCTest 38件を実行した。fake readerにより、同一候補、
+候補不一致、read error、時間上限、最大8候補、開始LBAずれ、連続blockのoverlap一致、overlap不一致時の
+PCM非出力を確認した。Piへのdeploy・通常CD/傷discでのrepeat再生、cache軽減効果、音声・性能への影響は
+確認していない。
+
 ## C2 capability probe（#7、Docker確認）
 
 起動時のread-only capability probeにMMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）を追加した。
