@@ -171,9 +171,9 @@ PcmWorkerへreconfigure要求を出す。workerは既存readerをowner threadで
 block sizeとreaderを使う。この順序によりread途中の比較条件やevidenceを混在させない。
 
 [probe_drive_capabilities](../../src/drive_capabilities.cpp)はsysfsのvendor/model/rev、読み取り専用の
-CDROM_GET_CAPABILITY、およびMMC `GET CONFIGURATION`のCD Read Feature（0x001e）を調べる。
-C2 Flagsが返った場合だけ`c2_supported`をDRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを
-報告できるというdrive宣言であり、read時にC2を取得したこと、reportが正しいこと、原PCMを検証したことを
+CDROM_GET_CAPABILITY、およびMMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）を調べる。
+CD Read Featureが存在しC2 Flagsが返った場合、またはFeatureが不在の場合だけ、`c2_supported`を
+DRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを報告できるというdrive宣言であり、read時にC2を取得したこと、reportが正しいこと、原PCMを検証したことを
 意味しない。DAE、C2 trust、cache、accurate stream、offsetはUNKNOWNを維持する。probeはMediaWorkerで
 非同期に実行し、probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
 probeの遅延は後続のmedia観測を遅らせ得る。現在は起動時一回のprobeであり、hotplug/reset時の能力失効と

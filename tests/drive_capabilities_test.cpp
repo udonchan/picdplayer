@@ -16,14 +16,14 @@ DrivePacketTransport c2_transport(bool supported) {
                        std::span<std::uint8_t> data,
                        std::span<std::uint8_t> sense) {
         check(command.size() == 10);
-        check(command[0] == 0x46 && command[1] == 0x02);
-        check(command[2] == 0x00 && command[3] == 0x1e);
-        check(command[7] == 0x00 && command[8] == 12);
-        check(data.size() == 12 && !sense.empty());
-        data[3] = 8; // Data Length: eight bytes following the header.
-        data[5] = 0x1e;
-        data[7] = 4; // CD Read Feature additional length.
-        data[8] = supported ? 0x02 : 0x00; // C2 Flags.
+        check(command[0] == 0x46 && command[1] == 0x00);
+        check(command[2] == 0x00 && command[3] == 0x00);
+        check(command[7] == 0x02 && command[8] == 0x00);
+        check(data.size() == 512 && !sense.empty());
+        data[3] = 12; // Header after data length plus one eight-byte descriptor.
+        data[9] = 0x1e;
+        data[11] = 4; // CD Read Feature additional length.
+        data[12] = supported ? 0x02 : 0x00; // C2 Flags.
         return 0;
     };
 }
@@ -56,9 +56,22 @@ int main() {
         check(c2_no.c2_supported.value == Knowledge::no);
         check(c2_no.c2_supported.source == CapabilityEvidenceSource::drive_reported);
 
+        const auto absent = probe_drive_capabilities(
+            "/synthetic/fake", root,
+            [](std::span<const std::uint8_t>, std::span<std::uint8_t> data, std::span<std::uint8_t>) {
+                data[3] = 4; // Configuration header, no feature descriptors.
+                return 0;
+            });
+        check(absent.c2_supported.value == Knowledge::no);
+        check(absent.c2_supported.source == CapabilityEvidenceSource::drive_reported);
+        check(absent.c2_supported.detail == "MMC GET CONFIGURATION CD Read feature absent");
+
         const auto malformed = probe_drive_capabilities(
             "/synthetic/fake", root,
-            [](std::span<const std::uint8_t>, std::span<std::uint8_t>, std::span<std::uint8_t>) { return 0; });
+            [](std::span<const std::uint8_t>, std::span<std::uint8_t> data, std::span<std::uint8_t>) {
+                data[3] = 5;
+                return 0;
+            });
         check(malformed.c2_supported.value == Knowledge::unknown);
         check(!malformed.probe_error.empty());
 

@@ -174,7 +174,7 @@ probe failureはcapability NOではなくUNKNOWN+error。probe成功を再生可
 | vendor/model/firmware | 現行はsysfs device/vendor, model, revから取得。欠落は不明として扱う |
 | kernelが公開する機能 | CDROM_GET_CAPABILITY。driver/interface側の根拠として保持 |
 | DAE | 後続phaseでMMCのreportを調査。成功したAudio readはTESTEDとしてその条件を記録 |
-| C2 support | MMC `GET CONFIGURATION`のCD Read Feature（0x001e）のC2 Flagsを`CDROM_SEND_PACKET`で読む。成功時だけDRIVE_REPORTEDのYES/NO。実測trustおよびread時のC2観測とは別管理 |
+| C2 support | MMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）のC2 Flagsを`CDROM_SEND_PACKET`で読む。成功時だけDRIVE_REPORTEDのYES/NO。実測trustおよびread時のC2観測とは別管理 |
 | accurate stream/cache | 後続phaseでMMC inquiry/mode page等を調査。reportと実測trustを別管理 |
 | speed control | CDC_SELECT_SPEEDはkernel report。実際の設定可否・効果は別途確認 |
 | supported/current speed | 未取得ならUNKNOWN。要求2xやread所要時間からcurrent speed=2xと断定しない |
@@ -183,9 +183,10 @@ probe failureはcapability NOではなくUNKNOWN+error。probe成功を再生可
 Linux CDROM_GET_CAPABILITYにはC2 trustやoffsetの直接的な情報はない。
 CDC_PLAY_AUDIOをDAE成功の証明として使わない。
 CDROM_SELECT_SPEEDは設定操作なので現行のprobeでは実行しない。
-C2 supportの初期probeは`CDROM_SEND_PACKET`で読み取り専用の`GET CONFIGURATION`を送る。
-CDB、response長、sense、権限、bridge越しの可否はDocker試験だけでは確認できない。command failureまたは
-不正な応答はUNKNOWN+`probe_error`にし、NOへ変換しない。generic packet対応だけで全MMC機能が使えるとはしない。
+C2 supportの初期probeは`CDROM_SEND_PACKET`で読み取り専用の`GET CONFIGURATION`から最大512 byteの
+feature descriptor一覧を取得する。command failureまたは不正な応答はUNKNOWN+`probe_error`にし、NOへ
+変換しない。Featureが不在という有効な応答だけはDRIVE_REPORTEDのNOにする。応答が上限を超える場合も
+UNKNOWNとして扱う。generic packet対応だけで全MMC機能が使えるとはしない。
 
 probeはMediaWorkerで逐次実行し、drive I/OはPCM readerと直列化する。
 待機中はUNKNOWNを公開する。hotplug/reset時の能力snapshot無効化・再取得、driveなしとdiscなしの

@@ -14,7 +14,9 @@
 namespace {
 constexpr std::uint8_t get_configuration = 0x46;
 constexpr std::uint16_t cd_read_feature = 0x001e;
-constexpr std::size_t configuration_response_bytes = 12;
+constexpr std::size_t configuration_response_bytes = 512;
+constexpr std::size_t configuration_header_bytes = 8;
+constexpr std::size_t feature_header_bytes = 4;
 
 std::string read_optional(const std::filesystem::path& path) {
     std::ifstream input(path);
@@ -71,9 +73,8 @@ DrivePacketTransport linux_packet_transport(const std::string& device) {
 void probe_c2_feature(DriveCapabilities& result, const DrivePacketTransport& transport) {
     std::array<std::uint8_t, 10> command{};
     command[0] = get_configuration;
-    command[1] = 0x02; // RT=single feature
-    command[2] = static_cast<std::uint8_t>(cd_read_feature >> 8);
-    command[3] = static_cast<std::uint8_t>(cd_read_feature);
+    // RT=all features. Some USB bridges do not honor a single-feature request;
+    // scanning the complete descriptor list avoids treating that quirk as C2 absence.
     command[7] = static_cast<std::uint8_t>(configuration_response_bytes >> 8);
     command[8] = static_cast<std::uint8_t>(configuration_response_bytes);
     std::array<std::uint8_t, configuration_response_bytes> data{};
@@ -84,18 +85,46 @@ void probe_c2_feature(DriveCapabilities& result, const DrivePacketTransport& tra
                                                "GET CONFIGURATION " + result.device).what();
         return;
     }
+
     const auto reported = static_cast<std::size_t>(
         (static_cast<std::uint32_t>(be16(data.data())) << 16) | be16(data.data() + 2));
-    if (reported < 8 || reported + 4 > data.size() ||
-        be16(data.data() + 4) != cd_read_feature || data[7] != 4) {
-        result.probe_error = "GET CONFIGURATION CD Read feature response is malformed or absent";
+    const auto total = reported + 4;
+    if (reported < 4 || total > data.size()) {
+        std::ostringstream message;
+        message << "GET CONFIGURATION response is malformed (data_length=" << reported << ')';
+        result.probe_error = message.str();
         return;
     }
-    result.c2_supported.value = data[8] & 0x02 ? Knowledge::yes : Knowledge::no;
-    result.c2_supported.source = CapabilityEvidenceSource::drive_reported;
-    result.c2_supported.detail = "MMC GET CONFIGURATION CD Read feature C2 Flags";
-}
 
+    for (std::size_t offset = configuration_header_bytes; offset < total;) {
+        if (offset + feature_header_bytes > total) {
+            result.probe_error = "GET CONFIGURATION feature descriptor header is truncated";
+            return;
+        }
+        const auto additional_length = static_cast<std::size_t>(data[offset + 3]);
+        const auto descriptor_bytes = feature_header_bytes + additional_length;
+        if (offset + descriptor_bytes > total) {
+            result.probe_error = "GET CONFIGURATION feature descriptor is truncated";
+            return;
+        }
+        if (be16(data.data() + offset) == cd_read_feature) {
+            if (additional_length < 1) {
+                result.probe_error = "GET CONFIGURATION CD Read feature is truncated";
+                return;
+            }
+            result.c2_supported.value = data[offset + feature_header_bytes] & 0x02
+                ? Knowledge::yes : Knowledge::no;
+            result.c2_supported.source = CapabilityEvidenceSource::drive_reported;
+            result.c2_supported.detail = "MMC GET CONFIGURATION CD Read feature C2 Flags";
+            return;
+        }
+        offset += descriptor_bytes;
+    }
+
+    result.c2_supported.value = Knowledge::no;
+    result.c2_supported.source = CapabilityEvidenceSource::drive_reported;
+    result.c2_supported.detail = "MMC GET CONFIGURATION CD Read feature absent";
+}
 bool probe_kernel_capabilities(DriveCapabilities& result) {
     const int fd = open(result.device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
     if (fd < 0) {

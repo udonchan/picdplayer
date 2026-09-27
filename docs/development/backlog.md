@@ -28,7 +28,7 @@
 
 | Issue | 主な範囲 |
 |---|---|
-| [#7 Extend drive capabilities and validate C2 evidence](https://github.com/udonchan/picdplayer/issues/7) | 現行probeは起動時一回のsysfs identity、CDROM_GET_CAPABILITY、およびMMC GET CONFIGURATIONのCD Read Feature C2 Flagsを読む。C2 supportのdrive reportは取得するが、実測trust、DAE/cache/accurate stream、速度・offsetは未実装。hotplug/reset時の能力失効は#88の責務。 |
+| [#7 Extend drive capabilities and validate C2 evidence](https://github.com/udonchan/picdplayer/issues/7) | 現行probeは起動時一回のsysfs identity、CDROM_GET_CAPABILITY、およびMMC GET CONFIGURATION feature descriptor一覧のCD Read Feature C2 Flagsを読む。C2 supportのdrive reportは取得するが、実測trust、DAE/cache/accurate stream、速度・offsetは未実装。hotplug/reset時の能力失効は#88の責務。 |
 | [#8 Add bounded drive speed control with fallback](https://github.com/udonchan/picdplayer/issues/8) | Phase 2のbuffer設定・drive I/O直列化は実装済みだが速度設定は未実装。KERNEL_REPORTED/YESだけでは実際の速度制御や効果を確認したことにならない。 |
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | 現行repeatは同一区間のPCM全体の反復一致だけを調べる。overlap整列とcache対策はなく、2-of-3一致でも独立した物理再読込を保証しない。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |

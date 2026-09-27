@@ -79,7 +79,7 @@ metadata/artworkの到着は再生開始とは独立し、再生状態だけか�
 | read_offset_samples | int? | sample単位offset。現行は未取得 |
 
 能力はdrive直下。`drive.capabilities`という階層はない。No Discでも利用可能なprobe情報を表示できる。
-`c2_supported`はMMC CD Read FeatureのC2 Flagsが取得できた場合だけDRIVE_REPORTEDのYES/NOとなる。
+`c2_supported`はMMC CD Read Featureが不在、またはC2 Flagsが取得できた場合だけDRIVE_REPORTEDのYES/NOとなる。
 これはC2 error pointerを報告できるというdrive宣言で、読み取り時のC2観測、reportの正確さ、または
 bit-perfect再生の証明ではない。command failureまたは応答不正時はUNKNOWNで`probe_error`に理由を残す。
 kernelがspeed制御対応と報告したことは、速度変更成功や実測速度の証明ではない。
