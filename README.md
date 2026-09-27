@@ -21,7 +21,7 @@ PiCDPlayerは、Raspberry Piと一般的な光学ドライブを使い、物理C
 設計上の目標とし、観測だけでsecureやperfectを断言しません。
 考え方は[読み取り結果について言えること](docs/guide/integrity.md)、現在の判定仕様は
 [機能設計](docs/design/functional-design.md)で説明しています。
-C2・cache対策・offset・外部照合を含む未実装の要求は[読み取り信頼性の仕様](docs/design/integrity-design.md)、
+C2の実測trust評価・cache対策・offset・外部照合を含む未実装の要求は[読み取り信頼性の仕様](docs/design/integrity-design.md)、
 作業の一覧は[残課題](docs/development/backlog.md)を参照してください。
 
 ## 特徴

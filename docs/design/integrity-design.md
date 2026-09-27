@@ -15,8 +15,8 @@
 |---|---|
 | 実装済み | read-only能力probe、UNKNOWNモデル、区間付きReadEvidence、stream世代、ALSA再生head推定、bounded event、technical status |
 | 実装済み | 先読み容量・開始閾値、drive access直列化、single/repeat、ReadPolicyの停止境界でのruntime適用 |
-| 未実装の要求 | 速度設定、overlap/cache対策、C2とtrust評価、offset、能力別strategy、詳細provenance/coverage、外部照合 |
-| 未確定の詳細 | MMC transport/command、cache対策手順、mode既定値、詳細履歴の容量、診断protocol、照合サービス・依存library |
+| 未実装の要求 | 速度設定、overlap/cache対策、C2のread時利用とtrust評価、offset、能力別strategy、詳細provenance/coverage、外部照合 |
+| 未確定の詳細 | cache対策手順、mode既定値、詳細履歴の容量、診断protocol、照合サービス・依存library |
 
 現在の公開型は[ReadEvidence / ReadDiagnostics](../../include/integrity_state.hpp)、
 [DriveCapabilities](../../include/drive_capabilities.hpp)、[ReadPolicy](../../include/read_policy.hpp)、
@@ -174,7 +174,8 @@ probe failureはcapability NOではなくUNKNOWN+error。probe成功を再生可
 | vendor/model/firmware | 現行はsysfs device/vendor, model, revから取得。欠落は不明として扱う |
 | kernelが公開する機能 | CDROM_GET_CAPABILITY。driver/interface側の根拠として保持 |
 | DAE | 後続phaseでMMCのreportを調査。成功したAudio readはTESTEDとしてその条件を記録 |
-| C2/accurate stream/cache | 後続phaseでMMC inquiry/mode page等を調査。reportと実測trustを別管理 |
+| C2 support | MMC `GET CONFIGURATION`のCD Read Feature（0x001e）のC2 Flagsを`CDROM_SEND_PACKET`で読む。成功時だけDRIVE_REPORTEDのYES/NO。実測trustおよびread時のC2観測とは別管理 |
+| accurate stream/cache | 後続phaseでMMC inquiry/mode page等を調査。reportと実測trustを別管理 |
 | speed control | CDC_SELECT_SPEEDはkernel report。実際の設定可否・効果は別途確認 |
 | supported/current speed | 未取得ならUNKNOWN。要求2xやread所要時間からcurrent speed=2xと断定しない |
 | read offset | database/calibration/user設定導入まではUNKNOWN。vendor/modelだけで自動断定しない |
@@ -182,12 +183,13 @@ probe failureはcapability NOではなくUNKNOWN+error。probe成功を再生可
 Linux CDROM_GET_CAPABILITYにはC2 trustやoffsetの直接的な情報はない。
 CDC_PLAY_AUDIOをDAE成功の証明として使わない。
 CDROM_SELECT_SPEEDは設定操作なので現行のprobeでは実行しない。
-MMC command transportはSG_IO等を候補とするが、CDB、response長、sense、権限、bridge越しの可否は
-実装phaseで仕様と実機を調査して確定する。generic packet対応だけで全MMC機能が使えるとはしない。
+C2 supportの初期probeは`CDROM_SEND_PACKET`で読み取り専用の`GET CONFIGURATION`を送る。
+CDB、response長、sense、権限、bridge越しの可否はDocker試験だけでは確認できない。command failureまたは
+不正な応答はUNKNOWN+`probe_error`にし、NOへ変換しない。generic packet対応だけで全MMC機能が使えるとはしない。
 
 probeはMediaWorkerで逐次実行し、drive I/OはPCM readerと直列化する。
-待機中はUNKNOWNを公開する。追加要求としてhotplug/resetでは能力snapshotを無効化・再取得し、
-driveなしとdiscなしを分ける。現在はdevice generationによる失効・再probeを実装していない。
+待機中はUNKNOWNを公開する。hotplug/reset時の能力snapshot無効化・再取得、driveなしとdiscなしの
+lifecycle分離は#88の責務であり、#7の初回probeへ含めない。現在はdevice generationによる失効・再probeを実装していない。
 速度変更・cache対策の追加前にdevice I/Oの調停を整え、ejectを優先する。
 現行probeに能動的cache/C2精度試験やトレイ操作は含めない。
 

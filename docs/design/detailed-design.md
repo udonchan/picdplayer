@@ -170,12 +170,14 @@ stream中に変更しない。APIで再生中に新policyを受けた場合はre
 PcmWorkerへreconfigure要求を出す。workerは既存readerをowner threadで閉じ、次回startで新policyに対応する
 block sizeとreaderを使う。この順序によりread途中の比較条件やevidenceを混在させない。
 
-[probe_drive_capabilities](../../src/drive_capabilities.cpp)はsysfsのvendor/model/revと読み取り専用の
-CDROM_GET_CAPABILITYを調べる。現段階でYES/NOを付けるのはkernelが報告するspeed controlだけで、
-DAE、C2、cache、accurate stream、offsetはUNKNOWNを維持する。probeはMediaWorkerで非同期に実行し、
-probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
-probeの遅延は後続のmedia観測を遅らせ得る。現在は起動時一回のprobeであり、
-hotplug/reset時の能力失効と再probeは未実装である。
+[probe_drive_capabilities](../../src/drive_capabilities.cpp)はsysfsのvendor/model/rev、読み取り専用の
+CDROM_GET_CAPABILITY、およびMMC `GET CONFIGURATION`のCD Read Feature（0x001e）を調べる。
+C2 Flagsが返った場合だけ`c2_supported`をDRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを
+報告できるというdrive宣言であり、read時にC2を取得したこと、reportが正しいこと、原PCMを検証したことを
+意味しない。DAE、C2 trust、cache、accurate stream、offsetはUNKNOWNを維持する。probeはMediaWorkerで
+非同期に実行し、probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
+probeの遅延は後続のmedia観測を遅らせ得る。現在は起動時一回のprobeであり、hotplug/reset時の能力失効と
+再probeは#88で扱い、未実装である。
 
 [route_api_request](../../src/api_server.cpp)はmethod/path/bodyを検証してhandlerへ渡す純粋な入口。
 実接続のloopback判定はApiServer callbackから呼ぶ共通routeで行い、純粋なroute単体は認証境界ではない。
