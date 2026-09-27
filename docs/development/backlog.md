@@ -1,6 +1,6 @@
 # 残課題とIssue一覧
 
-2026-09-26時点のrepositoryとGitHub Issueを照合した作業一覧。
+2026-09-26の一覧を基に、2026-09-28にIntegrity・drive・CI検証範囲を再照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
 着手・進捗・完了条件は各GitHub Issueで管理する。Issueを閉じる際は仕様と検証記録も更新する。
 この一覧の順番は優先順位や実装順ではない。実装済みと実機確認済み、
@@ -30,7 +30,7 @@
 |---|---|
 | [#7 Extend drive capabilities and validate C2 evidence](https://github.com/udonchan/picdplayer/issues/7) | 現行probeは起動時一回のsysfs identity、CDROM_GET_CAPABILITY、およびMMC GET CONFIGURATION feature descriptor一覧のCD Read Feature C2 Flagsを読む。C2 supportのdrive reportは取得するが、実測trust、DAE/cache/accurate stream、offsetは未実装。速度要求は#8で実装済み。hotplug/reset時の能力失効は#88の責務。 |
 | [#8 Add bounded drive speed control with fallback](https://github.com/udonchan/picdplayer/issues/8) | `--drive-speed-x 1..255`で、KERNEL_REPORTED/YESのdriveへ停止/一時停止中に一度だけ速度要求する経路、失敗記録、API/UI投影を実装・Docker確認済み。Piでは1x要求のioctl受理と20秒API再生まで確認済み。要求受理は実測速度・回転・騒音低下を意味しない。騒音・CEC・長時間再生・throughput・失敗状態の既定速度との比較が残る。 |
-| [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | repeat verifierは直前に採用した15 CD frameの先行overlapを再読してPCM連続性を確認し、overlapを出力から除いて重複再生を防ぐ。不一致はfail-closed。反復・overlap一致でもdrive cacheを排除できないため`CACHE_POSSIBLE`を公開する。cache軽減手順、物理再読込の保証、Pi異常媒体での検証は残る。 |
+| [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | repeat verifierは直前に採用した15 CD frameの先行overlapを再読してPCM連続性を確認し、overlapを出力から除いて重複再生を防ぐ。不一致はfail-closed。反復・overlap一致でもdrive cacheを排除できないため`CACHE_POSSIBLE`を公開する。Docker自動試験済み。追加後の通常CDを含むPi再生は未確認。cache軽減手順、物理再読込の保証、異常媒体での検証は残る。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
 | [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | #35/#36の実装と#89/#90の追加検証をPR #86/#87/#94/#95で整備。Docker36/36成功。全子Issue完了によりClose済み。実機異常系は#96、長期評価は#4/#83へ分離する。 |
@@ -149,5 +149,5 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 
 ## 2026-09-27変更の監査
 
-- [#115](https://github.com/udonchan/picdplayer/issues/115): 未比較overlapの不一致誤表示、拒否候補の採用識別子を修正する。#9の実機検証は別途継続。
-- [#116](https://github.com/udonchan/picdplayer/issues/116): #24完了、速度要求、世代・履歴公開の文書反映漏れを修正する。
+- [#115](https://github.com/udonchan/picdplayer/issues/115): 未比較overlapの不一致誤表示、拒否候補の採用識別子をPR #117で修正・Docker確認済み（マージ待ち）。#9の実機検証は別途継続。
+- [#116](https://github.com/udonchan/picdplayer/issues/116): #24完了、速度要求、世代・履歴公開、READMEとCI検証範囲の文書反映漏れをPR #117で修正（マージ待ち）。

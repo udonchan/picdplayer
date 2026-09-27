@@ -809,3 +809,7 @@ scrollHeight=1080 pxを維持し、albumは2行で省略された。
 対象はPR #108（UI）、#112（C2能力）、#113（速度要求）、#114（overlap）。コミットc31e49bまでを照合し、未比較overlapのMISMATCHED誤報告と拒否候補へのaccepted識別子設定を修正した。#24完了、速度要求、公開世代/履歴の古い記述を更新した。今回のPi deploy・試聴・傷disc・cache独立性の検証は行っていない。
 
 Docker Debian Trixie/aarch64のbuild/package生成とCTest38/38成功。追加JSON試験も成功。read失敗/部分read/候補不一致でNOT_CHECKED・比較0・採用null、overlap不一致で採用null、無効時NOT_REQUESTED、seek後reset、短い最終blockの出力を確認した。
+
+### CIと入口文書の再照合（#116）
+
+現行CIはpull_request/workflow_dispatchでubuntu-24.04-arm上のDockerを使い、build-container.shによるbuild/stage/.deb生成後にCTestを実行する。標準構成はmetadata/API有効、paranoia無効。ローカルDockerの38/38成功とGitHub Actionsの結果は別記録であり、Pi deploy・音声・表示やparanoia有効構成の検証を意味しない。開発手順の旧34件表記、READMEのoverlap実機未確認とPlayer Phase 1掲載漏れを修正した。過去の日付付き試験件数は当時の結果として保持する。
