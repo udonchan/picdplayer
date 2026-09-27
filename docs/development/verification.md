@@ -554,7 +554,7 @@ Piハング時は原因を確定できる前bootログがなかった。メモ�
 
 PR #86/#87はmasterへマージ済み（8b84acb）。#35/#36は実装済み部分と実施済み検証を
 完了範囲として整理し、未完了の異常系・非干渉要件を#89/#90へ移管した。
-移管は検証成功を意味しない。親#12はOpen、Player統合#24はDraftを維持する。
+移管時点では親#12はOpen、Player統合#24はDraftだった。移管は検証成功を意味しない。
 #24の復元契約検証待ちは#90へ引き継ぐ。
 
 ### 自動試験で確認した範囲
@@ -625,7 +625,7 @@ Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加し�
   要求時ではなく応答到着時の最新snapshotに照合し、世代変更で保持済み表示も破棄する契約を明記する。
 
 今回の成功は実機音声の保証ではない。実機音声・長時間運転は#4、長期負荷は#83の検証と区別する。
-#24のDraftは維持し、実際のPlayer側の履歴consumerを追加する場合は同じ条件の統合試験を必要とする。
+#24は当時Draftとして維持し、実際のPlayer側の履歴consumerを追加する場合は同じ条件の統合試験を必要とした。
 Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に対する再現可能な回帰検証であり、
 任意接続数への防御、無期限sink停止時のshutdown完了、real-time性能を新たに保証するものではない。
 
@@ -678,7 +678,7 @@ Docker/aarch64 build/package生成とCTest36/36成功。公開Presentation Model
 Piへ導入し通常14曲CDの`--probe-toc /dev/sr0`とREST/WSの全track半開区間・leadoutを機械的照合。
 start=0、leadout=242334、disc_generation=1。REST/WSのlayoutは同一でsessionもreadと一致した。
 試験後はdaemon/kioskとも停止。再生・試聴・特殊媒体・物理交換・TV表示は今回の検証対象外。
-#98はPR #101でマージ済み。#99は下記のPR #102で実装・検証済み、レビュー待ち。#24のmap描画は未実装。
+#98はPR #101、#99はPR #102でマージ済み。その後の標準Player側のmap描画は下記#24記録で実装・検証した。
 
 ## #99 Disc領域集計
 
@@ -704,3 +704,42 @@ API stop後はSTOPPED、current_playback=null、queue 0へ戻った。daemon/kio
 Chromium CDPも待受中だった。試験中にユーザーがTVの標準Player表示と音声再生を確認した。
 終端drain完走は未確認であり、詳細は
 [#24着手前の監査記録](reports/2026-09-26-pre-integrity-audit/README.md)を参照する。
+
+## #24 Player Integrity UI（2026-09-27）
+
+標準Playerへread activity、requested/effective policy、block buffer、current PCM、latest read、
+stream warning、STREAM coverage、drive capability、disc read mapを追加した。mapは有効な
+`disc.layout`に対して初回と新streamでcurrent PCM根拠を得た時に一回だけ`/api/read-history`を取得し、
+Refresh mapで明示更新できる。通常snapshot更新ではpollingしない。map responseは最新snapshotの
+session/disc generationと照合し、古いrevision・異なる世代・不正な値を表示しない。
+
+Docker/aarch64 buildとCTest38/38は成功した。Node試験は同値snapshotのDOM更新なし、position更新、
+同URLcoverの世代更新、Integrity summary、bounded map、古いrevision拒否、session変更時のmap破棄、
+通常snapshotでの詳細API非pollingを確認する。
+
+Piで14曲Audio CDを`AUDIO_READY`として確認し、APIからtrack 1を通常再生した。再生中のAPIでは
+position 1203 frame、current PCM LBA 1200–1215、latest read LBA 1965–1980、132 read call、
+1980 accepted frame、retry/error/dropped event 0だった。CDP画面でもread mapの1 region/revision 6と
+PCM/read markerを確認した。API stop後はSTOPPED、queue 0、current/latest nullへ戻り、直近journalに
+underrun、recovery、failure context、ERRORはなかった。CDP接続中の2秒測定でLayout/RecalcStyleは各8件。
+
+これは通常disc・短時間・CDP接続中の確認である。TV目視・試聴、傷disc、物理交換、終端drain、
+長期運転、CDP未接続のCPU/温度比較は未確認であり、#96/#4/#83の記録と重複しない。
+
+### Integrity monitor Phase 1（2026-09-27）
+
+#24のレビューで、標準Playerをprimary playbackとcompactなIntegrity monitorへ再配置した。Phase 1では
+実使用で情報量を評価するため、取得できるread/drive値を折り畳まず常時表示する。primary（曲・artwork・
+再生状態・進捗）、secondary（current/latest、方針、buffer、coverage、map）、diagnostic（LBA、観測窓、
+能力値）は文字サイズ・contrast・spacingで区別する。これは最終デザインや常時表示項目の決定ではない。
+常時PiCDPlayerロゴを外し、Integrity header内にstate API/WebSocket接続だけを示す`DAEMON · CONNECTED`等を置いた。
+`CURRENT READ · CLEAN`はcurrent playback evidenceの分類であり、disc全体・原盤・bit-perfect・daemon healthの
+保証ではない。current playbackとlatest readは出力PCM根拠とread-ahead観測として短く区別し、disc mapは
+observed clean、retry/repeat、recovered、UNCERTAIN/backend anomaly、unobservedのlegendを持つ。
+
+Docker/aarch64のCTest38/38成功後、Piへdeployした。通常14曲CDの短時間API再生をCDPで1920×1080に撮影し、
+read monitor、disc map、drive capabilityを同時に表示した状態で`document.documentElement.scrollHeight`が
+viewportと同じ1080 pxであることを確認した。同じviewportへ長いalbum/artist/track文字列を注入した表示確認でも
+scrollHeight=1080 pxを維持し、albumは2行で省略された。
+これはCSS layoutの確認であり、実metadata取得の網羅試験ではない。TV目視・試聴、傷disc、物理交換、終端drain、
+長期運転、CDP未接続のCPU/温度比較は未確認である。

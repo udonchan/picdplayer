@@ -62,8 +62,14 @@ const boot = (() => {
 const byId = (id) => document.getElementById(id);
 const set = (id, value) => {
   const element = byId(id);
-  const text = value || '—';
+  const text = value == null || value === '' ? '—' : String(value);
   if (element.textContent !== text) element.textContent = text;
+};
+const setStyle = (element, property, value) => {
+  if (element.style[property] !== value) element.style[property] = value;
+};
+const setHidden = (element, value) => {
+  if (element.hidden !== value) element.hidden = value;
 };
 
 // CD frame is 1/75 second. Keep this conversion in the UI presentation layer.
@@ -76,11 +82,212 @@ const formatTime = (frames) => {
 };
 
 function setConnection(value) {
-  set('connection', value);
+  const states = {
+    Live: ['connected', 'DAEMON · CONNECTED'],
+    Connecting: ['connecting', 'DAEMON · CONNECTING'],
+    Reconnecting: ['reconnecting', 'DAEMON · RECONNECTING'],
+    Offline: ['offline', 'DAEMON · OFFLINE'],
+    'Invalid state': ['invalid', 'DAEMON · INVALID STATE'],
+  };
+  const [state, label] = states[value] || ['unknown', 'DAEMON · UNKNOWN'];
+  const element = byId('connection');
+  if (element.dataset.state !== state) element.dataset.state = state;
+  set('connection', label);
 }
 
 function currentTrack(tracks, number) {
   return tracks?.find((track) => track.number === number) || null;
+}
+
+const safeInteger = (value) => Number.isSafeInteger(value);
+const safeNonNegative = (value) => safeInteger(value) && value >= 0;
+
+function formatEvidence(value) {
+  if (!value || !safeInteger(value.start_lba) || !safeNonNegative(value.frames_read)) return 'NOT AVAILABLE';
+  const verification = value.verification || {};
+  const suffix = safeNonNegative(value.direct_retries) && value.direct_retries > 0
+    ? ` · retry ${value.direct_retries}` : '';
+  const repeat = safeNonNegative(verification.attempts) && verification.attempts > 0
+    ? ` · ${verification.matching_reads ?? '—'}/${verification.attempts} match` : '';
+  return `${value.status || 'UNKNOWN'} · ${value.local_verification || 'UNKNOWN'} · LBA ${value.start_lba}–${value.start_lba + value.frames_read}${suffix}${repeat}`;
+}
+
+function formatCapability(value) {
+  if (!value || typeof value.value !== 'string') return 'UNKNOWN';
+  return value.source && value.source !== 'NONE' ? `${value.value} · ${value.source}` : value.value;
+}
+
+function integritySummary(read) {
+  if (read.active_warning) return `STREAM WARNING · ${read.active_warning.status || 'UNKNOWN'}`;
+  if (!read.current_playback) return 'CURRENT READ · NOT AVAILABLE';
+  return `CURRENT READ · ${read.current_playback.status || 'UNKNOWN'}`;
+}
+
+function discLayoutKey(snapshot) {
+  const layout = snapshot?.disc?.layout;
+  const session = snapshot?.read?.session_id;
+  if (snapshot?.schema_version !== 1 || snapshot?.disc?.state !== 'AUDIO_READY'
+      || !layout || typeof layout.session_id !== 'string' || !layout.session_id
+      || layout.session_id !== session || !safeNonNegative(layout.disc_generation)
+      || !safeInteger(layout.start_lba) || !safeInteger(layout.leadout_lba)
+      || layout.leadout_lba <= layout.start_lba) return null;
+  return `${layout.session_id}:${layout.disc_generation}`;
+}
+
+let presentationSession = null;
+let presentationRevision = -1;
+let presentationStream = null;
+let eventSequence = null;
+let eventDropped = 0;
+let observationGap = false;
+let currentSnapshot = null;
+let mapKey = null;
+let mapLoadingKey = null;
+let mapRequestedKey = null;
+let discMap = null;
+let renderedMapIdentity = null;
+let mapObservedStream = null;
+
+function acceptSnapshot(snapshot) {
+  const session = snapshot?.read?.session_id;
+  const revision = snapshot?.revision;
+  const stream = snapshot?.read?.stream_generation;
+  if (typeof session === 'string' && session) {
+    if (session === presentationSession && safeNonNegative(revision) && revision <= presentationRevision) return false;
+    if (session !== presentationSession || stream !== presentationStream) {
+      eventSequence = null;
+      eventDropped = 0;
+      observationGap = false;
+      presentationRevision = -1;
+    }
+    presentationSession = session;
+    presentationStream = stream;
+    if (safeNonNegative(revision)) presentationRevision = revision;
+  }
+  const window = snapshot?.read?.event_window;
+  if (window) {
+    if ((eventSequence === null && safeNonNegative(window.first_sequence) && window.first_sequence > 1)
+        || (eventSequence !== null && safeNonNegative(window.first_sequence)
+          && window.first_sequence > eventSequence + 1)
+        || (safeNonNegative(window.worker_dropped) && window.worker_dropped > eventDropped)) observationGap = true;
+    if (safeNonNegative(window.last_sequence)) eventSequence = window.last_sequence;
+    if (safeNonNegative(window.worker_dropped)) eventDropped = window.worker_dropped;
+  }
+  const key = discLayoutKey(snapshot);
+  if (key !== mapKey) {
+    mapKey = key;
+    discMap = null;
+    mapLoadingKey = null;
+    mapRequestedKey = null;
+    renderedMapIdentity = null;
+    mapObservedStream = null;
+  }
+  currentSnapshot = snapshot;
+  return true;
+}
+
+function mapMatchesSnapshot(snapshot, detail) {
+  const key = discLayoutKey(snapshot);
+  const map = detail?.disc_map;
+  if (!key || detail?.schema_version !== 1 || detail?.session_id !== snapshot.read?.session_id
+      || !map || map.scope !== 'DISC' || map.disc_generation !== snapshot.disc.layout?.disc_generation
+      || !safeNonNegative(map.revision) || !safeNonNegative(map.capacity) || map.capacity > 256
+      || typeof map.observations_complete !== 'boolean' || !Array.isArray(map.regions)
+      || map.regions.length > map.capacity) return null;
+  if (discMap && discMap.key === key && safeNonNegative(discMap.revision) && map.revision < discMap.revision) return null;
+  return { key, ...map };
+}
+
+function requestDiscMap(snapshot, force = false) {
+  const key = discLayoutKey(snapshot);
+  if (!key || (!force && (discMap?.key === key || mapLoadingKey === key || mapRequestedKey === key))) return;
+  mapRequestedKey = key;
+  mapLoadingKey = key;
+  renderDiscMap(snapshot);
+  try {
+    Promise.resolve(fetch('/api/read-history', { cache: 'no-store' })).then(async (response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const detail = await response.json();
+      const accepted = mapMatchesSnapshot(currentSnapshot, detail);
+      if (accepted) discMap = accepted;
+    }).catch(() => {}).finally(() => {
+      if (mapLoadingKey === key) mapLoadingKey = null;
+      renderDiscMap(currentSnapshot);
+    });
+  } catch {
+    mapLoadingKey = null;
+    renderDiscMap(snapshot);
+  }
+}
+
+function mapColor(flags) {
+  if (!safeNonNegative(flags)) return '#647174';
+  if (flags & (32 | 64)) return '#ff8c82';
+  if (flags & 16) return '#b99cff';
+  if (flags & (4 | 8)) return '#f2c66d';
+  if (flags & 2) return '#7199a5';
+  return '#647174';
+}
+
+function setMarker(id, layout, evidence, label) {
+  const marker = byId(id);
+  const lba = evidence?.start_lba;
+  if (!layout || !safeInteger(lba) || !safeNonNegative(evidence?.disc_generation)
+      || evidence.disc_generation !== layout.disc_generation || lba < layout.start_lba || lba >= layout.leadout_lba) {
+    setHidden(marker, true);
+    return;
+  }
+  const angle = 2 * Math.PI * (lba - layout.start_lba) / (layout.leadout_lba - layout.start_lba) - Math.PI / 2;
+  setStyle(marker, 'left', `${50 + 36 * Math.cos(angle)}%`);
+  setStyle(marker, 'top', `${50 + 36 * Math.sin(angle)}%`);
+  setHidden(marker, false);
+  if (marker.textContent !== label) marker.textContent = label;
+}
+
+function renderDiscMap(snapshot) {
+  const map = byId('disc-map');
+  const label = byId('read-map-state');
+  const layout = snapshot?.disc?.layout;
+  const key = discLayoutKey(snapshot);
+  if (!key) {
+    set('read-map-state', snapshot?.disc?.state === 'NO_DISC' ? 'No accepted audio disc' : 'Waiting for an accepted disc layout');
+    setStyle(map, 'background', '#202729');
+    renderedMapIdentity = null;
+    setMarker('map-current', null, null, 'P'); setMarker('map-latest', null, null, 'R');
+    return;
+  }
+  if (!discMap || discMap.key !== key) {
+    set('read-map-state', mapLoadingKey === key ? 'Loading bounded disc observations' : 'Map not obtained');
+    setStyle(map, 'background', '#202729');
+    renderedMapIdentity = null;
+  } else {
+    const identity = `${key}:${discMap.revision}`;
+    if (identity !== renderedMapIdentity) {
+      const span = layout.leadout_lba - layout.start_lba;
+      const layers = [];
+      for (const region of discMap.regions) {
+        if (!safeInteger(region?.start_lba) || !safeInteger(region?.end_lba) || !safeNonNegative(region?.flags)
+            || region.end_lba <= region.start_lba || region.start_lba < layout.start_lba
+            || region.end_lba > layout.leadout_lba) continue;
+        const begin = 100 * (region.start_lba - layout.start_lba) / span;
+        const end = 100 * (region.end_lba - layout.start_lba) / span;
+        layers.push(`conic-gradient(from -90deg, transparent 0% ${begin}%, ${mapColor(region.flags)} ${begin}% ${end}%, transparent ${end}% 100%)`);
+      }
+      setStyle(map, 'background', layers.length ? layers.join(',') : '#202729');
+      renderedMapIdentity = identity;
+    }
+    const completeness = discMap.observations_complete === true ? 'bounded observations' : 'incomplete lower bound';
+    const validRegions = discMap.regions.filter((region) => safeInteger(region?.start_lba)
+      && safeInteger(region?.end_lba) && safeNonNegative(region?.flags)
+      && region.end_lba > region.start_lba && region.start_lba >= layout.start_lba
+      && region.end_lba <= layout.leadout_lba).length;
+    const regionLabel = validRegions === discMap.regions.length
+      ? `${validRegions} regions`
+      : `${validRegions} valid regions / ${discMap.regions.length} reported`;
+    set('read-map-state', `${regionLabel} · ${completeness} · revision ${discMap.revision}`);
+  }
+  setMarker('map-current', layout, snapshot?.read?.current_playback, 'P');
+  setMarker('map-latest', layout, snapshot?.read?.latest, 'R');
 }
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
@@ -142,8 +349,11 @@ let progressScale;
 // Rendering only: never keep an independent player state in the browser.
 // 描画専用です。browser 側に独立した再生状態を持ちません。
 function render(snapshot) {
+  if (!acceptSnapshot(snapshot)) return;
   const player = snapshot.player || {};
   const disc = snapshot.disc || {};
+  const read = snapshot.read || {};
+  const drive = snapshot.drive || {};
   const enrichment = snapshot.enrichment || {};
   const track = currentTrack(snapshot.tracks, player.track_number);
   const hasDisc = disc.state === 'AUDIO_READY';
@@ -178,6 +388,47 @@ function render(snapshot) {
   }
   set('player-state', player.state || 'NO_DISC');
   showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id);
+  set('read-activity', read.activity || 'UNKNOWN');
+  set('read-strategy', read.effective_strategy || 'UNKNOWN');
+  const requestedPolicy = read.policy?.requested?.mode;
+  const effectivePolicy = read.policy?.effective?.mode;
+  set('read-policy', read.policy?.pending
+    ? `${effectivePolicy || 'UNKNOWN'} → ${requestedPolicy || 'UNKNOWN'} (PENDING)`
+    : (effectivePolicy || requestedPolicy || 'UNKNOWN'));
+  const blockCapacity = safeNonNegative(read.buffer_capacity_frames) && safeInteger(read.read_block_frames)
+    && read.read_block_frames > 0 ? Math.floor(read.buffer_capacity_frames / read.read_block_frames) : null;
+  set('read-buffer', safeNonNegative(read.queued_blocks) && blockCapacity !== null
+    ? `${read.queued_blocks} / ${blockCapacity} blocks` : 'N/A');
+  set('read-current', formatEvidence(read.current_playback));
+  set('read-latest', formatEvidence(read.latest));
+  set('read-warning', read.active_warning ? formatEvidence(read.active_warning) : 'NONE');
+  const history = read.history || {};
+  set('read-window', observationGap ? 'UNKNOWN (event gap)' : `${history.included ? 'DETAIL ' : 'STREAM '}window ${history.capacity ?? '—'} · dropped ${read.dropped_events ?? '—'}`);
+  const stats = read.stats || {};
+  set('read-stats', safeNonNegative(stats.read_calls) && safeNonNegative(stats.frames_accepted)
+    ? `${stats.read_calls} / ${stats.frames_accepted} frames` : 'NOT AVAILABLE');
+  const coverage = read.coverage || {};
+  set('read-coverage', `${coverage.scope || 'UNKNOWN'} · ${safeNonNegative(coverage.accepted_unique_frames) ? coverage.accepted_unique_frames : '—'} accepted unique frames`);
+  set('integrity-summary', integritySummary(read));
+  set('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ') || drive.device || 'UNKNOWN DRIVE');
+  set('cap-dae', formatCapability(drive.digital_audio_extraction));
+  set('cap-c2', formatCapability(drive.c2_supported));
+  set('cap-c2-trust', formatCapability(drive.c2_trustworthy));
+  set('cap-cache', formatCapability(drive.read_cache));
+  set('cap-stream', formatCapability(drive.accurate_stream));
+  set('cap-speed', formatCapability(drive.speed_control));
+  set('drive-offset', drive.read_offset_samples == null ? 'UNKNOWN' : `${drive.read_offset_samples} samples`);
+  set('drive-note', drive.probe_error || 'Capability reports are not measurement results.');
+  renderDiscMap(snapshot);
+  const observationStream = discLayoutKey(snapshot) && typeof read.session_id === 'string'
+    && safeNonNegative(read.stream_generation) && read.current_playback
+    ? `${discLayoutKey(snapshot)}:${read.stream_generation}` : null;
+  if (observationStream && observationStream !== mapObservedStream) {
+    mapObservedStream = observationStream;
+    requestDiscMap(snapshot, true);
+  } else {
+    requestDiscMap(snapshot);
+  }
   boot.snapshot();
 }
 
@@ -194,6 +445,7 @@ async function load() {
 }
 
 let retry;
+let activeSocket;
 
 // CEC/API events update the daemon state; reconnect after daemon or network restarts.
 // CEC/API の状態更新は daemon が行います。daemon や通信の再起動後は再接続します。
@@ -202,20 +454,25 @@ function connect() {
   setConnection('Connecting');
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   const socket = new WebSocket(`${scheme}://${location.host}/api/events`);
+  activeSocket = socket;
 
   socket.onopen = () => {
+    if (activeSocket !== socket) return;
     setConnection('Live');
     boot.connection(true);
   };
   socket.onmessage = (event) => {
+    if (activeSocket !== socket) return;
     try {
       render(JSON.parse(event.data));
     } catch {
       setConnection('Invalid state');
     }
   };
-  socket.onerror = () => socket.close();
+  socket.onerror = () => { if (activeSocket === socket) socket.close(); };
   socket.onclose = () => {
+    if (activeSocket !== socket) return;
+    activeSocket = null;
     boot.connection(false);
     setConnection('Reconnecting');
     retry = setTimeout(async () => {
@@ -224,5 +481,7 @@ function connect() {
     }, 1500);
   };
 }
+
+byId('refresh-read-map').addEventListener?.('click', () => requestDiscMap(currentSnapshot, true));
 
 load().finally(connect);

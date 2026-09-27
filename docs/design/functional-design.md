@@ -8,11 +8,47 @@ ALSA再生headに対応する根拠の推定をsnapshotへ公開するところ�
 公開するCLEANは検証済みの意味ではなく、local verificationをSINGLE_READ等で別に示す。
 Phase 1bではこのsnapshotだけを入力にする読み取り専用technical status画面を追加した。
 これは診断用であり、TV向け本番UIやauthoritative stateを兼ねない。
-`/player`は同じsnapshotを表示用に整形する初期のNow Playing画面である。画面は状態を所有せず、
-操作POSTも送らない。任意導入の`picdplayer-kiosk.service`はCageからWayland版Chromiumを起動し、
+`/player`は同じsnapshotを表示用に整形するNow Playing画面である。画面は状態を所有せず、
+操作POSTも送らない。曲情報・artwork・進捗に加えて、read activity、実効policy、block buffer、
+current/latest evidence、stream warning、drive capabilityと有界なdisc read mapを表示する。
+任意導入の`picdplayer-kiosk.service`はCageからWayland版Chromiumを起動し、
 この画面だけをtty1へ表示する。daemonとbrowserは別serviceであり、browserが状態を所有しない。
 Now Playing document内のcursorはCSSで隠すが、Cageのerror pageや他applicationまで含む
 cursor非表示の保証、画面遷移、画面からの操作、quiet bootは未実装である。
+
+### PlayerのIntegrity表示
+
+標準Playerは有効な`disc.layout`を受信したときに`GET /api/read-history`をdisc世代につき一回取得する。
+さらに新しいstreamでcurrent PCM根拠が初めて得られた時に一回だけ更新する。利用者はRefresh mapで
+明示再取得できる。通常のsnapshot/WS更新でpollingせず、取得失敗後にも自動再試行しない。
+responseは到着時の最新snapshotとroot `session_id`、`disc_map.disc_generation`を照合する。
+layoutがnull、sessionまたはdisc世代が変わった場合は、保持したmapを破棄する。同一discの古いmap revisionも採用しない。
+
+標準target viewportではartwork、曲名、artist、album、再生状態、進捗/時刻を一次情報とする。
+Integrityは常時アクセス可能な計測layerである。#24のPhase 1では実使用による評価のため、現在取得できる
+read/drive値を原則常時表示する。値を削除・単純化せず、typography、contrast、spacingで一次情報より控えめにする。
+長いmetadata、No Disc、Integrityが未取得のときにも、一次情報と概要が縦scrollなしで確認できることを標準targetの確認条件とする。
+
+概要の`CURRENT READ · CLEAN`等はcurrent playback evidenceの時点・範囲の分類であり、disc全体、原盤、
+bit-perfect、verification成功を意味しない。current evidenceがなければNOT AVAILABLEとする。current playbackは
+出力へ提出したPCM根拠、latest readはread-aheadを含む別の最新観測である。両者の差から可聴位置、物理head位置、
+速度、遅延を推測しない。右上の`DAEMON · CONNECTED`等は状態API/WebSocket接続の観測だけを示し、
+daemon全体、drive、read、audioのhealthを保証しない。CONNECTEDは控えめに、RECONNECTING/OFFLINE/invalidだけを
+必要に応じて強調する。接続表示はIntegrity headerに統合する。標準再生画面には常時PiCDPlayerロゴを置かず、
+backgroundはneutral darkとする。
+
+円盤read mapはTOCのLBAを内周から外周へ模式的に投影したものだが、物理半径・ヘッド位置・
+全discの健全性を表さない。regionが重なる場合は、UNCERTAIN/backend anomaly、RECOVERED、retry、
+accepted、attemptedの順で最も注意を要する観測色を表示する。個々のregionのflagsはbit集合であり、
+色だけで全flagsを復元できない。`observations_complete=false`は保持内容が不完全な下限であることを示し、
+全disc読取完了とは異なる。未観測範囲を未読・正常と表示しない。
+legendはobserved clean、retry/repeat、recovered、UNCERTAIN/backend anomaly、unobservedを区別する。
+これは記録済み観測の簡略な分類であり、その領域のPCM正しさやdisc全体の完全性を保証しない。
+
+current PCM markerとlatest read markerは別である。どちらも対応するdisc世代・範囲が確認できる場合だけ
+表示し、前者はALSAへ提出したPCM根拠、後者は先読み観測である。実可聴位置や物理head位置ではない。
+bufferは`queued_blocks / floor(buffer_capacity_frames / read_block_frames)`であり、可聴秒数ではない。
+null/不正値、UNKNOWN、NOT_CHECKED、UNSUPPORTED、N/Aを0やCLEANへ変換しない。
 反復一致読み取りは既定75 frame区間で2-of-3比較を行う。設定変更の契約は以下に記す。
 
 ## UIのカスタマイズ
@@ -240,7 +276,7 @@ PCMを最初に取得した試行番号ではない。採用理由は既存の`l
 
 追加fieldは任意として扱い、旧payloadにない場合は未取得とする。REST/WSのsnapshot形は維持する。
 最大8件の固定配列で保持し、PCM blockと共に現在再生区間へ届く。stream coverage・観測世代・有界履歴は下記の#35で実装済み。
-永続履歴は対象外。#24はこの公開契約を用いるPlayer統合の未実装Issueである。
+永続履歴は対象外。#24の標準Player統合はこの公開契約を用いて実装中である。
 
 ### stream coverageと根拠の世代（#35）
 
