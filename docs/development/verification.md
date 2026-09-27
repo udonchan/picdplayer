@@ -726,17 +726,20 @@ underrun、recovery、failure context、ERRORはなかった。CDP接続中の2�
 これは通常disc・短時間・CDP接続中の確認である。TV目視・試聴、傷disc、物理交換、終端drain、
 長期運転、CDP未接続のCPU/温度比較は未確認であり、#96/#4/#83の記録と重複しない。
 
-### UI階層の再調整（2026-09-27）
+### Integrity monitor Phase 1（2026-09-27）
 
-#24のレビューで、標準Playerをprimary playback、Integrity at a glance、展開可能な詳細診断へ再配置した。
-常時PiCDPlayerロゴを外し、右上はstate API/WebSocket接続だけを示す`DAEMON · CONNECTED`等へ変更した。
+#24のレビューで、標準Playerをprimary playbackとcompactなIntegrity monitorへ再配置した。Phase 1では
+実使用で情報量を評価するため、取得できるread/drive値を折り畳まず常時表示する。primary（曲・artwork・
+再生状態・進捗）、secondary（current/latest、方針、buffer、coverage、map）、diagnostic（LBA、観測窓、
+能力値）は文字サイズ・contrast・spacingで区別する。これは最終デザインや常時表示項目の決定ではない。
+常時PiCDPlayerロゴを外し、Integrity header内にstate API/WebSocket接続だけを示す`DAEMON · CONNECTED`等を置いた。
 `CURRENT READ · CLEAN`はcurrent playback evidenceの分類であり、disc全体・原盤・bit-perfect・daemon healthの
 保証ではない。current playbackとlatest readは出力PCM根拠とread-ahead観測として短く区別し、disc mapは
 observed clean、retry/repeat、recovered、UNCERTAIN/backend anomaly、unobservedのlegendを持つ。
 
 Docker/aarch64のCTest38/38成功後、Piへdeployした。通常14曲CDの短時間API再生をCDPで1920×1080に撮影し、
-折り畳み時の`document.documentElement.scrollHeight`がviewportと同じ1080 pxであることを確認した。詳細を
-展開してread/drive値が表示されることも確認し、その後は折り畳み・API stopへ戻した。同じviewportへ長い
-album/artist/track文字列を注入した表示確認でもscrollHeight=1080 pxを維持し、albumは2行で省略された。
+read monitor、disc map、drive capabilityを同時に表示した状態で`document.documentElement.scrollHeight`が
+viewportと同じ1080 pxであることを確認した。同じviewportへ長いalbum/artist/track文字列を注入した表示確認でも
+scrollHeight=1080 pxを維持し、albumは2行で省略された。
 これはCSS layoutの確認であり、実metadata取得の網羅試験ではない。TV目視・試聴、傷disc、物理交換、終端drain、
 長期運転、CDP未接続のCPU/温度比較は未確認である。

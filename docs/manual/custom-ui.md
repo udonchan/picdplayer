@@ -106,11 +106,17 @@ CSS transitionやbrowserの合成処理は別に発生し得るため、DOM writ
 region flagsはbit集合で重なり得る。未観測、`observations_complete=false`、UNKNOWN、NOT_CHECKEDを
 正常値へ変換しない。bufferのblock比率は可聴秒数でもqueued frame数でもない。
 
-標準Playerは一次再生情報、Integrity概要、展開可能な詳細診断の順に配置する。Custom UIが同様の表示を
-実装する場合、`CLEAN`をdisc全体/原盤/bit-perfectの保証にしない。current playback evidenceとlatest readは
-別の観測であり、前者は出力PCM根拠、後者はread-aheadを含み得る最新readである。差から物理head位置、
-可聴位置、速度、遅延を推測しない。接続表示を置く場合はstate API/WebSocketとの接続だけを示し、
-daemonやdriveのhealthを主張しない。
+標準Playerは一次再生情報を主役にし、その下へIntegrity monitorを置く。#24のPhase 1では、実使用で
+必要な情報量を評価するため、取得できるread/drive値を折り畳まず常時表示する。primary（曲・artwork・
+再生状態・進捗）、secondary（現在/最新read、方針、buffer、coverage、disc map）、diagnostic（LBA、
+観測窓、能力値など）の視覚的強さを、文字サイズ・contrast・spacingで分ける。これは最終的な常時表示
+項目を決めたものではない。次段階で評価して、削減や状態依存表示を検討する。
+
+Custom UIが同様の表示を実装する場合、`CLEAN`をdisc全体/原盤/bit-perfectの保証にしない。current playback
+evidenceとlatest readは別の観測であり、前者は出力PCM根拠、後者はread-aheadを含み得る最新readである。
+差から物理head位置、可聴位置、速度、遅延を推測しない。接続表示を置く場合はIntegrity header内で
+state API/WebSocketとの接続だけを示し、daemonやdriveのhealthを主張しない。標準Playerのneutral dark
+backgroundは将来のArtist Backgroundなどのvisual enrichmentへ依存しない。
 
 ## Custom UIの描画負荷
 

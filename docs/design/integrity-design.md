@@ -380,11 +380,14 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 #98はPR #101、#99はPR #102で完了済み。#24はこれらの契約を利用して実装できる。
 現行の128件履歴だけで全disc履歴を表示しない。
 詳細履歴はオンデマンド取得し、最新session/stream照合と有界保持を必須にする。
-標準target viewportでは主再生情報とIntegrity概要を優先し、詳細診断は展開可能にする。`CLEAN`は
-current evidenceのscope付き分類として表示し、全disc/原盤/bit-perfect保証に見せない。mapはobserved clean、
-retry/repeat、recovered、UNCERTAIN/backend anomaly、unobservedの意味と限界をlegendで示す。
-右上の接続表示はdaemon state API/WebSocket接続だけを表す。常時brandingを置かず、具体的なレイアウト・色・
-描画方式は実装時に決めるが、未観測値を生成しない条件を維持する。
+標準target viewportでは主再生情報を優先する。#24のPhase 1は実使用で評価するため、現在取得できるread/drive値を
+折り畳まず常時表示する。primary（曲・artwork・再生状態・進捗）、secondary（current/latest、方針、buffer、
+coverage、map）、diagnostic（LBA、観測窓、能力値）の階層を文字サイズ・contrast・spacingで表す。これは最終的な
+常時表示項目を確定するものではなく、評価後に削減や状態依存表示を検討する。`CLEAN`はcurrent evidenceのscope付き
+分類として表示し、全disc/原盤/bit-perfect保証に見せない。mapはobserved clean、retry/repeat、recovered、
+UNCERTAIN/backend anomaly、unobservedの意味と限界をlegendで示す。
+接続表示はIntegrity header内でdaemon state API/WebSocket接続だけを表す。常時brandingを置かず、backgroundは
+neutral darkとする。具体的なレイアウト・色・描画方式は実装時に決めるが、未観測値を生成しない条件を維持する。
 
 メッセージのfield・型・単位・意味・世代・順序・欠落・互換性を変更する際は、
 同じ変更作業で本仕様、関連する機能/API/Custom UI文書、および#24のCurrent state・Data sources・

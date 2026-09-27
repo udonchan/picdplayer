@@ -21,7 +21,7 @@
 body {
   min-height: 100vh;
   margin: 0;
-  background: radial-gradient(circle at 85% 8%, #19312a 0, transparent 28rem), var(--bg);
+  background: var(--bg);
   color: var(--text);
   font: 16px/1.45 system-ui, sans-serif;
   cursor: none;
@@ -32,13 +32,6 @@ main {
   min-height: 100vh;
   margin: auto;
   padding: clamp(18px, 3vh, 32px) clamp(28px, 4vw, 48px);
-}
-
-.system-status {
-  display: flex;
-  align-items: center;
-  justify-content: end;
-  min-height: 25px;
 }
 
 .connection {
@@ -59,7 +52,7 @@ main {
   grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);
   gap: clamp(26px, 5vw, 58px);
   align-items: center;
-  padding-top: clamp(8px, 1.5vh, 18px);
+  padding-top: clamp(18px, 3vh, 30px);
 }
 
 .art {
@@ -224,19 +217,14 @@ main {
   font-size: clamp(18px, 2.2vw, 25px);
 }
 
+.integrity-heading .connection { margin-left: auto; }
+
 .integrity-status {
   padding: 4px 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .08em;
-}
-
-.integrity-at-a-glance {
-  display: grid;
-  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
-  gap: 14px;
-  margin-top: 13px;
 }
 
 .integrity-card {
@@ -248,9 +236,10 @@ main {
 
 .integrity-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  padding: 14px 15px 15px;
+  grid-template-columns: minmax(0, 1fr) minmax(270px, 1.15fr) minmax(0, .9fr);
+  gap: 10px;
+  margin-top: 12px;
+  align-items: stretch;
 }
 
 .metrics {
@@ -263,16 +252,8 @@ main {
 
 .metrics dt { color: var(--muted); }
 .metrics dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.glance-metrics {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 5px 13px;
-  margin: 0;
-  font-size: 12px;
-}
-.glance-metrics dt { color: var(--muted); }
-.glance-metrics dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.evidence-label { margin: 13px 0 3px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.evidence-card h3 { margin: 0 0 10px; font-size: 15px; }
+.evidence-label { margin: 10px 0 3px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .evidence-value { margin: 0; overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
 .integrity-note, .map-heading p { margin: 11px 0 0; color: var(--muted); font-size: 11px; }
 .map-heading p { margin-top: 4px; }
@@ -291,7 +272,7 @@ main {
 
 .disc-map {
   position: relative;
-  width: min(100%, 135px);
+  width: min(100%, 112px);
   aspect-ratio: 1;
   margin: 10px auto 9px;
   border: 1px solid var(--line);
@@ -331,24 +312,8 @@ main {
 .legend.recovered { color: #b99cff; }
 .legend.unobserved { color: #202729; }.legend.unobserved::before { border: 1px solid var(--line); }
 
-.integrity-details {
-  margin-top: 11px;
-  border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 58%, transparent);
-}
-
-.integrity-details > summary {
-  padding: 10px 14px;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.integrity-details[open] > summary { border-bottom: 1px solid var(--line); }
-
 @media (max-width: 900px) {
-  .integrity-at-a-glance, .integrity-grid { grid-template-columns: 1fr; }
+  .integrity-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {

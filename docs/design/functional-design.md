@@ -25,16 +25,17 @@ responseは到着時の最新snapshotとroot `session_id`、`disc_map.disc_gener
 layoutがnull、sessionまたはdisc世代が変わった場合は、保持したmapを破棄する。同一discの古いmap revisionも採用しない。
 
 標準target viewportではartwork、曲名、artist、album、再生状態、進捗/時刻を一次情報とする。
-Integrityは常時アクセス可能な計測layerだが、通常は概要とmapを表示し、詳細なread/drive値は展開領域へ置く。
-値を削除・単純化せず、typography、contrast、spacingで一次情報より控えめにする。長いmetadata、No Disc、
-Integrityが未取得のときにも、一次情報と概要が縦scrollなしで確認できることを標準targetの確認条件とする。
+Integrityは常時アクセス可能な計測layerである。#24のPhase 1では実使用による評価のため、現在取得できる
+read/drive値を原則常時表示する。値を削除・単純化せず、typography、contrast、spacingで一次情報より控えめにする。
+長いmetadata、No Disc、Integrityが未取得のときにも、一次情報と概要が縦scrollなしで確認できることを標準targetの確認条件とする。
 
 概要の`CURRENT READ · CLEAN`等はcurrent playback evidenceの時点・範囲の分類であり、disc全体、原盤、
 bit-perfect、verification成功を意味しない。current evidenceがなければNOT AVAILABLEとする。current playbackは
 出力へ提出したPCM根拠、latest readはread-aheadを含む別の最新観測である。両者の差から可聴位置、物理head位置、
 速度、遅延を推測しない。右上の`DAEMON · CONNECTED`等は状態API/WebSocket接続の観測だけを示し、
 daemon全体、drive、read、audioのhealthを保証しない。CONNECTEDは控えめに、RECONNECTING/OFFLINE/invalidだけを
-必要に応じて強調する。標準再生画面には常時PiCDPlayerロゴを置かない。
+必要に応じて強調する。接続表示はIntegrity headerに統合する。標準再生画面には常時PiCDPlayerロゴを置かず、
+backgroundはneutral darkとする。
 
 円盤read mapはTOCのLBAを内周から外周へ模式的に投影したものだが、物理半径・ヘッド位置・
 全discの健全性を表さない。regionが重なる場合は、UNCERTAIN/backend anomaly、RECOVERED、retry、

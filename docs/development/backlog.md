@@ -38,7 +38,7 @@
 | [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90は完了。#24正式化時に公開実装と再照合済み。 |
 | [#96 Validate Integrity diagnostics under Raspberry Pi hardware faults](https://github.com/udonchan/picdplayer/issues/96) | 後日の実機異常系診断評価。傷disc/stallの再現・音声影響は#33、特殊TOCは#39/#40が担当。同じrun記録を共有し、API・警告・復元の整合だけを確認する。#24の追加blockerにはしない。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | #98/#99と監査修正#103〜#106はマージ済み。標準Playerへscope付きsummary・有界disc read map・展開可能な詳細/drive表示を実装中。primary playbackを優先し、daemon接続を明示するUI階層へ更新した。Docker/通常Pi CDPで再照合し、PRレビュー、TV/試聴、異常媒体・長期/負荷評価が残る。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | #98/#99と監査修正#103〜#106はマージ済み。Phase 1ではscope付きsummary・有界disc read map・全read/drive値を常時表示し、実使用で情報量を評価する。primary playbackを優先し、daemon接続をIntegrity headerへ統合する。Docker/通常Pi CDPで再照合し、PRレビュー、TV/試聴、異常媒体・長期/負荷評価が残る。 |
 
 ## 障害対応・機能改善
 
