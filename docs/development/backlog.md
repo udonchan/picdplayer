@@ -29,7 +29,7 @@
 | Issue | 主な範囲 |
 |---|---|
 | [#7 Extend drive capabilities and validate C2 evidence](https://github.com/udonchan/picdplayer/issues/7) | 現行probeは起動時一回のsysfs identity、CDROM_GET_CAPABILITY、およびMMC GET CONFIGURATION feature descriptor一覧のCD Read Feature C2 Flagsを読む。C2 supportのdrive reportは取得するが、実測trust、DAE/cache/accurate stream、速度・offsetは未実装。hotplug/reset時の能力失効は#88の責務。 |
-| [#8 Add bounded drive speed control with fallback](https://github.com/udonchan/picdplayer/issues/8) | `--drive-speed-x 1..255`で、KERNEL_REPORTED/YESのdriveへ停止/一時停止中に一度だけ速度要求する経路、失敗記録、API/UI投影を実装・Docker確認済み。Piには既定（速度未指定）でdeploy済み。要求受理は実測速度・回転・騒音低下を意味しない。通常CDでの設定可否、騒音・連続再生・throughput比較が残る。 |
+| [#8 Add bounded drive speed control with fallback](https://github.com/udonchan/picdplayer/issues/8) | `--drive-speed-x 1..255`で、KERNEL_REPORTED/YESのdriveへ停止/一時停止中に一度だけ速度要求する経路、失敗記録、API/UI投影を実装・Docker確認済み。Piでは1x要求のioctl受理と20秒API再生まで確認済み。要求受理は実測速度・回転・騒音低下を意味しない。騒音・CEC・長時間再生・throughput・失敗状態の既定速度との比較が残る。 |
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | 現行repeatは同一区間のPCM全体の反復一致だけを調べる。overlap整列とcache対策はなく、2-of-3一致でも独立した物理再読込を保証しない。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |

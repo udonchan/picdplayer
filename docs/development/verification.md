@@ -32,11 +32,16 @@ MediaWorkerの速度要求、JSONのnull/成功値、標準Playerの表示を自
 `requested_speed_x: null`、空の`speed_request_error`、`current_speed_x: null`を返すことを確認した。
 この通常deployでは速度ioctlを発行していない。
 
-速度要求の実機確認では、`/etc/default/picdplayer`の`PICDPLAYER_EXTRA_ARGS`へ
-`--drive-speed-x 1`を追加してdaemonを再起動する。Audio CDがSTOPPEDとなった後、APIの
-`requested_speed_x`または`speed_request_error`、journalの`speed_request`を確認する。次に通常再生で
-音声の連続供給、CEC/APIの操作応答、ドライブ騒音を既定設定と同条件で比較する。temperature、undervoltage、
-ALSA underrun、read failureも同時に記録する。実ドライブでのioctl受理、効果、長時間再生、失敗時の挙動は未確認であり、
+同日に`PICDPLAYER_EXTRA_ARGS`へ`--drive-speed-x 1`を追加してdaemonを再起動した。ASUS SDRW-08D2S-Uは
+`speed_control=YES/KERNEL_REPORTED`を返し、Audio CDのSTOPPED/AUDIO_READY後に
+`speed_request=accepted requested_speed_x=1 applied_speed=UNVERIFIED`を記録した。APIの
+`requested_speed_x`は1、`speed_request_error`は空、`current_speed_x`はnullだった。その後loopback APIで
+20秒再生し、PLAYING・track 1・position 1468 frame、`queued_blocks=50`、`dropped_events=0`を確認した。
+停止APIは204を返し、STOPPED/AUDIO_READYへ戻った。該当journalにはALSA underrun、read failure、
+main loop stall、eject errorを検出しなかった。
+
+この結果はioctl受理と短時間のAPI再生を示すだけである。音質・騒音の主観比較、CEC操作、temperature・
+undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認であり、既定速度との同条件比較を含めて
 #8の完了条件として残る。
 
 ## C2 capability probe（#7、Docker確認）
