@@ -54,9 +54,8 @@ public:
         ReadResult combined{position_, frames, 0, ReadStatus::read_error, EIO, 0};
         combined.read_independence = ReadIndependence::cache_possible;
         combined.verification.overlap_frames_requested = policy_.overlap_frames;
-        combined.verification.overlap_frames_compared = static_cast<unsigned>(overlap_frames);
-        combined.verification.overlap = overlap_frames ? OverlapVerification::mismatched
-                                                        : OverlapVerification::stream_boundary;
+        combined.verification.overlap = !policy_.overlap_frames ? OverlapVerification::not_requested
+            : overlap_frames ? OverlapVerification::not_checked : OverlapVerification::stream_boundary;
         std::vector<Candidate> candidates;
         const auto started = now_();
         for (unsigned attempt = 0; attempt < policy_.maximum_attempts; ++attempt) {
@@ -97,10 +96,9 @@ public:
             combined.verification.matching_reads = std::max(combined.verification.matching_reads,
                                                              found->matches);
             if (found->matches >= policy_.required_matches) {
-                combined.verification.accepted_candidate = detail.candidate;
-                combined.verification.accepted_attempt = combined.verification.attempts;
                 const auto output_begin = found->pcm.begin() +
                     static_cast<std::ptrdiff_t>(overlap_frames * cdda_samples_per_frame);
+                combined.verification.overlap_frames_compared = static_cast<unsigned>(overlap_frames);
                 if (overlap_frames && !std::equal(found->pcm.begin(), output_begin,
                                                    prior_tail_.begin(), prior_tail_.end())) {
                     combined.verification.overlap = OverlapVerification::mismatched;
@@ -108,8 +106,9 @@ public:
                     positioned_ = false;
                     return combined;
                 }
-                combined.verification.overlap = overlap_frames ? OverlapVerification::matched
-                                                               : OverlapVerification::stream_boundary;
+                if (overlap_frames) combined.verification.overlap = OverlapVerification::matched;
+                combined.verification.accepted_candidate = detail.candidate;
+                combined.verification.accepted_attempt = combined.verification.attempts;
                 std::copy(output_begin, found->pcm.end(), pcm.begin());
                 const auto tail_frames = std::min<std::size_t>(policy_.overlap_frames, frames);
                 const auto tail_samples = tail_frames * cdda_samples_per_frame;

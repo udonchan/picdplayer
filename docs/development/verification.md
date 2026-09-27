@@ -803,3 +803,9 @@ viewportと同じ1080 pxであることを確認した。同じviewportへ長い
 scrollHeight=1080 pxを維持し、albumは2行で省略された。
 これはCSS layoutの確認であり、実metadata取得の網羅試験ではない。TV目視・試聴、傷disc、物理交換、終端drain、
 長期運転、CDP未接続のCPU/温度比較は未確認である。
+
+## 9月27日の変更監査（#115 / #116、9月28日再開）
+
+対象はPR #108（UI）、#112（C2能力）、#113（速度要求）、#114（overlap）。コミットc31e49bまでを照合し、未比較overlapのMISMATCHED誤報告と拒否候補へのaccepted識別子設定を修正した。#24完了、速度要求、公開世代/履歴の古い記述を更新した。今回のPi deploy・試聴・傷disc・cache独立性の検証は行っていない。
+
+Docker Debian Trixie/aarch64のbuild/package生成とCTest38/38成功。追加JSON試験も成功。read失敗/部分read/候補不一致でNOT_CHECKED・比較0・採用null、overlap不一致で採用null、無効時NOT_REQUESTED、seek後reset、短い最終blockの出力を確認した。

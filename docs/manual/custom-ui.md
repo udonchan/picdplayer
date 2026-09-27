@@ -238,3 +238,5 @@ TOC座標は`disc.layout`で取得する。fieldとnull条件は[メッセージ
 GET /api/read-historyのdisc_mapはDISC scope。STREAM historyと照合条件を分け、
 root session_idと最新layoutのdisc_generationを照合する。最大256区間、容量超過時は不完全な下限として凍結。
 詳細fieldとflagsはメッセージ契約を参照。stop/seekでは保持、TOC再受理・daemon再起動ではresetする。
+
+`verification.overlap=NOT_CHECKED`は比較未実施であり、MISMATCHEDとは区別する。候補同士が一致してもoverlap不一致なら採用識別子はnullとなる。欠損・未知enumを正常値へ変換しない（#115）。

@@ -132,7 +132,7 @@ read bufferはCD frameの整数倍で、ReadResult.frames_read部分だけが有
 候補をPCM全sampleで比較し、policyの必要一致数で採用する（既定2一致、最大3試行）。最初の論理block以外は
 直前に採用した15 CD frameを先行overlapとして候補に含め、直前PCMとの一致も確認する。overlapは出力PCMから除くため
 重複再生しない。stream開始直後と明示seek直後は比較対象がなく`STREAM_BOUNDARY`となり、不一致は`EILSEQ`の
-read_errorとしてfail-closedにする。
+read_errorとしてfail-closedにする。比較前の失敗はNOT_CHECKED・比較frame数0とし、拒否候補の採用識別子はnullを維持する。
 試行数・完全read数・最大一致数・不一致数・時間予算超過、試行ごとの物理開始LBA/要求frame数、overlap結果をReadResultへ記録する。
 試行または時間予算（既定10秒）で未解決ならframes_read=0のread_errorを返し、
 呼び手のbufferへ候補PCMをコピーしない。時間予算は進行中のblocking readを中断しない。

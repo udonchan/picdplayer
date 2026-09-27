@@ -204,8 +204,47 @@ int main() {
         result = mismatch->read(one_frame);
         check(result.status == ReadStatus::read_error && result.native_error == EILSEQ);
         check(result.verification.overlap == OverlapVerification::mismatched);
+        check(!result.verification.accepted_candidate && !result.verification.accepted_attempt);
+        check(result.verification.overlap_frames_compared == 1);
         check(one_frame.front() == -1);
         rejects([&] { mismatch->read(one_frame); });
+
+        // Failed attempts never compare an overlap or select a candidate.
+        for (bool partial : {false, true}) {
+            auto failed = make_repeated_read_verifier(std::make_unique<ScriptedReader>(
+                std::vector<Reply>{{7}, {7},
+                    {8, partial ? ReadStatus::ok : ReadStatus::read_error, EIO, 0, 0},
+                    {9, partial ? ReadStatus::ok : ReadStatus::read_error, EIO, 0, 0}}),
+                RepeatedReadPolicy{2, 2, std::chrono::milliseconds(100), 1});
+            failed->seek(0);
+            check(failed->read(pcm).status == ReadStatus::ok);
+            result = failed->read(pcm);
+            check(result.verification.overlap == OverlapVerification::not_checked);
+            check(result.verification.overlap_frames_compared == 0);
+            check(!result.verification.accepted_candidate);
+        }
+        auto no_consensus = make_repeated_read_verifier(std::make_unique<ScriptedReader>(
+            std::vector<Reply>{{7}, {7}, {8}, {9}}),
+            RepeatedReadPolicy{2, 2, std::chrono::milliseconds(100), 1});
+        no_consensus->seek(0);
+        check(no_consensus->read(pcm).status == ReadStatus::ok);
+        result = no_consensus->read(pcm);
+        check(result.verification.overlap == OverlapVerification::not_checked);
+        check(result.verification.overlap_frames_compared == 0);
+
+        // A short final block emits only its logical frame; seek resets the tail.
+        result = overlap->read(pcm);
+        check(result.frames_read == 1 && pcm.front() == 104 && pcm.back() == 104);
+        check(result.verification.details[0].physical_frames_requested == 2);
+        overlap->seek(200);
+        result = overlap->read(pcm);
+        check(result.verification.overlap == OverlapVerification::stream_boundary);
+        check(result.verification.overlap_frames_compared == 0 && pcm.front() == 200);
+        auto disabled = make_repeated_read_verifier(std::make_unique<PositionReader>(),
+            {2, 2, std::chrono::milliseconds(100), 0});
+        disabled->seek(0);
+        check(disabled->read(pcm).verification.overlap == OverlapVerification::not_requested);
+        check(disabled->read(pcm).verification.overlap == OverlapVerification::not_requested);
 
         std::cout << "PASS: bounded repeated reads, position and overlap continuity, and fail-closed output\n";
     } catch (const std::exception& error) {

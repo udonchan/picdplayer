@@ -103,6 +103,7 @@ const char* read_independence_name(ReadIndependence value) {
 const char* overlap_verification_name(OverlapVerification value) {
     switch (value) {
     case OverlapVerification::not_requested: return "NOT_REQUESTED";
+    case OverlapVerification::not_checked: return "NOT_CHECKED";
     case OverlapVerification::stream_boundary: return "STREAM_BOUNDARY";
     case OverlapVerification::matched: return "MATCHED";
     case OverlapVerification::mismatched: return "MISMATCHED";

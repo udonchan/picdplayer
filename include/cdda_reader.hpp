@@ -18,7 +18,7 @@ enum class ReadStatus { ok, read_error };
 // Repeated PCM equality does not prove an independent physical reread: a
 // backend or drive may return cached data.
 enum class ReadIndependence { unknown, cache_possible, cache_mitigated };
-enum class OverlapVerification { not_requested, stream_boundary, matched, mismatched };
+enum class OverlapVerification { not_requested, not_checked, stream_boundary, matched, mismatched };
 struct ParanoiaEvents {
     unsigned reads = 0, verifies = 0, fixups = 0, skips = 0;
     unsigned read_errors = 0, cache_errors = 0, other = 0;

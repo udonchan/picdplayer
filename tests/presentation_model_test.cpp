@@ -90,6 +90,17 @@ int main() {
         check(verification["overlap_frames_compared"] == 15);
         check(verification["overlap"] == "MATCHED");
         check(diagnostic["read"]["latest"]["read_independence"] == "CACHE_POSSIBLE");
+        auto unchecked = diagnostic_model;
+        unchecked.read.latest->verification.overlap = OverlapVerification::not_checked;
+        unchecked.read.latest->verification.overlap_frames_compared = 0;
+        unchecked.read.latest->verification.accepted_candidate.reset();
+        unchecked.read.latest->verification.accepted_attempt.reset();
+        const auto unchecked_json = nlohmann::json::parse(serialize_presentation_model(unchecked));
+        const auto& unchecked_verification = unchecked_json["read"]["latest"]["verification"];
+        check(unchecked_verification["overlap"] == "NOT_CHECKED");
+        check(unchecked_verification["overlap_frames_compared"] == 0);
+        check(unchecked_verification["accepted_candidate"].is_null());
+        check(unchecked_verification["accepted_attempt"].is_null());
         auto single = model;
         single.read.latest = make_read_evidence(ReadResult{150, 15, 15, ReadStatus::ok, 0, 0});
         const auto single_json = nlohmann::json::parse(serialize_presentation_model(single));
