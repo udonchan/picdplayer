@@ -95,7 +95,10 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
             attempts.push_back({{"attempt", i + 1}, {"frames_read", attempt.frames_read},
                                {"complete", attempt.complete}, {"native_error", attempt.native_error},
                                {"direct_retries", attempt.direct_retries},
-                               {"candidate", optional(attempt.candidate)}});
+                               {"candidate", optional(attempt.candidate)},
+                               {"physical_start_lba", attempt.physical_start_lba},
+                               {"observed_start_lba", attempt.observed_start_lba},
+                               {"physical_frames_requested", attempt.physical_frames_requested}});
         }
         return {{"device_generation", evidence.device_generation},
                   {"disc_generation", evidence.disc_generation},
@@ -108,6 +111,7 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                   {"frames_read", evidence.frames_read},
                   {"status", integrity_read_status_name(evidence.status)},
                   {"local_verification", local_verification_name(evidence.local_verification)},
+                  {"read_independence", read_independence_name(evidence.read_independence)},
                   {"c2_status", c2_status_name(evidence.c2_status)},
                   {"offset_status", offset_status_name(evidence.offset_status)},
                   {"direct_retries", evidence.direct_retries},
@@ -119,6 +123,9 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                     {"complete_reads", evidence.verification.complete_reads},
                                     {"matching_reads", evidence.verification.matching_reads},
                                     {"mismatches", evidence.verification.mismatches},
+                                    {"overlap_frames_requested", verification.overlap_frames_requested},
+                                    {"overlap_frames_compared", verification.overlap_frames_compared},
+                                    {"overlap", overlap_verification_name(verification.overlap)},
                                     {"time_budget_exhausted",
                                      evidence.verification.time_budget_exhausted}}},
                   {"backend_events", {{"reads", evidence.backend_events.reads},

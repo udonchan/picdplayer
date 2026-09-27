@@ -45,6 +45,10 @@ int main() {
         accepted.verification.details[1] = {15, true, 0, 0, 1};
         accepted.verification.accepted_candidate = 1;
         accepted.verification.accepted_attempt = 2;
+        accepted.verification.overlap_frames_requested = 15;
+        accepted.verification.overlap_frames_compared = 15;
+        accepted.verification.overlap = OverlapVerification::matched;
+        accepted.read_independence = ReadIndependence::cache_possible;
         diagnostic_model.read.latest = make_read_evidence(accepted);
         PlayerEvent event;
         event.sequence = 42;
@@ -83,11 +87,15 @@ int main() {
         check(verification["attempt_details"][0]["candidate"] == 1);
         check(verification["accepted_candidate"] == 1);
         check(verification["detail_capacity"] == 8);
+        check(verification["overlap_frames_compared"] == 15);
+        check(verification["overlap"] == "MATCHED");
+        check(diagnostic["read"]["latest"]["read_independence"] == "CACHE_POSSIBLE");
         auto single = model;
         single.read.latest = make_read_evidence(ReadResult{150, 15, 15, ReadStatus::ok, 0, 0});
         const auto single_json = nlohmann::json::parse(serialize_presentation_model(single));
         check(single_json["read"]["latest"]["verification"]["attempt_details"].empty());
         check(single_json["read"]["latest"]["verification"]["accepted_candidate"].is_null());
+        check(single_json["read"]["latest"]["read_independence"] == "UNKNOWN");
         ReadDiagnostics identity;
         identity.session_id = "session-a";
         const DiscToc unusual{{{3, 150, 750}, {4, 900, 1500}}, 2400};

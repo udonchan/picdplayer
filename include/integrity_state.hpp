@@ -26,6 +26,7 @@ struct ReadEvidence {
     std::size_t frames_read = 0;
     IntegrityReadStatus status = IntegrityReadStatus::unknown;
     LocalVerification local_verification = LocalVerification::none;
+    ReadIndependence read_independence = ReadIndependence::unknown;
     C2Status c2_status = C2Status::unknown;
     OffsetStatus offset_status = OffsetStatus::unknown;
     unsigned direct_retries = 0;
@@ -113,5 +114,7 @@ void observe_read(IntegrityStats& stats, const ReadResult& result);
 const char* read_activity_name(ReadActivity value);
 const char* integrity_read_status_name(IntegrityReadStatus value);
 const char* local_verification_name(LocalVerification value);
+const char* read_independence_name(ReadIndependence value);
+const char* overlap_verification_name(OverlapVerification value);
 const char* c2_status_name(C2Status value);
 const char* offset_status_name(OffsetStatus value);

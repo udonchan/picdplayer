@@ -128,15 +128,21 @@ main loopを止めない。実行中ioctlのcancelや公平性は提供せず、
 read bufferはCD frameの整数倍で、ReadResult.frames_read部分だけが有効。
 最初とread_error後にseekが必要。EOF判定は呼び手がTOCで行う。
 [direct](../../src/cdda_reader.cpp)と[paranoia](../../src/paranoia_reader.cpp)は同じPCM形式を返す。
-[RepeatedReadVerifier](../../src/repeated_read_verifier.cpp)はreaderを包み、各試行前に同じLBAへseekする。
-候補をPCM全sampleで比較し、policyの必要一致数で採用する（既定2一致、最大3試行）。
-試行数・完全read数・最大一致数・不一致数・時間予算超過をReadResultへ記録する。
+[RepeatedReadVerifier](../../src/repeated_read_verifier.cpp)はreaderを包み、各試行前に同じ物理範囲へseekする。
+候補をPCM全sampleで比較し、policyの必要一致数で採用する（既定2一致、最大3試行）。最初の論理block以外は
+直前に採用した15 CD frameを先行overlapとして候補に含め、直前PCMとの一致も確認する。overlapは出力PCMから除くため
+重複再生しない。stream開始直後と明示seek直後は比較対象がなく`STREAM_BOUNDARY`となり、不一致は`EILSEQ`の
+read_errorとしてfail-closedにする。
+試行数・完全read数・最大一致数・不一致数・時間予算超過、試行ごとの物理開始LBA/要求frame数、overlap結果をReadResultへ記録する。
 試行または時間予算（既定10秒）で未解決ならframes_read=0のread_errorを返し、
 呼び手のbufferへ候補PCMをコピーしない。時間予算は進行中のblocking readを中断しない。
 PcmWorkerはsingleで15 frame、repeatでpolicyのregion_frames（既定75）を要求する。
 queue容量はCD frame設定をregionで割って切り捨て、開始閾値は切り上げる。
 切り上げ結果がqueue容量を超える場合は容量へ丸め、待機条件が達成不能にならないようにする。
 既定設定ではsingleは10秒/0.6秒、repeatは10秒/1秒（75 frame blockへの切り上げ）となる。
+候補数は最大8、overlapは最大75 CD frameであり、候補PCM量は要求範囲とこの上限で有界である。
+反復readはcacheを無効化しないため、採用結果を`CACHE_POSSIBLE`として公開する。これはPCM一致やoverlap一致が
+物理的に独立した再読を保証しないことを示す。現行実装は`CACHE_MITIGATED`を発行しない。
 各世代の処理開始時にblock量と容量をmutex下でコピーし、
 旧世代のreadが戻るまでに設定が変わっても可変設定をlock外から参照しない。
 [AudioOutput](../../include/audio_output.hpp)のwrite/delayの単位はCD frameでなくstereo sample frame。

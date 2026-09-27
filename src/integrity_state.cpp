@@ -28,6 +28,7 @@ ReadEvidence make_read_evidence(const ReadResult& result) {
     else if (backend_reported_verification(result.paranoia))
         evidence.local_verification = LocalVerification::backend_reported;
     else evidence.local_verification = LocalVerification::single_read;
+    evidence.read_independence = result.read_independence;
     // Neither current backend requests C2 pointers or applies a configured
     // drive offset. UNKNOWN is more accurate than assuming absence or zero.
     evidence.c2_status = C2Status::not_checked;
@@ -88,6 +89,25 @@ const char* local_verification_name(LocalVerification value) {
     case LocalVerification::multiple_match: return "MULTIPLE_MATCH";
     }
     return "NONE";
+}
+
+const char* read_independence_name(ReadIndependence value) {
+    switch (value) {
+    case ReadIndependence::unknown: return "UNKNOWN";
+    case ReadIndependence::cache_possible: return "CACHE_POSSIBLE";
+    case ReadIndependence::cache_mitigated: return "CACHE_MITIGATED";
+    }
+    return "UNKNOWN";
+}
+
+const char* overlap_verification_name(OverlapVerification value) {
+    switch (value) {
+    case OverlapVerification::not_requested: return "NOT_REQUESTED";
+    case OverlapVerification::stream_boundary: return "STREAM_BOUNDARY";
+    case OverlapVerification::matched: return "MATCHED";
+    case OverlapVerification::mismatched: return "MISMATCHED";
+    }
+    return "NOT_REQUESTED";
 }
 
 const char* c2_status_name(C2Status value) {

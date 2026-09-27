@@ -55,9 +55,11 @@ int main() {
         check(json["read"]["effective_strategy"] == "direct-single-read");
         check(json["read"]["latest"]["status"] == "CLEAN");
         check(json["read"]["latest"]["local_verification"] == "SINGLE_READ");
+        check(json["read"]["latest"]["read_independence"] == "UNKNOWN");
         check(json["read"]["latest"]["c2_status"] == "NOT_CHECKED");
         check(json["read"]["latest"]["offset_status"] == "UNKNOWN");
         check(json["read"]["latest"]["verification"]["attempts"] == 0);
+        check(json["read"]["latest"]["verification"]["overlap"] == "NOT_REQUESTED");
         check(json["read"]["stats"]["read_calls"] == 1);
         check(json["read"]["stats"]["verified_calls"] == 0);
         check(json["read"]["current_playback"]["start_lba"] == 45);

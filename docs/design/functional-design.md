@@ -107,9 +107,12 @@ direct追加retryは診断CLIで0〜10回指定でき、既定0。playerは既�
 paranoiaはFULLからNEVERSKIPを除いたmode、最大retry 20、skipは失敗として扱う。
 callback統計はdirectのretry回数と同じ意味ではない。
 
-`--read-verification repeat`はbackendをdecoratorで包み、75 CD frame（終端のみ短縮）の同一区間を最大3回読み、PCM全体が2回一致した
-候補だけを採用する。一致しない場合は再生を停止する。既定の`single`は従来どおり一回のreadを採用する。
-反復一致はdrive cacheの影響を排除しないため、独立した複数readや原盤PCMとの一致とは表示しない。
+`--read-verification repeat`はbackendをdecoratorで包み、75 CD frame（終端のみ短縮）の論理区間を最大3回読み、PCM全体が2回一致した
+候補だけを採用する。最初の論理区間以外は直前に採用した15 CD frameを先行overlapとして候補に含め、直前PCMとの一致も確認する。
+overlapは再生出力から除くため重複再生しない。比較対象のないstream開始/seek直後は`STREAM_BOUNDARY`、不一致は
+fail-closedで再生を停止する。既定の`single`は従来どおり一回のreadを採用する。
+反復一致とoverlap一致はdrive cacheの影響を排除しないため、`read_independence=CACHE_POSSIBLE`として公開し、
+独立した複数readや原盤PCMとの一致とは表示しない。
 
 API有効buildではread policyをruntimeで要求できる。daemonはrequested/effective/pendingを公開し、再生中の
 変更はSTOPPEDまたはNO_DISCで適用し、次回playでreaderを作り直す。PAUSED中も保留する。
