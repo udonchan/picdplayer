@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-09-26。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-09-27。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -10,10 +10,34 @@
 
 ## 現在の確認待ち
 
-傷disc、cache独立性、速度変更、S/PDIF出力は未確認。
+傷disc、cache独立性、速度変更の効果、S/PDIF出力は未確認。
 Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
+
+## Bounded drive speed request（#8、Docker確認と通常Pi deploy）
+
+`--drive-speed-x 1..255`を指定したdaemonは、Audio CDを認識したSTOPPEDまたはPAUSED中に、
+`drive.speed_control=YES/KERNEL_REPORTED`のときだけLinux `CDROM_SELECT_SPEED`へ一度だけCD倍速を
+要求する。要求はMediaWorkerとDriveAccessCoordinatorを通るため、PCM reader、media/TOC、ejectと
+同時にdevice ioctlを実行しない。成功時は`drive.requested_speed_x`へ要求値を記録する。これは
+ioctl受理だけを表し、適用速度・物理回転・騒音・throughputを測定しない。能力がNO/UNKNOWNならioctlを
+発行せず現在の設定を維持する。ioctlが失敗した場合も成功後の状態を推測せず、`drive.speed_request_error`へ
+理由を残して再生を継続する。
+`drive.current_speed_x`は現行では未観測でnullである。
+
+Linux/aarch64 Dockerで`./scripts/build-container.sh`とCTest 38件を実行した。範囲外値、transport失敗、
+MediaWorkerの速度要求、JSONのnull/成功値、標準Playerの表示を自動試験した。2026-09-27に.debをPiへ
+導入し、速度オプション未指定の通常設定でdaemon/kioskがactiveであること、APIが
+`requested_speed_x: null`、空の`speed_request_error`、`current_speed_x: null`を返すことを確認した。
+この通常deployでは速度ioctlを発行していない。
+
+速度要求の実機確認では、`/etc/default/picdplayer`の`PICDPLAYER_EXTRA_ARGS`へ
+`--drive-speed-x 1`を追加してdaemonを再起動する。Audio CDがSTOPPEDとなった後、APIの
+`requested_speed_x`または`speed_request_error`、journalの`speed_request`を確認する。次に通常再生で
+音声の連続供給、CEC/APIの操作応答、ドライブ騒音を既定設定と同条件で比較する。temperature、undervoltage、
+ALSA underrun、read failureも同時に記録する。実ドライブでのioctl受理、効果、長時間再生、失敗時の挙動は未確認であり、
+#8の完了条件として残る。
 
 ## C2 capability probe（#7、Docker確認）
 

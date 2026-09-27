@@ -179,6 +179,13 @@ DRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを報告できる�
 probeの遅延は後続のmedia観測を遅らせ得る。現在は起動時一回のprobeであり、hotplug/reset時の能力失効と
 再probeは#88で扱い、未実装である。
 
+`--drive-speed-x N`が指定され、probe結果が`speed_control=YES`なら、Audio CDのTOC採用後に
+STOPPEDまたはPAUSED中だけMediaWorkerへ`set_drive_speed`を一回要求する。callbackは
+DriveAccessCoordinator内で`CDROM_SELECT_SPEED`を呼ぶため、PCM reader、media/TOC、ejectと同時に
+device ioctlを行わない。Nは1〜255倍速に限定し、ioctl成功を`requested_speed_x`へ記録する。これは要求受理であって
+適用速度・回転・throughputの測定ではない。失敗は`speed_request_error`とwarning logに残し、再生可能化の
+条件にはしない。capabilityがNOまたはUNKNOWNならioctlを発行せず、既定設定を維持した理由を同じfieldへ記録する。current speedの標準queryや効果の実機検証は#8の残作業である。
+
 [route_api_request](../../src/api_server.cpp)はmethod/path/bodyを検証してhandlerへ渡す純粋な入口。
 実接続のloopback判定はApiServer callbackから呼ぶ共通routeで行い、純粋なroute単体は認証境界ではない。
 本文あり／なしのHTTP経路で同じ判定を使い、操作handlerとtelemetry handlerをloopbackにだけ渡す。

@@ -75,6 +75,8 @@ metadata/artworkの到着は再生開始とは独立し、再生状態だけか�
 | 上記flag.value | string | UNKNOWN / NO / YES |
 | 上記flag.source | string | NONE / KERNEL_REPORTED / DRIVE_REPORTED / TESTED / DATABASE / USER_CONFIGURED / INFERRED |
 | 上記flag.detail | string | 根拠の説明。空になり得る |
+| requested_speed_x | number? | ioctlが成功した要求CD倍速。実測値ではない |
+| speed_request_error | string | 明示された速度要求を適用しなかった最後の理由（ioctl失敗または能力非対応/不明）。未指定・成功時は空 |
 | current_speed_x | number? | drive速度の観測値。継続実測は未実装 |
 | read_offset_samples | int? | sample単位offset。現行は未取得 |
 

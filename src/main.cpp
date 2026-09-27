@@ -16,6 +16,7 @@
 #include <cerrno>
 #include <csignal>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <system_error>
 #include <sys/signalfd.h>
@@ -45,6 +46,8 @@ int main(int argc, char** argv) {
     PcmBufferConfig buffer_config;
     bool buffer_option = false;
     bool verification_option = false;
+    std::optional<unsigned> drive_speed_x;
+    bool drive_speed_option = false;
     ReadPolicy read_policy;
     std::string api_listen = "127.0.0.1";
     bool api_listen_option = false;
@@ -100,6 +103,17 @@ int main(int argc, char** argv) {
                 std::cerr << "Invalid --read-verification: expected single or repeat\n";
                 return 2;
             }
+        }
+        else if (arg == "--drive-speed-x" && i + 1 < argc) {
+            const std::string_view value(argv[++i]);
+            unsigned parsed = 0;
+            const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+            if (error != std::errc{} || end != value.data() + value.size() || parsed < 1 || parsed > 255) {
+                std::cerr << "Invalid --drive-speed-x: expected 1..255\n";
+                return 2;
+            }
+            drive_speed_x = parsed;
+            drive_speed_option = true;
         }
         else if (arg == "--player" && i + 1 < argc) player_device = argv[++i];
         else if (arg == "--audio-device" && i + 1 < argc) { audio_device = argv[++i]; audio_option = true; }
@@ -201,6 +215,9 @@ int main(int argc, char** argv) {
     if (verification_option && player_device.empty()) {
         std::cerr << "--read-verification requires --player\n"; return 2;
     }
+    if (drive_speed_option && player_device.empty()) {
+        std::cerr << "--drive-speed-x requires --player\n"; return 2;
+    }
     try {
         validate_pcm_buffer_config(buffer_config);
         validate_read_policy(read_policy, buffer_config.capacity_cd_frames);
@@ -249,7 +266,7 @@ int main(int argc, char** argv) {
                                cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
                                metadata_cache, api_listen, api_port, buffer_config,
-                               read_policy, custom_ui);
+                               read_policy, custom_ui, drive_speed_x);
             return 0;
         }
         if (!cdda_device.empty()) {

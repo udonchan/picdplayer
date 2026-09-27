@@ -25,7 +25,8 @@ async function main() {
     enrichment: { status: 'AVAILABLE' }, artwork: { cover: null },
     drive: { vendor: 'Drive', model: 'Model', digital_audio_extraction: { value: 'UNKNOWN', source: 'NONE' },
       c2_supported: { value: 'NOT_CHECKED', source: 'NONE' }, read_cache: { value: 'UNKNOWN', source: 'NONE' },
-      speed_control: { value: 'YES', source: 'KERNEL_REPORTED' }, read_offset_samples: null },
+      speed_control: { value: 'YES', source: 'KERNEL_REPORTED' }, requested_speed_x: 4,
+      speed_request_error: '', current_speed_x: null, read_offset_samples: null },
     read: { session_id: 'session-a', stream_generation: 4, activity: 'READING', effective_strategy: 'direct-single-read',
       queued_blocks: 1, buffer_capacity_frames: 90, read_block_frames: 75, dropped_events: 0,
       policy: { pending: true, requested: { mode: 'REPEAT' }, effective: { mode: 'SINGLE' } },
@@ -60,6 +61,8 @@ async function main() {
   assert.equal(node('connection').textContent, 'DAEMON · CONNECTED');
   assert.equal(node('connection').dataset.state, 'connected');
   assert.equal(node('read-policy').textContent, 'SINGLE → REPEAT (PENDING)');
+  assert.equal(node('drive-speed-request').textContent, '4x REQUEST ACCEPTED');
+  assert.equal(node('drive-speed-current').textContent, 'NOT AVAILABLE');
   assert.equal(node('read-buffer').textContent, '1 / 1 blocks');
   assert.equal(node('integrity-summary').textContent, 'CURRENT READ · CLEAN');
   assert.match(node('read-current').textContent, /LBA 20–35/);
