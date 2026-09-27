@@ -108,7 +108,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
                         const std::string& metadata_cache, const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config,
-                        ReadPolicy initial_read_policy, const std::string& custom_ui) {
+                        ReadPolicy initial_read_policy, const std::string& custom_ui,
+                        std::optional<unsigned> configured_drive_speed_x) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache;
 #endif
@@ -144,7 +145,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
         [device, drive_access] { drive_access->invoke([&] { eject_cd(device); }); },
         [device, drive_access] { return drive_access->invoke(
             [&] { return probe_drive_capabilities(device); }); },
-        [device, drive_access] { drive_access->invoke([&] { request_cd_start(device); }); });
+        [device, drive_access] { drive_access->invoke([&] { request_cd_start(device); }); },
+        [device, drive_access, configured_drive_speed_x] {
+            drive_access->invoke([&] {
+                const auto result = request_drive_speed(device, *configured_drive_speed_x);
+                if (!result.error.empty()) throw std::runtime_error(result.error);
+            }); });
 #ifdef ENABLE_METADATA
     EnrichmentService enrichment(metadata_enabled, metadata_cache);
 #endif
@@ -185,6 +191,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                        << " buffer_frames=" << buffer_config.capacity_cd_frames
                        << " startup_frames=" << buffer_config.startup_cd_frames
                        << " verification=" << read_policy_strategy(initial_read_policy, backend)
+                       << " requested_drive_speed_x="
+                       << (configured_drive_speed_x ? std::to_string(*configured_drive_speed_x) : "default")
                        << " stdin_commands=" << (interactive ? "enabled" : "disabled");
     if (interactive)
         log_info("player") << "Commands: play pause stop next previous track N seek SECONDS state quit";
@@ -200,6 +208,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     constexpr auto drive_start_interval = std::chrono::seconds(15);
     auto next_drive_start = std::chrono::steady_clock::time_point::max();
     std::optional<std::chrono::steady_clock::time_point> drive_start_requested_at;
+    bool drive_speed_request_attempted = false;
     std::vector<PlayerEvent> recent_events;
     std::uint64_t next_event_sequence = 0;
 #ifdef ENABLE_METADATA
@@ -419,6 +428,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #else
         constexpr bool eject_idle = true;
 #endif
+        if (configured_drive_speed_x && !drive_speed_request_attempted &&
+            media_state.state() == MediaLifecycleState::audio_ready &&
+            playback != PlaybackState::playing && eject_idle &&
+            drive_capabilities.speed_control.value == Knowledge::yes &&
+            media_worker.request(MediaWork::set_drive_speed)) {
+            drive_speed_request_attempted = true;
+            log_info("drive") << "speed_request=started requested_speed_x="
+                              << *configured_drive_speed_x;
+        }
         if (media_state.state() == MediaLifecycleState::audio_ready &&
             playback != PlaybackState::playing && eject_idle &&
             now >= next_drive_start && media_worker.request(MediaWork::start_drive)) {
@@ -438,6 +456,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     log_warning("media") << media_result.error;
                 last_media_error = media_result.error;
                 if (media_result.work == MediaWork::read_toc) toc_pending = false;
+                if (media_result.work == MediaWork::set_drive_speed)
+                    drive_capabilities.speed_request_error = media_result.error;
 #ifdef ENABLE_API
                 if (media_result.work == MediaWork::eject) {
                     api_eject_inflight = false;
@@ -458,6 +478,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                       << " dae=" << knowledge_name(drive_capabilities.digital_audio_extraction.value)
                                       << " c2=" << knowledge_name(drive_capabilities.c2_supported.value)
                                       << " offset=" << (drive_capabilities.read_offset_samples ? "KNOWN" : "UNKNOWN");
+                    if (configured_drive_speed_x && !drive_speed_request_attempted &&
+                        drive_capabilities.speed_control.value != Knowledge::yes) {
+                        drive_speed_request_attempted = true;
+                        drive_capabilities.speed_request_error = std::string("speed request not applied: ")
+                            + "speed_control=" + knowledge_name(drive_capabilities.speed_control.value);
+                        log_warning("drive") << drive_capabilities.speed_request_error
+                                             << " requested_speed_x=" << *configured_drive_speed_x;
+                    }
                 }
             } else if (media_result.work == MediaWork::observe) {
                 const auto before = media_state.state();
@@ -517,6 +545,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 }
 #endif
                 toc_needs_refresh = false;
+            } else if (media_result.work == MediaWork::set_drive_speed) {
+                drive_capabilities.requested_speed_x = static_cast<int>(*configured_drive_speed_x);
+                drive_capabilities.speed_request_error.clear();
+                log_info("drive") << "speed_request=accepted requested_speed_x="
+                                  << *configured_drive_speed_x << " applied_speed=UNVERIFIED";
             } else if (media_result.work == MediaWork::start_drive) {
                 const auto elapsed_ms = drive_start_requested_at
                     ? std::chrono::duration_cast<std::chrono::milliseconds>(

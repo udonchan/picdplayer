@@ -33,6 +33,7 @@ int main() {
         drive.device = "/dev/sr0"; drive.vendor = "ASUS";
         drive.speed_control = {Knowledge::yes, CapabilityEvidenceSource::kernel_reported,
                                "CDROM_GET_CAPABILITY CDC_SELECT_SPEED"};
+        drive.requested_speed_x = 4;
         PlayerEvent event;
         event.sequence = 7; event.stream_generation = 3;
         read.stream_generation = 3;
@@ -70,6 +71,9 @@ int main() {
         check(json["drive"]["vendor"] == "ASUS");
         check(json["drive"]["digital_audio_extraction"]["value"] == "UNKNOWN");
         check(json["drive"]["speed_control"]["value"] == "YES");
+        check(json["drive"]["requested_speed_x"] == 4);
+        check(json["drive"]["speed_request_error"] == "");
+        check(json["drive"]["current_speed_x"].is_null());
         check(json["recent_events"][0]["sequence"] == 7);
         check(json["recent_events"][0]["type"] == "READ_OBSERVED");
         check(json["read"]["event_window"]["first_sequence"] == 7);

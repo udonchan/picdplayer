@@ -22,6 +22,7 @@ SSH切断後も運転する場合はsystemdから起動する。
 |CEC device|`--cec-device /dev/cec0`|
 |CEC診断|`--cec-diagnostics`|
 |CEC無効化|`--no-cec`|
+|任意のCD速度要求|`--drive-speed-x 1`（1〜255倍速の要求）|
 
 CEC deviceが未出現、またはPhysical Addressが`f.f.f.f`なら、main loopを止めずに
 250 ms周期で再確認する。ALSAのopen/configureに失敗した場合はprocessが失敗終了し、
@@ -73,7 +74,11 @@ PICDPLAYER_EXTRA_ARGS=--cec-diagnostics
 ```
 
 `PICDPLAYER_EXTRA_ARGS`は空でもよい。複数の追加optionを指定する場合はsystemdの
-EnvironmentFile構文に従って値を引用する。
+EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指定した場合だけ、Audio CDを
+認識した停止中または一時停止中に`CDROM_SELECT_SPEED`へN倍速を一度だけ要求する。既定では
+速度を変更しない。成功はioctlが要求を受理したことだけを示し、実際に適用された速度・回転音の
+低下・読み取りthroughputを保証しない。能力がNO/UNKNOWNの場合はioctlを発行せず現在の設定を維持する。ioctl失敗後のdrive状態は推測せず、
+いずれの場合も再生は続行する。`/api/state`の`drive.speed_request_error`とjournalに理由を残す。速度変更と通常再生の実機評価は#8で継続する。
 これはshell scriptではないため、変数展開やcommand substitutionは利用しない。
 `--interactive`は指定しない。serviceのstdinは`null`なので、指定するとEOFで正常終了する。
 設定変更は`sudo systemctl restart picdplayer.service`で反映する。

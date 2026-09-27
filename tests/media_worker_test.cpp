@@ -22,12 +22,14 @@ int main() {
     try {
         const auto toc = make_audio_toc(1, std::vector<std::int32_t>{0, 750}, 1500);
         bool drive_started = false;
+        bool drive_speed_set = false;
         MediaWorker worker(
             [] { return MediaObservation::audio_disc; },
             [toc] { return toc; },
             [] {},
             [] { DriveCapabilities result; result.device = "/dev/fake"; return result; },
-            [&] { drive_started = true; });
+            [&] { drive_started = true; },
+            [&] { drive_speed_set = true; });
 
         check(worker.request(MediaWork::probe_drive));
         auto result = wait_for_result(worker);
@@ -47,6 +49,10 @@ int main() {
         check(worker.request(MediaWork::start_drive));
         result = wait_for_result(worker);
         check(result.work == MediaWork::start_drive && drive_started && result.error.empty());
+
+        check(worker.request(MediaWork::set_drive_speed));
+        result = wait_for_result(worker);
+        check(result.work == MediaWork::set_drive_speed && drive_speed_set && result.error.empty());
 
         check(worker.request(MediaWork::eject));
         result = wait_for_result(worker);

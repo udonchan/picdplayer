@@ -27,6 +27,10 @@ struct DriveCapabilities {
     CapabilityFlag read_cache;
     CapabilityFlag accurate_stream;
     CapabilityFlag speed_control;
+    // A successfully submitted CDROM_SELECT_SPEED request, not a measurement.
+    std::optional<int> requested_speed_x;
+    std::string speed_request_error;
+    // A measured/reported current speed. No current-speed query exists yet.
     std::optional<int> current_speed_x;
     std::optional<int> read_offset_samples;
     std::string probe_error;
@@ -38,6 +42,16 @@ using DrivePacketTransport = std::function<int(std::span<const std::uint8_t>,
                                                 std::span<std::uint8_t>,
                                                 std::span<std::uint8_t>)>;
 
+// Test seam for CDROM_SELECT_SPEED. The argument is a CD speed multiple and
+// the return value is zero on success or errno.
+// テスト用のCDROM_SELECT_SPEED境界。引数はCD倍速、成功時は0、失敗時はerrnoを返す。
+using DriveSpeedTransport = std::function<int(unsigned)>;
+
+struct DriveSpeedRequestResult {
+    std::optional<int> requested_speed_x;
+    std::string error;
+};
+
 // Best-effort, read-only probe. Failure leaves capabilities UNKNOWN and records
 // probe_error; it does not make CD playback unavailable.
 DriveCapabilities probe_drive_capabilities(
@@ -48,6 +62,12 @@ DriveCapabilities probe_drive_capabilities(
 DriveCapabilities probe_drive_capabilities(
     const std::string& device, const std::filesystem::path& sysfs_root,
     const DrivePacketTransport& packet_transport);
+
+// Requests a bounded CD speed multiple. A success means only that the ioctl
+// accepted the request; it is not a measurement of the applied drive speed.
+DriveSpeedRequestResult request_drive_speed(unsigned speed_x,
+                                            const DriveSpeedTransport& transport);
+DriveSpeedRequestResult request_drive_speed(const std::string& device, unsigned speed_x);
 
 const char* knowledge_name(Knowledge value);
 const char* capability_evidence_source_name(CapabilityEvidenceSource value);

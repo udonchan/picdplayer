@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-09-26。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-09-27。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -10,10 +10,40 @@
 
 ## 現在の確認待ち
 
-傷disc、cache独立性、速度変更、S/PDIF出力は未確認。
+傷disc、cache独立性、速度変更の効果、S/PDIF出力は未確認。
 Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
+
+## Bounded drive speed request（#8、Docker確認と通常Pi deploy）
+
+`--drive-speed-x 1..255`を指定したdaemonは、Audio CDを認識したSTOPPEDまたはPAUSED中に、
+`drive.speed_control=YES/KERNEL_REPORTED`のときだけLinux `CDROM_SELECT_SPEED`へ一度だけCD倍速を
+要求する。要求はMediaWorkerとDriveAccessCoordinatorを通るため、PCM reader、media/TOC、ejectと
+同時にdevice ioctlを実行しない。成功時は`drive.requested_speed_x`へ要求値を記録する。これは
+ioctl受理だけを表し、適用速度・物理回転・騒音・throughputを測定しない。能力がNO/UNKNOWNならioctlを
+発行せず現在の設定を維持する。ioctlが失敗した場合も成功後の状態を推測せず、`drive.speed_request_error`へ
+理由を残して再生を継続する。
+`drive.current_speed_x`は現行では未観測でnullである。
+
+Linux/aarch64 Dockerで`./scripts/build-container.sh`とCTest 38件を実行した。範囲外値、transport失敗、
+MediaWorkerの速度要求、JSONのnull/成功値、標準Playerの表示を自動試験した。2026-09-27に.debをPiへ
+導入し、速度オプション未指定の通常設定でdaemon/kioskがactiveであること、APIが
+`requested_speed_x: null`、空の`speed_request_error`、`current_speed_x: null`を返すことを確認した。
+この通常deployでは速度ioctlを発行していない。
+
+同日に`PICDPLAYER_EXTRA_ARGS`へ`--drive-speed-x 1`を追加してdaemonを再起動した。ASUS SDRW-08D2S-Uは
+`speed_control=YES/KERNEL_REPORTED`を返し、Audio CDのSTOPPED/AUDIO_READY後に
+`speed_request=accepted requested_speed_x=1 applied_speed=UNVERIFIED`を記録した。APIの
+`requested_speed_x`は1、`speed_request_error`は空、`current_speed_x`はnullだった。その後loopback APIで
+20秒再生し、PLAYING・track 1・position 1468 frame、`queued_blocks=50`、`dropped_events=0`を確認した。
+停止APIは204を返し、STOPPED/AUDIO_READYへ戻った。該当journalにはALSA underrun、read failure、
+main loop stall、eject errorを検出しなかった。外部album artworkを含めないCDP表示キャプチャと手順は
+[drive speed request実機記録](reports/2026-09-27-drive-speed-request/README.md)に保存した。
+
+この結果はioctl受理と短時間のAPI再生を示すだけである。音質・騒音の主観比較、CEC操作、temperature・
+undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認であり、既定速度との同条件比較を含めて
+#8の完了条件として残る。
 
 ## C2 capability probe（#7、Docker確認）
 

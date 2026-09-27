@@ -81,6 +81,8 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                      {"read_cache", capability(drive.read_cache)},
                      {"accurate_stream", capability(drive.accurate_stream)},
                      {"speed_control", capability(drive.speed_control)},
+                     {"requested_speed_x", optional(drive.requested_speed_x)},
+                     {"speed_request_error", drive.speed_request_error},
                      {"current_speed_x", optional(drive.current_speed_x)},
                      {"read_offset_samples", optional(drive.read_offset_samples)}};
     const auto read_evidence = [](const std::optional<ReadEvidence>& source) -> Json {

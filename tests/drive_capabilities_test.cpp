@@ -38,6 +38,18 @@ int main() {
           std::ofstream(root / "fake" / "device" / "model") << "MODEL\n";
           std::ofstream(root / "fake" / "device" / "rev") << "1.0\n"; }
 
+        unsigned requested_speed = 0;
+        const auto requested = request_drive_speed(4, [&](unsigned speed_x) {
+            requested_speed = speed_x;
+            return 0;
+        });
+        check(requested_speed == 4 && requested.requested_speed_x == 4 && requested.error.empty());
+
+        const auto rejected_speed = request_drive_speed(0, [](unsigned) { return 0; });
+        check(!rejected_speed.requested_speed_x && !rejected_speed.error.empty());
+        const auto denied_speed = request_drive_speed(8, [](unsigned) { return EPERM; });
+        check(!denied_speed.requested_speed_x && denied_speed.error.find("CDROM_SELECT_SPEED") != std::string::npos);
+
         const auto unavailable = probe_drive_capabilities("/nonexistent/fake", root);
         check(unavailable.vendor == "VENDOR" && unavailable.model == "MODEL" && unavailable.firmware == "1.0");
         check(unavailable.digital_audio_extraction.value == Knowledge::unknown);
@@ -82,7 +94,7 @@ int main() {
         check(!denied.probe_error.empty());
 
         std::filesystem::remove_all(root);
-        std::cout << "PASS: capability probe preserves UNKNOWN and parses C2 Flags\n";
+        std::cout << "PASS: capability probe preserves UNKNOWN, parses C2 Flags, and bounds speed requests\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return 1;
     }

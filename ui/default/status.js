@@ -119,6 +119,11 @@ function render(state) {
   set('cap-cache', formatCapability(drive.read_cache));
   set('cap-stream', formatCapability(drive.accurate_stream));
   set('cap-speed', formatCapability(drive.speed_control));
+  set('drive-speed-request', drive.speed_request_error
+    ? `NOT APPLIED · ${drive.speed_request_error}`
+    : (Number.isInteger(drive.requested_speed_x) ? `${drive.requested_speed_x}x REQUEST ACCEPTED` : 'NOT REQUESTED'));
+  set('drive-speed-current', Number.isInteger(drive.current_speed_x)
+    ? `${drive.current_speed_x}x OBSERVED` : 'NOT AVAILABLE');
   set('drive-offset', drive.read_offset_samples == null
     ? 'UNKNOWN'
     : `${drive.read_offset_samples} samples`);

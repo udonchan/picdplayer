@@ -417,8 +417,13 @@ function render(snapshot) {
   set('cap-cache', formatCapability(drive.read_cache));
   set('cap-stream', formatCapability(drive.accurate_stream));
   set('cap-speed', formatCapability(drive.speed_control));
+  set('drive-speed-request', drive.speed_request_error
+    ? `NOT APPLIED · ${drive.speed_request_error}`
+    : (Number.isInteger(drive.requested_speed_x) ? `${drive.requested_speed_x}x REQUEST ACCEPTED` : 'NOT REQUESTED'));
+  set('drive-speed-current', Number.isInteger(drive.current_speed_x)
+    ? `${drive.current_speed_x}x OBSERVED` : 'NOT AVAILABLE');
   set('drive-offset', drive.read_offset_samples == null ? 'UNKNOWN' : `${drive.read_offset_samples} samples`);
-  set('drive-note', drive.probe_error || 'Capability reports are not measurement results.');
+  set('drive-note', drive.probe_error || 'Capability reports and speed requests are not measurement results.');
   renderDiscMap(snapshot);
   const observationStream = discLayoutKey(snapshot) && typeof read.session_id === 'string'
     && safeNonNegative(read.stream_generation) && read.current_playback

@@ -17,6 +17,7 @@ constexpr std::uint16_t cd_read_feature = 0x001e;
 constexpr std::size_t configuration_response_bytes = 512;
 constexpr std::size_t configuration_header_bytes = 8;
 constexpr std::size_t feature_header_bytes = 4;
+constexpr unsigned maximum_requested_speed_x = 255;
 
 std::string read_optional(const std::filesystem::path& path) {
     std::ifstream input(path);
@@ -145,7 +146,33 @@ bool probe_kernel_capabilities(DriveCapabilities& result) {
     result.speed_control.detail = "CDROM_GET_CAPABILITY CDC_SELECT_SPEED";
     return true;
 }
+DriveSpeedTransport linux_speed_transport(const std::string& device) {
+    return [device](unsigned speed_x) -> int {
+        const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0) return errno;
+        const int result = ioctl(fd, CDROM_SELECT_SPEED, static_cast<unsigned long>(speed_x));
+        const int error = result < 0 ? errno : 0;
+        close(fd);
+        return error;
+    };
+}
 } // namespace
+
+DriveSpeedRequestResult request_drive_speed(unsigned speed_x,
+                                            const DriveSpeedTransport& transport) {
+    if (speed_x == 0 || speed_x > maximum_requested_speed_x)
+        return {{}, "requested CD speed must be in the range 1..255x"};
+    if (!transport) return {{}, "CDROM_SELECT_SPEED transport is unavailable"};
+    const int error = transport(speed_x);
+    if (error)
+        return {{}, std::system_error(error, std::generic_category(),
+                                      "CDROM_SELECT_SPEED").what()};
+    return {static_cast<int>(speed_x), {}};
+}
+
+DriveSpeedRequestResult request_drive_speed(const std::string& device, unsigned speed_x) {
+    return request_drive_speed(speed_x, linux_speed_transport(device));
+}
 
 DriveCapabilities probe_drive_capabilities(const std::string& device,
                                             const std::filesystem::path& sysfs_root) {
