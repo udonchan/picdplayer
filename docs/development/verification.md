@@ -45,7 +45,7 @@ main loop stall、eject errorを検出しなかった。外部album artworkを�
 undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認であり、既定速度との同条件比較を含めて
 #8の完了条件として残る。
 
-## Repeat overlap and cache evidence（#9、Docker確認）
+## Repeat overlap and cache evidence（#9、Docker/Pi通常CD確認）
 
 repeat verifierは、最初のblock以外で直前に採用した15 CD frameを先行overlapとして再読し、出力へ
 重複させずに直前PCMとの連続性を確認する。stream開始/明示seek直後は比較対象がないため
@@ -55,8 +55,12 @@ fail-closedでPCMを採用しない。反復一致・overlap一致ともcacheを
 
 Linux/aarch64 Dockerで`./scripts/build-container.sh`とCTest 38件を実行した。fake readerにより、同一候補、
 候補不一致、read error、時間上限、最大8候補、開始LBAずれ、連続blockのoverlap一致、overlap不一致時の
-PCM非出力を確認した。Piへのdeploy・通常CD/傷discでのrepeat再生、cache軽減効果、音声・性能への影響は
-確認していない。
+PCM非出力を確認した。2026-09-28にはPi 3上で通常14 track Audio CDへrepeat policy（75 frame、2-of-3）を
+適用し、15秒間に19 read / 38 candidate attempt、`MULTIPLE_MATCH`、15 frame `MATCHED` overlap、
+`CACHE_POSSIBLE`、read error・verification failureなしをAPIで確認した。停止後はsingle policyへ復元した。
+条件、同bootで試験開始前に観測した74,989 µs main-loop stall、確認範囲は
+[通常CD実機記録](reports/2026-09-28-repeat-overlap-normal-cd/README.md)を参照する。TV実表示・試聴、傷disc、
+cache軽減効果、物理的な再読込の保証、性能・長時間安定性は確認していない。
 
 ## C2 capability probe（#7、Docker確認）
 
