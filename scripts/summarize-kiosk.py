@@ -2,13 +2,25 @@
 """Summarize read-only kiosk JSONL samples without discarding the raw data."""
 
 import argparse
+import gzip
 import json
 from pathlib import Path
 import statistics
 
 
+def read_json_lines_text(path):
+    """Read plain or gzip-compressed JSON Lines artifacts."""
+    if path.read_bytes()[:2] == b"\x1f\x8b":
+        try:
+            with gzip.open(path, "rt", encoding="utf-8") as source:
+                return source.read()
+        except (EOFError, OSError, UnicodeDecodeError) as error:
+            raise ValueError(f"Cannot read gzip JSON Lines from {path}: {error}") from error
+    return path.read_text(encoding="utf-8")
+
+
 def summarize(path):
-    rows = [json.loads(line) for line in Path(path).read_text().splitlines() if line]
+    rows = [json.loads(line) for line in read_json_lines_text(Path(path)).splitlines() if line]
     if not rows:
         raise ValueError(f"No samples in {path}")
     temperatures = [row["temp_c"] for row in rows if row["temp_c"] is not None]

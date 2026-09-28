@@ -133,6 +133,8 @@ Pi 3でのCage + Chromium kioskのCPU・温度問題は、#52の実測で再生�
 `/proc/stat`と各taskのCPU tick差分から5秒区間の値を計算する。process別CPUは1 core=100%、
 system CPUは全coreに対する割合。温度、現在/過去throttling、各CPU周波数、memory/swap、
 thread別上位5件、RSSと時刻をJSON Linesへ記録する。rawにはfull command line、URL、API keyを入れない。
+[`summarize-kiosk.py`](../../scripts/summarize-kiosk.py)はplain `.jsonl`と、保存用の`.jsonl.gz`の両方を
+直接受け入れる。
 
 ```sh
 # Macで測定スクリプトをPiのhomeへ置く。Pi上ではコンパイルしない。
@@ -170,6 +172,13 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 #52のクローズに向け、[完了判定と制約](reports/2026-09-25-kiosk-baseline/README.md#完了判定の整理2026-09-26追記)を追記した。
 既存rawを再集計し、新規測定は行っていない。Cage単独は改善対象の特定に不要として省略し、
 過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、長期運転・実表示・音声は#4で別途確認する。
+
+2026-09-28には、Issue #122の修正候補を導入したPiで、通常14 track Audio CDのCDP未接続PLAYINGを
+30秒warm-up後に300秒測定した。system CPU平均は13.27%、最高温度は66.6°C、現在のthrottlingは0だった。
+raw data、process別CPU、測定条件、限界は[5分PLAYING記録](reports/2026-09-28-post-websocket-dedup-playing/README.md)に保存した。
+このpackageは測定時点で未マージのPR #123候補であり、revision・条件が過去の基線とそろわないため、
+CPU改善率の比較には用いない。同runでmain loop stage warningは再現しなかったが、過去に異なるstageで
+観測したwarningの原因を否定するものではない。TV実表示・試聴はこの測定の確認対象外である。
 
 ## 標準PlayerのDOM更新削減（Issue #53）
 
