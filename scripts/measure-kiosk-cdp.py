@@ -48,6 +48,7 @@ class WebSocket:
             raise
         self.next_id = 0
         self.events = {}
+        self.event_payload_bytes = {}
 
     def read_exact(self, size):
         while len(self.pending) < size:
@@ -89,12 +90,22 @@ class WebSocket:
             if "method" in message:
                 name = message["method"]
                 self.events[name] = self.events.get(name, 0) + 1
+                if name == "Network.webSocketFrameReceived":
+                    payload = message.get("params", {}).get("response", {}).get("payloadData")
+                    if isinstance(payload, str):
+                        self.event_payload_bytes[name] = (
+                            self.event_payload_bytes.get(name, 0) + len(payload.encode("utf-8")))
                 if on_event is not None:
                     on_event(message)
             if message.get("id") == self.next_id:
                 if "error" in message:
                     raise RuntimeError(message["error"])
                 return message.get("result", {})
+
+    def reset_event_counters(self):
+        """Start an interval after Network.enable has drained earlier events."""
+        self.events.clear()
+        self.event_payload_bytes.clear()
 
 
 def finish_trace(websocket):
@@ -194,12 +205,17 @@ def main():
         websocket.call("Performance.enable")
         websocket.call("Network.enable")
         first = {metric["name"]: metric["value"] for metric in websocket.call("Performance.getMetrics")["metrics"]}
+        # Network.enable can report frames received before this measurement window.
+        # Count only events observed after the baseline metrics response.
+        websocket.reset_event_counters()
         time.sleep(args.seconds)
         second = {metric["name"]: metric["value"] for metric in websocket.call("Performance.getMetrics")["metrics"]}
         counters = ("Frames", "JSEventListeners", "Nodes", "LayoutCount", "RecalcStyleCount", "TaskDuration",
                     "ScriptDuration", "LayoutDuration", "RecalcStyleDuration", "JSHeapUsedSize")
         print(json.dumps({"cdp_connected_seconds": args.seconds, "time_utc": time.time(),
                           "websocket_frames_received": websocket.events.get("Network.webSocketFrameReceived", 0),
+                          "websocket_payload_bytes_received": websocket.event_payload_bytes.get(
+                              "Network.webSocketFrameReceived", 0),
                           "metrics": {key: {"start": first.get(key), "end": second.get(key),
                                             "delta": second[key] - first[key]}
                                       for key in counters if key in first and key in second}}))

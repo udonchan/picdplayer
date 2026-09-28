@@ -28,6 +28,20 @@ PLAYING測定はAPIから開始し、20秒warm-up後に採取した。独立し�
 
 測定時刻帯を含むboot journalをALSA underrun、CDDA read error、thermal、USB over-current/disconnectで検索したが、該当する新規行は見つからなかった。`main_loop_stall stage=control duration_us=95365`が00:34に一件あったが、この60秒測定より前であり、本測定中の性能値へ含めない。別実行の74.989ms観測と合わせ、原因と再現性は[#121](https://github.com/udonchan/picdplayer/issues/121)で追跡する。
 
+## CDPで見つかったWebSocket重複送信と修正（#122）
+
+上記の無接続基線とは別条件で、MacからSSH port forwarding経由のCDPを10秒接続し、`Network`、`Performance`、一時的な`render()` wrapperと`MutationObserver`を用いて測定した。CDP自体の負荷を含むため、CPU基線やHDMI scanoutと同一視しない。
+
+| 条件 | WS frame / text payload | `render()` / DOM mutation | Layout / Paint |
+|---|---:|---:|---:|
+| 修正前 STOPPED | 477 / 2,155,563 byte | 480 / 0 | 0 / 0 |
+| 修正後 STOPPED | 0 / 0 byte | 0 / 0 | 0 / 0 |
+| 修正後 PLAYING | 40 / 758,472 byte | 40 / 379 | 40 / 40 |
+
+修正前もREST stateのrevisionは100ms間隔12回で不変だった。原因はdaemonのpublishではなく、API serverが同じ接続の`LWS_CALLBACK_SERVER_WRITEABLE`ごとに送信済みstateを確認せず同一snapshotを書き出せたことだった。接続ごとに送信済みgenerationを保持し、初回と内容が変化したstateだけを送るよう修正した。PLAYINGの40 frame/10秒は250ms周期の状態更新と整合する。終了後はAPIがSTOPPED/AUDIO_READY、温度65.5°C、current throttlingなしであることを確認した。
+
+payload byte数はCDPが報告する受信text payloadをUTF-8で数えた値であり、WebSocket framing、CDP通信、画面への転送量は含まない。Network domain有効化時の過去eventを測定窓へ含めないよう、baseline metrics応答後にcounterをresetする。集計値は`cdp-websocket-dedup.jsonl`に保存する。
+
 ## 解釈と限界
 
 - 現行masterの通常CDの短時間PLAYINGは、#52で記録した旧版の高負荷状態とは異なるCPU・温度範囲だった。ただしrevision、開始温度、表示条件、測定順、計測期間がそろわないため、改善率や一般的な性能保証にはしない。
@@ -40,8 +54,9 @@ PLAYING測定はAPIから開始し、20秒warm-up後に採取した。独立し�
 
 - `stopped-no-cdp.jsonl.gz`
 - `playing-no-cdp.jsonl.gz`
+- `cdp-websocket-dedup.jsonl`
 
-各rawは時刻、CPU/process/thread、RSS、memory/swap、周波数、温度、throttling、想定player stateを含む。URL、album artwork、API key、full process argsは含めない。展開後に次で表を再計算できる。
+sampler rawは時刻、CPU/process/thread、RSS、memory/swap、周波数、温度、throttling、想定player stateを含む。CDP rawはURL、album artwork、API key、full process argsを含めない。展開後に次でsamplerの表を再計算できる。
 
 ```sh
 gzip -dc stopped-no-cdp.jsonl.gz > /tmp/stopped.jsonl

@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <mutex>
 #include <netinet/in.h>
 #include <ifaddrs.h>
 #include <sys/socket.h>
@@ -258,6 +259,7 @@ int main() {
         std::atomic<bool> got_initial_event = false;
         std::atomic<bool> websocket_done = false;
         std::string websocket_received;
+        std::mutex websocket_mutex;
         std::thread websocket_client([&] {
             const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
             if (fd < 0) { websocket_done = true; return; }
@@ -276,10 +278,15 @@ int main() {
                 for (;;) {
                     const auto count = recv(fd, buffer, sizeof(buffer), 0);
                     if (count <= 0) break;
-                    websocket_received.append(buffer, static_cast<std::size_t>(count));
-                    if (websocket_received.find(R"({"revision":7})") != std::string::npos)
-                        got_initial_event = true;
-                    if (websocket_received.find(R"({"revision":8})") != std::string::npos) break;
+                    bool received_update = false;
+                    {
+                        std::lock_guard lock(websocket_mutex);
+                        websocket_received.append(buffer, static_cast<std::size_t>(count));
+                        if (websocket_received.find(R"({"revision":7})") != std::string::npos)
+                            got_initial_event = true;
+                        received_update = websocket_received.find(R"({"revision":8})") != std::string::npos;
+                    }
+                    if (received_update) break;
                 }
             }
             close(fd); websocket_done = true;
@@ -288,6 +295,22 @@ int main() {
             server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         check(got_initial_event);
+        // service() may make a connected socket writeable repeatedly. The initial snapshot must not repeat
+        // until publish_state() receives changed content.
+        for (int i = 0; i < 50; ++i) {
+            server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        const auto occurrences = [](const std::string& value, std::string_view needle) {
+            std::size_t count = 0, position = 0;
+            while ((position = value.find(needle, position)) != std::string::npos) {
+                ++count; position += needle.size();
+            }
+            return count;
+        };
+        {
+            std::lock_guard lock(websocket_mutex);
+            check(occurrences(websocket_received, R"({"revision":7})") == 1);
+        }
         server.publish_state(R"({"revision":8})");
         for (int i = 0; i < 1000 && !websocket_done; ++i) {
             server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -295,6 +318,7 @@ int main() {
         websocket_client.join();
         check(websocket_received.find("101 Switching Protocols") != std::string::npos);
         check(websocket_received.find(R"({"revision":8})") != std::string::npos);
+        check(occurrences(websocket_received, R"({"revision":8})") == 1);
 
         const ApiReadPolicyProvider policy_provider = [] {
             return std::string(R"({"requested":{"mode":"REPEAT"},"effective":{"mode":"SINGLE"},"pending":true})");

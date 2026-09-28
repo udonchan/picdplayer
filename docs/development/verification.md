@@ -139,9 +139,10 @@ limitが立てばsamplerは異常終了する。serviceを起動して測る場�
 ALSA underrun、daemon slow stage、CDDA errorは同じ時刻の`journalctl`から別途照合する。
 
 CDPはMacからSSH port forwardingで接続し、[短時間の計測スクリプト](../../scripts/measure-kiosk-cdp.py)
-でPerformance metricsと任意のtimeline trace・screenshotを取得する。CDP自身がCPU/paintに負荷を
+でPerformance metrics、受信WebSocket frame数とtext payload byte数、任意のtimeline trace・screenshotを取得する。payload byte数はCDPが報告する受信text payloadのUTF-8 byte数であり、WebSocket framing、CDP通信、画面への転送量を含まない。CDP自身がCPU/paintに負荷を
 加えるので、未接続の5分測定と混ぜない。`Performance.getMetrics`のLayoutCountなどはrendererの
 累積値の差であり、画面に実際に表示されたpixelを保証しない。traceは最大10秒に制限する。
+Network domainを有効化した直後に届く過去のframe eventはbaseline応答後にcounterをresetして除外する。
 
 ```sh
 ssh -N -L 9222:127.0.0.1:9222 picdplayer-pi  # 別terminal
@@ -166,6 +167,10 @@ STOPPEDが全core CPU平均8.39%、65.5°C、PLAYINGが19.33%、最大69.3°Cで
 power/thermal制限は各0/12 sampleだった。これは同条件反復や改善率の根拠ではなく、現行構成の
 追加基線である。raw、process別値、測定条件と残るCDP/Cage/反復比較は
 [現行kiosk基線](reports/2026-09-28-current-kiosk-baseline/README.md)に記録する。
+
+同日のCDP測定ではSTOPPED中にも同一snapshotが10秒で477回届くWebSocket重複送信を検出した。
+接続ごとの送信済みgenerationを追跡する修正後、同条件は0回となり、PLAYINGでは10秒40回の状態更新送信を維持した。これはCDPの短時間観測であり、無接続CPU値・HDMI scanout・長期安定性を証明しない。条件とpayload byteの意味は
+[現行kiosk基線](reports/2026-09-28-current-kiosk-baseline/README.md#cdpで見つかったwebsocket重複送信と修正122)を参照する。
 
 ## 標準PlayerのDOM更新削減（Issue #53）
 
