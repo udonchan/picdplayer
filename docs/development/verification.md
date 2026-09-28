@@ -42,10 +42,11 @@ stale cacheのoffline fallback、JSON破損後の再取得、書込み不能、C
 
 通常のlookupは`HttpClient`を使う。testだけは`MetadataOptions::http_get` callbackで応答を注入でき、productionの
 provider選択やdaemon CLIには露出しない。Docker Debian Trixie/aarch64で`metadata_lookup` testを実行し、
-MusicBrainz 429からRetry-After 0の再試行、CAA JSON routing、cancel時の待機中断を確認した。
+MusicBrainz 429からRetry-After 0の再試行、CAA JSON routing、cancel時の待機中断を確認した。さらに、注入した
+connection failureが`MetadataWorker`を通って同じgenerationの`MetadataStatus::error`と元のerror文字列に変換されることを確認した。
 
-実HTTPS responseを使うtimeout・connection failure・redirect header、workerを通る失敗結果と世代切替の結合試験、
-Pi上の通常metadata/CAA lookupは未確認である。
+実HTTPS responseを使うtimeout・connection failure・redirect header、`MetadataSession`の世代切替と失敗結果を組み合わせた
+結合試験、Pi上の通常metadata/CAA lookupは未確認である。
 
 ## Bounded drive speed request（#8、Docker確認と通常Pi deploy）
 

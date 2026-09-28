@@ -1,10 +1,18 @@
 #include "metadata_lookup.hpp"
+#include "metadata_worker.hpp"
 
+#include <chrono>
 #include <iostream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <vector>
 
 namespace {
-void check(bool value) { if (!value) throw std::runtime_error("metadata lookup test failed"); }
+void check(bool value, std::string_view detail = {}) {
+    if (!value) throw std::runtime_error("metadata lookup test failed: " + std::string(detail));
+}
 
 constexpr const char* musicbrainz_body = R"({"releases":[{"id":"release","title":"Album","media":[{"discs":[{"id":"disc"}],"tracks":[{"position":1,"title":"Song"}]}]}]})";
 constexpr const char* cover_art_body = R"({"images":[{"front":true,"thumbnails":{"500":"https://coverartarchive.org/release/release/cover.jpg"}}]})";
@@ -48,7 +56,28 @@ int main() {
         try { (void)lookup_musicbrainz_id("disc", options); }
         catch (const std::runtime_error& error) { cancellation_observed = std::string_view(error.what()) == "metadata lookup cancelled"; }
         check(cancellation_observed);
-        std::cout << "PASS: metadata lookup retry, CAA routing, and cancellation fixtures\n";
+
+        MetadataOptions failing_options{
+            .cache_directory = {},
+            .use_cache = false,
+            .cancelled = {},
+            .http_get = [](std::string_view, std::size_t, const std::function<bool()>&, RedirectPolicy) -> HttpResponse {
+                throw std::runtime_error("simulated connection failure");
+            }};
+        MetadataWorker worker([failing_options = std::move(failing_options)](
+                                  const DiscToc&, const MetadataWorker::Cancelled& cancelled) mutable {
+            failing_options.cancelled = cancelled;
+            return lookup_musicbrainz_id("disc", failing_options);
+        });
+        const auto toc = make_audio_toc(1, std::vector<std::int32_t>{0}, 75);
+        worker.request({42, toc});
+        MetadataWorkerResult failure{};
+        for (int i = 0; i < 500 && !worker.pop(failure); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        check(failure.generation == 42, "worker did not return generation 42");
+        check(failure.metadata.status == MetadataStatus::error, "worker did not map lookup failure to ERROR");
+        check(failure.metadata.error == "simulated connection failure", "worker did not preserve lookup failure message");
+        std::cout << "PASS: metadata lookup retry, CAA routing, cancellation, and failure fixtures\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
