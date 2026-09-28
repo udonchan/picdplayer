@@ -236,11 +236,11 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | 関数・型 | 契約 |
 |---|---|
 | [calculate_musicbrainz_disc_id](../../src/musicbrainz_disc_id.cpp) | TOC再検証、LBA+150、discid_put/get_id/get_toc_string。device accessなし |
-| [parse_musicbrainz_response](../../src/metadata_parser.cpp) | 該当Disc IDのmediumから候補生成、track positionを1始まり連続で検証、0/1/複数を分類 |
+| [parse_musicbrainz_response](../../src/metadata_parser.cpp) | 該当Disc IDのmediumから候補生成、medium内track positionを1始まり連続で検証、0/1/複数を分類 |
 | parse_cover_art_response | front画像のHTTPS URLを選択。画像bytesは取得しない |
-| [HttpClient::get](../../src/http_client.cpp) | HTTPS・timeout・受信サイズ・redirect policyを適用しstatus/type/bodyを返す |
-| [lookup_musicbrainz_id](../../src/metadata_lookup.cpp) | cacheまたはHTTP→parse→単一候補CAA。CAA例外はartwork.errorへ格納 |
-| lookup_musicbrainz_disc | Disc ID計算と上記lookup後、各候補の曲数を実TOCと照合。不一致はmetadata ERROR |
+| [HttpClient::get](../../src/http_client.cpp) | HTTPS・timeout・受信サイズ・redirect policyを適用しstatus/type/bodyと、解釈できた`Retry-After`秒数を返す。CAAでは許可host、redirect header、socket接続先IPを検査する |
+| [lookup_musicbrainz_id](../../src/metadata_lookup.cpp) | cacheまたはHTTP→parse→単一候補CAA。CAA例外はartwork.errorへ格納。testでは`MetadataOptions::http_get`で決定的応答を注入できる |
+| lookup_musicbrainz_disc | Disc ID計算と上記lookup後、各候補の曲数を実TOCと照合。一致時はTOC順でmedium positionを物理track番号へ対応付ける。不一致はmetadata ERROR |
 | [MetadataWorker::request/pop](../../src/metadata_worker.cpp) | pending最新1件、結果1件。worker内でlookup例外をERROR結果へ変換 |
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
 
@@ -249,11 +249,15 @@ closingフラグだけに連動する。交換時の安全性は中断ではな�
 LOADINGへ遷移した時にmetadata世代を無効化し、TOC再取得後のbegin_if_neededで
 同一TOCでもmetadataを再要求する。同じLOADING状態の反復観測では世代を増やさない。
 交換を観測できなかった同一TOCの別discまでは識別しない。
-TOCが1以外の番号で始まる場合のmetadata track positionとの対応付けも未実装である。
+MusicBrainzのmedium内positionは物理track番号と同一視せず、positionの連続性と曲数一致を検証してから
+TOC順の物理track番号へ対応付ける。したがって先頭trackが1以外でも、対応不能な候補を別trackへ割り当てない。
 
-raw cacheはsize確認→read→通常parser、書き込みはtemporary file→rename。
-MusicBrainzの404は空releasesとして扱う。parse前にraw JSONをcacheするため、不正cacheが残る可能性がある。
-HTTP本文上限はあるが、cacheの総量制限や全JSON fieldへの厳密な型検証は保証しない。
+raw cacheはsize確認→read→通常parser、書き込みはtemporary file→renameする。更新から30日以内のentryを
+freshとして用い、期限切れentryはnetwork取得失敗時だけoffline fallbackにする。cache全体は64 MiBまでとし、
+新規書込み前に最古ファイルから削除する。残ったtemporary fileは次の書込み時に除去する。サイズ超過・画像形式
+不正は無効化し、metadataまたはCAA JSONがcache hitでparse不能なら無効化してnetworkから一度再取得する。
+MusicBrainzの404は空releasesとして扱う。書込み不能やcache処理失敗は取得済み結果を無効にしない。
+HTTP本文上限はあるが、全JSON fieldへの厳密な型検証は保証しない。
 
 ## drive start診断
 

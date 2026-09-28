@@ -153,7 +153,8 @@ CDP metricsは`cdp-{stopped,playing}.jsonl.gz`に保存した。`player-playing-
 watchdog停止直前までの7件と停止時の1件を含む。比較には前者のみを用いた。
 各sampleにPiのUTC epoch/monotonic時刻、区間長、CPU、process/thread、RSS、memory/swap、
 frequency、温度、throttling current/historyを保存した。URL、album名、API key、full process argsは
-記録しない。`python3 scripts/summarize-kiosk.py <raw.jsonl>`で表の値を再計算できる。
+記録しない。`python3 scripts/summarize-kiosk.py <raw.jsonl>`または
+`python3 scripts/summarize-kiosk.py <raw.jsonl.gz>`で表の値を再計算できる。
 
 STOPPEDの最初のrunではChromiumがprocess titleのargv[0]内に`--type`を置く形式をcollectorが
 認識せず、Chromiumの各PIDをすべて`browser`と分類した。PID別CPU値とsystem CPU/温度は有効。

@@ -15,6 +15,58 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## Metadata JSON入力境界（#38、Docker自動試験）
+
+MusicBrainzとCover Art ArchiveのJSON本文は既存の2 MiB/512 KiB HTTP受信上限に加え、parser callbackで
+nestingを32、keyを含む文字列を4096 bytesまでに制限する。上限超過と構文不正はmetadata lookupの例外となり、
+MetadataWorkerがERROR結果へ変換するため、CD再生を待たせない。Docker Debian Trixie/aarch64で
+`metadata_parser` testを実行し、既存の正常/不正入力に加え、33段のnestingと4097 byte文字列の拒否を確認した。
+
+429/503ではlibcurlが解釈したRetry-After秒数を最大15秒まで待ち、値がない場合は1.1秒待つ。
+retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。実際のHTTPS response headerを使う
+`http_security_policy` testではCAA初期URLとredirect host、相対redirect、IPv4/IPv6のpublic/private/link-local
+判定を確認した。実際のHTTPS redirect headerを使う統合試験、network切断、実機のmetadata lookup挙動は未確認である。
+
+## Metadata cache lifecycle（#37、Docker自動試験）
+
+metadata/CAA JSONとcover imageのcacheは、更新から30日を過ぎるとnetwork取得を優先し、取得に失敗した場合だけ
+期限切れの有効entryをoffline fallbackとして使う。cache全体は64 MiBに制限し、書込み前に最古entryから削除する。
+temporary file→renameによる更新を維持し、残ったtemporary fileは次の書込み時に削除する。サイズ超過、画像形式不正、
+cache hitのJSON parse失敗は無効化し、JSONはnetworkから一度再取得する。
+
+Docker Debian Trixie/aarch64で`metadata_cache` testを実行し、fresh/stale判定、容量到達時の古いentry削除、
+上限超過entryの非保存、読み取り上限超過entryの無効化、残存temporary fileの削除を確認した。実HTTPを使う
+stale cacheのoffline fallback、JSON破損後の再取得、書込み不能、CAA失敗、Pi上のcache挙動は未確認である。
+
+## Metadata HTTP fixture（#135、Docker自動試験）
+
+通常のlookupは`HttpClient`を使う。testだけは`MetadataOptions::http_get` callbackで応答を注入でき、productionの
+provider選択やdaemon CLIには露出しない。Docker Debian Trixie/aarch64で`metadata_lookup` testを実行し、
+MusicBrainz 429（Retry-After 0）および503（Retry-Afterなし）からの再試行、CAA JSON routing、cancel時の待機中断を
+確認した。さらに、注入したconnection failureが`MetadataWorker`を通って同じgenerationの`MetadataStatus::error`と元の
+error文字列に変換されること、古いgenerationのERROR結果を`MetadataSession`が適用しないことを確認した。
+`http_client` testは空けたloopback TCP portへ実際にHTTPS接続し、libcurlのconnection failureが
+`HTTP request failed:`例外として返ることも確認する。この試験は外部networkへ接続しない。
+
+実HTTPS responseを使うtimeout・redirect header、Pi上の通常metadata/CAA lookupは未確認である。
+
+## Optional paranoia license warning（#66、Docker自動試験）
+
+`PICDPLAYER_ENABLE_PARANOIA=ON ./scripts/build-container.sh`で、対応containerのDebian
+`libcdio-paranoia`がGPL-3-or-laterであること、生成binaryの再配布前にライセンス互換性と
+source-offerを確認すること、通常releaseはOFFであることをCMake configure warningとして確認した。
+paranoia有効構成ではpackageに`libcdio-cdda`と`libcdio-paranoia`のruntime dependencyが入り、
+CTest 45件が成功した。標準のparanoia無効構成では44件が成功した。本体ライセンスの採用と
+直接依存の監査文書は未確定である。
+
+## 非1始まりTOCのmetadata対応付け（#39、Docker自動試験）
+
+MusicBrainzの`medium.tracks[].position`はmedium内の順序である。parserは1からの連続性を検証し、
+`lookup_musicbrainz_disc`は候補の曲数が実TOCと一致する場合だけ、TOC順に物理track番号へ対応付ける。
+Docker Debian Trixie/aarch64で`metadata_lookup` testを実行し、track 3から始まる2曲TOCが
+position 1/2の曲名をtrack 3/4へ対応付けること、曲数不一致の候補はERRORとなり選択されないことを確認した。
+実機で先頭trackが1以外のAudio CDは未確認である。
+
 ## Bounded drive speed request（#8、Docker確認と通常Pi deploy）
 
 `--drive-speed-x 1..255`を指定したdaemonは、Audio CDを認識したSTOPPEDまたはPAUSED中に、
@@ -61,6 +113,16 @@ PCM非出力を確認した。2026-09-28にはPi 3上で通常14 track Audio CD�
 条件、同bootで試験開始前に観測した74,989 µs main-loop stall、確認範囲は
 [通常CD実機記録](reports/2026-09-28-repeat-overlap-normal-cd/README.md)を参照する。TV実表示・試聴、傷disc、
 cache軽減効果、物理的な再読込の保証、性能・長時間安定性は確認していない。
+
+## Deterministic Integrity observation fixture（#110、Docker自動試験）
+
+`tests/integrity_fixture.hpp`のtest-only `ScriptedCddaReader`を追加し、明示したLBA、要求/取得frame、
+`ReadStatus`、native error、direct retry、backend event、local verificationを既存`PcmWorker`へ渡す。
+Docker Debian Trixie/aarch64で`./scripts/build-container.sh`とCTest 39件を実行し、clean、direct retryによる
+UNCERTAIN、backend fixupまたはcandidate mismatch後のRECOVERED、read error、disc mapのaccepted/unaccepted区間、
+history/eventの有界evictionを確認した。fixtureはproduction daemon、CLI、package、実drive I/O、ALSA、CECを
+変更せず、C1/C2、物理再read、cache独立性、read speed、傷の物理形状を再現しない。Player UIを通常rendererまで
+通すlocal review harnessは#111で扱うため、今回の成功は実機異常mediaやUI表示の確認ではない。
 
 ## 通常runtime API操作とdaemon再起動（#4、Pi確認）
 
@@ -123,6 +185,8 @@ Pi 3でのCage + Chromium kioskのCPU・温度問題は、#52の実測で再生�
 `/proc/stat`と各taskのCPU tick差分から5秒区間の値を計算する。process別CPUは1 core=100%、
 system CPUは全coreに対する割合。温度、現在/過去throttling、各CPU周波数、memory/swap、
 thread別上位5件、RSSと時刻をJSON Linesへ記録する。rawにはfull command line、URL、API keyを入れない。
+[`summarize-kiosk.py`](../../scripts/summarize-kiosk.py)はplain `.jsonl`と、保存用の`.jsonl.gz`の両方を
+直接受け入れる。
 
 ```sh
 # Macで測定スクリプトをPiのhomeへ置く。Pi上ではコンパイルしない。
@@ -139,10 +203,9 @@ limitが立てばsamplerは異常終了する。serviceを起動して測る場�
 ALSA underrun、daemon slow stage、CDDA errorは同じ時刻の`journalctl`から別途照合する。
 
 CDPはMacからSSH port forwardingで接続し、[短時間の計測スクリプト](../../scripts/measure-kiosk-cdp.py)
-でPerformance metrics、受信WebSocket frame数とtext payload byte数、任意のtimeline trace・screenshotを取得する。payload byte数はCDPが報告する受信text payloadのUTF-8 byte数であり、WebSocket framing、CDP通信、画面への転送量を含まない。CDP自身がCPU/paintに負荷を
+でPerformance metricsと任意のtimeline trace・screenshotを取得する。CDP自身がCPU/paintに負荷を
 加えるので、未接続の5分測定と混ぜない。`Performance.getMetrics`のLayoutCountなどはrendererの
 累積値の差であり、画面に実際に表示されたpixelを保証しない。traceは最大10秒に制限する。
-Network domainを有効化した直後に届く過去のframe eventはbaseline応答後にcounterをresetして除外する。
 
 ```sh
 ssh -N -L 9222:127.0.0.1:9222 picdplayer-pi  # 別terminal
@@ -162,15 +225,18 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 既存rawを再集計し、新規測定は行っていない。Cage単独は改善対象の特定に不要として省略し、
 過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、長期運転・実表示・音声は#4で別途確認する。
 
-2026-09-28には、PR #120 merge後の現行masterを通常CDで短時間再測定した。CDP未接続の60秒では
-STOPPEDが全core CPU平均8.39%、65.5°C、PLAYINGが19.33%、最大69.3°Cで、現在の
-power/thermal制限は各0/12 sampleだった。これは同条件反復や改善率の根拠ではなく、現行構成の
-追加基線である。raw、process別値、測定条件と残るCDP/Cage/反復比較は
-[現行kiosk基線](reports/2026-09-28-current-kiosk-baseline/README.md)に記録する。
+2026-09-28には、Issue #122の修正候補を導入したPiで、通常14 track Audio CDのCDP未接続PLAYINGを
+30秒warm-up後に300秒測定した。system CPU平均は13.27%、最高温度は66.6°C、現在のthrottlingは0だった。
+raw data、process別CPU、測定条件、限界は[5分PLAYING記録](reports/2026-09-28-post-websocket-dedup-playing/README.md)に保存した。
+このpackageは測定時点で未マージのPR #123候補であり、revision・条件が過去の基線とそろわないため、
+CPU改善率の比較には用いない。同runでmain loop stage warningは再現しなかったが、過去に異なるstageで
+観測したwarningの原因を否定するものではない。TV実表示・試聴はこの測定の確認対象外である。
 
-同日のCDP測定ではSTOPPED中にも同一snapshotが10秒で477回届くWebSocket重複送信を検出した。
-接続ごとの送信済みgenerationを追跡する修正後、同条件は0回となり、PLAYINGでは10秒40回の状態更新送信を維持した。これはCDPの短時間観測であり、無接続CPU値・HDMI scanout・長期安定性を証明しない。条件とpayload byteの意味は
-[現行kiosk基線](reports/2026-09-28-current-kiosk-baseline/README.md#cdpで見つかったwebsocket重複送信と修正122)を参照する。
+同日に、同候補で通常CDのSTOPPEDとPLAYINGを各60秒測定し、CDP未接続時の状態と10秒間CDP接続時の
+WebSocket配信を[短時間のcurrent kiosk記録](reports/2026-09-28-current-kiosk-baseline/README.md)へ保存した。
+修正前のSTOPPEDでは477 frame・2.16 MBを受信したのに対し、修正後はSTOPPEDで0 frame、PLAYINGで40 frameだった。
+この観測は接続ごとの同一generation重複送信が抑止されたことを示すが、revision・測定時間・CDP自体の負荷が異なるため、
+過去のCPU基線との定量比較には用いない。
 
 ## 標準PlayerのDOM更新削減（Issue #53）
 
@@ -621,7 +687,9 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
   非同期queueの満杯時挙動、runtime level変更、追加sink、rotation、ライセンスを調査し、必要性が確認できた
   段階で置換を検討する。現時点では再生経路へ影響する変更を行わない。
 - metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
-- cache期限/総容量/破損復旧、候補選択、非1始まりtrack対応、HTTP/JSON制限の強化は未実装。
+- stale cacheのoffline fallbackと破損JSON再取得の統合試験、書込み不能、候補選択、非1始まりtrack対応、
+  実HTTPS response headerを使うRetry-After/redirect統合試験、
+  network切断とPi上metadata lookupの確認は未完了または継続確認とする。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
 - Now Playingはdaemonが配信するsame-origin artworkを表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。
   長期継続運転と起動時間短縮を継続確認する。quiet boot・read-only root・Buildroot imageは未実装。

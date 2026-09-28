@@ -248,6 +248,7 @@ int main(int argc, char** argv) {
             .cache_directory = metadata_cache,
             .use_cache = true,
             .cancelled = {},
+            .http_get = {},
         };
         if (!metadata_device.empty()) { probe_metadata_device(metadata_device, metadata_options); return 0; }
         if (!lookup_disc.empty()) { probe_metadata_id(lookup_disc, metadata_options); return 0; }

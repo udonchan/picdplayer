@@ -4,6 +4,24 @@
 
 using Json = nlohmann::json;
 namespace {
+constexpr int maximum_json_depth = 32;
+constexpr std::size_t maximum_json_string_bytes = 4096;
+
+Json parse_bounded_json(std::string_view input, const char* source) {
+    try {
+        return Json::parse(input.begin(), input.end(), [](int depth, Json::parse_event_t event, Json& value) {
+            if (depth > maximum_json_depth)
+                throw std::runtime_error("metadata JSON exceeds nesting limit");
+            if ((event == Json::parse_event_t::key || event == Json::parse_event_t::value) &&
+                value.is_string() && value.get_ref<const std::string&>().size() > maximum_json_string_bytes)
+                throw std::runtime_error("metadata JSON string exceeds size limit");
+            return true;
+        });
+    } catch (const Json::exception& error) {
+        throw std::runtime_error(std::string("invalid ") + source + " JSON: " + error.what());
+    }
+}
+
 std::string text(const Json& object, const char* key) {
     const auto it = object.find(key);
     return it != object.end() && it->is_string() ? it->get<std::string>() : std::string{};
@@ -38,9 +56,7 @@ const char* metadata_status_name(MetadataStatus status) {
 
 MetadataResult parse_musicbrainz_response(std::string_view input, std::string_view disc_id) {
     MetadataResult result; result.disc_id = disc_id;
-    Json root;
-    try { root = Json::parse(input.begin(), input.end()); }
-    catch (const Json::exception& e) { throw std::runtime_error(std::string("invalid MusicBrainz JSON: ") + e.what()); }
+    Json root = parse_bounded_json(input, "MusicBrainz");
     if (!root.is_object()) throw std::runtime_error("MusicBrainz response is not an object");
     const auto releases = root.find("releases");
     if (releases == root.end() || !releases->is_array()) throw std::runtime_error("MusicBrainz response has no releases array");
@@ -97,9 +113,7 @@ MetadataResult parse_musicbrainz_response(std::string_view input, std::string_vi
 
 ArtworkInfo parse_cover_art_response(std::string_view input) {
     ArtworkInfo result;
-    Json root;
-    try { root = Json::parse(input.begin(), input.end()); }
-    catch (const Json::exception& e) { throw std::runtime_error(std::string("invalid Cover Art JSON: ") + e.what()); }
+    Json root = parse_bounded_json(input, "Cover Art");
     if (!root.is_object() || !root.contains("images") || !root["images"].is_array())
         throw std::runtime_error("Cover Art response has no images array");
     for (const auto& image : root["images"]) {

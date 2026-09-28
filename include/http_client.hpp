@@ -1,11 +1,18 @@
 #pragma once
 #include <cstddef>
+#include <optional>
 #include <functional>
 #include <string>
 #include <string_view>
 
-struct HttpResponse { long status = 0; std::string content_type; std::string body; };
-enum class RedirectPolicy { reject, follow_https };
+struct HttpResponse {
+    long status = 0;
+    std::string content_type;
+    std::string body;
+    // Seconds from Retry-After when libcurl can parse the response header.
+    std::optional<long long> retry_after_seconds;
+};
+enum class RedirectPolicy { reject, follow_cover_art_archive };
 
 class HttpClient {
 public:

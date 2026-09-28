@@ -253,14 +253,24 @@ metadata結果全体をmainへ返す。
 raw JSONを`metadata/{disc-id}.json`、`cover-art/{release-id}.json`へ、検証済み画像bytesを
 `cover-art/{release-id}.image`へ保存する。
 cache pathは明示指定。systemdでは/var/cache/picdplayerを利用できる。
-書き込み失敗は無視して取得結果を利用する。期限・総容量制限・破損cacheからの自動再取得は未実装。
+cacheは更新から30日を過ぎると新しいnetwork取得を試みる。network取得に失敗した場合だけ、期限切れでも
+サイズ・形式が有効なcacheをoffline fallbackとして利用する。cache全体は64 MiBまでとし、書込み前に最古の
+ファイルから削除する。書込みはtemporary fileからrenameし、残ったtemporary fileは次の書込み時に除去する。
+サイズ超過・画像形式不正のcacheは無効化する。metadata/CAA JSONのcacheがparse不能なら無効化して一度だけ
+networkから再取得する。書き込み失敗は取得結果を無効にせず、再生を止めない。
 read-only rootへの移植時はcacheを別の書き込み可能領域へ置く。
 
 HTTP接続timeout 5秒、全体15秒。MusicBrainz開始間隔1.1秒、429/503は最大3回。
-User-Agentはコード内のPiCDPlayer/0.1.0とproject URL。Retry-After解釈は未実装。
-MusicBrainz redirectは拒否、CAAはHTTPSに限り最大3回。host/IPの追加制限は未実装。
-JSON本文上限はMusicBrainz 2 MiB、CAA 512 KiB。深さ・全field長の個別上限は未実装。
-parserは必須構造を検査するが、任意文字列の欠落や型違いは空文字扱いになる。
+User-Agentはコード内のPiCDPlayer/0.1.0とproject URL。429/503ではlibcurlが解釈できた`Retry-After`の秒数を
+使い、1回の待機を最大15秒に制限する。headerがない・解釈できない場合は1.1秒待機する。cancel/shutdown中は
+待機を中断する。429/503に対するHTTP試行は合計3回までとし、無制限のbackoffにしない。
+MusicBrainz redirectは拒否する。CAAはHTTPSに限り最大3回とし、初期URLは`coverartarchive.org`だけを
+許可する。redirect先は同hostまたは`archive.org`とそのsubdomainだけを許可する。CAA requestではproxyを
+利用せず、socket生成時にloopback、private、carrier-grade NAT、link-local、unique-local、multicast等の
+宛先IPを拒否する。host名検査と実接続IP検査を分けるため、DNS解決後の宛先も制限する。
+JSON本文上限はMusicBrainz 2 MiB、CAA 512 KiB。JSONのnestingは32、keyを含む文字列は4096 bytesまでとし、
+上限超過または構文不正はmetadata ERRORへ変換する。parserは必須構造を検査するが、上限内の任意文字列の
+欠落や型違いは空文字扱いになる。
 
 Buildrootへの移植は未実施。過去の依存・license・package調査は
 [metadata調査記録](../history/metadata-design.md)を参照し、移植時に対象revisionで再確認する。

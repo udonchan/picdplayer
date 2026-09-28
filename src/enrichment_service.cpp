@@ -14,7 +14,7 @@ public:
         if (!enabled) return;
         // Keep this path for serving validated same-origin artwork after the
         // worker has finished. The worker receives its own copy.
-        MetadataOptions options{.cache_directory = cache_directory, .use_cache = true, .cancelled = {}};
+        MetadataOptions options{.cache_directory = cache_directory, .use_cache = true, .cancelled = {}, .http_get = {}};
         worker = std::make_unique<MetadataWorker>(
             [options = std::move(options)](const DiscToc& toc, const MetadataWorker::Cancelled& cancelled) mutable {
                 options.cancelled = cancelled;

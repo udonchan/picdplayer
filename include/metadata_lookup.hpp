@@ -1,5 +1,6 @@
 #pragma once
 #include "disc_toc.hpp"
+#include "http_client.hpp"
 #include "metadata_model.hpp"
 #include <filesystem>
 #include <functional>
@@ -7,9 +8,14 @@
 #include <string>
 
 struct MetadataOptions {
+    using HttpGet = std::function<HttpResponse(std::string_view, std::size_t,
+                                               const std::function<bool()>&, RedirectPolicy)>;
     std::filesystem::path cache_directory;
     bool use_cache = true;
     std::function<bool()> cancelled;
+    // Test-only callers may supply deterministic responses. Production leaves
+    // this empty and uses HttpClient.
+    HttpGet http_get;
 };
 
 MetadataResult lookup_musicbrainz_disc(const DiscToc& toc, const MetadataOptions& options = {});
