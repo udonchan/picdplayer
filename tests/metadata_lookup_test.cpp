@@ -32,6 +32,8 @@ int main() {
                     ++musicbrainz_calls;
                     if (musicbrainz_calls == 1)
                         return HttpResponse{.status = 429, .content_type = {}, .body = {}, .retry_after_seconds = 0};
+                    if (musicbrainz_calls == 2)
+                        return HttpResponse{.status = 503, .content_type = {}, .body = {}, .retry_after_seconds = {}};
                     return HttpResponse{.status = 200, .content_type = "application/json", .body = musicbrainz_body,
                                         .retry_after_seconds = {}};
                 }
@@ -44,7 +46,7 @@ int main() {
         const auto result = lookup_musicbrainz_id("disc", options);
         check(result.status == MetadataStatus::available && result.selected == 0);
         check(result.artwork.status == ArtworkStatus::available);
-        check(musicbrainz_calls == 2 && cover_art_calls == 1);
+        check(musicbrainz_calls == 3 && cover_art_calls == 1);
 
         bool cancelled = false;
         options.cancelled = [&] { return cancelled; };

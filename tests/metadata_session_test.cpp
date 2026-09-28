@@ -16,6 +16,12 @@ int main() {
         MetadataResult current; current.status = MetadataStatus::ambiguous; current.disc_id = "current";
         check(session.apply({request_b.generation, b, current}));
         check(session.snapshot().disc_id == "current");
+        MetadataResult failed; failed.status = MetadataStatus::error; failed.error = "simulated metadata timeout";
+        const auto request_failure = session.begin(a);
+        check(!session.apply({request_b.generation, b, failed}));
+        check(session.apply({request_failure.generation, a, failed}));
+        check(session.snapshot().status == MetadataStatus::error &&
+              session.snapshot().error == "simulated metadata timeout");
         session.invalidate();
         auto request_a_again = session.begin(a);
         check(!session.apply({request_a.generation, a, old}));
