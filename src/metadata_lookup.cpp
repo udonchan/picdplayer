@@ -1,4 +1,5 @@
 #include "metadata_lookup.hpp"
+#include "metadata_retry_policy.hpp"
 #include "http_client.hpp"
 #include "metadata_parser.hpp"
 #include "musicbrainz_disc_id.hpp"
@@ -72,6 +73,8 @@ std::string fetch_musicbrainz(const std::string& id, const MetadataOptions& opti
         }
         if (response.status != 429 && response.status != 503)
             throw std::runtime_error("MusicBrainz HTTP status " + std::to_string(response.status));
+        wait_until(options, std::chrono::steady_clock::now() +
+                              metadata_retry_delay(response.retry_after_seconds));
     }
     throw std::runtime_error("MusicBrainz service remained busy after retries");
 }

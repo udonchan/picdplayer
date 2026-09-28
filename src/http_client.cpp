@@ -62,6 +62,9 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
     }
     HttpResponse response; response.body = std::move(target.body);
     curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &response.status);
+    curl_off_t retry_after = -1;
+    if (curl_easy_getinfo(curl.get(), CURLINFO_RETRY_AFTER, &retry_after) == CURLE_OK && retry_after >= 0)
+        response.retry_after_seconds = static_cast<long long>(retry_after);
     char* content_type = nullptr; curl_easy_getinfo(curl.get(), CURLINFO_CONTENT_TYPE, &content_type);
     if (content_type) response.content_type = content_type;
     return response;

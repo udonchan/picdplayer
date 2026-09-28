@@ -22,8 +22,9 @@ nestingを32、keyを含む文字列を4096 bytesまでに制限する。上限�
 MetadataWorkerがERROR結果へ変換するため、CD再生を待たせない。Docker Debian Trixie/aarch64で
 `metadata_parser` testを実行し、既存の正常/不正入力に加え、33段のnestingと4097 byte文字列の拒否を確認した。
 
-この確認はparser単体であり、429/503のRetry-After、redirect先host/IPの追加制限、network切断、実機の
-metadata lookup挙動は未確認・未実装である。
+429/503ではlibcurlが解釈したRetry-After秒数を最大15秒まで待ち、値がない場合は1.1秒待つ。
+retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。実際のHTTPS response headerを使う
+統合試験、redirect先host/IPの追加制限、network切断、実機のmetadata lookup挙動は未確認・未実装である。
 
 ## Bounded drive speed request（#8、Docker確認と通常Pi deploy）
 
