@@ -119,6 +119,11 @@ if name == 'docker':
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(list(self.package.glob('*.deb')), [])
 
+    def test_invalid_optional_paranoia_setting_blocks_build(self):
+        result, calls = self.run_script('build-container.sh', PICDPLAYER_ENABLE_PARANOIA='invalid')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
+
 
 @unittest.skipIf(BUILD is None, 'Pass the CMake build directory to test generated scripts')
 class MaintainerScriptsTest(unittest.TestCase):

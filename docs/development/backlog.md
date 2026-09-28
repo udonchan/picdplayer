@@ -22,7 +22,7 @@
 | [#27 Investigate and reduce kiosk CPU and thermal load](https://github.com/udonchan/picdplayer/issues/27) | クローズ済みの親Issue。[#52](https://github.com/udonchan/picdplayer/issues/52)の基線測定・完了判定の根拠は[測定記録](reports/2026-09-25-kiosk-baseline/README.md)へ反映済み。[#53](https://github.com/udonchan/picdplayer/issues/53)の描画改善、[#61](https://github.com/udonchan/picdplayer/issues/61)の残余負荷測定、[#62](https://github.com/udonchan/picdplayer/issues/62)のCustom UI向け注意事項は完了済み。最新構成の追加測定は[#83](https://github.com/udonchan/picdplayer/issues/83)、長期runtimeは[#4](https://github.com/udonchan/picdplayer/issues/4)へ移管した。条件と限界は[検証状況](verification.md)を参照する。 |
 | [#83 Complete outstanding kiosk performance measurements](https://github.com/udonchan/picdplayer/issues/83) | 最新masterのSTOPPED/PLAYING、修正版CDP、Cage単独、計測器負荷と条件をそろえた反復比較。#52の未完了測定を引き継ぐ。長期耐久・実表示・試聴は#4。 |
 | [#5 Evaluate read stalls and bound playback recovery](https://github.com/udonchan/picdplayer/issues/5) | 親Issue。[#33 read stallの影響測定](https://github.com/udonchan/picdplayer/issues/33)と[#34 有界な再生復旧](https://github.com/udonchan/picdplayer/issues/34)に分割済み。ALSA underrun復旧とread integrityを混同しない。 |
-| [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | direct/paranoiaの保存PCM正常再生とdirect single/repeatの限定的な比較はあるが、drive回転・cache条件をそろえたbackend性能比較は未完了。現行運用はdirect。 |
+| [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | `PICDPLAYER_ENABLE_PARANOIA=ON`で同じDocker build scriptからparanoia有効packageを生成でき、CTest 39件を確認した。direct/paranoiaの保存PCM正常再生とdirect single/repeatの限定的な比較はあるが、drive回転・cache条件をそろえたPi上のbackend性能比較は未完了。現行運用はdirect。 |
 
 ## integrity仕様の実装
 

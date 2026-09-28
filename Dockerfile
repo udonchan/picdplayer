@@ -10,6 +10,7 @@ RUN apt-get update \
         libasound2-dev \
         libdiscid-dev \
         libcurl4-openssl-dev \
+        libcdio-paranoia-dev \
         nlohmann-json3-dev \
         libwebsockets-dev \
         file \
