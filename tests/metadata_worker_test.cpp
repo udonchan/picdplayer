@@ -44,6 +44,14 @@ int main() {
         try { MetadataWorker invalid({}); }
         catch (const std::invalid_argument&) { rejected_empty_callback = true; }
         check(rejected_empty_callback);
+
+        MetadataWorker failing([](const DiscToc&, const MetadataWorker::Cancelled&) -> MetadataResult {
+            throw std::runtime_error("bounded metadata input rejected");
+        });
+        failing.request({4, toc_a});
+        for (int i = 0; i < 100 && !failing.pop(result); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        check(result.generation == 4 && result.metadata.status == MetadataStatus::error &&
+              result.metadata.error == "bounded metadata input rejected");
         std::cout << "PASS: metadata worker latest request and cancellation\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
