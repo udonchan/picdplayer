@@ -16,6 +16,10 @@ metadataは再生に追加する情報である。TOCを読めた時点で再生
 取得中にdiscが変われば、届いた結果は古いかもしれない。世代とTOCを照合することで、
 disc Aの曲名をdisc Bへ表示することを防ぐ。取消が間に合うことだけに正しさを依存させない。
 
+MusicBrainzの`tracks[].position`はmedium内の順序であり、物理CDのtrack番号ではない。PiCDPlayerは
+positionが1から連続し、曲数が実TOCと一致する候補だけを受け入れる。その後、TOC順に観測した物理track番号へ
+対応付ける。先頭がtrack 1以外でも、曲名を番号の違うtrackへ割り当てないためである。
+
 画像はさらに別の取得段階である。現在は単一候補のreleaseについてCover Art Archiveへ
 問い合わせ、daemonがJPEG/PNG/WebPの画像bytesを上限付きで取得・検査してcacheへ保存する。
 Now PlayingはPiCDPlayer originの`/api/presentation/artwork/cover`だけを読む。provider URLや

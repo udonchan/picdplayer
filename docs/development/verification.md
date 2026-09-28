@@ -48,6 +48,14 @@ error文字列に変換されること、古いgenerationのERROR結果を`Metad
 
 実HTTPS responseを使うtimeout・connection failure・redirect header、Pi上の通常metadata/CAA lookupは未確認である。
 
+## 非1始まりTOCのmetadata対応付け（#39、Docker自動試験）
+
+MusicBrainzの`medium.tracks[].position`はmedium内の順序である。parserは1からの連続性を検証し、
+`lookup_musicbrainz_disc`は候補の曲数が実TOCと一致する場合だけ、TOC順に物理track番号へ対応付ける。
+Docker Debian Trixie/aarch64で`metadata_lookup` testを実行し、track 3から始まる2曲TOCが
+position 1/2の曲名をtrack 3/4へ対応付けること、曲数不一致の候補はERRORとなり選択されないことを確認した。
+実機で先頭trackが1以外のAudio CDは未確認である。
+
 ## Bounded drive speed request（#8、Docker確認と通常Pi deploy）
 
 `--drive-speed-x 1..255`を指定したdaemonは、Audio CDを認識したSTOPPEDまたはPAUSED中に、
