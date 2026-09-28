@@ -178,7 +178,11 @@ int main() {
         // handshake成立を観測する。大きな本文をconsumerはまだ消費していない。
         const auto before = output.total;
         shutdown(http.fd, SHUT_RDWR); shutdown(ws.fd, SHUT_RDWR);
-        for (int i = 0; i < 20; ++i) { api.service(); engine.tick(); }
+        while (output.total == before && std::chrono::steady_clock::now() < deadline) {
+            api.service();
+            engine.tick();
+            std::this_thread::yield();
+        }
         require(output.total > before);
         // Freeze production at the full PCM queue before inspecting the event window.
         // PCM queue満杯を同期点にし、event消費中の追加入力を除く。
