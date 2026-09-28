@@ -26,6 +26,17 @@ MetadataWorkerがERROR結果へ変換するため、CD再生を待たせない�
 retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。実際のHTTPS response headerを使う
 統合試験、redirect先host/IPの追加制限、network切断、実機のmetadata lookup挙動は未確認・未実装である。
 
+## Metadata cache lifecycle（#37、Docker自動試験）
+
+metadata/CAA JSONとcover imageのcacheは、更新から30日を過ぎるとnetwork取得を優先し、取得に失敗した場合だけ
+期限切れの有効entryをoffline fallbackとして使う。cache全体は64 MiBに制限し、書込み前に最古entryから削除する。
+temporary file→renameによる更新を維持し、残ったtemporary fileは次の書込み時に削除する。サイズ超過、画像形式不正、
+cache hitのJSON parse失敗は無効化し、JSONはnetworkから一度再取得する。
+
+Docker Debian Trixie/aarch64で`metadata_cache` testを実行し、fresh/stale判定、容量到達時の古いentry削除、
+上限超過entryの非保存、読み取り上限超過entryの無効化、残存temporary fileの削除を確認した。実HTTPを使う
+stale cacheのoffline fallback、JSON破損後の再取得、書込み不能、CAA失敗、Pi上のcache挙動は未確認である。
+
 ## Bounded drive speed request（#8、Docker確認と通常Pi deploy）
 
 `--drive-speed-x 1..255`を指定したdaemonは、Audio CDを認識したSTOPPEDまたはPAUSED中に、
@@ -640,7 +651,9 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
   非同期queueの満杯時挙動、runtime level変更、追加sink、rotation、ライセンスを調査し、必要性が確認できた
   段階で置換を検討する。現時点では再生経路へ影響する変更を行わない。
 - metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
-- cache期限/総容量/破損復旧、候補選択、非1始まりtrack対応、HTTP/JSON制限の強化は未実装。
+- stale cacheのoffline fallbackと破損JSON再取得の統合試験、書込み不能、候補選択、非1始まりtrack対応、
+  実HTTPS headerを使う統合試験、redirect先host/IP制限、
+  network切断とPi上metadata lookupの確認は未完了または継続確認とする。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
 - Now Playingはdaemonが配信するsame-origin artworkを表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。
   長期継続運転と起動時間短縮を継続確認する。quiet boot・read-only root・Buildroot imageは未実装。
