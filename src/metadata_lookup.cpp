@@ -220,13 +220,19 @@ MetadataResult lookup_musicbrainz_id(const std::string& disc_id, const MetadataO
 MetadataResult lookup_musicbrainz_disc(const DiscToc& toc, const MetadataOptions& options) {
     const auto identity = calculate_musicbrainz_disc_id(toc);
     auto result = lookup_musicbrainz_id(identity.id, options); result.toc = identity.toc;
-    for (const auto& candidate : result.candidates) {
+    for (auto& candidate : result.candidates) {
         if (candidate.metadata.tracks.size() != toc.tracks.size()) {
             result.status = MetadataStatus::error; result.selected.reset();
             result.error = "MusicBrainz track count does not match physical TOC";
             result.artwork = {};
             break;
         }
+        // MusicBrainz positions are one-based positions within the medium. Once
+        // the parser has verified their order and cardinality, bind them to the
+        // observed physical track numbers rather than assuming the TOC begins
+        // at track 1.
+        for (std::size_t index = 0; index < toc.tracks.size(); ++index)
+            candidate.metadata.tracks[index].track_number = toc.tracks[index].number;
     }
     return result;
 }

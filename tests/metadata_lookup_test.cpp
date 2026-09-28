@@ -1,5 +1,6 @@
 #include "metadata_lookup.hpp"
 #include "metadata_worker.hpp"
+#include "musicbrainz_disc_id.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -79,6 +80,35 @@ int main() {
         check(failure.generation == 42, "worker did not return generation 42");
         check(failure.metadata.status == MetadataStatus::error, "worker did not map lookup failure to ERROR");
         check(failure.metadata.error == "simulated connection failure", "worker did not preserve lookup failure message");
+
+        const auto non_one_based_toc = make_audio_toc(3, std::vector<std::int32_t>{0, 75}, 150);
+        const auto non_one_based_id = calculate_musicbrainz_disc_id(non_one_based_toc).id;
+        bool return_short_medium = false;
+        MetadataOptions mapping_options{
+            .cache_directory = {},
+            .use_cache = false,
+            .cancelled = {},
+            .http_get = [&](std::string_view url, std::size_t, const std::function<bool()>&, RedirectPolicy) {
+                if (url.starts_with("https://musicbrainz.org/")) {
+                    const auto body = std::string(R"({"releases":[{"id":"mapping","media":[{"discs":[{"id":")") +
+                                      non_one_based_id +
+                                      (return_short_medium ? R"("}],"tracks":[{"position":1,"title":"First"}]}]}]})"
+                                                           : R"("}],"tracks":[{"position":1,"title":"First"},{"position":2,"title":"Second"}]}]}]})");
+                    return HttpResponse{.status = 200, .content_type = "application/json", .body = body,
+                                        .retry_after_seconds = {}};
+                }
+                return HttpResponse{.status = 404, .content_type = {}, .body = {}, .retry_after_seconds = {}};
+            }};
+        const auto mapped = lookup_musicbrainz_disc(non_one_based_toc, mapping_options);
+        check(mapped.status == MetadataStatus::available && mapped.selected == 0,
+              "non-one-based TOC lookup was not available");
+        check(mapped.candidates[0].metadata.tracks[0].track_number == 3 &&
+              mapped.candidates[0].metadata.tracks[1].track_number == 4,
+              "medium positions were not mapped to physical track numbers");
+        return_short_medium = true;
+        const auto mismatched = lookup_musicbrainz_disc(non_one_based_toc, mapping_options);
+        check(mismatched.status == MetadataStatus::error && !mismatched.selected,
+              "track-count mismatch was not rejected");
         std::cout << "PASS: metadata lookup retry, CAA routing, cancellation, and failure fixtures\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
