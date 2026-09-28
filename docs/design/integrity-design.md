@@ -16,13 +16,13 @@
 | 実装済み | read-only能力probe、UNKNOWNモデル、区間付きReadEvidence、stream世代、ALSA再生head推定、bounded event、technical status |
 | 実装済み | 先読み容量・開始閾値、drive access直列化、single/repeat、ReadPolicyの停止境界でのruntime適用 |
 | 未実装の要求 | cache軽減を伴う独立性、C2のread時利用とtrust評価、offset、能力別strategy、外部照合 |
-| 未確定の詳細 | cache対策手順、mode既定値、詳細履歴の容量、診断protocol、照合サービス・依存library |
+| 未確定の詳細 | cache対策手順、mode既定値、照合サービス・依存library |
 
 現在の公開型は[ReadEvidence / ReadDiagnostics](../../include/integrity_state.hpp)、
 [DriveCapabilities](../../include/drive_capabilities.hpp)、[ReadPolicy](../../include/read_policy.hpp)、
 [PlayerEvent](../../include/player_event.hpp)を正とする。後述の拡張モデルと同名でも同一の契約とは限らない。
 現在のeventはREAD_OBSERVEDで、`WS /api/events`はsnapshot配信である。
-専用diagnostic stream、device/disc generationの公開、policy revision、track全域のcoverageはまだない。
+device/disc generation、policy revision、128件の詳細履歴、stream coverage、256区間のdisc mapは公開済み。独立した完全replay用diagnostic streamは提供しない。
 
 未実装項目の着手・進捗・完了条件は[残課題一覧](../development/backlog.md)で追跡する。
 phase番号は段階の対応付けであり、phaseの一部分を実装しただけで全体を完了とはしない。
@@ -44,7 +44,7 @@ playback continuity、quiet operation、extensibility、UI simplicityとする�
 ## 2. 現行実装と追加要求の境界
 
 観測core、technical status、先読み設定、drive access直列化、任意の反復一致は現行設計へ統合した。
-追加要求の中心はC2の取得と信頼性評価、cache独立性、overlap、offset、詳細provenance、
+追加要求の中心はC2の取得と信頼性評価、cache独立性、offset、
 能力に応じたstrategy選択、外部照合である。ReadPolicyの稼働中切替は実装・自動試験済みで、
 通常CDでPLAYING/PAUSED中の保留とSTOPPED境界での適用を確認した。現在の小さなReadPolicyと、
 以下の全要素を備えた将来policyは区別する。
@@ -303,7 +303,7 @@ NO DISC画面はdrive名・能力・根拠・UNKNOWNを表示する。discなし
 通常画面の1行statusは読み取り/先読み/比較/回復を表現し、詳細から採用理由へ進める。
 "PCM verified locally"単独の断定表示は避け、「同一区間を3回比較し一致、cache独立性不明」等の根拠にする。
 NO DISC表示やtechnical statusは既存の診断画面で扱う。Chromium kioskは別serviceとして導入済みで、
-通常はNow Playingを表示する。詳細provenanceやactive warningの追加は別途実装する。
+通常はNow Playingを表示する。有界provenanceとactive warningは実装済みである。
 
 ## 11. 外部検証
 
@@ -379,7 +379,7 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 ## Player UI統合案の管理（#24）
 
 #24は現行APIと#98/#99の追加契約を利用する実装Issueとして正式化した。標準Playerの実装は
-`ui/default/`で進行中であり、実機表示・性能の確認前に完了扱いにしない。
+`ui/default/`に実装しPR #108でPhase 1を完了した。通常Pi CDPで確認済みで、異常scenarioは#109〜#111、実機異常系は#96、長期/性能は#4/#83で追跡する。
 #35/#36と追加検証#89/#90は完了。公開仕様の正本は[メッセージ契約](message-contract.md)。
 主表示を維持してcurrent/latest、stream警告、方針、buffer、drive能力を統合する。
 全ディスク円盤read mapを必須成果物とし、TOC/世代公開#98とdisc領域集計#99をHard dependencyとする。
@@ -407,4 +407,8 @@ workerが一次read結果を最大256区間へ集約する。停止/seekをま�
 同じ観測flagsの隣接/重複区間だけ結合し、過去異常を後の成功で上書きしない。
 容量超過時は不完全な下限として凍結する。未観測を未読/正常と塗らない。
 詳細はGET /api/read-historyのdisc_mapとして取得し、通常WSには載せない。
-field・flags・世代照合はメッセージ契約を正本とする。#24の描画は実装中である。
+field・flags・世代照合はメッセージ契約を正本とする。#24の描画はPR #108で実装済みである。
+
+### Overlap監査補足（#115）
+
+候補未確定・read失敗ではoverlapはNOT_CHECKEDであり、不一致を観測したことにはしない。比較frame数は実比較時だけ設定する。拒否候補のaccepted識別子はnull。正式な状態・型はメッセージ契約を参照する。

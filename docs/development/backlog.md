@@ -1,6 +1,6 @@
 # 残課題とIssue一覧
 
-2026-09-26時点のrepositoryとGitHub Issueを照合した作業一覧。
+2026-09-26の一覧を基に、2026-09-28にIntegrity・drive・CI検証範囲を再照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
 着手・進捗・完了条件は各GitHub Issueで管理する。Issueを閉じる際は仕様と検証記録も更新する。
 この一覧の順番は優先順位や実装順ではない。実装済みと実機確認済み、
@@ -28,9 +28,9 @@
 
 | Issue | 主な範囲 |
 |---|---|
-| [#7 Extend drive capabilities and validate C2 evidence](https://github.com/udonchan/picdplayer/issues/7) | 現行probeは起動時一回のsysfs identity、CDROM_GET_CAPABILITY、およびMMC GET CONFIGURATION feature descriptor一覧のCD Read Feature C2 Flagsを読む。C2 supportのdrive reportは取得するが、実測trust、DAE/cache/accurate stream、速度・offsetは未実装。hotplug/reset時の能力失効は#88の責務。 |
+| [#7 Extend drive capabilities and validate C2 evidence](https://github.com/udonchan/picdplayer/issues/7) | 現行probeは起動時一回のsysfs identity、CDROM_GET_CAPABILITY、およびMMC GET CONFIGURATION feature descriptor一覧のCD Read Feature C2 Flagsを読む。C2 supportのdrive reportは取得するが、実測trust、DAE/cache/accurate stream、offsetは未実装。速度要求は#8で実装済み。hotplug/reset時の能力失効は#88の責務。 |
 | [#8 Add bounded drive speed control with fallback](https://github.com/udonchan/picdplayer/issues/8) | `--drive-speed-x 1..255`で、KERNEL_REPORTED/YESのdriveへ停止/一時停止中に一度だけ速度要求する経路、失敗記録、API/UI投影を実装・Docker確認済み。Piでは1x要求のioctl受理と20秒API再生まで確認済み。要求受理は実測速度・回転・騒音低下を意味しない。騒音・CEC・長時間再生・throughput・失敗状態の既定速度との比較が残る。 |
-| [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | repeat verifierは直前に採用した15 CD frameの先行overlapを再読してPCM連続性を確認し、overlapを出力から除いて重複再生を防ぐ。不一致はfail-closed。反復・overlap一致でもdrive cacheを排除できないため`CACHE_POSSIBLE`を公開する。cache軽減手順、物理再読込の保証、Pi異常媒体での検証は残る。 |
+| [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | repeat verifierは直前に採用した15 CD frameの先行overlapを再読してPCM連続性を確認し、overlapを出力から除いて重複再生を防ぐ。不一致はfail-closed。反復・overlap一致でもdrive cacheを排除できないため`CACHE_POSSIBLE`を公開する。Docker自動試験済み。追加後の通常CDを含むPi再生は未確認。cache軽減手順、物理再読込の保証、異常媒体での検証は残る。 |
 | [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | 現在のread offsetはUNKNOWN/nullで補正しない。offset不明を0とみなさず、符号・単位・根拠・端区間の扱いを決める必要がある。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | 現行ReadPolicyはsingle/repeatと停止境界のruntime切替。QUIET/BALANCED/SECUREや未解決時の追加fallbackは未実装であり、backend名をsecure保証にしない。 |
 | [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | #35/#36の実装と#89/#90の追加検証をPR #86/#87/#94/#95で整備。Docker36/36成功。全子Issue完了によりClose済み。実機異常系は#96、長期評価は#4/#83へ分離する。 |
@@ -38,7 +38,7 @@
 | [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90は完了。#24正式化時に公開実装と再照合済み。 |
 | [#96 Validate Integrity diagnostics under Raspberry Pi hardware faults](https://github.com/udonchan/picdplayer/issues/96) | 後日の実機異常系診断評価。傷disc/stallの再現・音声影響は#33、特殊TOCは#39/#40が担当。同じrun記録を共有し、API・警告・復元の整合だけを確認する。#24の追加blockerにはしない。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
-| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | #98/#99と監査修正#103〜#106はマージ済み。Phase 1ではscope付きsummary・有界disc read map・全read/drive値を常時表示し、実使用で情報量を評価する。primary playbackを優先し、daemon接続をIntegrity headerへ統合する。Docker/通常Pi CDPで再照合し、PRレビュー、TV/試聴、異常媒体・長期/負荷評価が残る。 |
+| [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | #98/#99と監査修正#103〜#106はマージ済み。Phase 1ではscope付きsummary・有界disc read map・全read/drive値を常時表示し、実使用で情報量を評価する。primary playbackを優先し、daemon接続をIntegrity headerへ統合する。PR #108をマージしPhase 1はClose済み。通常Pi CDP確認済み。異常scenarioは#109（#110 → #111）、実機異常系は#96、長期/負荷は#4/#83で追跡する。 |
 
 ## 障害対応・機能改善
 
@@ -133,7 +133,7 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 - [#98](https://github.com/udonchan/picdplayer/issues/98): TOC座標とdisc観測世代のdisc.layout公開はPR #101でマージ済み。Docker36/36、通常PiのTOC/REST/WS照合済み。
 - [#99](https://github.com/udonchan/picdplayer/issues/99): 最大256区間のDISC集計を実装。PR #102でマージ済み。Docker36/36、Piで140 read超・stop/resume保持・daemon restart resetを確認。
 
-#98/#99は完了済みの前提。#24は標準Playerのconsumer実装と検証を進める。相互はRelatedで、#12の完了を取り消さず追加機能として管理する。
+#98/#99は完了済みの前提。#24の標準Player consumerはPR #108で完了済み。相互はRelatedで、#12の完了を取り消さず追加機能として管理する。
 
 ## #24着手前の監査修正（PR #102）
 
@@ -146,3 +146,8 @@ Buildroot採用と最終imageへの.deb利用は未決定である。
 実機では修正前の終端試験が失敗したため、その後の通常再生だけを確認した。修正版で13秒間の
 通常再生・API stop・エラーなしと、TVの表示・音声再生は確認済みだが、終端drainは未確認。
 [監査記録](reports/2026-09-26-pre-integrity-audit/README.md)を参照する。
+
+## 2026-09-27変更の監査
+
+- [#115](https://github.com/udonchan/picdplayer/issues/115): 未比較overlapの不一致誤表示、拒否候補の採用識別子をPR #117で修正・Docker確認済み（マージ待ち）。#9の実機検証は別途継続。
+- [#116](https://github.com/udonchan/picdplayer/issues/116): #24完了、速度要求、世代・履歴公開、READMEとCI検証範囲の文書反映漏れをPR #117で修正（マージ待ち）。

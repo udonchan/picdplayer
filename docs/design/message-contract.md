@@ -138,13 +138,13 @@ latest/current_playback/active_warning/history.regions[]は同一形式。
 | verification | object | 以下 |
 
 verification: attempts、complete_reads、matching_reads、mismatches、overlap_frames_requested、overlap_frames_comparedはuint、
-overlapはNOT_REQUESTED / STREAM_BOUNDARY / MATCHED / MISMATCHED、time_budget_exhaustedはbool。
+overlapはNOT_REQUESTED / NOT_CHECKED / STREAM_BOUNDARY / MATCHED / MISMATCHED、time_budget_exhaustedはbool。
 detail_capacityは8。accepted_candidate/accepted_attemptはuint?、attempt_detailsは最大8件の配列。
 各attemptはattempt（1始まりuint）、frames_read（uint）、complete（bool）、native_error（int）、
 direct_retries（uint）、candidate（uint?）、physical_start_lba（int）、observed_start_lba（int）、physical_frames_requested（uint）。
 candidateは同じread内のみ比較する。top-levelのstart_lba/frames_requested/frames_readは出力論理区間、
 attemptのphysical値は先行overlapを含むbackend要求範囲である。
-accepted_attemptは一致閾値を満たした試行。single/backend内部の未観測試行は空配列/nullとなる。
+accepted_attemptは一致閾値とoverlap条件を満たし採用された試行。single/backend内部の未観測試行は空配列/nullとなる。
 
 不完全readはUNCERTAIN。完全readでも直接retry/skips/read_errors/cache_errorsはUNCERTAINの根拠となる。
 backend fixup（skipなし）や一致確認に至るmismatchはRECOVEREDの根拠となり、この判定が前記anomalyより優先する。
@@ -278,3 +278,7 @@ nonblocking drain中は追加のALSA delay照会を行わず、位置・根拠�
 この間のcurrent_playbackを刻々の実音声位置として扱わない。正常drain完了時に停止・破棄する。
 drain中または全PCM提出後のunderrunはエラー停止とし、最終sectorへ再seekしない。
 途中のunderrun復帰と異なり、正常完走したという保証にはしない。
+
+### Overlap evidenceの未観測と拒否（#115）
+
+NOT_REQUESTEDはoverlap無効、STREAM_BOUNDARYは直前の採用PCM不在、NOT_CHECKEDは比較対象はあるが候補一致に至らず比較未実施を示す。overlap_frames_comparedは実比較時だけ非0となる。accepted_candidate/accepted_attemptはoverlapを含む採用条件を満たした場合だけ設定し、拒否時はnull。matching_readsは候補同士の一致回数であり、overlap成功や採用を意味しない。

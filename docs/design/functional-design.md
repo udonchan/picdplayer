@@ -134,7 +134,7 @@ ALSA EPIPEはAudioUnderrunとしてreset・reader再生成・再bufferする。
 
 同一driveに対するreader open/seek/read/closeとmedia/TOC/eject/capability probeは共有mutexで直列化する。
 進行中ioctlは強制中断せず、ejectは従来どおりstream停止、reader解放確認後に要求する。
-速度設定はまだ行わない。既定bufferは通常CDでstartup、seek、track変更、pause復帰と連続再生を
+速度要求は`--drive-speed-x`で任意に指定できる。要求受理は実測速度を意味しない。既定bufferは通常CDでstartup、seek、track変更、pause復帰と連続再生を
 実機比較して決めたが、傷discや長いread stallに対する余裕は未評価である。CD queueが満杯でも
 main loopがALSA latency近く停止すればunderrunし得るため、両bufferを同じものとして扱わない。
 
@@ -279,7 +279,7 @@ PCMを最初に取得した試行番号ではない。採用理由は既存の`l
 
 追加fieldは任意として扱い、旧payloadにない場合は未取得とする。REST/WSのsnapshot形は維持する。
 最大8件の固定配列で保持し、PCM blockと共に現在再生区間へ届く。stream coverage・観測世代・有界履歴は下記の#35で実装済み。
-永続履歴は対象外。#24の標準Player統合はこの公開契約を用いて実装中である。
+永続履歴は対象外。#24の標準Player統合はPR #108で完了し、この公開契約を使用する。
 
 ### stream coverageと根拠の世代（#35）
 
