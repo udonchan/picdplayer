@@ -161,6 +161,12 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 既存rawを再集計し、新規測定は行っていない。Cage単独は改善対象の特定に不要として省略し、
 過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、長期運転・実表示・音声は#4で別途確認する。
 
+2026-09-28には、PR #120 merge後の現行masterを通常CDで短時間再測定した。CDP未接続の60秒では
+STOPPEDが全core CPU平均8.39%、65.5°C、PLAYINGが19.33%、最大69.3°Cで、現在の
+power/thermal制限は各0/12 sampleだった。これは同条件反復や改善率の根拠ではなく、現行構成の
+追加基線である。raw、process別値、測定条件と残るCDP/Cage/反復比較は
+[現行kiosk基線](reports/2026-09-28-current-kiosk-baseline/README.md)に記録する。
+
 ## 標準PlayerのDOM更新削減（Issue #53）
 
 #53は#52のbaseline測定をhard dependencyとする。最初のDOM write削減は標準Playerの
