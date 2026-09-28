@@ -251,9 +251,12 @@ LOADINGへ遷移した時にmetadata世代を無効化し、TOC再取得後のbe
 交換を観測できなかった同一TOCの別discまでは識別しない。
 TOCが1以外の番号で始まる場合のmetadata track positionとの対応付けも未実装である。
 
-raw cacheはsize確認→read→通常parser、書き込みはtemporary file→rename。
-MusicBrainzの404は空releasesとして扱う。parse前にraw JSONをcacheするため、不正cacheが残る可能性がある。
-HTTP本文上限はあるが、cacheの総量制限や全JSON fieldへの厳密な型検証は保証しない。
+raw cacheはsize確認→read→通常parser、書き込みはtemporary file→renameする。更新から30日以内のentryを
+freshとして用い、期限切れentryはnetwork取得失敗時だけoffline fallbackにする。cache全体は64 MiBまでとし、
+新規書込み前に最古ファイルから削除する。残ったtemporary fileは次の書込み時に除去する。サイズ超過・画像形式
+不正は無効化し、metadataまたはCAA JSONがcache hitでparse不能なら無効化してnetworkから一度再取得する。
+MusicBrainzの404は空releasesとして扱う。書込み不能やcache処理失敗は取得済み結果を無効にしない。
+HTTP本文上限はあるが、全JSON fieldへの厳密な型検証は保証しない。
 
 ## drive start診断
 

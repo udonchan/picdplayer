@@ -1,4 +1,5 @@
 #include "metadata_lookup.hpp"
+#include "metadata_cache.hpp"
 #include "metadata_retry_policy.hpp"
 #include "http_client.hpp"
 #include "metadata_parser.hpp"
@@ -7,7 +8,6 @@
 #include <chrono>
 #include <cctype>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
@@ -24,23 +24,6 @@ bool safe_key(const std::string& value) {
     if (value.empty() || value.size() > 64) return false;
     for (unsigned char c : value) if (!(std::isalnum(c) || c == '-' || c == '_' || c == '.')) return false;
     return true;
-}
-std::optional<std::string> read_cache(const std::filesystem::path& path, std::size_t maximum) {
-    std::error_code ec;
-    const auto size = std::filesystem::file_size(path, ec);
-    if (ec) return std::nullopt;
-    if (size > maximum) throw std::runtime_error("cached response exceeds size limit");
-    std::ifstream input(path, std::ios::binary);
-    if (!input) return std::nullopt;
-    return std::string(std::istreambuf_iterator<char>(input), {});
-}
-void write_cache(const std::filesystem::path& path, std::string_view body) {
-    std::error_code ec; std::filesystem::create_directories(path.parent_path(), ec);
-    if (ec) return;
-    auto temporary = path; temporary += ".tmp";
-    { std::ofstream output(temporary, std::ios::binary | std::ios::trunc); if (!output) return; output.write(body.data(), static_cast<std::streamsize>(body.size())); if (!output) return; }
-    std::filesystem::rename(temporary, path, ec);
-    if (ec) std::filesystem::remove(temporary, ec);
 }
 bool cancelled(const MetadataOptions& options) { return options.cancelled && options.cancelled(); }
 void wait_until(const MetadataOptions& options, std::chrono::steady_clock::time_point deadline) {
@@ -82,20 +65,47 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
     cache_hit = false;
     if (!safe_key(release_id)) throw std::runtime_error("invalid release ID");
     const auto path = options.cache_directory / "cover-art" / (release_id + ".json");
+    std::optional<MetadataCacheEntry> cached;
+    if (options.use_cache && !options.cache_directory.empty())
+        cached = read_metadata_cache(path, artwork_json_limit);
     std::optional<std::string> body;
-    if (options.use_cache && !options.cache_directory.empty()) { body = read_cache(path, artwork_json_limit); cache_hit = body.has_value(); }
+    if (cached && cached->fresh) { body = cached->body; cache_hit = true; }
     if (!body) {
+        try {
+            HttpClient client;
+            const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
+                                             artwork_json_limit, options.cancelled,
+                                             RedirectPolicy::follow_https);
+            if (response.status == 404) { ArtworkInfo result; result.status = ArtworkStatus::unavailable; return result; }
+            if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
+            if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");
+            body = response.body;
+            if (options.use_cache && !options.cache_directory.empty())
+                write_metadata_cache(options.cache_directory, path, *body);
+        } catch (...) {
+            if (!cached) throw;
+            body = cached->body;
+            cache_hit = true;
+        }
+    }
+    ArtworkInfo result;
+    try {
+        result = parse_cover_art_response(*body);
+    } catch (...) {
+        if (!cache_hit) throw;
+        invalidate_metadata_cache(path);
         HttpClient client;
         const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
-                                         artwork_json_limit, options.cancelled,
-                                         RedirectPolicy::follow_https);
-        if (response.status == 404) { ArtworkInfo result; result.status = ArtworkStatus::unavailable; return result; }
+                                         artwork_json_limit, options.cancelled, RedirectPolicy::follow_https);
+        if (response.status == 404) { ArtworkInfo unavailable; unavailable.status = ArtworkStatus::unavailable; return unavailable; }
         if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
         if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");
         body = response.body;
-        if (options.use_cache && !options.cache_directory.empty()) write_cache(path, *body);
+        if (options.use_cache && !options.cache_directory.empty())
+            write_metadata_cache(options.cache_directory, path, *body);
+        cache_hit = false;
+        result = parse_cover_art_response(*body);
     }
-    auto result = parse_cover_art_response(*body);
     if (result.status != ArtworkStatus::available || options.cache_directory.empty()) return result;
     const auto image_path = options.cache_directory / "cover-art" / (release_id + ".image");
     const auto valid_image = [](std::string_view bytes) -> std::optional<std::string> {
@@ -105,16 +115,24 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
         if (bytes.size() >= 12 && bytes.substr(0, 4) == "RIFF" && bytes.substr(8, 4) == "WEBP") return "image/webp";
         return std::nullopt;
     };
+    std::optional<MetadataCacheEntry> cached_image;
+    if (options.use_cache) cached_image = read_metadata_cache(image_path, artwork_image_limit);
     std::optional<std::string> image;
-    if (options.use_cache) image = read_cache(image_path, artwork_image_limit);
+    if (cached_image && cached_image->fresh && valid_image(cached_image->body)) image = cached_image->body;
+    else if (cached_image) invalidate_metadata_cache(image_path);
     if (!image) {
-        HttpClient client;
-        const auto response = client.get(result.image_url, artwork_image_limit, options.cancelled,
-                                         RedirectPolicy::follow_https);
-        if (response.status != 200) throw std::runtime_error("Cover Art image HTTP status " + std::to_string(response.status));
-        image = response.body;
-        if (!valid_image(*image)) throw std::runtime_error("Cover Art image is not JPEG, PNG, or WebP");
-        if (options.use_cache) write_cache(image_path, *image);
+        try {
+            HttpClient client;
+            const auto response = client.get(result.image_url, artwork_image_limit, options.cancelled,
+                                             RedirectPolicy::follow_https);
+            if (response.status != 200) throw std::runtime_error("Cover Art image HTTP status " + std::to_string(response.status));
+            image = response.body;
+            if (!valid_image(*image)) throw std::runtime_error("Cover Art image is not JPEG, PNG, or WebP");
+            if (options.use_cache) write_metadata_cache(options.cache_directory, image_path, *image);
+        } catch (...) {
+            if (!cached_image || !valid_image(cached_image->body)) throw;
+            image = cached_image->body;
+        }
     }
     const auto mime = valid_image(*image);
     if (!mime) throw std::runtime_error("cached Cover Art image is invalid");
@@ -161,14 +179,36 @@ void print_result(const MetadataResult& result) {
 MetadataResult lookup_musicbrainz_id(const std::string& disc_id, const MetadataOptions& options) {
     if (!safe_key(disc_id)) throw std::invalid_argument("invalid MusicBrainz Disc ID");
     const auto path = options.cache_directory / "metadata" / (disc_id + ".json");
+    std::optional<MetadataCacheEntry> cached;
+    if (options.use_cache && !options.cache_directory.empty())
+        cached = read_metadata_cache(path, metadata_limit);
     std::optional<std::string> body;
     bool cache_hit = false;
-    if (options.use_cache && !options.cache_directory.empty()) { body = read_cache(path, metadata_limit); cache_hit = body.has_value(); }
+    if (cached && cached->fresh) { body = cached->body; cache_hit = true; }
     if (!body) {
-        body = fetch_musicbrainz(disc_id, options);
-        if (options.use_cache && !options.cache_directory.empty()) write_cache(path, *body);
+        try {
+            body = fetch_musicbrainz(disc_id, options);
+            if (options.use_cache && !options.cache_directory.empty())
+                write_metadata_cache(options.cache_directory, path, *body);
+        } catch (...) {
+            if (!cached) throw;
+            body = cached->body;
+            cache_hit = true;
+        }
     }
-    auto result = parse_musicbrainz_response(*body, disc_id); result.from_cache = cache_hit;
+    MetadataResult result;
+    try {
+        result = parse_musicbrainz_response(*body, disc_id);
+    } catch (...) {
+        if (!cache_hit) throw;
+        invalidate_metadata_cache(path);
+        body = fetch_musicbrainz(disc_id, options);
+        if (options.use_cache && !options.cache_directory.empty())
+            write_metadata_cache(options.cache_directory, path, *body);
+        cache_hit = false;
+        result = parse_musicbrainz_response(*body, disc_id);
+    }
+    result.from_cache = cache_hit;
     if (result.selected) {
         bool artwork_cache = false;
         try { result.artwork = fetch_artwork(result.candidates[*result.selected].metadata.release_id, options, artwork_cache); }
