@@ -48,8 +48,8 @@ Dockerを利用できる状態でrepository rootから次を実行します。
 docker build -t picdplayer-build .
 ```
 
-`picdplayer-build` imageには、CMake、C++ compiler、ALSAやmetadata/API機能に必要な
-development packageが含まれています。`BUILD_TESTING=ON`（既定）の自動試験用に
+`picdplayer-build` imageには、CMake、C++ compiler、ALSAやmetadata/API機能、任意の
+libcdio-paranoia readerに必要なdevelopment packageが含まれています。`BUILD_TESTING=ON`（既定）の自動試験用に
 Node.jsとPython 3も含みます。どちらもPiのdaemon/kiosk実行時には不要で、
 ハードウェアを使わないJavaScript・Python試験のために使用します。
 
@@ -129,6 +129,22 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
 件数の正本はCMakeの登録結果です。`ctest --test-dir build-container -N`で確認できます。
 実機deviceの代わりにfake、ALSA null、存在しないCD deviceを使用する試験があり、
 loopback socket通信を許可した環境が必要です。実機の試聴・CEC・TV表示は別に確認します。
+
+### 任意のparanoia build
+
+direct/paranoia比較のためにlibcdio-paranoia readerを含める場合は、同じbuild scriptへ
+`PICDPLAYER_ENABLE_PARANOIA=ON`を指定する。
+
+```sh
+docker build -t picdplayer-build .
+PICDPLAYER_ENABLE_PARANOIA=ON ./scripts/build-container.sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
+  ctest --test-dir build-container --output-on-failure
+```
+
+標準のCIと通常の`.deb`はparanoia無効のままである。paranoia有効の生成物を再配布する場合の
+ライセンス条件は[#66](https://github.com/udonchan/picdplayer/issues/66)で整理中であり、比較・検証用途と
+正式releaseを混同しない。Pi上でコンパイルせず、このDocker buildで生成したpackageをdeployする。
 
 ### Raspberry Piへdeployする
 

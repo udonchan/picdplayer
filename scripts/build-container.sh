@@ -18,6 +18,15 @@ IMAGE="${PICDPLAYER_BUILD_IMAGE:-picdplayer-build}"
 BUILD_DIR="build-container"
 STAGE_DIR="${REPO_ROOT}/stage"
 PACKAGE_DIR="${REPO_ROOT}/package-container"
+ENABLE_PARANOIA="${PICDPLAYER_ENABLE_PARANOIA:-OFF}"
+
+case "${ENABLE_PARANOIA}" in
+    ON|OFF) ;;
+    *)
+        echo "ERROR: PICDPLAYER_ENABLE_PARANOIA must be ON or OFF (got: ${ENABLE_PARANOIA})" >&2
+        exit 1
+        ;;
+esac
 
 echo "==> PiCDPlayer container build"
 echo "    repository : ${REPO_ROOT}"
@@ -25,6 +34,7 @@ echo "    image      : ${IMAGE}"
 echo "    build dir  : ${REPO_ROOT}/${BUILD_DIR}"
 echo "    stage dir  : ${STAGE_DIR}"
 echo "    package dir: ${PACKAGE_DIR}"
+echo "    paranoia   : ${ENABLE_PARANOIA}"
 echo
 
 # ---------------------------------------------------------------------------
@@ -57,6 +67,7 @@ docker run --rm \
     "${IMAGE}" \
     cmake -S . -B "${BUILD_DIR}" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DENABLE_PARANOIA="${ENABLE_PARANOIA}" \
         -DENABLE_METADATA=ON \
         -DENABLE_API=ON \
         -DINSTALL_SYSTEMD_UNIT=ON \

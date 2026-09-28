@@ -198,6 +198,11 @@ API有効時はJSON schema、route、technical status/Now Playing asset、loopba
 paranoiaにはlibrary呼び出しをwrapした試験がある。
 logger試験は時刻・level・component、stdout/stderrのlevel別振り分け、終了時のqueue drainを確認する。
 
+2026-09-28に`PICDPLAYER_ENABLE_PARANOIA=ON ./scripts/build-container.sh`でDocker Debian Trixie/aarch64の
+packageを生成し、追加の`paranoia_reader`を含むCTest 39件に成功した。生成packageは
+`libcdio-cdda`および`libcdio-paranoia`のruntime依存を持つ。これはlibrary結合と自動試験の確認であり、
+Pi上のparanoia再生・性能比較・試聴の確認ではない。
+
 標準の再実行手順（Mac、初回はDocker imageを作成）:
 
 ```sh
