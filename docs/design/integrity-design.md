@@ -371,6 +371,48 @@ mixed map、history/eventのevictionを確認する。fixtureはC1/C2、物理�
 read speed、傷の物理形状を生成せず、production daemon、CLI、packageには含めない。Player UIを通す
 manual review harnessは#111で別途扱う。
 
+### Local Player Integrity scenario review harness（#111）
+
+`integrity_scenario_harness`はtest/development targetであり、`ScriptedCddaReader`、silent audio output、
+固定TOC/drive capabilityを使う。通常の`cdplayerd`、systemd service、package、ALSA、CEC、実driveを変更しない。
+`clean`、`retry`、`recovered`、`uncertain`、`mixed`、`read-ahead`、`transition`を選択すると、既存の
+`PcmWorker → PlaybackEngine → PresentationModel/serializer → ApiServer → /player`経路でloopback APIを公開する。
+`transition`はCLEANからUNCERTAIN、RECOVEREDへ移るfixtureである。C1/C2、read speed、physical reread、
+傷の物理形状、bit-perfectは再現・保証しない。`read-ahead`ではsilent outputがPCMを消費せず、queued blockの
+latest readをcurrent playback evidenceなしで確認する。正常に読み取りを継続するscenarioではfixture PCMを
+通常の`PlaybackEngine`経路で消費する。`uncertain`ではread errorをworker stateに残して表示するため、
+通常runtimeが行う停止処理を意図的に進めない。
+
+Docker build後、Macのbrowser/CDPから確認する場合は次のように固定portを公開する。
+
+```sh
+docker run --rm -p 127.0.0.1:18080:18080 -v "$PWD:/src" -w /src picdplayer-build \
+  ./build-container/integrity_scenario_harness --scenario transition --port 18080
+```
+
+起動時に`INTEGRITY_SCENARIO_HARNESS development_only=1 scenario=transition`を標準出力へ記録する。
+表示された`http://127.0.0.1:18080/player`を開く。終了は`Ctrl-C`で行う。これは開発用のlocal fixtureであり、
+実機異常media試験（#96）や通常Player/Custom UIのhardware検証を置き換えない。
+
+CDPで標準rendererのスクリーンショットを取得する場合は、harnessをport 8080へ公開し、MacのChromeを別profileで
+起動する。既存`measure-kiosk-cdp.py`はtarget URLを`http://127.0.0.1:8080/player`として選ぶため、このportを使う。
+
+```sh
+# terminal 1
+docker run --rm -p 127.0.0.1:8080:8080 -v "$PWD:/src" -w /src picdplayer-build \
+  ./build-container/integrity_scenario_harness --scenario mixed --port 8080
+
+# terminal 2（Mac）
+profile_dir="$(mktemp -d)"
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 \
+  --user-data-dir="$profile_dir" http://127.0.0.1:8080/player
+python3 scripts/measure-kiosk-cdp.py --seconds 1 --screenshot /tmp/picdplayer-integrity-mixed.png
+```
+
+スクリーンショットはChrome rendererのsurfaceを示すだけで、HDMI scanoutやTVの実表示を保証しない。Chromeを閉じた後、
+一時profileは必要なら手動で削除する。
+
 Macからこのfixtureだけを実行する場合は、既存Docker buildを作成してから次を実行する。
 
 ```sh
