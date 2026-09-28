@@ -62,6 +62,16 @@ PCM非出力を確認した。2026-09-28にはPi 3上で通常14 track Audio CD�
 [通常CD実機記録](reports/2026-09-28-repeat-overlap-normal-cd/README.md)を参照する。TV実表示・試聴、傷disc、
 cache軽減効果、物理的な再読込の保証、性能・長時間安定性は確認していない。
 
+## Deterministic Integrity observation fixture（#110、Docker自動試験）
+
+`tests/integrity_fixture.hpp`のtest-only `ScriptedCddaReader`を追加し、明示したLBA、要求/取得frame、
+`ReadStatus`、native error、direct retry、backend event、local verificationを既存`PcmWorker`へ渡す。
+Docker Debian Trixie/aarch64で`./scripts/build-container.sh`とCTest 39件を実行し、clean、direct retryによる
+UNCERTAIN、backend fixupまたはcandidate mismatch後のRECOVERED、read error、disc mapのaccepted/unaccepted区間、
+history/eventの有界evictionを確認した。fixtureはproduction daemon、CLI、package、実drive I/O、ALSA、CECを
+変更せず、C1/C2、物理再read、cache独立性、read speed、傷の物理形状を再現しない。Player UIを通常rendererまで
+通すlocal review harnessは#111で扱うため、今回の成功は実機異常mediaやUI表示の確認ではない。
+
 ## 通常runtime API操作とdaemon再起動（#4、Pi確認）
 
 2026-09-28、通常14 track Audio CDを認識したdirect single readerへ、loopback APIでplay、pause、+10秒seek、
