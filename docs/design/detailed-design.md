@@ -239,7 +239,7 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | [parse_musicbrainz_response](../../src/metadata_parser.cpp) | 該当Disc IDのmediumから候補生成、track positionを1始まり連続で検証、0/1/複数を分類 |
 | parse_cover_art_response | front画像のHTTPS URLを選択。画像bytesは取得しない |
 | [HttpClient::get](../../src/http_client.cpp) | HTTPS・timeout・受信サイズ・redirect policyを適用しstatus/type/bodyと、解釈できた`Retry-After`秒数を返す。CAAでは許可host、redirect header、socket接続先IPを検査する |
-| [lookup_musicbrainz_id](../../src/metadata_lookup.cpp) | cacheまたはHTTP→parse→単一候補CAA。CAA例外はartwork.errorへ格納 |
+| [lookup_musicbrainz_id](../../src/metadata_lookup.cpp) | cacheまたはHTTP→parse→単一候補CAA。CAA例外はartwork.errorへ格納。testでは`MetadataOptions::http_get`で決定的応答を注入できる |
 | lookup_musicbrainz_disc | Disc ID計算と上記lookup後、各候補の曲数を実TOCと照合。不一致はmetadata ERROR |
 | [MetadataWorker::request/pop](../../src/metadata_worker.cpp) | pending最新1件、結果1件。worker内でlookup例外をERROR結果へ変換 |
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
