@@ -215,6 +215,8 @@ struct ApiServer::Implementation {
     ApiReadPolicyProvider read_policy_provider;
     ApiArtworkProvider artwork_provider;
     std::string websocket_state;
+    std::uint64_t websocket_generation = 0;
+    std::unordered_map<lws*, std::uint64_t> websocket_clients;
     std::array<lws_protocols, 2> protocols{};
     lws_context* context = nullptr;
     struct PendingRequest { std::string method; std::string path; std::string body; };
@@ -289,18 +291,27 @@ struct ApiServer::Implementation {
                     ? 0 : 1;
             }
             if (reason == LWS_CALLBACK_ESTABLISHED) {
+                self->websocket_clients.emplace(wsi, std::numeric_limits<std::uint64_t>::max());
                 lws_callback_on_writable(wsi);
                 return 0;
             }
             if (reason == LWS_CALLBACK_SERVER_WRITEABLE) {
+                const auto client = self->websocket_clients.find(wsi);
+                if (client == self->websocket_clients.end()) return -1;
+                if (client->second == self->websocket_generation) return 0;
                 constexpr std::size_t maximum_state_bytes = 1024 * 1024;
                 if (self->websocket_state.size() > maximum_state_bytes) return -1;
                 std::vector<unsigned char> message(LWS_PRE + self->websocket_state.size());
                 std::memcpy(message.data() + LWS_PRE, self->websocket_state.data(), self->websocket_state.size());
                 const auto written = lws_write(wsi, message.data() + LWS_PRE,
                                                self->websocket_state.size(), LWS_WRITE_TEXT);
-                return written >= 0 && static_cast<std::size_t>(written) == self->websocket_state.size()
-                    ? 0 : -1;
+                if (written < 0 || static_cast<std::size_t>(written) != self->websocket_state.size()) return -1;
+                client->second = self->websocket_generation;
+                return 0;
+            }
+            if (reason == LWS_CALLBACK_CLOSED) {
+                self->websocket_clients.erase(wsi);
+                return 0;
             }
             if (reason == LWS_CALLBACK_RECEIVE) return -1;
             if (reason == LWS_CALLBACK_HTTP_BODY) {
@@ -394,6 +405,7 @@ ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;
     implementation_->websocket_state = state_json;
+    ++implementation_->websocket_generation;
     lws_callback_on_writable_all_protocol(implementation_->context,
                                           &implementation_->protocols[0]);
 }

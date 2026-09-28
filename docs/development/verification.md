@@ -232,6 +232,12 @@ raw data、process別CPU、測定条件、限界は[5分PLAYING記録](reports/2
 CPU改善率の比較には用いない。同runでmain loop stage warningは再現しなかったが、過去に異なるstageで
 観測したwarningの原因を否定するものではない。TV実表示・試聴はこの測定の確認対象外である。
 
+同日に、同候補で通常CDのSTOPPEDとPLAYINGを各60秒測定し、CDP未接続時の状態と10秒間CDP接続時の
+WebSocket配信を[短時間のcurrent kiosk記録](reports/2026-09-28-current-kiosk-baseline/README.md)へ保存した。
+修正前のSTOPPEDでは477 frame・2.16 MBを受信したのに対し、修正後はSTOPPEDで0 frame、PLAYINGで40 frameだった。
+この観測は接続ごとの同一generation重複送信が抑止されたことを示すが、revision・測定時間・CDP自体の負荷が異なるため、
+過去のCPU基線との定量比較には用いない。
+
 ## 標準PlayerのDOM更新削減（Issue #53）
 
 #53は#52のbaseline測定をhard dependencyとする。最初のDOM write削減は標準Playerの

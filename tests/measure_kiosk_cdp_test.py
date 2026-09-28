@@ -53,6 +53,37 @@ class CdpTest(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             cdp.finish_trace(ws)
 
+    def test_websocket_payload_bytes_count_only_received_text_payloads(self):
+        ws = cdp.WebSocket.__new__(cdp.WebSocket)
+        ws.socket = Mock()
+        ws.next_id = 0
+        ws.events = {}
+        ws.event_payload_bytes = {}
+        ws.receive = Mock(side_effect=[
+            {"method": "Network.webSocketFrameReceived",
+             "params": {"response": {"payloadData": "測定"}}},
+            {"method": "Network.webSocketFrameReceived", "params": {"response": {}}},
+            {"id": 1, "result": {}},
+        ])
+
+        ws.call("Performance.enable")
+
+        self.assertEqual(ws.events["Network.webSocketFrameReceived"], 2)
+        self.assertEqual(ws.event_payload_bytes["Network.webSocketFrameReceived"],
+                         len("測定".encode("utf-8")))
+
+    def test_reset_event_counters_preserves_transport_state(self):
+        ws = cdp.WebSocket.__new__(cdp.WebSocket)
+        ws.events = {"Network.webSocketFrameReceived": 3}
+        ws.event_payload_bytes = {"Network.webSocketFrameReceived": 42}
+        ws.next_id = 7
+
+        ws.reset_event_counters()
+
+        self.assertEqual(ws.events, {})
+        self.assertEqual(ws.event_payload_bytes, {})
+        self.assertEqual(ws.next_id, 7)
+
 
 if __name__ == "__main__":
     unittest.main()
