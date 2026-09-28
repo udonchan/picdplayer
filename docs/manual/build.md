@@ -68,5 +68,9 @@ Python 3があるとCLI・daemon試験（API有効時はUI起動試験も）を�
 全試験の実行にはNode.jsとPython 3の両方を用意する。
 ユーザー編集版の指定と復旧方法は[Custom UI](custom-ui.md)を参照する。
 paranoiaを使用する場合は `ENABLE_PARANOIA=ON` でconfigureし、`--cdda-reader paranoia` を指定する。
+この設定は比較・検証用で、通常のreleaseはOFFである。対応containerのDebian
+`libcdio-paranoia` packageはGPL-3-or-laterとして配布されているため、有効化したbinaryを
+再配布する前に対象package版の条件、ライセンス互換性、source提供要件を確認する。configure時にも
+同じ警告を表示する。プロジェクト本体と依存の正式なライセンス方針は[#66](https://github.com/udonchan/picdplayer/issues/66)で監査中である。
 
 インストールと起動設定は[systemd手順](../manual/systemd.md)、操作例は[操作・診断](../manual/operations.md)を参照する。

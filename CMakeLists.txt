@@ -17,6 +17,11 @@ if(ENABLE_PARANOIA)
     if(NOT PARANOIA_FOUND)
         message(FATAL_ERROR "ENABLE_PARANOIA=ON requires libcdio_paranoia (Debian: libcdio-paranoia-dev)")
     endif()
+    message(WARNING
+        "ENABLE_PARANOIA=ON links the optional libcdio-paranoia reader. "
+        "The Debian package used by the supported container is GPL-3-or-later; "
+        "redistributing a resulting binary requires a license-compatibility and "
+        "source-offer review. Official releases keep ENABLE_PARANOIA=OFF. See #66.")
 endif()
 if(ENABLE_METADATA)
     pkg_check_modules(DISCID QUIET IMPORTED_TARGET libdiscid)

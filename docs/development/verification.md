@@ -50,6 +50,15 @@ error文字列に変換されること、古いgenerationのERROR結果を`Metad
 
 実HTTPS responseを使うtimeout・redirect header、Pi上の通常metadata/CAA lookupは未確認である。
 
+## Optional paranoia license warning（#66、Docker自動試験）
+
+`PICDPLAYER_ENABLE_PARANOIA=ON ./scripts/build-container.sh`で、対応containerのDebian
+`libcdio-paranoia`がGPL-3-or-laterであること、生成binaryの再配布前にライセンス互換性と
+source-offerを確認すること、通常releaseはOFFであることをCMake configure warningとして確認した。
+paranoia有効構成ではpackageに`libcdio-cdda`と`libcdio-paranoia`のruntime dependencyが入り、
+CTest 45件が成功した。標準のparanoia無効構成では44件が成功した。本体ライセンスの採用と
+直接依存の監査文書は未確定である。
+
 ## 非1始まりTOCのmetadata対応付け（#39、Docker自動試験）
 
 MusicBrainzの`medium.tracks[].position`はmedium内の順序である。parserは1からの連続性を検証し、
