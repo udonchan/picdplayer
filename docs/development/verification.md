@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-09-27。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-09-28。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -61,6 +61,18 @@ PCM非出力を確認した。2026-09-28にはPi 3上で通常14 track Audio CD�
 条件、同bootで試験開始前に観測した74,989 µs main-loop stall、確認範囲は
 [通常CD実機記録](reports/2026-09-28-repeat-overlap-normal-cd/README.md)を参照する。TV実表示・試聴、傷disc、
 cache軽減効果、物理的な再読込の保証、性能・長時間安定性は確認していない。
+
+## 通常runtime API操作とdaemon再起動（#4、Pi確認）
+
+2026-09-28、通常14 track Audio CDを認識したdirect single readerへ、loopback APIでplay、pause、+10秒seek、
+resume、stopを順に送り、すべて204を確認した。PLAYINGではpositionと50 queued blocksが進み、PAUSED/STOPPEDでは
+queueが0へ戻った。`picdplayer.service` restart後にはdaemon/kioskともactiveで、APIはSTOPPED状態を返した。
+各snapshotの`dropped_events`は0で、run中のjournalにはread error、ALSA underrun、eject errorを検出しなかった。
+詳細と同bootで試験前に一件あったmain-loop stallは
+[通常runtime API実機記録](reports/2026-09-28-normal-runtime-api/README.md)に保存した。
+
+これはSSH/API経路の確認であり、TV実表示・試聴・CEC・Custom UI・cold boot・長時間運転・eject/drive消失は
+確認していない。#4をこれだけで完了扱いにしない。
 
 ## C2 capability probe（#7、Docker確認）
 
