@@ -371,6 +371,17 @@ mixed map、history/eventのevictionを確認する。fixtureはC1/C2、物理�
 read speed、傷の物理形状を生成せず、production daemon、CLI、packageには含めない。Player UIを通す
 manual review harnessは#111で別途扱う。
 
+Macからこのfixtureだけを実行する場合は、既存Docker buildを作成してから次を実行する。
+
+```sh
+./scripts/build-container.sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
+  ctest --test-dir build-container -R '^integrity_fixture$' --output-on-failure
+```
+
+`-V`を追加するとCTestの詳細を表示する。これはC++ test targetであり、Piへのdeploy、daemon起動、
+Player UI表示は行わない。
+
 ### repeat試行根拠の追加（#35）
 
 `read.latest/current_playback.verification`に有界な試行詳細と採用候補を追加する。
