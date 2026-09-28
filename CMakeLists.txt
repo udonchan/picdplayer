@@ -326,6 +326,12 @@ if(BUILD_TESTING)
         target_compile_options(http_security_policy_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(http_security_policy_test PRIVATE CURL::libcurl)
         add_test(NAME http_security_policy COMMAND http_security_policy_test)
+        add_executable(http_client_test tests/http_client_test.cpp src/http_client.cpp src/http_security_policy.cpp)
+        target_include_directories(http_client_test PRIVATE include)
+        target_compile_features(http_client_test PRIVATE cxx_std_20)
+        target_compile_options(http_client_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(http_client_test PRIVATE CURL::libcurl)
+        add_test(NAME http_client COMMAND http_client_test)
         add_executable(metadata_lookup_test tests/metadata_lookup_test.cpp src/metadata_lookup.cpp
             src/metadata_parser.cpp src/metadata_retry_policy.cpp src/metadata_cache.cpp src/http_client.cpp
             src/http_security_policy.cpp src/musicbrainz_disc_id.cpp src/cd_device.cpp src/disc_toc.cpp

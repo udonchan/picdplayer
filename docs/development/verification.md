@@ -45,8 +45,10 @@ provider選択やdaemon CLIには露出しない。Docker Debian Trixie/aarch64�
 MusicBrainz 429（Retry-After 0）および503（Retry-Afterなし）からの再試行、CAA JSON routing、cancel時の待機中断を
 確認した。さらに、注入したconnection failureが`MetadataWorker`を通って同じgenerationの`MetadataStatus::error`と元の
 error文字列に変換されること、古いgenerationのERROR結果を`MetadataSession`が適用しないことを確認した。
+`http_client` testは空けたloopback TCP portへ実際にHTTPS接続し、libcurlのconnection failureが
+`HTTP request failed:`例外として返ることも確認する。この試験は外部networkへ接続しない。
 
-実HTTPS responseを使うtimeout・connection failure・redirect header、Pi上の通常metadata/CAA lookupは未確認である。
+実HTTPS responseを使うtimeout・redirect header、Pi上の通常metadata/CAA lookupは未確認である。
 
 ## 非1始まりTOCのmetadata対応付け（#39、Docker自動試験）
 
