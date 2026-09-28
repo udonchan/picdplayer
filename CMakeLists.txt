@@ -328,7 +328,8 @@ if(BUILD_TESTING)
         add_test(NAME http_security_policy COMMAND http_security_policy_test)
         add_executable(metadata_lookup_test tests/metadata_lookup_test.cpp src/metadata_lookup.cpp
             src/metadata_parser.cpp src/metadata_retry_policy.cpp src/metadata_cache.cpp src/http_client.cpp
-            src/http_security_policy.cpp src/musicbrainz_disc_id.cpp src/cd_device.cpp src/disc_toc.cpp)
+            src/http_security_policy.cpp src/musicbrainz_disc_id.cpp src/cd_device.cpp src/disc_toc.cpp
+            src/metadata_worker.cpp)
         target_include_directories(metadata_lookup_test PRIVATE include)
         target_compile_features(metadata_lookup_test PRIVATE cxx_std_20)
         target_compile_options(metadata_lookup_test PRIVATE -Wall -Wextra -Wpedantic)
