@@ -21,3 +21,5 @@ jobs:
         run: ./scripts/build-container.sh
       - name: Run hardware-independent tests
         run: docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
+      - name: Test Debian package lifecycle
+        run: ./scripts/test-package-lifecycle.sh

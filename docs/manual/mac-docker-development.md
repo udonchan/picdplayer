@@ -125,7 +125,7 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
   ctest --test-dir build-container --output-on-failure
 ```
 
-標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含め、2026-09-28の標準構成では38件を登録します。
+標準構成はmetadata/API有効、paranoia無効です。Node.jsとPython 3を含め、2026-09-28の標準構成では44件を登録します。
 件数の正本はCMakeの登録結果です。`ctest --test-dir build-container -N`で確認できます。
 実機deviceの代わりにfake、ALSA null、存在しないCD deviceを使用する試験があり、
 loopback socket通信を許可した環境が必要です。実機の試聴・CEC・TV表示は別に確認します。
@@ -292,6 +292,26 @@ test on Raspberry Pi
 
 という役割分担です。
 
+### packageの更新・削除を確認する
+
+packageを生成した後、次で同じDebian arm64 build imageの使い捨てcontainerにおいて、旧版からの更新、
+同一artifactの再install、purgeを確認できます。
+
+```sh
+./scripts/test-package-lifecycle.sh
+```
+
+この検証は旧package所有fileが更新時に削除されること、packageが所有しないfileが保持されること、
+purge後にpackage所有fileが残らないことを確認する。Piへ接続せず、host filesystemも変更しない。
+CIも`build-container.sh`の後に同じscriptを実行する。
+
+`dpkg -i`はtransactional rollbackを提供しない。Piでconfigure失敗や中断を確認した場合は、まず
+`sudo dpkg --audit`、`sudo systemctl status picdplayer.service picdplayer-kiosk.service`、
+`journalctl -u picdplayer.service -u picdplayer-kiosk.service -b`で状態を記録する。原因を解消した後、
+既知の正常なartifactを`./scripts/deploy.sh`で再installする。packageの依存関係などで半configured状態が
+残る場合は、Piのconsoleで`sudo dpkg --configure -a`を実行してからservice状態を再確認する。
+この復旧操作は限定sudoers ruleの対象外であり、対話的な管理者権限を使う。
+
 Dockerは再現可能なLinux/aarch64ビルド環境として使用し、
 Raspberry Piは実際のCDドライブ、HDMI audio、CEC、TV表示、systemd起動などを
 確認するruntime targetとして扱います。
@@ -300,5 +320,5 @@ Raspberry Piは実際のCDドライブ、HDMI audio、CEC、TV表示、systemd�
 
 `.github/workflows/ci.yml`はPull Requestと手動実行で`ubuntu-24.04-arm`を使い、
 上記と同じDocker image作成、`scripts/build-container.sh`によるビルド・stage、
-Docker内のCTestを実行します。実機のCD-ROM、CEC、ALSA/HDMI、TV表示やPiへのdeployは
+Docker内のCTest、使い捨てcontainer内の`dpkg` install/upgrade/reinstall/purge検証を実行します。実機のCD-ROM、CEC、ALSA/HDMI、TV表示やPiへのdeployは
 対象外です。releaseやRaspberry Pi OS imageの生成もこのworkflowでは行いません。
