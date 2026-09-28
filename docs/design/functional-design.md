@@ -259,8 +259,9 @@ read-only rootへの移植時はcacheを別の書き込み可能領域へ置く�
 HTTP接続timeout 5秒、全体15秒。MusicBrainz開始間隔1.1秒、429/503は最大3回。
 User-Agentはコード内のPiCDPlayer/0.1.0とproject URL。Retry-After解釈は未実装。
 MusicBrainz redirectは拒否、CAAはHTTPSに限り最大3回。host/IPの追加制限は未実装。
-JSON本文上限はMusicBrainz 2 MiB、CAA 512 KiB。深さ・全field長の個別上限は未実装。
-parserは必須構造を検査するが、任意文字列の欠落や型違いは空文字扱いになる。
+JSON本文上限はMusicBrainz 2 MiB、CAA 512 KiB。JSONのnestingは32、keyを含む文字列は4096 bytesまでとし、
+上限超過または構文不正はmetadata ERRORへ変換する。parserは必須構造を検査するが、上限内の任意文字列の
+欠落や型違いは空文字扱いになる。Retry-After、redirect先host/IPの追加制限は未実装。
 
 Buildrootへの移植は未実施。過去の依存・license・package調査は
 [metadata調査記録](../history/metadata-design.md)を参照し、移植時に対象revisionで再確認する。

@@ -20,6 +20,14 @@ int main() {
         check(bad_position);
         bool rejected = false; try { (void)parse_musicbrainz_response("{", "disc"); } catch (const std::runtime_error&) { rejected = true; }
         check(rejected);
+        bool deep = false;
+        try { (void)parse_musicbrainz_response(std::string(33, '[') + "0" + std::string(33, ']'), "disc"); }
+        catch (const std::runtime_error&) { deep = true; }
+        check(deep);
+        bool long_string = false;
+        try { (void)parse_musicbrainz_response("{\"releases\":[],\"extra\":\"" + std::string(4097, 'x') + "\"}", "disc"); }
+        catch (const std::runtime_error&) { long_string = true; }
+        check(long_string);
         auto art = parse_cover_art_response(R"({"images":[{"front":true,"thumbnails":{"500":"https://archive.org/front.jpg"}}]})");
         check(art.status == ArtworkStatus::available && art.image_url == "https://archive.org/front.jpg");
         art = parse_cover_art_response(R"({"images":[{"front":true,"image":"http://coverartarchive.org/release/a/front.jpg"}]})");
