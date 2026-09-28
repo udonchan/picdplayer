@@ -249,6 +249,22 @@ if(BUILD_TESTING)
         target_compile_options(ui_bundle_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(ui_bundle_test PRIVATE PkgConfig::WEBSOCKETS nlohmann_json::nlohmann_json Threads::Threads)
         add_test(NAME ui_bundle COMMAND ui_bundle_test)
+        add_executable(integrity_scenario_harness tests/integrity_scenario_harness.cpp
+            src/api_server.cpp src/ui_bundle.cpp src/logger.cpp src/pcm_worker.cpp src/integrity_state.cpp
+            src/playback_engine.cpp src/player_controller.cpp src/disc_toc.cpp src/presentation_model.cpp
+            src/presentation_json.cpp src/daemon_snapshot_json.cpp src/drive_capabilities.cpp src/player_event.cpp
+            src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
+        target_include_directories(integrity_scenario_harness PRIVATE include src tests ${CMAKE_CURRENT_BINARY_DIR})
+        target_compile_features(integrity_scenario_harness PRIVATE cxx_std_20)
+        target_compile_options(integrity_scenario_harness PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(integrity_scenario_harness PRIVATE PkgConfig::WEBSOCKETS Threads::Threads
+            nlohmann_json::nlohmann_json)
+        if(NODE_EXECUTABLE)
+            add_test(NAME integrity_scenario_harness COMMAND ${NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/integrity_scenario_harness_test.js
+                $<TARGET_FILE:integrity_scenario_harness>)
+            set_tests_properties(integrity_scenario_harness PROPERTIES TIMEOUT 20)
+        endif()
     endif()
     add_executable(optical_drive_test tests/optical_drive_test.cpp src/optical_drive.cpp)
     target_include_directories(optical_drive_test PRIVATE include)
