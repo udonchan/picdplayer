@@ -357,6 +357,20 @@ ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能に�
 実機でC2の信頼性やoffsetを未確認のままTESTEDにしない。ビルド・自動試験は
 [Mac + Docker手順](../manual/mac-docker-development.md)を使い、Piではruntime/hardware検証を行う。
 
+### Deterministic Integrity observation fixture（#110）
+
+`tests/integrity_fixture.hpp`の`ScriptedCddaReader`はtest-onlyの`CddaReader`である。各stepは
+論理start LBA、要求/取得frame数、`ReadStatus`、native error、direct retry、backend event、
+local verificationを明示し、workerが渡すPCM bufferのframe数とseek位置がstepと一致しなければ失敗する。
+scriptを使い切ったread、seek前のread、read error後の再seekなしのreadは失敗する。
+
+このfixtureは`PcmWorker`が既存の`ReadEvidence`、stats、coverage、disc map、active warning、
+history/event windowへ投影する経路をhardware非依存で検証する。`integrity_fixture_test`はclean、
+direct retryによるUNCERTAIN、backend fixupまたは複数candidate mismatch後のRECOVERED、read error、
+mixed map、history/eventのevictionを確認する。fixtureはC1/C2、物理再read、drive cache独立性、
+read speed、傷の物理形状を生成せず、production daemon、CLI、packageには含めない。Player UIを通す
+manual review harnessは#111で別途扱う。
+
 ### repeat試行根拠の追加（#35）
 
 `read.latest/current_playback.verification`に有界な試行詳細と採用候補を追加する。
