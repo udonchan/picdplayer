@@ -11,6 +11,12 @@
 
 namespace {
 std::once_flag curl_once;
+void initialize_curl() {
+    std::call_once(curl_once, [] {
+        if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK)
+            throw std::runtime_error("curl initialization failed");
+    });
+}
 struct WriteTarget { std::string body; std::size_t maximum; bool exceeded = false; };
 struct RedirectTarget { bool rejected = false; };
 size_t write_body(char* data, size_t size, size_t count, void* opaque) noexcept {
@@ -55,7 +61,7 @@ curl_socket_t open_public_socket(void*, curlsocktype, curl_sockaddr* address) no
 }
 }
 HttpClient::HttpClient() {
-    std::call_once(curl_once, [] { if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) throw std::runtime_error("curl initialization failed"); });
+    initialize_curl();
 }
 HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
                              const std::function<bool()>& cancelled,
@@ -109,6 +115,7 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
     return response;
 }
 std::string HttpClient::escape(std::string_view value) {
+    initialize_curl();
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
     if (!curl) throw std::runtime_error("curl allocation failed");
     char* escaped = curl_easy_escape(curl.get(), value.data(), static_cast<int>(value.size()));

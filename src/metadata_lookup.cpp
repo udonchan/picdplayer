@@ -26,6 +26,12 @@ bool safe_key(const std::string& value) {
     return true;
 }
 bool cancelled(const MetadataOptions& options) { return options.cancelled && options.cancelled(); }
+HttpResponse get_http(const MetadataOptions& options, std::string_view url, std::size_t maximum,
+                      RedirectPolicy redirects = RedirectPolicy::reject) {
+    if (options.http_get) return options.http_get(url, maximum, options.cancelled, redirects);
+    HttpClient client;
+    return client.get(url, maximum, options.cancelled, redirects);
+}
 void wait_until(const MetadataOptions& options, std::chrono::steady_clock::time_point deadline) {
     while (std::chrono::steady_clock::now() < deadline) {
         if (cancelled(options)) throw std::runtime_error("metadata lookup cancelled");
@@ -33,7 +39,6 @@ void wait_until(const MetadataOptions& options, std::chrono::steady_clock::time_
     }
 }
 std::string fetch_musicbrainz(const std::string& id, const MetadataOptions& options) {
-    HttpClient client;
     const auto url = "https://musicbrainz.org/ws/2/discid/" + HttpClient::escape(id) +
         "?fmt=json&cdstubs=no&inc=recordings%2Bartist-credits%2Brelease-groups";
     for (int attempt = 0; attempt < 3; ++attempt) {
@@ -48,7 +53,7 @@ std::string fetch_musicbrainz(const std::string& id, const MetadataOptions& opti
             lock.unlock();
             wait_until(options, allowed);
         }
-        const auto response = client.get(url, metadata_limit, options.cancelled);
+        const auto response = get_http(options, url, metadata_limit);
         if (response.status == 404) return R"({"releases":[]})";
         if (response.status == 200) {
             if (!response.content_type.starts_with("application/json")) throw std::runtime_error("MusicBrainz returned non-JSON content");
@@ -72,10 +77,8 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
     if (cached && cached->fresh) { body = cached->body; cache_hit = true; }
     if (!body) {
         try {
-            HttpClient client;
-            const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
-                                             artwork_json_limit, options.cancelled,
-                                             RedirectPolicy::follow_cover_art_archive);
+            const auto response = get_http(options, "https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
+                                           artwork_json_limit, RedirectPolicy::follow_cover_art_archive);
             if (response.status == 404) { ArtworkInfo result; result.status = ArtworkStatus::unavailable; return result; }
             if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
             if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");
@@ -94,9 +97,8 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
     } catch (...) {
         if (!cache_hit) throw;
         invalidate_metadata_cache(path);
-        HttpClient client;
-        const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
-                                         artwork_json_limit, options.cancelled, RedirectPolicy::follow_cover_art_archive);
+        const auto response = get_http(options, "https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
+                                       artwork_json_limit, RedirectPolicy::follow_cover_art_archive);
         if (response.status == 404) { ArtworkInfo unavailable; unavailable.status = ArtworkStatus::unavailable; return unavailable; }
         if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
         if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");
@@ -122,9 +124,8 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
     else if (cached_image) invalidate_metadata_cache(image_path);
     if (!image) {
         try {
-            HttpClient client;
-            const auto response = client.get(result.image_url, artwork_image_limit, options.cancelled,
-                                             RedirectPolicy::follow_cover_art_archive);
+            const auto response = get_http(options, result.image_url, artwork_image_limit,
+                                           RedirectPolicy::follow_cover_art_archive);
             if (response.status != 200) throw std::runtime_error("Cover Art image HTTP status " + std::to_string(response.status));
             image = response.body;
             if (!valid_image(*image)) throw std::runtime_error("Cover Art image is not JPEG, PNG, or WebP");
