@@ -75,7 +75,7 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
             HttpClient client;
             const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
                                              artwork_json_limit, options.cancelled,
-                                             RedirectPolicy::follow_https);
+                                             RedirectPolicy::follow_cover_art_archive);
             if (response.status == 404) { ArtworkInfo result; result.status = ArtworkStatus::unavailable; return result; }
             if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
             if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");
@@ -96,7 +96,7 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
         invalidate_metadata_cache(path);
         HttpClient client;
         const auto response = client.get("https://coverartarchive.org/release/" + HttpClient::escape(release_id) + "/",
-                                         artwork_json_limit, options.cancelled, RedirectPolicy::follow_https);
+                                         artwork_json_limit, options.cancelled, RedirectPolicy::follow_cover_art_archive);
         if (response.status == 404) { ArtworkInfo unavailable; unavailable.status = ArtworkStatus::unavailable; return unavailable; }
         if (response.status != 200) throw std::runtime_error("Cover Art HTTP status " + std::to_string(response.status));
         if (!response.content_type.starts_with("application/json")) throw std::runtime_error("Cover Art returned non-JSON content");
@@ -124,7 +124,7 @@ ArtworkInfo fetch_artwork(const std::string& release_id, const MetadataOptions& 
         try {
             HttpClient client;
             const auto response = client.get(result.image_url, artwork_image_limit, options.cancelled,
-                                             RedirectPolicy::follow_https);
+                                             RedirectPolicy::follow_cover_art_archive);
             if (response.status != 200) throw std::runtime_error("Cover Art image HTTP status " + std::to_string(response.status));
             image = response.body;
             if (!valid_image(*image)) throw std::runtime_error("Cover Art image is not JPEG, PNG, or WebP");
