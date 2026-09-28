@@ -24,7 +24,8 @@ MetadataWorkerがERROR結果へ変換するため、CD再生を待たせない�
 
 429/503ではlibcurlが解釈したRetry-After秒数を最大15秒まで待ち、値がない場合は1.1秒待つ。
 retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。実際のHTTPS response headerを使う
-統合試験、redirect先host/IPの追加制限、network切断、実機のmetadata lookup挙動は未確認・未実装である。
+`http_security_policy` testではCAA初期URLとredirect host、相対redirect、IPv4/IPv6のpublic/private/link-local
+判定を確認した。実際のHTTPS redirect headerを使う統合試験、network切断、実機のmetadata lookup挙動は未確認である。
 
 ## Metadata cache lifecycle（#37、Docker自動試験）
 
@@ -652,7 +653,7 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
   段階で置換を検討する。現時点では再生経路へ影響する変更を行わない。
 - metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
 - stale cacheのoffline fallbackと破損JSON再取得の統合試験、書込み不能、候補選択、非1始まりtrack対応、
-  実HTTPS headerを使う統合試験、redirect先host/IP制限、
+  実HTTPS response headerを使うRetry-After/redirect統合試験、
   network切断とPi上metadata lookupの確認は未完了または継続確認とする。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
 - Now Playingはdaemonが配信するsame-origin artworkを表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。

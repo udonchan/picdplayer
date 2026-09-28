@@ -12,7 +12,7 @@ struct HttpResponse {
     // Seconds from Retry-After when libcurl can parse the response header.
     std::optional<long long> retry_after_seconds;
 };
-enum class RedirectPolicy { reject, follow_https };
+enum class RedirectPolicy { reject, follow_cover_art_archive };
 
 class HttpClient {
 public:

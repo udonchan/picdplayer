@@ -264,10 +264,13 @@ HTTP接続timeout 5秒、全体15秒。MusicBrainz開始間隔1.1秒、429/503�
 User-Agentはコード内のPiCDPlayer/0.1.0とproject URL。429/503ではlibcurlが解釈できた`Retry-After`の秒数を
 使い、1回の待機を最大15秒に制限する。headerがない・解釈できない場合は1.1秒待機する。cancel/shutdown中は
 待機を中断する。429/503に対するHTTP試行は合計3回までとし、無制限のbackoffにしない。
-MusicBrainz redirectは拒否、CAAはHTTPSに限り最大3回。host/IPの追加制限は未実装。
+MusicBrainz redirectは拒否する。CAAはHTTPSに限り最大3回とし、初期URLは`coverartarchive.org`だけを
+許可する。redirect先は同hostまたは`archive.org`とそのsubdomainだけを許可する。CAA requestではproxyを
+利用せず、socket生成時にloopback、private、carrier-grade NAT、link-local、unique-local、multicast等の
+宛先IPを拒否する。host名検査と実接続IP検査を分けるため、DNS解決後の宛先も制限する。
 JSON本文上限はMusicBrainz 2 MiB、CAA 512 KiB。JSONのnestingは32、keyを含む文字列は4096 bytesまでとし、
 上限超過または構文不正はmetadata ERRORへ変換する。parserは必須構造を検査するが、上限内の任意文字列の
-欠落や型違いは空文字扱いになる。redirect先host/IPの追加制限は未実装。
+欠落や型違いは空文字扱いになる。
 
 Buildrootへの移植は未実施。過去の依存・license・package調査は
 [metadata調査記録](../history/metadata-design.md)を参照し、移植時に対象revisionで再確認する。
