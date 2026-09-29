@@ -314,8 +314,16 @@ NO DISC表示やtechnical statusは既存の診断画面で扱う。Chromium kio
 
 ## 11. 外部検証
 
-Phase 5でAccurateRip等のprotocol・checksum・offset規約・利用条件を改めて調査する。
-MusicBrainz Disc IDや曲名一致をPCM検証と混同しない。
+外部PCM検証のproviderを実装する前に、protocol・checksum・offset規約・利用条件を一次資料で確認する。
+MusicBrainz Disc IDや曲名一致をPCM検証と混同しない。MusicBrainz Disc IDはTOC由来であり、
+PCMの同一性を表さない。AccurateRipの第三者アクセスは承認済みプログラムに限定されるため、
+PiCDPlayerは明示的な合意なしに既定providerとして利用しない。
+
+CTDBは候補として調査したが、公式資料はCD全体をripして照合する方式を説明している。
+現行のbounded再生queueと限定したread evidenceは全disc PCMを保存・証明しないため、
+再生中に観測した部分PCMからCTDBのMATCHを導かない。外部照合を実装する場合は、
+完全取得PCMのcoverage・generation・再生とのI/O調停を#160で先に定義する。
+その取得は通常再生のcritical pathに置かず、通常起動時に自動で開始しない。
 外部照合は方式・version・track identity・coverage・offset・confidence値を伴う独立した結果とする。
 confidenceを一般的な正解確率へ変換しない。MISMATCHだけでdrive故障を断定しない。
 track末尾で結果が出てもよい。seek/skipや未解決・代替PCMによりchecksum入力が不足した場合は
