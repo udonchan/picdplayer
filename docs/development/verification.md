@@ -988,3 +988,15 @@ Docker Debian Trixie/aarch64のbuild/package生成とCTest38/38成功。追加JS
 ### CIと入口文書の再照合（#116）
 
 現行CIはpull_request/workflow_dispatchでubuntu-24.04-arm上のDockerを使い、build-container.shによるbuild/stage/.deb生成後にCTestを実行する。標準構成はmetadata/API有効、paranoia無効。ローカルDockerの38/38成功とGitHub Actionsの結果は別記録であり、Pi deploy・音声・表示やparanoia有効構成の検証を意味しない。開発手順の旧34件表記、READMEのoverlap実機未確認とPlayer Phase 1掲載漏れを修正した。過去の日付付き試験件数は当時の結果として保持する。
+
+## #155 capability-based read strategy（2026-09-29）
+
+`--direct-c2-pointers`を要求したdirect backendについて、snapshotの`read.strategy`へrequested/effective
+strategy、pending、machine-readable downgrade reasonを追加した。probe前、C2 support=UNKNOWN、support=NO、
+probe結果がPLAYING/PAUSED中の既存readerへ未適用という状態を別々に表現する。既存readerはstream途中で
+切り替えず、STOPPED境界で再生成する。strategyはoptionalなread mechanismの選択結果であり、C2 trust、
+PCM品質、disc全体のread integrityを表さない。
+
+Docker Debian Trixie/aarch64でbuild、stage、`.deb`生成とCTest45/45成功を確認した。strategy resolverの
+single/repeat、probe pending、support YES/NO/UNKNOWN、C2非要求、およびsnapshot JSONを自動試験した。
+Piでの新しいstrategy JSON確認、C2 packet failure fallback、傷disc、別drive/bridgeは未実施で、#146で追跡する。

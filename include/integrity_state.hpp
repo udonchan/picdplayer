@@ -91,6 +91,9 @@ struct ReadDiagnostics {
     ReadActivity activity = ReadActivity::idle;
     std::string requested_mode = "LEGACY";
     std::string effective_strategy = "legacy";
+    std::string requested_strategy = "legacy";
+    ReadStrategyDowngrade strategy_downgrade = ReadStrategyDowngrade::none;
+    bool strategy_pending = false;
     std::optional<ReadEvidence> latest;
     std::optional<ReadEvidence> current_playback;
     std::optional<ReadEvidence> active_warning; // last uncertain read in this stream

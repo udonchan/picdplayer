@@ -15,7 +15,8 @@
 |---|---|
 | 実装済み | read-only能力probe、UNKNOWNモデル、区間付きReadEvidence、stream世代、ALSA再生head推定、bounded event、technical status |
 | 実装済み | 先読み容量・開始閾値、drive access直列化、single/repeat、ReadPolicyの停止境界でのruntime適用 |
-| 未実装の要求 | cache軽減を伴う独立性、C2のread時利用とtrust評価、offset、能力別strategy、外部照合 |
+| 実装済み | direct backendのC2 pointer opt-in、capabilityに応じたsingle/repeat strategy選択とdowngrade reason公開 |
+| 未実装の要求 | cache軽減を伴う独立性、C2 trust評価、offset、追加mode、外部照合 |
 | 未確定の詳細 | cache対策手順、mode既定値、照合サービス・依存library |
 
 現在の公開型は[ReadEvidence / ReadDiagnostics](../../include/integrity_state.hpp)、
@@ -44,8 +45,9 @@ playback continuity、quiet operation、extensibility、UI simplicityとする�
 ## 2. 現行実装と追加要求の境界
 
 観測core、technical status、先読み設定、drive access直列化、任意の反復一致は現行設計へ統合した。
-追加要求の中心はC2の取得と信頼性評価、cache独立性、offset、
-能力に応じたstrategy選択、外部照合である。ReadPolicyの稼働中切替は実装・自動試験済みで、
+追加要求の中心はC2 trust評価、cache独立性、offset、追加mode、外部照合である。direct C2 pointerは
+明示opt-inで、capabilityに応じた現行single/repeat strategy選択とdowngrade reasonを公開する。
+ReadPolicyの稼働中切替は実装・自動試験済みで、
 通常CDでPLAYING/PAUSED中の保留とSTOPPED境界での適用を確認した。現在の小さなReadPolicyと、
 以下の全要素を備えた将来policyは区別する。
 
@@ -142,7 +144,10 @@ seekでcoverageに穴がある場合、track checksum完成とはしない。
 direct/paranoiaはbackendでありQUIET/BALANCED/SECUREとは別。paranoiaを選ぶだけでSECUREとはしない。
 現行snapshotのrequested_mode=LEGACYとsingle/repeatのReadPolicyを維持し、
 QUIET/BALANCED/SECUREを利用可能なmodeとしてCLI/APIで受け付けない。
-将来はrequested mode、effective strategy、満たせない条件・降格理由を同時に公開する。
+現行snapshotは`read.strategy`にrequested/effective、pending、downgrade reasonを公開する。effectiveは
+現在readerへ適用済みの構成であり、requestedとの差はstream途中でreaderを切り替えない境界を表す。
+C2 pointer要求ではprobe前・support=UNKNOWN・support=NO・probe結果が現行streamへ未適用を区別する。
+これらはC2 trustやPCM品質を表さない。QUIET/BALANCED/SECUREなど追加modeのstrategyは未実装である。
 
 | 未実装mode | 目標policy |
 |---|---|

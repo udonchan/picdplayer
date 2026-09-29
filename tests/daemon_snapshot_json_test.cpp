@@ -18,6 +18,9 @@ int main() {
         ReadDiagnostics read;
         read.activity = ReadActivity::buffering;
         read.effective_strategy = "direct-single-read";
+        read.requested_strategy = "direct-c2-pointers-single-read";
+        read.strategy_downgrade = ReadStrategyDowngrade::c2_probe_pending;
+        read.strategy_pending = true;
         read.latest = make_read_evidence({60, 15, 15, ReadStatus::ok, 0, 0});
         read.current_playback = make_read_evidence({45, 15, 15, ReadStatus::ok, 0, 0});
         read.queued_blocks = 8;
@@ -53,6 +56,9 @@ int main() {
         check(json["metadata"]["cover_art"]["status"] == "AVAILABLE");
         check(json["read"]["activity"] == "BUFFERING");
         check(json["read"]["effective_strategy"] == "direct-single-read");
+        check(json["read"]["strategy"]["requested"] == "direct-c2-pointers-single-read");
+        check(json["read"]["strategy"]["downgrade_reason"] == "C2_PROBE_PENDING");
+        check(json["read"]["strategy"]["pending"] == true);
         check(json["read"]["latest"]["status"] == "CLEAN");
         check(json["read"]["latest"]["local_verification"] == "SINGLE_READ");
         check(json["read"]["latest"]["read_independence"] == "UNKNOWN");
