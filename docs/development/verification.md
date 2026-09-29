@@ -203,6 +203,8 @@ DRIVE_REPORTED/YES、`drive.c2_trustworthy`をUNKNOWN、`probe_error`を空と�
 service再起動後もdaemon/kioskはactiveで、通常CD（14 track）の認識まで確認した。この結果はdriveの
 C2 error pointer対応宣言を確認しただけであり、C2 reportの正確さ、傷disc上のC2観測、trust、read integrityは未確認である。
 
+2026-09-29、`--direct-c2-pointers`を明示し、同じASUS driveと通常14 track Audio CDでAPI経由の短時間再生を実行した。起動時logは`c2_pointers=requested effective=YES support=YES`を記録した。8秒後のAPI snapshotは`player=PLAYING`、`read.stats.read_calls=75`、`failed_calls=0`、`read.latest.c2_status=CLEAN`だった。C2 packet failureへの通常read fallbackはこのrunでは発生しなかった。CLEANは読んだ75 read callのlatest区間でC2 pointerが報告されなかった観測であり、C2 trust、傷discでの検出性能、disc全体の完全性、bit-perfectを示さない。
+
 ## 文書・診断API・CDP監査（2026-09-26、#79 / #80 / #81）
 
 現行コードと文書を照合し、画像binary cache / same-origin配信、EnrichmentServiceと
