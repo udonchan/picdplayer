@@ -184,7 +184,7 @@ std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     }
 #endif
     auto fd = std::make_shared<DeviceFd>(device);
-    return std::make_unique<LinuxIoctlReader>([fd](std::int32_t lba, std::span<std::int16_t> pcm) {
+    auto audio_read = [fd](std::int32_t lba, std::span<std::int16_t> pcm) {
         cdrom_read_audio request{};
         request.addr.lba = lba;
         request.addr_format = CDROM_LBA;
@@ -200,5 +200,28 @@ std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
             }
         }
         return 0;
-    }, options);
+    };
+    C2AudioRead c2_read;
+    if (options.request_c2_pointers) {
+        c2_read = make_mmc_c2_audio_read([fd](std::span<const std::uint8_t> command,
+                                             std::span<std::uint8_t> data,
+                                             std::span<std::uint8_t> sense) {
+            if (command.size() > CDROM_PACKET_SIZE) return EINVAL;
+            request_sense request_sense_data{};
+            cdrom_generic_command request{};
+            std::memcpy(request.cmd, command.data(), command.size());
+            request.buffer = data.data();
+            request.buflen = static_cast<unsigned int>(data.size());
+            request.sense = &request_sense_data;
+            request.data_direction = CGC_DATA_READ;
+            request.quiet = 1;
+            request.timeout = 5000;
+            const int result = ioctl(fd->value, CDROM_SEND_PACKET, &request);
+            const int error = result < 0 ? errno : 0;
+            const auto bytes = std::min(sense.size(), sizeof(request_sense_data));
+            std::memcpy(sense.data(), &request_sense_data, bytes);
+            return error;
+        });
+    }
+    return std::make_unique<LinuxIoctlReader>(std::move(audio_read), options, std::move(c2_read));
 }
