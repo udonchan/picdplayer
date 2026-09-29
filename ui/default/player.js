@@ -154,7 +154,7 @@ let observationGap = false;
 let currentSnapshot = null;
 let mapKey = null;
 let mapLoadingKey = null;
-let mapRequestedKey = null;
+let mapLastRequestedAt = Number.NEGATIVE_INFINITY;
 let discMap = null;
 let renderedMapIdentity = null;
 let mapObservedStream = null;
@@ -189,7 +189,7 @@ function acceptSnapshot(snapshot) {
     mapKey = key;
     discMap = null;
     mapLoadingKey = null;
-    mapRequestedKey = null;
+    mapLastRequestedAt = Number.NEGATIVE_INFINITY;
     renderedMapIdentity = null;
     mapObservedStream = null;
   }
@@ -209,10 +209,16 @@ function mapMatchesSnapshot(snapshot, detail) {
   return { key, ...map };
 }
 
+const discMapRefreshIntervalMs = 2000;
+
 function requestDiscMap(snapshot, force = false) {
   const key = discLayoutKey(snapshot);
-  if (!key || (!force && (discMap?.key === key || mapLoadingKey === key || mapRequestedKey === key))) return;
-  mapRequestedKey = key;
+  const playing = snapshot?.player?.state === 'PLAYING' && snapshot?.read?.current_playback;
+  const now = performance.now();
+  const due = now - mapLastRequestedAt >= discMapRefreshIntervalMs;
+  if (!key || mapLoadingKey === key
+      || (!force && discMap?.key === key && (!playing || !due))) return;
+  mapLastRequestedAt = now;
   mapLoadingKey = key;
   renderDiscMap(snapshot);
   try {

@@ -102,7 +102,8 @@ CSS transitionやbrowserの合成処理は別に発生し得るため、DOM writ
 オンデマンドの`GET /api/read-history`にある`disc_map`を使う。Custom UIはこれを実装する義務を負わない。
 実装する場合は、map responseのroot `session_id`と最新snapshot、`disc_map.disc_generation`と
 `disc.layout.disc_generation`を照合し、layout/session/disc世代の変更時は旧mapを捨てる。
-通常のWS更新で詳細履歴をpollingせず、利用者の明示操作など有界な取得機会を選ぶ。
+標準Playerは`PLAYING`中に2秒に一回を上限としてdisc mapを更新するが、WS更新ごとには詳細履歴を取得しない。
+Custom UIは同じcadenceを実装する義務を負わず、利用者の明示操作など有界な取得機会を選ぶ。
 region flagsはbit集合で重なり得る。未観測、`observations_complete=false`、UNKNOWN、NOT_CHECKEDを
 正常値へ変換しない。bufferのblock比率は可聴秒数でもqueued frame数でもない。
 

@@ -16,6 +16,7 @@ async function main() {
   const sockets = [];
   const frames = [];
   let historyRequests = 0;
+  let now = 0;
   const snapshot = {
     schema_version: 1, revision: 1,
     player: { state: 'PLAYING', track_number: 1, position_frames: 75, track_duration_frames: 4500 },
@@ -48,7 +49,7 @@ async function main() {
     nodes.set(id, value); return value;
   }
   vm.runInNewContext(source, {
-    performance: { now: () => 1 }, document: { readyState: 'complete', getElementById: node, addEventListener() {} },
+    performance: { now: () => now }, document: { readyState: 'complete', getElementById: node, addEventListener() {} },
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url) => {
       if (url === '/api/read-history') ++historyRequests;
@@ -76,10 +77,17 @@ async function main() {
   assert.match(node('disc-map').style.background, /conic-gradient/);
   assert.equal(node('map-current').hidden, false);
   assert.equal(node('map-latest').hidden, false);
+  now = 1999;
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 2,
     player: { ...snapshot.player, position_frames: 90 } }) });
   await settle();
-  assert.equal(historyRequests, 1, 'snapshot updates must not poll read history');
+  assert.equal(historyRequests, 1, 'read-history must not be fetched for every snapshot');
+
+  now = 2000;
+  sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 3,
+    player: { ...snapshot.player, position_frames: 105 } }) });
+  await settle();
+  assert.equal(historyRequests, 2, 'playing snapshots refresh the map at the bounded cadence');
 
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 1,
     read: { ...snapshot.read, activity: 'FAILED' } }) });

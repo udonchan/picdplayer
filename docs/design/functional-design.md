@@ -19,8 +19,9 @@ cursor非表示の保証、画面遷移、画面からの操作、quiet bootは�
 ### PlayerのIntegrity表示
 
 標準Playerは有効な`disc.layout`を受信したときに`GET /api/read-history`をdisc世代につき一回取得する。
-さらに新しいstreamでcurrent PCM根拠が初めて得られた時に一回だけ更新する。利用者はRefresh mapで
-明示再取得できる。通常のsnapshot/WS更新でpollingせず、取得失敗後にも自動再試行しない。
+さらに新しいstreamでcurrent PCM根拠が初めて得られた時に更新する。`PLAYING`中はdisc mapを進行表示するため、
+2秒に一回を上限として再取得する。WebSocket更新ごとには取得せず、停止中はこの周期取得を行わない。利用者は
+Refresh mapで明示再取得できる。取得失敗は表示を停止せず、次の有界な取得機会まで待つ。
 responseは到着時の最新snapshotとroot `session_id`、`disc_map.disc_generation`を照合する。
 layoutがnull、sessionまたはdisc世代が変わった場合は、保持したmapを破棄する。同一discの古いmap revisionも採用しない。
 
