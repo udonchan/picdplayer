@@ -392,7 +392,7 @@ docker run --rm -p 127.0.0.1:18080:18080 -v "$PWD:/src" -w /src picdplayer-build
 
 起動時に`INTEGRITY_SCENARIO_HARNESS development_only=1 scenario=transition`を標準出力へ記録する。
 表示された`http://127.0.0.1:18080/player`を開く。終了は`Ctrl-C`で行う。これは開発用のlocal fixtureであり、
-実機異常media試験（#96）や通常Player/Custom UIのhardware検証を置き換えない。
+実機異常media試験（#146）や通常Player/Custom UIのhardware検証を置き換えない。
 
 CDPで標準rendererのスクリーンショットを取得する場合は、harnessをport 8080へ公開し、MacのChromeを別profileで
 起動する。既存`measure-kiosk-cdp.py`はtarget URLを`http://127.0.0.1:8080/player`として選ぶため、このportを使う。

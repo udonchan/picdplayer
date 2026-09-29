@@ -92,6 +92,14 @@ async function main() {
   for (const [index, [name, status]] of scenarios.entries()) {
     await runScenario(name, status, 18100 + index);
   }
+  const invalid = spawn(harness, ['--scenario', 'invalid']);
+  let stderr = '';
+  invalid.stderr.setEncoding('utf8');
+  invalid.stderr.on('data', (chunk) => { stderr += chunk; });
+  await new Promise((resolve) => invalid.once('exit', resolve));
+  assert.equal(invalid.exitCode, 2);
+  assert.match(stderr, /unknown scenario: invalid/);
+  assert.match(stderr, /usage: integrity_scenario_harness/);
   console.log('PASS: Integrity scenario harness exposes Player, state, and history for all scenarios');
 }
 

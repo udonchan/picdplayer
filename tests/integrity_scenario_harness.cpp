@@ -145,6 +145,10 @@ int main(int argc, char** argv) {
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
         controller.stop(); engine.synchronize();
+    } catch (const std::invalid_argument& error) {
+        std::cerr << error.what() << '\n';
+        usage();
+        return 2;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
