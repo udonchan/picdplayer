@@ -33,9 +33,12 @@ void require_cdda_backend(CddaBackend backend) {
     }
     if (backend != CddaBackend::direct) throw std::invalid_argument("invalid CDDA backend");
 }
-LinuxIoctlReader::LinuxIoctlReader(AudioRead transport, DirectOptions options)
-    : transport_(std::move(transport)), options_(options) {
-    if (!transport_ || options.retries > 10) throw std::invalid_argument("invalid direct reader options");
+LinuxIoctlReader::LinuxIoctlReader(AudioRead transport, DirectOptions options,
+                                   C2AudioRead c2_transport)
+    : transport_(std::move(transport)), options_(options), c2_transport_(std::move(c2_transport)) {
+    if (!transport_ || options.retries > 10 ||
+        (options.request_c2_pointers && !c2_transport_))
+        throw std::invalid_argument("invalid direct reader options");
 }
 void LinuxIoctlReader::seek(std::int32_t lba) {
     if (lba < 0) throw std::invalid_argument("negative CDDA LBA");
@@ -55,21 +58,51 @@ ReadResult LinuxIoctlReader::read(std::span<std::int16_t> pcm) {
         const auto frames = std::min<std::size_t>(75, count - result.frames_read);
         const auto block = std::span(scratch).first(frames * cdda_samples_per_frame);
         int error = 0;
-        unsigned attempt = 0;
-        do {
-            error = transport_(cursor_, block);
-            if (!error) break;
-            // Only an I/O error gets optional retries; permissions, removal etc. fail immediately.
-            if (error != EIO || attempt == options_.retries) break;
-            ++attempt;
-            ++result.retries;
-        } while (true);
+        C2Status block_c2 = C2Status::not_checked;
+        if (options_.request_c2_pointers) {
+            const auto c2_result = c2_transport_(cursor_, block);
+            error = c2_result.error;
+            if (!error && (c2_result.c2_status == C2Status::clean ||
+                           c2_result.c2_status == C2Status::reported)) {
+                block_c2 = c2_result.c2_status;
+            } else {
+                // A malformed success is no more meaningful than a packet
+                // failure. Use normal audio extraction without claiming C2.
+                block_c2 = C2Status::unknown;
+                error = 0;
+                unsigned attempt = 0;
+                do {
+                    error = transport_(cursor_, block);
+                    if (!error) break;
+                    if (error != EIO || attempt == options_.retries) break;
+                    ++attempt;
+                    ++result.retries;
+                } while (true);
+            }
+        }
+        if (!options_.request_c2_pointers || error) {
+            if (options_.request_c2_pointers) block_c2 = C2Status::unknown;
+            unsigned attempt = 0;
+            do {
+                error = transport_(cursor_, block);
+                if (!error) break;
+                // Only an I/O error gets optional retries; permissions, removal etc. fail immediately.
+                if (error != EIO || attempt == options_.retries) break;
+                ++attempt;
+                ++result.retries;
+            } while (true);
+        }
         if (error) {
             positioned_ = false;
             result.status = ReadStatus::read_error;
             result.native_error = error;
             return result;
         }
+        if (result.frames_read == 0) result.c2_status = block_c2;
+        else if (result.c2_status == C2Status::reported || block_c2 == C2Status::reported)
+            result.c2_status = C2Status::reported;
+        else if (result.c2_status != block_c2)
+            result.c2_status = C2Status::unknown;
         std::copy(block.begin(), block.end(), pcm.begin() + result.frames_read * cdda_samples_per_frame);
         cursor_ += static_cast<std::int32_t>(frames);
         result.frames_read += frames;

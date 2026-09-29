@@ -67,6 +67,31 @@ int main() {
         exhausted.seek(0);
         result = exhausted.read(pcm);
         check(result.status == ReadStatus::read_error && result.retries == 2 && calls == 3);
+        rejects([&] { LinuxIoctlReader invalid([](int, auto) { return 0; }, {0, true}); });
+        calls = 0;
+        LinuxIoctlReader c2_clean([&](int, auto buffer) {
+            ++calls;
+            std::fill(buffer.begin(), buffer.end(), 5);
+            return 0;
+        }, {0, true}, [&](int lba, auto buffer) {
+            check(lba == 0 || lba == 75);
+            std::fill(buffer.begin(), buffer.end(), 8);
+            return C2AudioReadResult{0, lba == 75 ? C2Status::reported : C2Status::clean};
+        });
+        c2_clean.seek(0);
+        result = c2_clean.read(pcm);
+        check(result.status == ReadStatus::ok && result.c2_status == C2Status::reported);
+        check(calls == 0 && pcm.front() == 8);
+        calls = 0;
+        LinuxIoctlReader c2_fallback([&](int, auto buffer) {
+            ++calls;
+            std::fill(buffer.begin(), buffer.end(), 6);
+            return 0;
+        }, {0, true}, [](int, auto) { return C2AudioReadResult{EIO, C2Status::unknown}; });
+        c2_fallback.seek(0);
+        result = c2_fallback.read(std::span(pcm).first(cdda_samples_per_frame));
+        check(result.status == ReadStatus::ok && result.c2_status == C2Status::unknown);
+        check(calls == 1 && pcm.front() == 6);
         std::cout << "PASS: selection, cursor, chunks, partial failure, bounded retry\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return 1;

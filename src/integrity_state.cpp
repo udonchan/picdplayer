@@ -29,9 +29,7 @@ ReadEvidence make_read_evidence(const ReadResult& result) {
         evidence.local_verification = LocalVerification::backend_reported;
     else evidence.local_verification = LocalVerification::single_read;
     evidence.read_independence = result.read_independence;
-    // Neither current backend requests C2 pointers or applies a configured
-    // drive offset. UNKNOWN is more accurate than assuming absence or zero.
-    evidence.c2_status = C2Status::not_checked;
+    evidence.c2_status = result.c2_status;
     evidence.offset_status = OffsetStatus::unknown;
     evidence.direct_retries = result.retries;
     evidence.backend_events = result.paranoia;

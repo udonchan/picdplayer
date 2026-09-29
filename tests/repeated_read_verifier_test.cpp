@@ -21,14 +21,15 @@ template<class F> void rejects(F action) {
 
 struct Reply {
     Reply(int value, ReadStatus status = ReadStatus::ok, int error = 0, int start_lba_offset = 0,
-          std::optional<std::size_t> frames_read = {})
+          std::optional<std::size_t> frames_read = {}, C2Status c2_status = C2Status::not_checked)
         : value(value), status(status), error(error), start_lba_offset(start_lba_offset),
-          frames_read(frames_read) {}
+          frames_read(frames_read), c2_status(c2_status) {}
     int value;
     ReadStatus status;
     int error;
     int start_lba_offset;
     std::optional<std::size_t> frames_read;
+    C2Status c2_status;
 };
 class ScriptedReader final : public CddaReader {
 public:
@@ -41,6 +42,7 @@ public:
         const auto frames = pcm.size() / cdda_samples_per_frame;
         const auto read_frames = std::min(frames, reply.frames_read.value_or(frames));
         ReadResult result{position_ + reply.start_lba_offset, frames, 0, reply.status, reply.error, 0};
+        result.c2_status = reply.c2_status;
         if (reply.status == ReadStatus::ok) {
             std::fill_n(pcm.begin(), static_cast<std::ptrdiff_t>(read_frames * cdda_samples_per_frame),
                         static_cast<std::int16_t>(reply.value));
@@ -113,6 +115,20 @@ int main() {
         check(result.verification.details[2].candidate == 2);
         check(result.verification.accepted_candidate == 2);
         check(result.verification.accepted_attempt == 3);
+
+        auto c2_reported = make_repeated_read_verifier(
+            std::make_unique<ScriptedReader>(std::vector<Reply>{{3, ReadStatus::ok, 0, 0, {}, C2Status::clean},
+                                                                 {3, ReadStatus::ok, 0, 0, {}, C2Status::reported}}));
+        c2_reported->seek(310);
+        result = c2_reported->read(pcm);
+        check(result.status == ReadStatus::ok && result.c2_status == C2Status::reported);
+
+        auto c2_incompatible = make_repeated_read_verifier(
+            std::make_unique<ScriptedReader>(std::vector<Reply>{{4, ReadStatus::ok, 0, 0, {}, C2Status::clean},
+                                                                 {4, ReadStatus::ok, 0, 0, {}, C2Status::not_checked}}));
+        c2_incompatible->seek(320);
+        result = c2_incompatible->read(pcm);
+        check(result.status == ReadStatus::ok && result.c2_status == C2Status::unknown);
 
         auto unresolved = make_repeated_read_verifier(
             std::make_unique<ScriptedReader>(std::vector<Reply>{{1}, {2}, {3}}));
