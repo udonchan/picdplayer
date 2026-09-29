@@ -103,6 +103,9 @@ struct ReadDiagnostics {
     std::size_t read_block_frames = 0;
     std::size_t prebuffer_target_frames = 0;
     std::optional<std::int64_t> last_prebuffer_wait_ms;
+    std::optional<std::int64_t> read_inflight_ms;
+    std::int64_t read_stall_timeout_ms = 0;
+    std::optional<std::int64_t> last_read_stall_ms;
     ReadPolicy requested_policy{};
     ReadPolicy effective_policy{};
     bool policy_pending = false;

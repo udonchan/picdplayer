@@ -166,7 +166,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #ifdef ENABLE_METADATA
     EnrichmentService enrichment(metadata_enabled, metadata_cache);
 #endif
-    PlaybackEngine engine(controller, worker, *audio, 0);
+    PlaybackEngine engine(controller, worker, *audio, 0,
+                          std::chrono::milliseconds(initial_read_policy.time_budget_ms));
     ReadPolicy requested_read_policy = initial_read_policy;
     ReadPolicy effective_read_policy = initial_read_policy;
     bool read_policy_pending = false;
@@ -181,6 +182,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         applied_strategy = select_read_strategy(policy, backend, direct_c2_pointers,
                                                 drive_probe_complete,
                                                 drive_capabilities.c2_supported.value);
+        engine.set_read_stall_timeout(std::chrono::milliseconds(policy.time_budget_ms));
         worker.reconfigure(applied_strategy.effective,
                            policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
                            block_frames);

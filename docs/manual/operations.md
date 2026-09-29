@@ -223,6 +223,7 @@ journalctl -u picdplayer.service -f -o cat
 | player: failure_context | tick間隔、残PCM、CD read所要時間・進行時間 |
 | player: underrun recovery | reader再生成・先読み増加による復旧開始。同じstreamでは最大3回 |
 | player: underrun recovery_limit_exhausted | 4回目のunderrunで復旧上限に達したためエラー停止。read integrityのRECOVEREDとは別 |
+| player: read_stall | 一回のreader callがeffective ReadPolicyの`time_budget_ms`を超えたためSTOPPEDへ遷移。ioctlの中断・PCM品質の判定ではない |
 | metadata: stale_result_discarded | 世代不一致の古い結果を破棄 |
 
 CECの遅延診断には--cec-diagnosticsを使う。queue空・read_inflight_us増大は供給不足の手掛かり、

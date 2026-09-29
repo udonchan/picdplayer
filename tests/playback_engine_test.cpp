@@ -87,6 +87,27 @@ int main() {
         }
         const PcmBufferConfig defaults;
         check(defaults.capacity_cd_frames == 750 && defaults.startup_cd_frames == 45);
+        // An uninterruptible reader must not block the main loop indefinitely.
+        // The engine stops the stream and lets the worker release the reader
+        // only after the blocking call returns.
+        {
+            auto gate = std::make_shared<Gate>();
+            PcmWorker worker([gate] { return std::make_unique<FakeReader>(gate); });
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 300));
+            FakeOutput output;
+            PlaybackEngine engine(controller, worker, output, 300, std::chrono::milliseconds(10));
+            controller.play(); engine.synchronize();
+            wait_for([&] { std::lock_guard lock(gate->mutex); return gate->entered; });
+            std::this_thread::sleep_for(std::chrono::milliseconds(15));
+            engine.tick();
+            const auto diagnostics = engine.read_diagnostics();
+            check(controller.state().playback == PlaybackState::stopped &&
+                  diagnostics.last_read_stall_ms && *diagnostics.last_read_stall_ms >= 10 &&
+                  diagnostics.read_stall_timeout_ms == 10 && !diagnostics.current_playback);
+            { std::lock_guard lock(gate->mutex); gate->release = true; }
+            gate->cv.notify_all();
+        }
         // ALSA delay need not be available after nonblocking drain starts.
         // drain開始後はdelayを照会せず、末尾のunderrunでは再seekしない。
         for (const bool terminal_error : {false, true}) {

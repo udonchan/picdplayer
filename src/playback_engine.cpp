@@ -3,14 +3,21 @@
 #include <algorithm>
 #include <stdexcept>
 
-PlaybackEngine::PlaybackEngine(PlayerController& c, PcmWorker& w, AudioOutput& a, std::int32_t end)
+PlaybackEngine::PlaybackEngine(PlayerController& c, PcmWorker& w, AudioOutput& a, std::int32_t end,
+                               std::chrono::milliseconds read_stall_timeout)
     : controller_(c), worker_(w), output_(a), end_(end),
-      prebuffer_blocks_(w.startup_buffer_blocks()) {
-    if (end < 0) throw std::invalid_argument("invalid disc end");
+      prebuffer_blocks_(w.startup_buffer_blocks()), read_stall_timeout_(read_stall_timeout) {
+    if (end < 0 || read_stall_timeout <= std::chrono::milliseconds::zero())
+        throw std::invalid_argument("invalid playback engine configuration");
 }
 void PlaybackEngine::set_disc_end(std::int32_t end) {
     if (end < 0) throw std::invalid_argument("invalid disc end");
     end_ = end;
+}
+void PlaybackEngine::set_read_stall_timeout(std::chrono::milliseconds timeout) {
+    if (active_ || timeout <= std::chrono::milliseconds::zero())
+        throw std::invalid_argument("invalid read stall timeout change");
+    read_stall_timeout_ = timeout;
 }
 void PlaybackEngine::reset_prebuffer_target() {
     if (active_) throw std::logic_error("cannot change prebuffer target while active");
@@ -27,6 +34,7 @@ void PlaybackEngine::synchronize() {
     block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
     prebuffer_started_at_ = std::chrono::steady_clock::now();
     last_prebuffer_wait_ms_.reset();
+    last_read_stall_ms_.reset();
     submitted_evidence_.clear(); current_evidence_.reset();
     const auto state = controller_.state();
     if (state.playback == PlaybackState::playing) {
@@ -44,6 +52,23 @@ void PlaybackEngine::tick() {
     try {
         const auto status = worker_.status();
         if (!status.error.empty()) throw std::runtime_error(status.error);
+        if (status.read_inflight_us >= read_stall_timeout_.count() * 1000) {
+            last_read_stall_ms_ = status.read_inflight_us / 1000;
+            log_warning("player") << "read_stall timeout_ms=" << read_stall_timeout_.count()
+                                  << " inflight_ms=" << *last_read_stall_ms_
+                                  << " queued_blocks=" << status.queued;
+            // An in-flight ioctl cannot be cancelled safely.  Stop issuing PCM,
+            // invalidate this stream, and let the reader owner close it after the
+            // call returns.  Do not retry or substitute data here.
+            controller_.stop();
+            active_ = false;
+            submitted_evidence_.clear(); current_evidence_.reset();
+            block_ = {}; offset_ = 0;
+            worker_.cancel();
+            worker_.discard_reader();
+            output_.reset();
+            return;
+        }
         if (draining_) {
             if (output_.drain()) { controller_.finished(); synchronize(); }
             return;
@@ -170,5 +195,8 @@ ReadDiagnostics PlaybackEngine::read_diagnostics(bool include_history) {
     result.queued_blocks = status.queued;
     result.prebuffer_target_frames = prebuffer_blocks_ * worker_.read_block_cd_frames();
     result.last_prebuffer_wait_ms = last_prebuffer_wait_ms_;
+    if (status.read_inflight_us > 0) result.read_inflight_ms = status.read_inflight_us / 1000;
+    result.read_stall_timeout_ms = read_stall_timeout_.count();
+    result.last_read_stall_ms = last_read_stall_ms_;
     return result;
 }

@@ -1000,3 +1000,14 @@ PCM品質、disc全体のread integrityを表さない。
 Docker Debian Trixie/aarch64でbuild、stage、`.deb`生成とCTest45/45成功を確認した。strategy resolverの
 single/repeat、probe pending、support YES/NO/UNKNOWN、C2非要求、およびsnapshot JSONを自動試験した。
 Piでの新しいstrategy JSON確認、C2 packet failure fallback、傷disc、別drive/bridgeは未実施で、#146で追跡する。
+
+## #34 bounded read stall（2026-09-29）
+
+effective ReadPolicyの`time_budget_ms`を、一回のreader callをmain loopが待機し続けないための上限として適用した。
+超過時はPCMを代替せずSTOPPEDへ遷移し、進行中ioctlは中断せずworker threadが復帰後にreaderを破棄する。
+`read.read_stall`はinflight、timeout、直近timeoutを公開する。ALSA underrun復旧とread integrityの
+`RECOVERED`とは別に扱う。
+
+Docker Debian Trixie/aarch64のbuild、stage、`.deb`生成とCTest45/45を確認した。gateで停止するfake readerを
+用い、main loopが指定timeout後にSTOPPEDへ移行し、readerの解放を待たないことを自動試験した。Piの長いread stall、
+傷disc、別driveでのtimeout値の妥当性と音声への影響は未確認で、#146の物理記録を待つ。
