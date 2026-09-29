@@ -99,6 +99,7 @@ kernelがspeed制御対応と報告したことは、速度変更成功や実測
 | queued_blocks | uint | workerの待機PCM block数。可聴buffer秒数ではない |
 | buffer_capacity_frames, startup_buffer_frames, read_block_frames, prebuffer_target_frames | uint | 容量・開始閾値・read量・実効prebuffer閾値のCD frame数。充填frame数ではない |
 | last_prebuffer_wait_ms | int? | 直近prebuffer待ち時間ms |
+| read_stall | object | in-flight reader callの時間と停止境界。下記参照 |
 | policy | object | requested/effectiveのpolicy objectとpending bool |
 | dropped_events | uint | worker event queueから破棄した件数 |
 | latest, current_playback, active_warning | evidence? | 最新read、出力へ提出したPCMの根拠、現在streamの最後のUNCERTAIN |
@@ -121,6 +122,12 @@ mechanismを選択できなかった理由であり、PCM品質・C2 trust・bit
 support=NOは`C2_UNSUPPORTED`、UNKNOWNは`C2_CAPABILITY_UNKNOWN`で通常readを維持する。probe結果が
 PLAYING/PAUSED中に届いた場合、既存readerは切り替えず`C2_STREAM_RESTART_REQUIRED`としてSTOPPED後に
 適用する。C2が実際に取得されなかった理由は各readの`c2_status`であり、strategy理由と混同しない。
+
+`read_stall.inflight_ms`は現在進行中のreader callの経過msで、callがない場合はnullである。
+`timeout_ms`はeffective ReadPolicyの`time_budget_ms`、`last_timeout_ms`は当該streamでmain loopが
+停止を選んだ最後の観測値で、未発生ならnullである。timeoutはioctlを中断したことを意味しない。timeout時は
+PCMを代替せずSTOPPEDへ遷移し、readerはworker threadでcall復帰後に破棄する。ALSA underrun recovery、
+`RECOVERED` read evidence、C2 statusとは別の状態である。
 
 block容量はworkerと同じく`floor(buffer_capacity_frames / read_block_frames)`。
 正のread量と非負の容量を検証して算出し、欠損/不正値では未取得表示にする。

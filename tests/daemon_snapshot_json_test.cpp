@@ -29,6 +29,9 @@ int main() {
         read.read_block_frames = 15;
         read.prebuffer_target_frames = 150;
         read.last_prebuffer_wait_ms = 1234;
+        read.read_inflight_ms = 234;
+        read.read_stall_timeout_ms = 10000;
+        read.last_read_stall_ms = 10001;
         read.requested_policy = {ReadVerificationMode::repeat, 75, 2, 3, 10000};
         read.effective_policy = read.requested_policy;
         observe_read(read.stats, {60, 15, 15, ReadStatus::ok, 0, 0});
@@ -75,6 +78,9 @@ int main() {
         check(json["read"]["read_block_frames"] == 15);
         check(json["read"]["prebuffer_target_frames"] == 150);
         check(json["read"]["last_prebuffer_wait_ms"] == 1234);
+        check(json["read"]["read_stall"]["inflight_ms"] == 234);
+        check(json["read"]["read_stall"]["timeout_ms"] == 10000);
+        check(json["read"]["read_stall"]["last_timeout_ms"] == 10001);
         check(json["read"]["policy"]["effective"]["mode"] == "REPEAT");
         check(json["drive"]["vendor"] == "ASUS");
         check(json["drive"]["digital_audio_extraction"]["value"] == "UNKNOWN");

@@ -110,7 +110,8 @@ stream開始後の集計を値コピーで返す。世代が変わったread完�
 その他retry/skip/read error/cache error→UNCERTAIN、残り→CLEANである。
 local_verificationはmatching_readsが2以上ならMULTIPLE_MATCH、次にparanoia verify/fixupが
 あればBACKEND_REPORTED、残りはSINGLE_READ。これは観測の分類で、全policy条件の充足や
-原盤一致の保証ではない。現行backendはC2 NOT_CHECKED、offset UNKNOWNを返す。
+原盤一致の保証ではない。offsetは現行backendでUNKNOWNである。C2は既定でNOT_CHECKEDだが、direct backendの
+`--direct-c2-pointers` opt-inではcapability probeの結果によりNOT_AVAILABLE、UNKNOWN、CLEAN、REPORTEDを返し得る。
 frames_acceptedは要求全量を成功取得した場合だけ加算する。verified_callsは2回以上一致の
 read数であり、policyの必要一致数を満たした採用read数と同一とは限らない。
 
@@ -139,6 +140,11 @@ read_errorとしてfail-closedにする。比較前の失敗はNOT_CHECKED・比
 試行数・完全read数・最大一致数・不一致数・時間予算超過、試行ごとの物理開始LBA/要求frame数、overlap結果をReadResultへ記録する。
 試行または時間予算（既定10秒）で未解決ならframes_read=0のread_errorを返し、
 呼び手のbufferへ候補PCMをコピーしない。時間予算は進行中のblocking readを中断しない。
+同じeffective ReadPolicyの`time_budget_ms`はPlaybackEngineにおける一回のreader callのstall監視上限でもある。
+readerがこの時間を超えてもmain loopはioctlを待たず、controllerをSTOPPEDへ遷移してstreamを無効化する。
+workerのcancel/discardはreader所有threadへ依頼され、実際のcloseはblocking callが戻った後になる。retry、古いPCM、
+無音の代替は行わない。これはrepeat verifierの候補試行予算とは別に、single/direct/paranoiaを含む一回の
+uninterruptible callに対するmain-loop上の停止境界である。
 PcmWorkerはsingleで15 frame、repeatでpolicyのregion_frames（既定75）を要求する。
 queue容量はCD frame設定をregionで割って切り捨て、開始閾値は切り上げる。
 切り上げ結果がqueue容量を超える場合は容量へ丸め、待機条件が達成不能にならないようにする。
