@@ -14,6 +14,7 @@ for args, expected in [
     (['--pcm-output', '-'], 'file path'),
     (['--pcm-output'], 'Usage:'),
     (['--probe-cdda', '/nonexistent', '--cdda-reader', 'typo'], 'unknown CDDA'),
+    (['--probe-cdda', '/nonexistent', '--cdda-reader', 'direct', '--direct-c2-pointers'], 'requires --player'),
 
     (['--probe-cdda', '/nonexistent'], 'explicit'),
     (['--cdda-reader', 'direct'], 'require --probe-cdda'),

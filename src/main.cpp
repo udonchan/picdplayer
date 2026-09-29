@@ -247,6 +247,9 @@ int main(int argc, char** argv) {
     if (direct_c2_pointers && backend != CddaBackend::direct) {
         std::cerr << "--direct-c2-pointers requires --cdda-reader direct\n"; return 2;
     }
+    if (direct_c2_pointers && player_device.empty()) {
+        std::cerr << "--direct-c2-pointers requires --player\n"; return 2;
+    }
     try {
 #ifdef ENABLE_METADATA
         MetadataOptions metadata_options{
