@@ -1,5 +1,6 @@
 #pragma once
 #include "cdda_reader.hpp"
+#include "drive_capabilities.hpp"
 #include <functional>
 
 // Internal transport seam for tests. Return errno, or zero on full success.
@@ -14,6 +15,10 @@ struct C2AudioReadResult {
 // observation; it must not infer drive-wide C2 trust.
 using C2AudioRead = std::function<C2AudioReadResult(std::int32_t,
                                                      std::span<std::int16_t>)>;
+// Builds an MMC READ CD transport that requests CD-DA user data and C2 error
+// pointers. This remains an internal seam so the CDB and payload parsing can
+// be tested without an optical drive.
+C2AudioRead make_mmc_c2_audio_read(DrivePacketTransport transport);
 class LinuxIoctlReader final : public CddaReader {
 public:
     explicit LinuxIoctlReader(AudioRead transport, DirectOptions options = {},

@@ -4,6 +4,7 @@
 #include <array>
 #include <bit>
 #include <cerrno>
+#include <cstring>
 #include <climits>
 #include <fcntl.h>
 #include <limits>
@@ -17,6 +18,57 @@
 #ifdef ENABLE_PARANOIA
 std::unique_ptr<CddaReader> make_paranoia_reader(const std::string& device);
 #endif
+
+namespace {
+constexpr std::uint8_t read_cd = 0xbe;
+constexpr std::size_t read_cd_cdb_bytes = 12;
+constexpr std::size_t cdda_bytes_per_frame = cdda_samples_per_frame * sizeof(std::int16_t);
+constexpr std::size_t c2_pointer_bytes_per_frame = 294;
+void put_be24(std::uint8_t* destination, std::size_t value) {
+    destination[0] = static_cast<std::uint8_t>(value >> 16);
+    destination[1] = static_cast<std::uint8_t>(value >> 8);
+    destination[2] = static_cast<std::uint8_t>(value);
+}
+void put_be32(std::uint8_t* destination, std::int32_t value) {
+    const auto encoded = static_cast<std::uint32_t>(value);
+    destination[0] = static_cast<std::uint8_t>(encoded >> 24);
+    destination[1] = static_cast<std::uint8_t>(encoded >> 16);
+    destination[2] = static_cast<std::uint8_t>(encoded >> 8);
+    destination[3] = static_cast<std::uint8_t>(encoded);
+}
+}
+
+C2AudioRead make_mmc_c2_audio_read(DrivePacketTransport transport) {
+    if (!transport) throw std::invalid_argument("C2 packet transport is required");
+    return [transport = std::move(transport)](std::int32_t lba, std::span<std::int16_t> pcm) {
+        if (lba < 0 || pcm.empty() || pcm.size() % cdda_samples_per_frame)
+            return C2AudioReadResult{EINVAL, C2Status::unknown};
+        const auto frames = pcm.size() / cdda_samples_per_frame;
+        if (frames > 0x00ffffff || frames >
+            (std::numeric_limits<std::size_t>::max() / (cdda_bytes_per_frame + c2_pointer_bytes_per_frame)))
+            return C2AudioReadResult{EINVAL, C2Status::unknown};
+        std::array<std::uint8_t, read_cd_cdb_bytes> command{};
+        command[0] = read_cd;
+        command[1] = 0x04; // expected sector type: CD-DA
+        put_be32(command.data() + 2, lba);
+        put_be24(command.data() + 6, frames);
+        command[9] = 0x12; // user data plus C2 error pointers
+        std::vector<std::uint8_t> response(frames * (cdda_bytes_per_frame + c2_pointer_bytes_per_frame));
+        std::array<std::uint8_t, sizeof(request_sense)> sense{};
+        const auto error = transport(command, response, sense);
+        if (error) return C2AudioReadResult{error, C2Status::unknown};
+        bool reported = false;
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const auto offset = frame * (cdda_bytes_per_frame + c2_pointer_bytes_per_frame);
+            std::memcpy(pcm.data() + frame * cdda_samples_per_frame,
+                        response.data() + offset, cdda_bytes_per_frame);
+            const auto c2 = std::span(response).subspan(offset + cdda_bytes_per_frame,
+                                                         c2_pointer_bytes_per_frame);
+            reported = reported || std::any_of(c2.begin(), c2.end(), [](std::uint8_t value) { return value != 0; });
+        }
+        return C2AudioReadResult{0, reported ? C2Status::reported : C2Status::clean};
+    };
+}
 
 CddaBackend parse_cdda_backend(std::string_view name) {
     if (name == "direct") return CddaBackend::direct;
