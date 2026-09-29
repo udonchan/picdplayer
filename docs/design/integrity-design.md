@@ -157,10 +157,10 @@ desired_confidenceは手順への要求であり、根拠のない確率値で�
 retry回数・比較回数・library内部retryを分け、二重retryで予算が膨張しないようbackend別に計上する。
 
 未解決時はSTOP / BEST_AVAILABLE / SILENCE / WAIT_WITH_BUDGETを明示的に選ぶ。
-現行single/repeatはread失敗時停止を維持する。追加fallbackはmode導入時に適用条件を確定する。
-有効な候補がないBEST_AVAILABLEでは未初期化/古いPCMを使わずSTOPへ移る。
-無音を使う場合もUNCERTAINかつsample_origin=SILENCEとする。複雑な補間は初期実装の対象外。
-waitにも期限と最終動作を持ち、無期限retry・stallを避ける。ただし進行中kernel ioctlは強制中断できない。
+
+現行single/repeatの`unresolved_data_policy`はSTOPである。read error、短いread、またはrepeatの候補不成立では、当該PCMをqueueへ入れず、workerをFAILEDにしてPlaybackEngineがSTOPへ遷移する。古いblock、未初期化buffer、推測したPCM、無音を代替として出力しない。seek、stop、eject、disc世代変更はworker generationを切り替え、以前のstreamのPCMやpolicyを次のstreamへ混在させない。このSTOPはC2 trustや原盤一致の判定ではなく、未解決PCMを成功として再生しないための現在の安全境界である。
+
+BEST_AVAILABLE、SILENCE、WAIT_WITH_BUDGETは未実装であり、現行CLI/APIは受け付けない。導入する場合はmodeごとの適用条件、上限、diagnostic field、sample origin、音声・操作への影響を別途確定する。有効な候補がないBEST_AVAILABLEでは未初期化/古いPCMを使わずSTOPへ移る。無音を使う場合もUNCERTAINかつsample_origin=SILENCEとする。複雑な補間は初期実装の対象外。waitにも期限と最終動作を持ち、無期限retry・stallを避ける。ただし進行中kernel ioctlは強制中断できない。
 
 ## 7. NO DISCでの能力probe
 
