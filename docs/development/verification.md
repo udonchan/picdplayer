@@ -357,6 +357,28 @@ Docker/aarch64で再生成し、CTest 31/31件（deploy/build失敗経路とmain
 実際の稼働中service更新と更新失敗からの復旧は未検証である。
 上記のTV表示・再生確認は再レビュー修正前のpackageに対する結果である。
 
+## Debian package lifecycle（#44、Docker自動試験）
+
+`scripts/test-package-lifecycle.sh`は、`build-container.sh`が生成した唯一の`.deb`をread-onlyで
+使い捨てのDebian Trixie/aarch64 containerへ渡す。同container内で旧版`picdplayer` packageを作成して
+installし、旧package所有file、package非所有file、現行packageを区別する。
+
+現行artifactのupgrade後に旧package所有fileが削除されること、非所有fileが残ること、同一artifactの
+reinstall後も`install ok installed`であること、purge後に現行package所有のfile/symlinkが残らず
+非所有fileが残ることを確認する。標準のPull Request CIはbuildとCTestの後にこのscriptを実行する。
+このcontainer test単体ではboot済みsystemd host、稼働中serviceのrestart/stop、Piのfilesystem、失敗したdpkg操作からの
+実機復旧を確認しない。後者の手順は[Mac + Docker開発手順](../manual/mac-docker-development.md#packageの更新削除を確認する)へ記録する。
+
+2026-09-28、通常Audio CDを認識したPiでdaemonとkioskをともにactiveへ戻し、同版`0.1.0` packageを
+`scripts/deploy.sh`でreinstallした。postinstのrestart後も両serviceは`active/running`、
+`dpkg-query`は`install ok installed 0.1.0`、loopback `/api/state`は4516 bytesのJSONを返した。
+不正なarchiveを同じremote pathへ置くと`dpkg-deb`が展開前に拒否し、既存packageと両serviceはactiveのまま
+維持された。その後、正常artifactを同scriptで再deployし、両serviceとAPIが復帰した。
+
+これは同版reinstallと展開前失敗からの復旧だけを確認する。異version upgrade、展開後またはmaintainer script途中の
+失敗、power loss、package removeをPiで実行したものではない。実機でのこれらの破壊的条件は、release運用を決める
+前に必要性と安全な手順を判断する。
+
 ## 実機確認済み
 
 | 対象 | 確認範囲 |

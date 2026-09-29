@@ -64,7 +64,7 @@
 | Issue | 主な範囲 |
 |---|---|
 | [#18 Specify persistent settings and custom UI updates](https://github.com/udonchan/picdplayer/issues/18) | 親Issue。Custom UIの起動時静的検証とfallbackは実装済み。[#41 永続設定](https://github.com/udonchan/picdplayer/issues/41)と[#42 Custom UI更新・復旧](https://github.com/udonchan/picdplayer/issues/42)を追跡する。 |
-| [#21 Plan reproducible releases and appliance images](https://github.com/udonchan/picdplayer/issues/21) | 親Issue。PR向けDocker/aarch64 CIと[#43 開発用Debian package](https://github.com/udonchan/picdplayer/issues/43)は完了済み。残る[#44 更新・削除](https://github.com/udonchan/picdplayer/issues/44)、[#45 版付きrelease artifact](https://github.com/udonchan/picdplayer/issues/45)、[#46 image要件](https://github.com/udonchan/picdplayer/issues/46)、[#47 bootable image](https://github.com/udonchan/picdplayer/issues/47)を追跡する。最終imageに開発用`.deb`を使うかは未決定。 |
+| [#21 Plan reproducible releases and appliance images](https://github.com/udonchan/picdplayer/issues/21) | 親Issue。PR向けDocker/aarch64 CIと[#43 開発用Debian package](https://github.com/udonchan/picdplayer/issues/43)は完了済み。[#44 更新・削除](https://github.com/udonchan/picdplayer/issues/44)では使い捨てcontainerでinstall/upgrade/reinstall/purgeをCI化し、Piのactive serviceで同版reinstallと不正archive拒否後の正常artifact復旧を確認した。実機の異version upgradeと展開後/maintainer script中断からの復旧は未確認である。[#45 版付きrelease artifact](https://github.com/udonchan/picdplayer/issues/45)、[#46 image要件](https://github.com/udonchan/picdplayer/issues/46)、[#47 bootable image](https://github.com/udonchan/picdplayer/issues/47)を追跡する。最終imageに開発用`.deb`を使うかは未決定。 |
 
 ## 未実装の製品機能
 
