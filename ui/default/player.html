@@ -10,7 +10,6 @@
 </head>
 <body>
   <main>
-    <div class="primary-column">
     <section class="now-playing" aria-live="polite">
       <div id="art" class="art placeholder"><img id="cover" alt=""><span id="art-mark">CD</span></div>
       <div class="details">
@@ -40,7 +39,8 @@
             <dt>Stream warning</dt><dd id="read-warning">—</dd>
           </dl>
           <section class="buffer-measurement" aria-label="Block buffer">
-            <div><p class="evidence-label">BLOCK BUFFER</p><p id="read-buffer" class="buffer-value">—</p></div>
+            <p class="evidence-label">BLOCK BUFFER</p>
+            <p id="read-buffer" class="buffer-value">—</p>
             <div class="buffer-meter" aria-hidden="true"><span id="read-buffer-meter"></span></div>
           </section>
           <dl class="metrics read-quantity-metrics">
@@ -53,19 +53,20 @@
           <p class="evidence-label">LATEST READ · MAY BE AHEAD</p><p id="read-latest" class="evidence-value">—</p>
           <p class="integrity-note">Playback evidence follows PCM submitted for output. Latest read is a separate read-ahead observation, not a physical head or audible position.</p>
         </article>
-      </div>
-    </section>
-    </div>
-    <aside class="technical-column" aria-label="Disc and drive diagnostics">
+        <div class="integrity-side">
           <article class="integrity-card map-card">
             <div class="map-heading"><div><h3>Disc read map</h3><p id="read-map-state">Waiting for an accepted disc layout</p></div><button id="refresh-read-map" type="button">Refresh map</button></div>
-            <div id="disc-map" class="disc-map" role="img" aria-label="Disc read map">
-              <span id="map-latest" class="map-marker latest" hidden>R</span>
-              <span id="map-current" class="map-marker current" hidden>P</span>
-              <span class="map-hole" aria-hidden="true"></span>
+            <div class="map-observation">
+              <div id="disc-map" class="disc-map" role="img" aria-label="Disc read map">
+                <span id="map-latest" class="map-marker latest" hidden>R</span>
+                <span id="map-current" class="map-marker current" hidden>P</span>
+                <span class="map-hole" aria-hidden="true"></span>
+              </div>
+              <div class="map-details">
+                <p class="map-legend"><span class="legend clean">Observed clean</span><span class="legend retry">Retry / repeat</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain / anomaly</span><span class="legend unobserved">Unobserved</span><span class="legend current">PCM</span><span class="legend latest">Latest read</span></p>
+                <p class="integrity-note">Colors classify recorded observations, not disc-wide correctness. The rings project TOC LBA; they are not a physical head position.</p>
+              </div>
             </div>
-            <p class="map-legend"><span class="legend clean">Observed clean</span><span class="legend retry">Retry / repeat</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain / anomaly</span><span class="legend unobserved">Unobserved</span><span class="legend current">PCM</span><span class="legend latest">Latest read</span></p>
-            <p class="integrity-note">Colors classify recorded observations, not disc-wide correctness. The rings project TOC LBA; they are not a physical head position.</p>
           </article>
           <article class="integrity-card drive-card">
             <h3>Drive capability</h3>
@@ -83,7 +84,9 @@
             </dl>
             <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
           </article>
-    </aside>
+        </div>
+      </div>
+    </section>
   </main>
   <script src="/player.js" defer></script>
 </body>

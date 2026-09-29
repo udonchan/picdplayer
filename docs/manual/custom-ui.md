@@ -112,8 +112,9 @@ region flagsはbit集合で重なり得る。未観測、`observations_complete=
 観測窓、能力値など）の視覚的強さを、文字サイズ・contrast・spacingで分ける。これは最終的な常時表示
 項目を決めたものではない。次段階で評価して、削減や状態依存表示を検討する。
 
-#150の標準layoutでは、Now PlayingとRead observationを左列、Disc read map / Drive capabilityを右列へ
-分け、Now Playingの最大幅を維持する。幅が不足するときは内容に応じて一列へ縮退する。これは
+#150の標準layoutでは、Now Playingの下にIntegrity Monitorを置き、その内部でRead observationを左列、
+Disc read map / Drive capabilityを右列へ分ける。Now Playingの最大幅は維持し、幅が不足するときは内容に
+応じて一列へ縮退する。これは
 default UIの表示方針であり、Custom UIに同じ配置を義務付けない。buffer meterを描く場合は、有効な
 `queued_blocks / floor(buffer_capacity_frames / read_block_frames)`と同じ正確な数値を必ず併記する。
 buffer以外のcoverage、速度、LBA、capabilityなどを見かけの割合に変換しない。
