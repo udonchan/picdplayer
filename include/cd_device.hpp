@@ -30,5 +30,9 @@ void eject_cd(const std::string& device);
 // the kernel/drive accepted the command; it does not prove continued rotation.
 void request_cd_start(const std::string& device);
 
+// Requests spindle stop through Linux CDROMSTOP. Success only means that the
+// kernel/drive accepted the command; it does not prove that rotation stopped.
+void request_cd_stop(const std::string& device);
+
 // One-shot CDROMSTART diagnostic. Does not read PCM or alter the TOC model.
 void probe_cd_start(const std::string& device);

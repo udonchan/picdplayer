@@ -15,6 +15,20 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## Bounded stopped-idle drive stop（#144、Pi確認）
+
+通常Audio CDを認識したPiで、従来のSTOPPED/PAUSED中15秒ごとの`CDROMSTART`要求を廃止した。
+TOC取得後のSTOPPEDが連続5分に達すると、DriveAccessCoordinatorを通した`CDROMSTOP`要求が一度だけ
+発行される。Pi journalでは`stop_command=accepted elapsed_ms=10 rotation=UNVERIFIED`を確認した。
+TVでdrive spinが停止したことはユーザーが目視・聴取したが、daemonは回転状態を観測しないため、
+ioctl受理と物理停止を同じ保証として扱わない。
+
+停止要求後、loopback `POST /api/play`は204を返し、5秒後にtrack 1の`PLAYING`とposition進行を確認した。
+同じrunで`POST /api/eject`は202を返し、約1秒後に`NO_DISC`へ遷移した。CD再挿入後は
+`AUDIO_READY → STOPPED`、14 tracks、track 1へ復帰した。daemon/kioskは全工程でactiveだった。
+この確認は通常CD、direct reader、短時間の再生復帰に限る。pause、unsupported/error、長時間STOPPED、
+drive/USB bridgeごとの差異は、物理媒体・drive横断の後続検証 #146 で扱う。
+
 ## Metadata JSON入力境界（#38、Docker自動試験）
 
 MusicBrainzとCover Art ArchiveのJSON本文は既存の2 MiB/512 KiB HTTP受信上限に加え、parser callbackで
@@ -362,8 +376,8 @@ reinstall後も`install ok installed`であること、purge後に現行package�
 維持された。その後、正常artifactを同scriptで再deployし、両serviceとAPIが復帰した。
 
 これは同版reinstallと展開前失敗からの復旧だけを確認する。異version upgrade、展開後またはmaintainer script途中の
-失敗、power loss、package removeをPiで実行したものではない。実機でのこれらの破壊的条件は、release運用を決める
-前に必要性と安全な手順を判断する。
+失敗、power loss、package removeをPiで実行したものではない。これらの破壊的条件は、安全に隔離した実機で行う
+後続検証 #147 へ移管する。
 
 ## 実機確認済み
 

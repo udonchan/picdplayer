@@ -259,19 +259,19 @@ freshとして用い、期限切れentryはnetwork取得失敗時だけoffline f
 MusicBrainzの404は空releasesとして扱う。書込み不能やcache処理失敗は取得済み結果を無効にしない。
 HTTP本文上限はあるが、全JSON fieldへの厳密な型検証は保証しない。
 
-## drive start診断
+## drive spindle control
 
 [request_cd_start](../../src/cd_device.cpp)はdeviceを一時的に開き、Linux `CDROMSTART` ioctlを一回だけ
 発行して閉じる。PCMやTOCを読まず、成功はkernel/driveが命令を受理したことだけを表す。
 [probe_cd_start](../../src/cd_device.cpp)はその所要時間を出力する一回実行の診断である。
 回転中かどうかを返す標準状態値としては扱わない。
 
-daemonはAudio CDのTOC読取完了直後を最初の期限とし、STOPPEDまたはPAUSED中だけMediaWorkerへ
-start_driveを要求する。要求受付時に次の期限を15秒後へ進める。PLAYING、NO DISC、LOADING、eject待ち・
-実行中には要求しない。再生終了時に期限を過ぎていれば直ちに要求する。MediaWorker callbackは
+daemonはAudio CDのTOC読取完了後、STOPPEDが連続して5分続いた時だけMediaWorkerへ`stop_drive`を要求する。
+PLAYINGへの遷移、NO DISC、LOADING、eject待ち・実行中は停止予約を取り消す。MediaWorker callbackは
 DriveAccessCoordinator内で実行するため、PCM reader、status/TOC、ejectと同時にdevice ioctlを行わない。
 結果ログの`rotation=UNVERIFIED`は、命令受理から物理的な回転状態を推測しないという契約である。
-初回命令もbackground処理であり、再生可能化の必須条件にはしない。
+停止要求はbackground処理であり、再生可能化の必須条件にはしない。次の再生でdriveが自動的に回転開始することは
+drive/bridge依存であり、実機確認が必要である。
 
 ## テスト境界
 

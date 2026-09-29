@@ -150,7 +150,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             drive_access->invoke([&] {
                 const auto result = request_drive_speed(device, *configured_drive_speed_x);
                 if (!result.error.empty()) throw std::runtime_error(result.error);
-            }); });
+            }); },
+        [device, drive_access] { drive_access->invoke([&] { request_cd_stop(device); }); });
 #ifdef ENABLE_METADATA
     EnrichmentService enrichment(metadata_enabled, metadata_cache);
 #endif
@@ -205,9 +206,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::uint64_t disc_generation = 0;
     bool toc_pending = false;
     bool toc_needs_refresh = true;
-    constexpr auto drive_start_interval = std::chrono::seconds(15);
-    auto next_drive_start = std::chrono::steady_clock::time_point::max();
-    std::optional<std::chrono::steady_clock::time_point> drive_start_requested_at;
+    constexpr auto drive_stop_idle = std::chrono::minutes(5);
+    auto next_drive_stop = std::chrono::steady_clock::time_point::max();
+    std::optional<std::chrono::steady_clock::time_point> drive_stop_requested_at;
+    auto previous_playback = controller.state().playback;
     bool drive_speed_request_attempted = false;
     std::vector<PlayerEvent> recent_events;
     std::uint64_t next_event_sequence = 0;
@@ -437,11 +439,18 @@ void run_player_session(const std::string& device, CddaBackend backend,
             log_info("drive") << "speed_request=started requested_speed_x="
                               << *configured_drive_speed_x;
         }
+        if (playback == PlaybackState::playing) {
+            next_drive_stop = std::chrono::steady_clock::time_point::max();
+        } else if (playback == PlaybackState::stopped && previous_playback != PlaybackState::stopped &&
+                   media_state.state() == MediaLifecycleState::audio_ready) {
+            next_drive_stop = now + drive_stop_idle;
+        }
+        previous_playback = playback;
         if (media_state.state() == MediaLifecycleState::audio_ready &&
-            playback != PlaybackState::playing && eject_idle &&
-            now >= next_drive_start && media_worker.request(MediaWork::start_drive)) {
-            drive_start_requested_at = std::chrono::steady_clock::now();
-            next_drive_start = now + drive_start_interval;
+            playback == PlaybackState::stopped && eject_idle && now >= next_drive_stop &&
+            media_worker.request(MediaWork::stop_drive)) {
+            drive_stop_requested_at = std::chrono::steady_clock::now();
+            next_drive_stop = std::chrono::steady_clock::time_point::max();
         }
         MediaWorkerResult media_result{};
         while (media_worker.pop(media_result)) {
@@ -493,7 +502,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (after != before)
                     log_info("media") << "state=" << media_state_name(after);
                 if (after == MediaLifecycleState::loading && after != before) {
-                    next_drive_start = std::chrono::steady_clock::time_point::max();
+                    next_drive_stop = std::chrono::steady_clock::time_point::max();
 #ifdef ENABLE_METADATA
                     enrichment.invalidate();
 #endif
@@ -501,7 +510,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     toc_needs_refresh = true;
                 } else if (after == MediaLifecycleState::no_disc ||
                            after == MediaLifecycleState::unsupported) {
-                    next_drive_start = std::chrono::steady_clock::time_point::max();
+                    next_drive_stop = std::chrono::steady_clock::time_point::max();
                     toc_pending = false;
                     toc_needs_refresh = true;
                     loaded_toc.reset();
@@ -535,9 +544,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                       << " leadout_lba=" << loaded_toc->leadout_lba;
                     print_state(controller);
                 }
-                // LOADING invalidates enrichment and the keep-awake deadline,
-                // even if the subsequent TOC identifies the same disc.
-                next_drive_start = std::chrono::steady_clock::now();
+                // A newly accepted TOC starts a fresh stopped-idle interval.
+                next_drive_stop = std::chrono::steady_clock::now() + drive_stop_idle;
 #ifdef ENABLE_METADATA
                 if (metadata_enabled) {
                     enrichment.begin_if_needed(*loaded_toc);
@@ -550,14 +558,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 drive_capabilities.speed_request_error.clear();
                 log_info("drive") << "speed_request=accepted requested_speed_x="
                                   << *configured_drive_speed_x << " applied_speed=UNVERIFIED";
-            } else if (media_result.work == MediaWork::start_drive) {
-                const auto elapsed_ms = drive_start_requested_at
+            } else if (media_result.work == MediaWork::stop_drive) {
+                const auto elapsed_ms = drive_stop_requested_at
                     ? std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::steady_clock::now() - *drive_start_requested_at).count()
+                          std::chrono::steady_clock::now() - *drive_stop_requested_at).count()
                     : 0;
-                drive_start_requested_at.reset();
-                log_debug("drive") << "start_command=accepted elapsed_ms=" << elapsed_ms
-                                   << " rotation=UNVERIFIED";
+                drive_stop_requested_at.reset();
+                log_info("drive") << "stop_command=accepted elapsed_ms=" << elapsed_ms
+                                  << " rotation=UNVERIFIED";
             } else if (media_result.work == MediaWork::eject) {
 #ifdef ENABLE_API
                 api_eject_inflight = false;
@@ -575,7 +583,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     log_info("media") << "state=" << media_state_name(after);
                 toc_pending = false;
                 toc_needs_refresh = true;
-                next_drive_start = std::chrono::steady_clock::time_point::max();
+                next_drive_stop = std::chrono::steady_clock::time_point::max();
                 loaded_toc.reset();
 #ifdef ENABLE_METADATA
                 enrichment.invalidate();

@@ -106,15 +106,15 @@ memory使用量が増える。開始閾値を増やすとplay・seek後の待ち
 `rotation=UNVERIFIED`は、ioctl成功だけでは実際の回転開始や継続時間を確認できないことを示す。
 常駐serviceとdrive操作が競合しないよう、実機比較時はserviceを停止する。
 
-player modeではAudio CD準備完了直後に一回、その後STOPPEDまたはPAUSED中に15秒間隔で同じ命令を
-background要求する。
-PLAYING、disc未準備、eject中には要求しない。成功時はDEBUG levelで次を記録する。
+player modeではAudio CDのTOC取得後、STOPPEDが5分連続した場合にLinux `CDROMSTOP`を一回だけ
+background要求する。PLAYING、disc未準備、LOADING、eject中には要求しない。成功時はINFO levelで次を記録する。
 
 ```text
-DEBUG drive: start_command=accepted elapsed_ms=... rotation=UNVERIFIED
+INFO drive: stop_command=accepted elapsed_ms=... rotation=UNVERIFIED
 ```
 
-これは待機中の回転維持を試みる機能であり、driveが実際に回転を継続したという状態表示ではない。
+これは停止要求の受理を記録するだけであり、driveが実際に停止したという状態表示ではない。次の再生、eject、
+service restartを対象driveで確認する。
 
 probe-cddaは既定でPCMを捨て、再生しない。保存には`--pcm-output /tmp/track1.pcm`を追加する。
 保存形式はraw S16_LE・44.1 kHz・stereo。既存ファイルを上書きしない。framesは1〜750。
