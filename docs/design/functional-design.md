@@ -51,9 +51,9 @@ bufferは`queued_blocks / floor(buffer_capacity_frames / read_block_frames)`で�
 null/不正値、UNKNOWN、NOT_CHECKED、UNSUPPORTED、N/Aを0やCLEANへ変換しない。
 反復一致読み取りは既定75 frame区間で2-of-3比較を行う。設定変更の契約は以下に記す。
 
-#150ではPlayerの一次再生情報の最大幅を維持しつつ、Integrity Monitorだけをmeasurement表示に必要な
-横幅へ広げる。Read observationを左、Disc read mapとDrive capabilityを右の縦積みに置く。利用可能な幅が
-各列の内容を収められなくなったときは一列へ縮退し、事前に決め打ちしたviewport幅だけを根拠に情報を隠さない。
+#150ではPlayerの一次再生情報の最大幅を維持し、画面全体を左のPlayer / Read observationと、右の
+Disc read map / Drive capabilityに分ける。利用可能な幅が各列の内容を収められなくなったときは一列へ
+縮退し、事前に決め打ちしたviewport幅だけを根拠に情報を隠さない。
 block bufferは正の`read_block_frames`と容量から上式が算出できる場合だけmeterで補助表示し、常に
 `queued_blocks / block_capacity blocks`の正確なテキストを併記する。他の値に推測上の比率を作らない。
 `read_stall`はin-flight/last timeoutとlimitの診断値で、ioctlを中断したこと、PCMの回復、drive故障を意味しない。

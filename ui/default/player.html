@@ -10,6 +10,7 @@
 </head>
 <body>
   <main>
+    <div class="primary-column">
     <section class="now-playing" aria-live="polite">
       <div id="art" class="art placeholder"><img id="cover" alt=""><span id="art-mark">CD</span></div>
       <div class="details">
@@ -52,7 +53,10 @@
           <p class="evidence-label">LATEST READ · MAY BE AHEAD</p><p id="read-latest" class="evidence-value">—</p>
           <p class="integrity-note">Playback evidence follows PCM submitted for output. Latest read is a separate read-ahead observation, not a physical head or audible position.</p>
         </article>
-        <div class="integrity-side">
+      </div>
+    </section>
+    </div>
+    <aside class="technical-column" aria-label="Disc and drive diagnostics">
           <article class="integrity-card map-card">
             <div class="map-heading"><div><h3>Disc read map</h3><p id="read-map-state">Waiting for an accepted disc layout</p></div><button id="refresh-read-map" type="button">Refresh map</button></div>
             <div id="disc-map" class="disc-map" role="img" aria-label="Disc read map">
@@ -79,9 +83,7 @@
             </dl>
             <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
           </article>
-        </div>
-      </div>
-    </section>
+    </aside>
   </main>
   <script src="/player.js" defer></script>
 </body>
