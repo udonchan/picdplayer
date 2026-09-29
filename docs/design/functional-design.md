@@ -38,7 +38,7 @@ daemon全体、drive、read、audioのhealthを保証しない。CONNECTEDは控
 必要に応じて強調する。接続表示はIntegrity headerに統合する。標準再生画面には常時PiCDPlayerロゴを置かず、
 backgroundはneutral darkとする。
 
-円盤read mapはTOCのLBAを内周から外周へ模式的に投影したものだが、物理半径・ヘッド位置・
+円盤read mapはTOCのLBAを12時を起点とする角度へ模式的に投影したものだが、物理半径・ヘッド位置・
 全discの健全性を表さない。regionが重なる場合は、UNCERTAIN/backend anomaly、RECOVERED、retry、
 accepted、attemptedの順で最も注意を要する観測色を表示する。個々のregionのflagsはbit集合であり、
 色だけで全flagsを復元できない。`observations_complete=false`は保持内容が不完全な下限であることを示し、
@@ -46,8 +46,9 @@ accepted、attemptedの順で最も注意を要する観測色を表示する。
 legendはobserved clean、retry/repeat、recovered、UNCERTAIN/backend anomaly、unobservedを区別する。
 これは記録済み観測の簡略な分類であり、その領域のPCM正しさやdisc全体の完全性を保証しない。
 
-current PCM markerとlatest read markerは別である。どちらも対応するdisc世代・範囲が確認できる場合だけ
-表示し、前者はALSAへ提出したPCM根拠、後者は先読み観測である。実可聴位置や物理head位置ではない。
+標準UIの円盤上の点は、対応するdisc世代・範囲を確認できたlatest observed readだけを示す。
+先読みを含み得る観測であり、実可聴位置や物理head位置ではない。ALSAへ提出したPCM根拠は
+Read observationのPLAYBACK EVIDENCEに別途表示し、円盤上の位置とは混同しない。
 bufferは`queued_blocks / floor(buffer_capacity_frames / read_block_frames)`であり、可聴秒数ではない。
 null/不正値、UNKNOWN、NOT_CHECKED、UNSUPPORTED、N/Aを0やCLEANへ変換しない。
 反復一致読み取りは既定75 frame区間で2-of-3比較を行う。設定変更の契約は以下に記す。
@@ -55,6 +56,8 @@ null/不正値、UNKNOWN、NOT_CHECKED、UNSUPPORTED、N/Aを0やCLEANへ変換�
 #150ではPlayerの一次再生情報の最大幅を維持し、Now Playingの下にIntegrity Monitorを置く。Integrity
 Monitorの内部ではRead observationを左、Disc read mapとDrive capabilityを右の縦積みに置く。利用可能な
 幅が各列の内容を収められなくなったときは一列へ縮退し、事前に決め打ちしたviewport幅だけを根拠に情報を隠さない。
+Disc read mapは枠付きの独立カードを使わず、右列の上段で円盤を大きなvisual layerとして配置する。
+円盤のためにMonitor全体の高さを増やさず、低解像度では円盤と説明を通常のフローに戻す。
 block bufferは正の`read_block_frames`と容量から上式が算出できる場合だけmeterで補助表示し、常に
 `queued_blocks / block_capacity blocks`の正確なテキストを併記する。他の値に推測上の比率を作らない。
 `read_stall`はin-flight/last timeoutとlimitの診断値で、ioctlを中断したこと、PCMの回復、drive故障を意味しない。

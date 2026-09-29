@@ -74,8 +74,7 @@ async function main() {
   assert.match(node('read-current').textContent, /CACHE_POSSIBLE/);
   assert.match(node('read-current').textContent, /overlap MATCHED/);
   assert.match(node('read-map-state').textContent, /2 regions/);
-  assert.match(node('disc-map').style.background, /conic-gradient/);
-  assert.equal(node('map-current').hidden, false);
+  assert.match(node('disc-map').style.background, /conic-gradient\(from 0deg/);
   assert.equal(node('map-latest').hidden, false);
   now = 1999;
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 2,
@@ -103,7 +102,7 @@ async function main() {
   assert.match(node('read-map-state').textContent, /No accepted audio disc/);
   assert.equal(node('integrity-summary').textContent, 'CURRENT READ · NOT AVAILABLE');
   assert.equal(node('read-current').textContent, 'NOT AVAILABLE');
-  assert.equal(node('map-current').hidden, true);
+  assert.equal(node('map-latest').hidden, true);
   sockets[0].onclose();
   assert.equal(node('connection').textContent, 'DAEMON · RECONNECTING');
   assert.equal(node('connection').dataset.state, 'reconnecting');

@@ -270,7 +270,7 @@ function renderDiscMap(snapshot) {
     set('read-map-state', snapshot?.disc?.state === 'NO_DISC' ? 'No accepted audio disc' : 'Waiting for an accepted disc layout');
     setStyle(map, 'background', '#202729');
     renderedMapIdentity = null;
-    setMarker('map-current', null, null, 'P'); setMarker('map-latest', null, null, 'R');
+    setMarker('map-latest', null, null, '');
     return;
   }
   if (!discMap || discMap.key !== key) {
@@ -288,7 +288,8 @@ function renderDiscMap(snapshot) {
             || region.end_lba > layout.leadout_lba) continue;
         const begin = 100 * (region.start_lba - layout.start_lba) / span;
         const end = 100 * (region.end_lba - layout.start_lba) / span;
-        layers.push(`conic-gradient(from -90deg, transparent 0% ${begin}%, ${mapColor(region.flags)} ${begin}% ${end}%, transparent ${end}% 100%)`);
+        // CSS conic-gradient starts at 12 o'clock, matching setMarker's -PI/2 angle.
+        layers.push(`conic-gradient(from 0deg, transparent 0% ${begin}%, ${mapColor(region.flags)} ${begin}% ${end}%, transparent ${end}% 100%)`);
       }
       setStyle(map, 'background', layers.length ? layers.join(',') : '#202729');
       renderedMapIdentity = identity;
@@ -303,8 +304,7 @@ function renderDiscMap(snapshot) {
       : `${validRegions} valid regions / ${discMap.regions.length} reported`;
     set('read-map-state', `${regionLabel} · ${completeness} · revision ${discMap.revision}`);
   }
-  setMarker('map-current', layout, snapshot?.read?.current_playback, 'P');
-  setMarker('map-latest', layout, snapshot?.read?.latest, 'R');
+  setMarker('map-latest', layout, snapshot?.read?.latest, '');
 }
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
