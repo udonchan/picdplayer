@@ -23,4 +23,4 @@ boot全体でstallがないことは区別する。
 
 SSH/API観測だけを行った。TV実表示、HDMI/ARC音声の試聴、CEC入力への画面追従、Custom UI、cold boot、
 NO_DISC/LOADING、metadata/画像失敗、長時間運転、ejectやdrive消失は確認していない。これらは#4の
-残る完了条件または#33/#88/#96/#83の担当範囲である。
+残る完了条件または#146/#88/#83の担当範囲である。
