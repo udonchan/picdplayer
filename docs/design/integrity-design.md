@@ -245,6 +245,34 @@ ALSA underrun復旧は出力継続の処理であり、read integrityのRECOVERE
 同じstreamでは最大3回まで再生位置からreaderを再生成して再開し、上限到達時は停止する。これは
 read errorの再試行方針や未解決PCMの扱いを変更しない。
 
+### Offset入力・校正契約（#162、未実装）
+
+`read_offset_samples`はstereo sample frameの符号付き整数とする。論理PCM位置を`p`、
+設定offsetを`o`としたとき、補正後に論理位置`p`へ置くPCMは物理reader位置`p + o`から得る。
+従って`o > 0`は後方の物理PCMを前倒しにし、論理要求の末尾より後の入力を必要とする。
+`o < 0`は先頭より前の入力を必要とする。この規約をdatabaseや校正値の規約と比較せずに
+値だけ取り込まない。1 CD frameは588 stereo sample frameなので、補正はCD frame境界に
+揃わない値を含み得る。
+
+初期入力は将来の`--read-offset-samples SIGNED_INTEGER`と`/etc/default/picdplayer`の
+`PICDPLAYER_EXTRA_ARGS`を候補とする。対象は`--player`だけで、起動時に符号付き32-bit整数として
+構文とoverflowを検証する。実装はdiscのaudio範囲と一回のreader要求から安全に扱えない値を拒否し、
+任意の上限値を黙って丸めない。設定はstream途中に適用せず、service再起動または停止境界で新しい
+reader configurationとして反映する。
+
+未指定は`read_offset_samples=null`、`offset_status=UNKNOWN`であり、0へ読み替えない。明示した0も
+校正値として公開する。値を実際に適用したreadは`CORRECTED`、値が判明しても適用されないreadは
+`UNCORRECTED`とする。`DriveCapabilities`には値だけでなく、少なくとも
+`USER_CONFIGURED` / `TESTED` / `DATABASE`の根拠とdetailを伴わせる。明示ユーザー値は将来の
+校正・database値より優先し、利用条件・機種/firmware一致・符号規約を検証できないdatabase値は
+自動採用しない。
+
+補正入力がdiscのaudio範囲外となる先頭・末尾は、ゼロ埋め・繰返し・推定PCMを生成しない。
+その論理区間はcoverage不足として結果・外部checksum入力から除外し、全域照合をMATCHにしない。
+seek、disc generation変更、read error、代替PCMも同様にcoverageを途切れさせる。実装時は
+正負offset、非frame境界、disc端、partial read、repeat overlap、disc交換をfake PCMで検証し、
+校正値の物理確認は#146で別途記録する。
+
 ## 9. provenance・統計の上限
 
 以下は詳細provenance拡張の要求であり、現行ReadEvidenceとstream集計に対する追加仕様である。
