@@ -3,7 +3,9 @@
 #include "cdda_reader.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -17,8 +19,9 @@ struct ScriptedRead {
 
 class ScriptedCddaReader final : public CddaReader {
 public:
-    explicit ScriptedCddaReader(std::vector<ScriptedRead> script)
-        : script_(std::move(script)) {}
+    explicit ScriptedCddaReader(std::vector<ScriptedRead> script,
+                                std::chrono::milliseconds read_delay = {})
+        : script_(std::move(script)), read_delay_(read_delay) {}
 
     void seek(std::int32_t lba) override {
         if (next_ == script_.size()) throw std::runtime_error("script exhausted");
@@ -38,6 +41,7 @@ public:
             step.result.frames_read > step.result.frames_requested ||
             step.result.frames_read > available_frames)
             throw std::logic_error("invalid scripted read");
+        if (read_delay_.count() > 0) std::this_thread::sleep_for(read_delay_);
         std::fill_n(pcm.begin(), static_cast<std::ptrdiff_t>(
             step.result.frames_read * cdda_samples_per_frame), step.sample);
         if (step.result.status == ReadStatus::ok)
@@ -53,4 +57,5 @@ private:
     std::size_t next_ = 0;
     std::int32_t position_ = 0;
     bool positioned_ = false;
+    std::chrono::milliseconds read_delay_{};
 };

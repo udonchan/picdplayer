@@ -138,6 +138,25 @@ history/eventの有界evictionを確認した。fixtureはproduction daemon、CL
 変更せず、C1/C2、物理再read、cache独立性、read speed、傷の物理形状を再現しない。Player UIを通常rendererまで
 通すlocal review harnessは#111で扱うため、今回の成功は実機異常mediaやUI表示の確認ではない。
 
+## Local Player Integrity scenario harness（#111、Docker自動試験）
+
+`integrity_scenario_harness`は#110のtest-only readerを、silent audio output、固定の有効TOC、固定drive
+capabilityと組み合わせ、loopbackの標準Playerと`/api/state`、`/api/read-history`を公開する。通常の
+`cdplayerd`、systemd、package、ALSA、CEC、実driveには分岐を追加しない。`clean`、`retry`、`recovered`、
+`uncertain`、`mixed`、`read-ahead`、`transition`を選べる。`transition`はCLEAN、UNCERTAIN、RECOVEREDの
+順で観測を進め、`mixed`はclean/retry/recoveredのdisc map領域を作る。これらは観測データのfixtureであり、
+C1/C2、物理的な再読、cache独立性、read speed、傷の物理形状、bit-perfectを再現・保証しない。
+`read-ahead`はfixture PCMをsilent outputで保留し、latest readとcurrent playback evidenceが異なる表示を
+確認する条件である。正常に読み取りを継続するscenarioは同じ`PlaybackEngine`経路でfixture PCMを消費する。
+`uncertain`はread errorを表示するため、通常runtimeの停止処理を進めない。
+
+Docker Debian Trixie/aarch64でharnessを起動し、各scenarioについて標準`/player` asset、snapshot、
+on-demand history/disc mapをNodeのHTTP testで取得した。これはproductionと同じ
+PcmWorker → PlaybackEngine → PresentationModel/serializer → ApiServerのAPI配信経路を確認するが、
+browser rendererの実行、Custom UI、Piの表示・音声・異常mediaは確認していない。manual/CDPの起動手順と
+対象外は[Integrity仕様](../design/integrity-design.md#local-player-integrity-scenario-review-harness111)を参照する。harnessは
+起動時にdevelopment-only性とscenario名を標準出力へ記録する。
+
 ## 通常runtime API操作とdaemon再起動（#4、Pi確認）
 
 2026-09-28、通常14 track Audio CDを認識したdirect single readerへ、loopback APIでplay、pause、+10秒seek、
