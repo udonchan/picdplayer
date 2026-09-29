@@ -67,6 +67,57 @@ int main() {
         exhausted.seek(0);
         result = exhausted.read(pcm);
         check(result.status == ReadStatus::read_error && result.retries == 2 && calls == 3);
+        rejects([&] { LinuxIoctlReader invalid([](int, auto) { return 0; }, {0, true}); });
+        calls = 0;
+        LinuxIoctlReader c2_clean([&](int, auto buffer) {
+            ++calls;
+            std::fill(buffer.begin(), buffer.end(), 5);
+            return 0;
+        }, {0, true}, [&](int lba, auto buffer) {
+            check(lba == 0 || lba == 75);
+            std::fill(buffer.begin(), buffer.end(), 8);
+            return C2AudioReadResult{0, lba == 75 ? C2Status::reported : C2Status::clean};
+        });
+        c2_clean.seek(0);
+        result = c2_clean.read(pcm);
+        check(result.status == ReadStatus::ok && result.c2_status == C2Status::reported);
+        check(calls == 0 && pcm.front() == 8);
+        calls = 0;
+        LinuxIoctlReader c2_fallback([&](int, auto buffer) {
+            ++calls;
+            std::fill(buffer.begin(), buffer.end(), 6);
+            return 0;
+        }, {0, true}, [](int, auto) { return C2AudioReadResult{EIO, C2Status::unknown}; });
+        c2_fallback.seek(0);
+        result = c2_fallback.read(std::span(pcm).first(cdda_samples_per_frame));
+        check(result.status == ReadStatus::ok && result.c2_status == C2Status::unknown);
+        check(calls == 1 && pcm.front() == 6);
+        LinuxIoctlReader c2_unavailable([](int, auto buffer) {
+            std::fill(buffer.begin(), buffer.end(), 4);
+            return 0;
+        }, {0, false, C2Status::not_available});
+        c2_unavailable.seek(0);
+        check(c2_unavailable.read(std::span(pcm).first(cdda_samples_per_frame)).c2_status ==
+              C2Status::not_available);
+        rejects([&] { LinuxIoctlReader invalid_status([](int, auto) { return 0; },
+                                                       {0, false, C2Status::clean}); });
+        std::array<std::uint8_t, 12> cdb{};
+        auto mmc_c2 = make_mmc_c2_audio_read([&](auto command, auto data, auto) {
+            check(command.size() == cdb.size());
+            std::copy(command.begin(), command.end(), cdb.begin());
+            check(data.size() == 2 * (2352 + 294));
+            std::fill(data.begin(), data.end(), 0);
+            data[2352 + 294 + 2352 + 17] = 1;
+            std::fill_n(reinterpret_cast<std::int16_t*>(data.data()), cdda_samples_per_frame, 42);
+            return 0;
+        });
+        auto c2_result = mmc_c2(1234, std::span(pcm).first(2 * cdda_samples_per_frame));
+        check(c2_result.error == 0 && c2_result.c2_status == C2Status::reported);
+        check(cdb[0] == 0xbe && cdb[1] == 0x04 && cdb[2] == 0 && cdb[3] == 0 &&
+              cdb[4] == 0x04 && cdb[5] == 0xd2 && cdb[6] == 0 && cdb[7] == 0 &&
+              cdb[8] == 2 && cdb[9] == 0x12 && pcm.front() == 42);
+        auto packet_error = make_mmc_c2_audio_read([](auto, auto, auto) { return EPERM; });
+        check(packet_error(0, std::span(pcm).first(cdda_samples_per_frame)).error == EPERM);
         std::cout << "PASS: selection, cursor, chunks, partial failure, bounded retry\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return 1;

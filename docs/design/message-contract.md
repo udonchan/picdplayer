@@ -131,7 +131,7 @@ latest/current_playback/active_warning/history.regions[]は同一形式。
 | status | string | UNKNOWN / CLEAN / RECOVERED / UNCERTAIN |
 | local_verification | string | NONE / SINGLE_READ / BACKEND_REPORTED / MULTIPLE_MATCH |
 | read_independence | string | UNKNOWN / CACHE_POSSIBLE / CACHE_MITIGATED。現行repeatはCACHE_POSSIBLEで、物理再読込は保証しない |
-| c2_status | string | UNKNOWN / NOT_AVAILABLE / NOT_CHECKED / CLEAN / REPORTED。現行readerはNOT_CHECKED |
+| c2_status | string | UNKNOWN / NOT_AVAILABLE / NOT_CHECKED / CLEAN / REPORTED。既定はNOT_CHECKED。`--direct-c2-pointers`を指定し、probeがC2 support=YESならC2 pointerを要求する。support=NOはNOT_AVAILABLE、packet failure後の通常read fallbackはUNKNOWN。 |
 | offset_status | string | UNKNOWN / UNCORRECTED / CORRECTED。現行readerはUNKNOWN |
 | direct_retries | uint | 当該readの直接retry回数 |
 | backend_events | object | reads/verifies/fixups/skips/read_errors/cache_errors/other、すべてuint |

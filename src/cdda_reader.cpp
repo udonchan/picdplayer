@@ -4,6 +4,7 @@
 #include <array>
 #include <bit>
 #include <cerrno>
+#include <cstring>
 #include <climits>
 #include <fcntl.h>
 #include <limits>
@@ -17,6 +18,57 @@
 #ifdef ENABLE_PARANOIA
 std::unique_ptr<CddaReader> make_paranoia_reader(const std::string& device);
 #endif
+
+namespace {
+constexpr std::uint8_t read_cd = 0xbe;
+constexpr std::size_t read_cd_cdb_bytes = 12;
+constexpr std::size_t cdda_bytes_per_frame = cdda_samples_per_frame * sizeof(std::int16_t);
+constexpr std::size_t c2_pointer_bytes_per_frame = 294;
+void put_be24(std::uint8_t* destination, std::size_t value) {
+    destination[0] = static_cast<std::uint8_t>(value >> 16);
+    destination[1] = static_cast<std::uint8_t>(value >> 8);
+    destination[2] = static_cast<std::uint8_t>(value);
+}
+void put_be32(std::uint8_t* destination, std::int32_t value) {
+    const auto encoded = static_cast<std::uint32_t>(value);
+    destination[0] = static_cast<std::uint8_t>(encoded >> 24);
+    destination[1] = static_cast<std::uint8_t>(encoded >> 16);
+    destination[2] = static_cast<std::uint8_t>(encoded >> 8);
+    destination[3] = static_cast<std::uint8_t>(encoded);
+}
+}
+
+C2AudioRead make_mmc_c2_audio_read(DrivePacketTransport transport) {
+    if (!transport) throw std::invalid_argument("C2 packet transport is required");
+    return [transport = std::move(transport)](std::int32_t lba, std::span<std::int16_t> pcm) {
+        if (lba < 0 || pcm.empty() || pcm.size() % cdda_samples_per_frame)
+            return C2AudioReadResult{EINVAL, C2Status::unknown};
+        const auto frames = pcm.size() / cdda_samples_per_frame;
+        if (frames > 0x00ffffff || frames >
+            (std::numeric_limits<std::size_t>::max() / (cdda_bytes_per_frame + c2_pointer_bytes_per_frame)))
+            return C2AudioReadResult{EINVAL, C2Status::unknown};
+        std::array<std::uint8_t, read_cd_cdb_bytes> command{};
+        command[0] = read_cd;
+        command[1] = 0x04; // expected sector type: CD-DA
+        put_be32(command.data() + 2, lba);
+        put_be24(command.data() + 6, frames);
+        command[9] = 0x12; // user data plus C2 error pointers
+        std::vector<std::uint8_t> response(frames * (cdda_bytes_per_frame + c2_pointer_bytes_per_frame));
+        std::array<std::uint8_t, sizeof(request_sense)> sense{};
+        const auto error = transport(command, response, sense);
+        if (error) return C2AudioReadResult{error, C2Status::unknown};
+        bool reported = false;
+        for (std::size_t frame = 0; frame < frames; ++frame) {
+            const auto offset = frame * (cdda_bytes_per_frame + c2_pointer_bytes_per_frame);
+            std::memcpy(pcm.data() + frame * cdda_samples_per_frame,
+                        response.data() + offset, cdda_bytes_per_frame);
+            const auto c2 = std::span(response).subspan(offset + cdda_bytes_per_frame,
+                                                         c2_pointer_bytes_per_frame);
+            reported = reported || std::any_of(c2.begin(), c2.end(), [](std::uint8_t value) { return value != 0; });
+        }
+        return C2AudioReadResult{0, reported ? C2Status::reported : C2Status::clean};
+    };
+}
 
 CddaBackend parse_cdda_backend(std::string_view name) {
     if (name == "direct") return CddaBackend::direct;
@@ -33,9 +85,14 @@ void require_cdda_backend(CddaBackend backend) {
     }
     if (backend != CddaBackend::direct) throw std::invalid_argument("invalid CDDA backend");
 }
-LinuxIoctlReader::LinuxIoctlReader(AudioRead transport, DirectOptions options)
-    : transport_(std::move(transport)), options_(options) {
-    if (!transport_ || options.retries > 10) throw std::invalid_argument("invalid direct reader options");
+LinuxIoctlReader::LinuxIoctlReader(AudioRead transport, DirectOptions options,
+                                   C2AudioRead c2_transport)
+    : transport_(std::move(transport)), options_(options), c2_transport_(std::move(c2_transport)) {
+    if (!transport_ || options.retries > 10 ||
+        (options.request_c2_pointers && !c2_transport_) ||
+        (!options.request_c2_pointers && options.inactive_c2_status != C2Status::not_checked &&
+         options.inactive_c2_status != C2Status::not_available))
+        throw std::invalid_argument("invalid direct reader options");
 }
 void LinuxIoctlReader::seek(std::int32_t lba) {
     if (lba < 0) throw std::invalid_argument("negative CDDA LBA");
@@ -50,26 +107,58 @@ ReadResult LinuxIoctlReader::read(std::span<std::int16_t> pcm) {
     if (count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max() - cursor_))
         throw std::invalid_argument("CDDA LBA overflow");
     ReadResult result{cursor_, count, 0, ReadStatus::ok, 0, 0};
+    result.c2_status = options_.request_c2_pointers ? C2Status::unknown : options_.inactive_c2_status;
     std::array<std::int16_t, 75 * cdda_samples_per_frame> scratch{};
     while (result.frames_read < count) {
         const auto frames = std::min<std::size_t>(75, count - result.frames_read);
         const auto block = std::span(scratch).first(frames * cdda_samples_per_frame);
         int error = 0;
-        unsigned attempt = 0;
-        do {
-            error = transport_(cursor_, block);
-            if (!error) break;
-            // Only an I/O error gets optional retries; permissions, removal etc. fail immediately.
-            if (error != EIO || attempt == options_.retries) break;
-            ++attempt;
-            ++result.retries;
-        } while (true);
+        C2Status block_c2 = options_.request_c2_pointers
+            ? C2Status::not_checked : options_.inactive_c2_status;
+        if (options_.request_c2_pointers) {
+            const auto c2_result = c2_transport_(cursor_, block);
+            error = c2_result.error;
+            if (!error && (c2_result.c2_status == C2Status::clean ||
+                           c2_result.c2_status == C2Status::reported)) {
+                block_c2 = c2_result.c2_status;
+            } else {
+                // A malformed success is no more meaningful than a packet
+                // failure. Use normal audio extraction without claiming C2.
+                block_c2 = C2Status::unknown;
+                error = 0;
+                unsigned attempt = 0;
+                do {
+                    error = transport_(cursor_, block);
+                    if (!error) break;
+                    if (error != EIO || attempt == options_.retries) break;
+                    ++attempt;
+                    ++result.retries;
+                } while (true);
+            }
+        }
+        if (!options_.request_c2_pointers || error) {
+            if (options_.request_c2_pointers) block_c2 = C2Status::unknown;
+            unsigned attempt = 0;
+            do {
+                error = transport_(cursor_, block);
+                if (!error) break;
+                // Only an I/O error gets optional retries; permissions, removal etc. fail immediately.
+                if (error != EIO || attempt == options_.retries) break;
+                ++attempt;
+                ++result.retries;
+            } while (true);
+        }
         if (error) {
             positioned_ = false;
             result.status = ReadStatus::read_error;
             result.native_error = error;
             return result;
         }
+        if (result.frames_read == 0) result.c2_status = block_c2;
+        else if (result.c2_status == C2Status::reported || block_c2 == C2Status::reported)
+            result.c2_status = C2Status::reported;
+        else if (result.c2_status != block_c2)
+            result.c2_status = C2Status::unknown;
         std::copy(block.begin(), block.end(), pcm.begin() + result.frames_read * cdda_samples_per_frame);
         cursor_ += static_cast<std::int32_t>(frames);
         result.frames_read += frames;
@@ -99,7 +188,7 @@ std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     }
 #endif
     auto fd = std::make_shared<DeviceFd>(device);
-    return std::make_unique<LinuxIoctlReader>([fd](std::int32_t lba, std::span<std::int16_t> pcm) {
+    auto audio_read = [fd](std::int32_t lba, std::span<std::int16_t> pcm) {
         cdrom_read_audio request{};
         request.addr.lba = lba;
         request.addr_format = CDROM_LBA;
@@ -115,5 +204,28 @@ std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
             }
         }
         return 0;
-    }, options);
+    };
+    C2AudioRead c2_read;
+    if (options.request_c2_pointers) {
+        c2_read = make_mmc_c2_audio_read([fd](std::span<const std::uint8_t> command,
+                                             std::span<std::uint8_t> data,
+                                             std::span<std::uint8_t> sense) {
+            if (command.size() > CDROM_PACKET_SIZE) return EINVAL;
+            request_sense request_sense_data{};
+            cdrom_generic_command request{};
+            std::memcpy(request.cmd, command.data(), command.size());
+            request.buffer = data.data();
+            request.buflen = static_cast<unsigned int>(data.size());
+            request.sense = &request_sense_data;
+            request.data_direction = CGC_DATA_READ;
+            request.quiet = 1;
+            request.timeout = 5000;
+            const int result = ioctl(fd->value, CDROM_SEND_PACKET, &request);
+            const int error = result < 0 ? errno : 0;
+            const auto bytes = std::min(sense.size(), sizeof(request_sense_data));
+            std::memcpy(sense.data(), &request_sense_data, bytes);
+            return error;
+        });
+    }
+    return std::make_unique<LinuxIoctlReader>(std::move(audio_read), options, std::move(c2_read));
 }

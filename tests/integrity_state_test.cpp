@@ -16,6 +16,10 @@ int main() {
         check(evidence.c2_status == C2Status::not_checked);
         check(evidence.offset_status == OffsetStatus::unknown);
 
+        result.c2_status = C2Status::reported;
+        check(make_read_evidence(result).c2_status == C2Status::reported);
+        result.c2_status = C2Status::not_checked;
+
         IntegrityStats stats;
         observe_read(stats, result);
         check(stats.read_calls == 1 && stats.frames_accepted == 15);

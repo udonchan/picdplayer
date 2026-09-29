@@ -12,7 +12,6 @@
 enum class ReadActivity { idle, reading, buffering, complete, failed };
 enum class LocalVerification { none, single_read, backend_reported, multiple_match };
 enum class IntegrityReadStatus { unknown, clean, recovered, uncertain };
-enum class C2Status { unknown, not_available, not_checked, clean, reported };
 enum class OffsetStatus { unknown, uncorrected, corrected };
 
 struct ReadEvidence {

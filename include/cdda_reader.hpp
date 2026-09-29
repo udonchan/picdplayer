@@ -15,6 +15,10 @@ CddaBackend parse_cdda_backend(std::string_view name);
 void require_cdda_backend(CddaBackend backend);
 
 enum class ReadStatus { ok, read_error };
+// C2 pointer information is an observation attached to one read call.  It
+// does not establish C2 trustworthiness or prove that the returned PCM is the
+// original disc data.
+enum class C2Status { unknown, not_available, not_checked, clean, reported };
 // Repeated PCM equality does not prove an independent physical reread: a
 // backend or drive may return cached data.
 enum class ReadIndependence { unknown, cache_possible, cache_mitigated };
@@ -60,6 +64,7 @@ struct ReadResult {
     ParanoiaEvents paranoia{}; // callback counts, not sector/retry counts
     LocalReadVerification verification{};
     ReadIndependence read_independence = ReadIndependence::unknown;
+    C2Status c2_status = C2Status::not_checked;
 };
 
 struct RepeatedReadPolicy {
@@ -86,6 +91,13 @@ std::unique_ptr<CddaReader> make_repeated_read_verifier(
     SteadyNow now = [] { return std::chrono::steady_clock::now(); });
 struct DirectOptions {
     unsigned retries = 0; // Additional attempts per ioctl, bounded to 10.
+    // Explicit opt-in. A failed C2 request falls back to ordinary audio reads
+    // and produces an UNKNOWN C2 observation for that read call.
+    bool request_c2_pointers = false;
+    // When C2 packet reads are not selected, distinguish a known unsupported
+    // drive from an unrequested or not-yet-known capability. Only these two
+    // values are valid while request_c2_pointers is false.
+    C2Status inactive_c2_status = C2Status::not_checked;
 };
 std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     const std::string& device, DirectOptions options = {});

@@ -10,4 +10,5 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& metadata_cache, const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config = {},
                         ReadPolicy read_policy = {}, const std::string& custom_ui = {},
-                        std::optional<unsigned> drive_speed_x = std::nullopt);
+                        std::optional<unsigned> drive_speed_x = std::nullopt,
+                        bool direct_c2_pointers = false);

@@ -18,7 +18,18 @@ void add(ParanoiaEvents& to, const ParanoiaEvents& from) {
 struct Candidate {
     std::vector<std::int16_t> pcm;
     unsigned matches = 1;
+    C2Status c2_status = C2Status::unknown;
 };
+
+// A repeated-read result summarizes all matching reads that selected its PCM.
+// Do not retain CLEAN when another selected attempt could not provide a
+// compatible C2 observation; REPORTED remains a concrete observation.
+C2Status merge_c2_status(C2Status earlier, C2Status later) {
+    if (earlier == C2Status::reported || later == C2Status::reported)
+        return C2Status::reported;
+    if (earlier == later) return earlier;
+    return C2Status::unknown;
+}
 
 class RepeatedReadVerifier final : public CddaReader {
 public:
@@ -87,10 +98,11 @@ public:
             });
             if (found == candidates.end()) {
                 if (!candidates.empty()) ++combined.verification.mismatches;
-                candidates.push_back({std::move(sample), 1});
+                candidates.push_back({std::move(sample), 1, result.c2_status});
                 found = std::prev(candidates.end());
             } else {
                 ++found->matches;
+                found->c2_status = merge_c2_status(found->c2_status, result.c2_status);
             }
             detail.candidate = static_cast<unsigned>(std::distance(candidates.begin(), found)) + 1;
             combined.verification.matching_reads = std::max(combined.verification.matching_reads,
@@ -116,6 +128,7 @@ public:
                 combined.frames_read = frames;
                 combined.status = ReadStatus::ok;
                 combined.native_error = 0;
+                combined.c2_status = found->c2_status;
                 position_ += static_cast<std::int32_t>(frames);
                 return combined;
             }

@@ -109,7 +109,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& metadata_cache, const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config,
                         ReadPolicy initial_read_policy, const std::string& custom_ui,
-                        std::optional<unsigned> configured_drive_speed_x) {
+                        std::optional<unsigned> configured_drive_speed_x,
+                        bool direct_c2_pointers) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache;
 #endif
@@ -123,10 +124,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
     validate_read_policy(initial_read_policy, buffer_config.capacity_cd_frames);
     auto reader_policy = std::make_shared<ReadPolicy>(initial_read_policy);
     auto reader_policy_mutex = std::make_shared<std::mutex>();
+    auto direct_options = std::make_shared<DirectOptions>();
+    auto direct_options_mutex = std::make_shared<std::mutex>();
     auto reader_factory = [=] {
                          ReadPolicy policy;
                          { std::lock_guard lock(*reader_policy_mutex); policy = *reader_policy; }
-                         auto reader = make_cdda_reader(backend, device);
+                         DirectOptions options;
+                         { std::lock_guard lock(*direct_options_mutex); options = *direct_options; }
+                         auto reader = make_cdda_reader(backend, device, options);
                          return policy.mode == ReadVerificationMode::repeat
                              ? make_repeated_read_verifier(std::move(reader), repeated_read_policy(policy))
                              : std::move(reader);
@@ -482,6 +487,15 @@ void run_player_session(const std::string& device, CddaBackend backend,
             if (media_result.work == MediaWork::probe_drive) {
                 if (media_result.drive) {
                     drive_capabilities = std::move(*media_result.drive);
+                    if (direct_c2_pointers && backend == CddaBackend::direct) {
+                        std::lock_guard lock(*direct_options_mutex);
+                        direct_options->request_c2_pointers = drive_capabilities.c2_supported.value == Knowledge::yes;
+                        direct_options->inactive_c2_status = drive_capabilities.c2_supported.value == Knowledge::no
+                            ? C2Status::not_available : C2Status::not_checked;
+                        log_info("drive") << "c2_pointers=requested effective="
+                                          << (direct_options->request_c2_pointers ? "YES" : "NO")
+                                          << " support=" << knowledge_name(drive_capabilities.c2_supported.value);
+                    }
                     log_info("drive") << "capabilities speed_control="
                                       << knowledge_name(drive_capabilities.speed_control.value)
                                       << " dae=" << knowledge_name(drive_capabilities.digital_audio_extraction.value)
