@@ -827,12 +827,12 @@ Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に�
 
 ### 実機異常系の担当と記録の共有
 
-[実機診断評価 #96](https://github.com/udonchan/picdplayer/issues/96)で、観測できたread異常と
-API/警告/再接続の整合を確認する。傷disc・長いread stallの再現と音声影響は#33、backend比較は#6、
-特殊TOCのmetadata対応・同一TOC識別は#39/#40、物理hotplugは#88が引き続き担当する。
+[物理媒体・USB drive実機評価 #146](https://github.com/udonchan/picdplayer/issues/146)で、観測できたread異常と
+音声/操作影響、API/警告/再接続の整合を同じrun記録で確認する。backend比較は#6、特殊TOCのmetadata対応・
+同一TOC識別は#39/#40、物理hotplugは#88が引き続き担当する。
 試験手順・結果はreports配下の同じrunを参照し、本Issueのために媒体試験を重複実施しない。
 本書の過去の未確認記述は当時の記録として保持し、実施後に確認範囲と参照先を更新する。
-#96は今後の課題であり、#89/#90の自動試験成功や#24の着手条件に実機確認済みという意味を追加しない。
+#146は今後の課題であり、#89/#90の自動試験成功や#24の着手条件に実機確認済みという意味を追加しない。
 
 ## #89 有界provenanceの容量・overflow検証
 
@@ -920,7 +920,7 @@ PCM/read markerを確認した。API stop後はSTOPPED、queue 0、current/lates
 underrun、recovery、failure context、ERRORはなかった。CDP接続中の2秒測定でLayout/RecalcStyleは各8件。
 
 これは通常disc・短時間・CDP接続中の確認である。TV目視・試聴、傷disc、物理交換、終端drain、
-長期運転、CDP未接続のCPU/温度比較は未確認であり、#96/#4/#83の記録と重複しない。
+長期運転、CDP未接続のCPU/温度比較は未確認であり、#146/#4/#83の記録と重複しない。
 
 ### Integrity monitor Phase 1（2026-09-27）
 

@@ -18,4 +18,4 @@ SSH port forwarding経由のCDPとloopback APIを使い、以下を確認した�
 
 assertion結果は[results.json](results.json)。画像はローカル一時ファイルだけに置き、repositoryには保存しない。
 これは短い通常系smoke testであり、TV実表示・試聴・冷却/温度測定・cold boot・異常disc・長期負荷は未確認。
-異常系実機評価は#96が所有し、#33等の試験記録と共有する。
+異常系実機評価は#146が所有し、同じrun記録を共有する。

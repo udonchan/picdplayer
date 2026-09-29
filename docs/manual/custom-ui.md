@@ -190,7 +190,7 @@ Custom UIはこれらを成功保証へ読み替えず、欠損時は値を生�
 
 詳細履歴は常時snapshotから分離し、GET /api/read-historyで取得する。通常stateのread.session_idと
 stream_generationを照合して旧結果を捨てる。契約の正本は機能設計「詳細履歴のオンデマンド取得」。
-#36のwarning/event復元は実装済み。追加の異常系自動検証#90は完了。実機異常系は#96、Playerへの統合は#24で扱う。
+#36のwarning/event復元は実装済み。追加の異常系自動検証#90は完了。実機異常系は#146、Playerへの統合は#24で扱う。
 
 #36でread.active_warningとevent_windowを追加し、technical statusはsnapshotで警告を置換する。
 契約の正本は機能設計「診断snapshotの復元」。既存event sequenceは維持し、read_sequenceを追加。
