@@ -164,6 +164,14 @@ void request_cd_start(const std::string& device) {
         throw std::system_error(errno, std::generic_category(), "CDROMSTART " + device);
 }
 
+void request_cd_stop(const std::string& device) {
+    const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0) throw std::system_error(errno, std::generic_category(), "open " + device);
+    const ScopedFd guard(fd);
+    if (ioctl(fd, CDROMSTOP, 0) < 0)
+        throw std::system_error(errno, std::generic_category(), "CDROMSTOP " + device);
+}
+
 void probe_cd_start(const std::string& device) {
     const auto started = std::chrono::steady_clock::now();
     request_cd_start(device);

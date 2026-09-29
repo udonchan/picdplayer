@@ -4,10 +4,10 @@
 
 MediaWorker::MediaWorker(Observe observe, ReadToc read_toc, Eject eject,
                          ProbeDrive probe_drive, StartDrive start_drive,
-                         SetDriveSpeed set_drive_speed)
+                         SetDriveSpeed set_drive_speed, StopDrive stop_drive)
     : observe_(std::move(observe)), read_toc_(std::move(read_toc)), eject_(std::move(eject)),
       probe_drive_(std::move(probe_drive)), start_drive_(std::move(start_drive)),
-      set_drive_speed_(std::move(set_drive_speed)) {
+      stop_drive_(std::move(stop_drive)), set_drive_speed_(std::move(set_drive_speed)) {
     if (!observe_ || !read_toc_ || !eject_) throw std::invalid_argument("media worker callback is empty");
     thread_ = std::thread(&MediaWorker::run, this);
 }
@@ -57,6 +57,9 @@ void MediaWorker::run() {
             else if (work == MediaWork::start_drive) {
                 if (!start_drive_) throw std::runtime_error("drive start is unavailable");
                 start_drive_();
+            } else if (work == MediaWork::stop_drive) {
+                if (!stop_drive_) throw std::runtime_error("drive stop is unavailable");
+                stop_drive_();
             } else if (work == MediaWork::set_drive_speed) {
                 if (!set_drive_speed_) throw std::runtime_error("drive speed control is unavailable");
                 set_drive_speed_();
