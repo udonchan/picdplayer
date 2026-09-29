@@ -5,6 +5,10 @@
 #include <chrono>
 #include <deque>
 
+// A stream may resume after a transient ALSA XRUN, but must not retry forever.
+// ALSA XRUN recovery is independent from CD read-integrity recovery.
+inline constexpr unsigned maximum_underrun_recoveries = 3;
+
 class PlaybackEngine {
 public:
     PlaybackEngine(PlayerController& controller, PcmWorker& worker, AudioOutput& output, std::int32_t end);

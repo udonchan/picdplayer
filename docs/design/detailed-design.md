@@ -118,7 +118,10 @@ READ_OBSERVED eventは256件上限の別queueへ渡し、main側でsequenceを�
 backend回復報告はINFO、未確実な結果はWARNING。start/cancel/discardで旧世代のeventを破棄する。
 PcmBufferConfigは容量と開始閾値をCD frameで保持し、有効read block数へ変換する。既定750/45 frame、
 上限2250 frameで、0、15の倍数でない値、開始閾値が容量を超える値を起動前に拒否する。
-underrun時の開始閾値増加も設定された容量を上限とする。
+underrun時の開始閾値増加も設定された容量を上限とする。同じstream内のALSA underrun復帰は
+最大3回までとし、4回目はreader再生成を繰り返さずエラー停止する。play、seek、pauseなど意図した
+stream切替ではこの回数をリセットする。これは出力経路の有界化であり、read integrityのRECOVEREDや
+read retryの回数とは別の状態である。
 
 [DriveAccessCoordinator](../../include/drive_access.hpp)は一台のdriveに対するblocking callをmutexで直列化する。
 PcmWorkerのfactory/seek/read/closeとMediaWorker callbackが共有する。mutex待ちはworker thread内で行い、

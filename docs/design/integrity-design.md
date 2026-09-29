@@ -237,6 +237,8 @@ offsetは正負付きstereo sample frame単位（両channelで同じ時間位置
 採用databaseの符号規約を明記し、補正で必要な端データが読めない場合はその範囲を不明/代替扱いにする。
 speed設定非対応ならdrive既定、C2不可なら利用可能なoverlap/repeated read、offset不明なら未補正で再生する。
 ALSA underrun復旧は出力継続の処理であり、read integrityのRECOVEREDとは別のeventと統計にする。
+同じstreamでは最大3回まで再生位置からreaderを再生成して再開し、上限到達時は停止する。これは
+read errorの再試行方針や未解決PCMの扱いを変更しない。
 
 ## 9. provenance・統計の上限
 
