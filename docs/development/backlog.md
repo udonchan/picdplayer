@@ -48,6 +48,7 @@
 | [#146 Validate physical optical-media faults and USB drive compatibility](https://github.com/udonchan/picdplayer/issues/146) | 傷・劣化媒体、read stall、別USB optical drive/bridgeの実機評価を集約する。音声/操作影響とAPI・警告・復元の整合を同じrun記録で確認する。physical hotplugは#88、特殊TOCは#39/#40が担当する。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
 | [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | #98/#99と監査修正#103〜#106はマージ済み。Phase 1ではscope付きsummary・有界disc read map・全read/drive値を常時表示し、実使用で情報量を評価する。primary playbackを優先し、daemon接続をIntegrity headerへ統合する。PR #108をマージしPhase 1はClose済み。通常Pi CDP確認済み。deterministicな異常scenarioの開発確認は#109で完了し、実機異常系は#146、長期/負荷は#4/#83で追跡する。 |
+| [#150 Reorganize Integrity Monitor information hierarchy and responsive layout](https://github.com/udonchan/picdplayer/issues/150) | Playerの一次再生情報の幅を維持したまま、Integrity MonitorをRead observationとDisc read map / Drive capabilityのmeasurement layoutへ再構成する。実在snapshotだけを表示し、buffer meterには正確なblock値を併記する。#83と#124は#150および#25の完了後に最終構成で扱う。 |
 
 ## 障害対応・機能改善
 

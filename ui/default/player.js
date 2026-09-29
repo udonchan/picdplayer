@@ -127,6 +127,13 @@ function integritySummary(read) {
   return `CURRENT READ · ${read.current_playback.status || 'UNKNOWN'}`;
 }
 
+function formatReadStall(value) {
+  if (!value || !safeNonNegative(value.timeout_ms)) return 'NOT AVAILABLE';
+  const inflight = safeNonNegative(value.inflight_ms) ? `in-flight ${value.inflight_ms} ms` : 'idle';
+  const last = safeNonNegative(value.last_timeout_ms) ? ` · last timeout ${value.last_timeout_ms} ms` : '';
+  return `${inflight} · limit ${value.timeout_ms} ms${last}`;
+}
+
 function discLayoutKey(snapshot) {
   const layout = snapshot?.disc?.layout;
   const session = snapshot?.read?.session_id;
@@ -401,8 +408,10 @@ function render(snapshot) {
     : (effectivePolicy || requestedPolicy || 'UNKNOWN'));
   const blockCapacity = safeNonNegative(read.buffer_capacity_frames) && safeInteger(read.read_block_frames)
     && read.read_block_frames > 0 ? Math.floor(read.buffer_capacity_frames / read.read_block_frames) : null;
-  set('read-buffer', safeNonNegative(read.queued_blocks) && blockCapacity !== null
-    ? `${read.queued_blocks} / ${blockCapacity} blocks` : 'N/A');
+  const bufferKnown = safeNonNegative(read.queued_blocks) && blockCapacity !== null && blockCapacity > 0;
+  set('read-buffer', bufferKnown ? `${read.queued_blocks} / ${blockCapacity} blocks` : 'N/A');
+  const bufferFraction = bufferKnown ? Math.min(1, read.queued_blocks / blockCapacity) : 0;
+  setStyle(byId('read-buffer-meter'), 'transform', `scaleX(${bufferFraction})`);
   set('read-current', formatEvidence(read.current_playback));
   set('read-latest', formatEvidence(read.latest));
   set('read-warning', read.active_warning ? formatEvidence(read.active_warning) : 'NONE');
@@ -413,6 +422,7 @@ function render(snapshot) {
     ? `${stats.read_calls} / ${stats.frames_accepted} frames` : 'NOT AVAILABLE');
   const coverage = read.coverage || {};
   set('read-coverage', `${coverage.scope || 'UNKNOWN'} · ${safeNonNegative(coverage.accepted_unique_frames) ? coverage.accepted_unique_frames : '—'} accepted unique frames`);
+  set('read-stall', formatReadStall(read.read_stall));
   set('integrity-summary', integritySummary(read));
   set('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ') || drive.device || 'UNKNOWN DRIVE');
   set('cap-dae', formatCapability(drive.digital_audio_extraction));

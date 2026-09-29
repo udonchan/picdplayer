@@ -11,7 +11,11 @@
   --line: #30393c;
   --text: #edf2f2;
   --muted: #9aa8aa;
-  --accent: #7ed9a3;
+  --blue: #82b8ef;
+  --clean: #7199a5;
+  --retry: #f2c66d;
+  --warning: #ff8c82;
+  --recovered: #b99cff;
 }
 
 * {
@@ -28,7 +32,7 @@ body {
 }
 
 main {
-  max-width: 1120px;
+  max-width: 1540px;
   min-height: 100vh;
   margin: auto;
   padding: clamp(18px, 3vh, 32px) clamp(28px, 4vw, 48px);
@@ -53,6 +57,8 @@ main {
   gap: clamp(26px, 5vw, 58px);
   align-items: center;
   padding-top: clamp(18px, 3vh, 30px);
+  max-width: 1120px;
+  margin-inline: auto;
 }
 
 .art {
@@ -97,7 +103,7 @@ main {
 .eyebrow,
 .state {
   margin: 0 0 10px;
-  color: var(--accent);
+  color: var(--muted);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.11em;
@@ -138,7 +144,7 @@ main {
 
 #track-number {
   min-width: 2.2ch;
-  color: var(--accent);
+  color: var(--text);
   font-size: 28px;
   font-weight: 750;
 }
@@ -179,7 +185,7 @@ main {
   display: block;
   width: 100%;
   height: 100%;
-  background: var(--accent);
+  background: var(--blue);
   transform: scaleX(0);
   transform-origin: left center;
 }
@@ -210,14 +216,20 @@ main {
   justify-content: space-between;
 }
 
+.integrity-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  align-items: center;
+  justify-content: end;
+}
+
 .integrity-heading h2,
 .map-heading h3,
 .drive-card h3 {
   margin: 0;
   font-size: clamp(18px, 2.2vw, 25px);
 }
-
-.integrity-heading .connection { margin-left: auto; }
 
 .integrity-status {
   padding: 4px 0;
@@ -234,13 +246,16 @@ main {
   background: color-mix(in srgb, var(--panel) 80%, transparent);
 }
 
-.integrity-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(270px, 1.15fr) minmax(0, .9fr);
-  gap: 10px;
+.integrity-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-top: 12px;
-  align-items: stretch;
+  align-items: start;
 }
+
+.evidence-card { flex: 1 1 570px; }
+.integrity-side { display: grid; flex: 1 1 350px; gap: 12px; min-width: min(100%, 350px); }
 
 .metrics {
   display: grid;
@@ -258,6 +273,23 @@ main {
 .integrity-note, .map-heading p { margin: 11px 0 0; color: var(--muted); font-size: 11px; }
 .map-heading p { margin-top: 4px; }
 .drive-name { margin: 12px 0 16px; font-size: 17px; overflow-wrap: anywhere; }
+
+.read-status-metrics { grid-template-columns: minmax(8rem, .65fr) minmax(0, 1.65fr); }
+.read-quantity-metrics { margin-top: 14px; grid-template-columns: minmax(8rem, .65fr) minmax(0, 1.65fr); }
+.buffer-measurement {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, .8fr);
+  gap: 12px;
+  align-items: end;
+  margin-top: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.buffer-measurement .evidence-label { margin-top: 0; }
+.buffer-value { margin: 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+.buffer-meter { height: 6px; overflow: hidden; background: #354043; }
+.buffer-meter span { display: block; width: 100%; height: 100%; background: var(--blue); transform: scaleX(0); transform-origin: left center; }
 
 #refresh-read-map {
   flex: none;
@@ -304,17 +336,13 @@ main {
   text-align: center;
 }
 
-.map-marker.current, .legend.current { background: var(--accent); }
+.map-marker.current, .legend.current { background: var(--blue); }
 .map-marker.latest, .legend.latest { background: #d7e9ff; }
 .map-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; margin: 0; color: var(--muted); font-size: 10px; }
 .legend::before { display: inline-block; width: 9px; height: 9px; margin-right: 4px; content: ''; background: currentColor; }
-.legend.clean { color: #7199a5; }.legend.retry { color: #f2c66d; }.legend.warning { color: #ff8c82; }
-.legend.recovered { color: #b99cff; }
+.legend.clean { color: var(--clean); }.legend.retry { color: var(--retry); }.legend.warning { color: var(--warning); }
+.legend.recovered { color: var(--recovered); }
 .legend.unobserved { color: #202729; }.legend.unobserved::before { border: 1px solid var(--line); }
-
-@media (max-width: 900px) {
-  .integrity-grid { grid-template-columns: 1fr; }
-}
 
 @media (max-width: 720px) {
   main {
@@ -337,4 +365,6 @@ main {
   }
 
   .integrity-heading, .map-heading { align-items: stretch; flex-direction: column; }
+  .integrity-signals { justify-content: start; }
+  .buffer-measurement { grid-template-columns: 1fr; }
 }

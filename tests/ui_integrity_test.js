@@ -29,6 +29,7 @@ async function main() {
       speed_request_error: '', current_speed_x: null, read_offset_samples: null },
     read: { session_id: 'session-a', stream_generation: 4, activity: 'READING', effective_strategy: 'direct-single-read',
       queued_blocks: 1, buffer_capacity_frames: 90, read_block_frames: 75, dropped_events: 0,
+      read_stall: { inflight_ms: null, timeout_ms: 10000, last_timeout_ms: null },
       policy: { pending: true, requested: { mode: 'REPEAT' }, effective: { mode: 'SINGLE' } },
       history: { included: false, capacity: 128 }, event_window: { first_sequence: 1, last_sequence: 2, worker_dropped: 0 },
       current_playback: { status: 'CLEAN', local_verification: 'SINGLE_READ', start_lba: 20, frames_read: 15,
@@ -65,6 +66,8 @@ async function main() {
   assert.equal(node('drive-speed-request').textContent, '4x REQUEST ACCEPTED');
   assert.equal(node('drive-speed-current').textContent, 'NOT AVAILABLE');
   assert.equal(node('read-buffer').textContent, '1 / 1 blocks');
+  assert.equal(node('read-buffer-meter').style.transform, 'scaleX(1)');
+  assert.equal(node('read-stall').textContent, 'idle · limit 10000 ms');
   assert.equal(node('integrity-summary').textContent, 'CURRENT READ · CLEAN');
   assert.match(node('read-current').textContent, /LBA 20–35/);
   assert.match(node('read-current').textContent, /CACHE_POSSIBLE/);
