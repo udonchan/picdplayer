@@ -94,6 +94,10 @@ struct DirectOptions {
     // Explicit opt-in. A failed C2 request falls back to ordinary audio reads
     // and produces an UNKNOWN C2 observation for that read call.
     bool request_c2_pointers = false;
+    // When C2 packet reads are not selected, distinguish a known unsupported
+    // drive from an unrequested or not-yet-known capability. Only these two
+    // values are valid while request_c2_pointers is false.
+    C2Status inactive_c2_status = C2Status::not_checked;
 };
 std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     const std::string& device, DirectOptions options = {});

@@ -89,7 +89,9 @@ LinuxIoctlReader::LinuxIoctlReader(AudioRead transport, DirectOptions options,
                                    C2AudioRead c2_transport)
     : transport_(std::move(transport)), options_(options), c2_transport_(std::move(c2_transport)) {
     if (!transport_ || options.retries > 10 ||
-        (options.request_c2_pointers && !c2_transport_))
+        (options.request_c2_pointers && !c2_transport_) ||
+        (!options.request_c2_pointers && options.inactive_c2_status != C2Status::not_checked &&
+         options.inactive_c2_status != C2Status::not_available))
         throw std::invalid_argument("invalid direct reader options");
 }
 void LinuxIoctlReader::seek(std::int32_t lba) {
@@ -105,12 +107,14 @@ ReadResult LinuxIoctlReader::read(std::span<std::int16_t> pcm) {
     if (count > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max() - cursor_))
         throw std::invalid_argument("CDDA LBA overflow");
     ReadResult result{cursor_, count, 0, ReadStatus::ok, 0, 0};
+    result.c2_status = options_.request_c2_pointers ? C2Status::unknown : options_.inactive_c2_status;
     std::array<std::int16_t, 75 * cdda_samples_per_frame> scratch{};
     while (result.frames_read < count) {
         const auto frames = std::min<std::size_t>(75, count - result.frames_read);
         const auto block = std::span(scratch).first(frames * cdda_samples_per_frame);
         int error = 0;
-        C2Status block_c2 = C2Status::not_checked;
+        C2Status block_c2 = options_.request_c2_pointers
+            ? C2Status::not_checked : options_.inactive_c2_status;
         if (options_.request_c2_pointers) {
             const auto c2_result = c2_transport_(cursor_, block);
             error = c2_result.error;

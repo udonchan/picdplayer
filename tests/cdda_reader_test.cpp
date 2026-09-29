@@ -92,6 +92,15 @@ int main() {
         result = c2_fallback.read(std::span(pcm).first(cdda_samples_per_frame));
         check(result.status == ReadStatus::ok && result.c2_status == C2Status::unknown);
         check(calls == 1 && pcm.front() == 6);
+        LinuxIoctlReader c2_unavailable([](int, auto buffer) {
+            std::fill(buffer.begin(), buffer.end(), 4);
+            return 0;
+        }, {0, false, C2Status::not_available});
+        c2_unavailable.seek(0);
+        check(c2_unavailable.read(std::span(pcm).first(cdda_samples_per_frame)).c2_status ==
+              C2Status::not_available);
+        rejects([&] { LinuxIoctlReader invalid_status([](int, auto) { return 0; },
+                                                       {0, false, C2Status::clean}); });
         std::array<std::uint8_t, 12> cdb{};
         auto mmc_c2 = make_mmc_c2_audio_read([&](auto command, auto data, auto) {
             check(command.size() == cdb.size());
