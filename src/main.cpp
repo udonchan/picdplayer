@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
     bool probe_only_options = false, audio_option = false;
     int cdda_track = 1, cdda_frames = 75, cdda_retries = 0;
     bool cdda_options = false;
+    bool direct_c2_pointers = false;
     std::string media_device;
     std::string toc_device;
     std::string drive_start_device;
@@ -139,6 +140,7 @@ int main(int argc, char** argv) {
             cdda_options = true;
         }
         else if (arg == "--cdda-reader" && i + 1 < argc) { backend_name = argv[++i]; cdda_options = true; }
+        else if (arg == "--direct-c2-pointers") { direct_c2_pointers = true; cdda_options = true; }
         else if ((arg == "--track" || arg == "--frames" || arg == "--direct-retries") && i + 1 < argc) {
             probe_only_options = true;
             const std::string_view value(argv[++i]);
@@ -242,6 +244,9 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
+    if (direct_c2_pointers && backend != CddaBackend::direct) {
+        std::cerr << "--direct-c2-pointers requires --cdda-reader direct\n"; return 2;
+    }
     try {
 #ifdef ENABLE_METADATA
         MetadataOptions metadata_options{
@@ -267,7 +272,7 @@ int main(int argc, char** argv) {
                                cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
                                metadata_cache, api_listen, api_port, buffer_config,
-                               read_policy, custom_ui, drive_speed_x);
+                               read_policy, custom_ui, drive_speed_x, direct_c2_pointers);
             return 0;
         }
         if (!cdda_device.empty()) {

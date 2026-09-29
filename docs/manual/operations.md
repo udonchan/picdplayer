@@ -31,6 +31,20 @@
   --read-verification repeat
 ```
 
+### C2 error pointerの明示的な確認
+
+`--direct-c2-pointers`はdirect readerだけで使う実験的な明示opt-inである。起動後のdrive probeが`c2_supported=YES`と報告した場合だけMMC `READ CD`でC2 error pointerを要求する。`NO`なら通常readを続けつつ`c2_status=NOT_AVAILABLE`、probe未完了・UNKNOWN・flag未指定なら`NOT_CHECKED`である。packetが失敗した区間は通常readへfallbackし、`UNKNOWN`として表示する。
+
+C2 pointerが全てzeroでも、C2 trust、原盤一致、bit-perfect、disc全体の正常を保証しない。まず通常CDで短時間確認し、傷discや別driveの評価は#146で扱う。systemd標準設定にはこのflagを入れない。
+
+```sh
+sudo systemctl stop picdplayer-kiosk.service picdplayer.service
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct --direct-c2-pointers \
+  --audio-device plughw:CARD=vc4hdmi,DEV=0 --api-port 8080 --no-cec
+```
+
+`GET /api/state`の`read.latest.c2_status`を確認し、確認後は手動daemonを終了してからsystemd serviceを再開する。
+
 ### 任意のドライブ速度要求
 
 `--drive-speed-x`はLinux `CDROM_SELECT_SPEED`へCD倍速を一度だけ要求する診断的な設定である。
