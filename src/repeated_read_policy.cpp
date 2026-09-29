@@ -41,3 +41,44 @@ std::string read_policy_strategy(const ReadPolicy& policy, CddaBackend backend) 
     return std::string(base) + "+repeat-" + std::to_string(policy.required_matches) + "of" +
            std::to_string(policy.maximum_attempts);
 }
+
+namespace {
+std::string c2_strategy(const ReadPolicy& policy) {
+    if (policy.mode == ReadVerificationMode::single) return "direct-c2-pointers-single-read";
+    return "direct-c2-pointers+repeat-" + std::to_string(policy.required_matches) + "of" +
+           std::to_string(policy.maximum_attempts);
+}
+}
+
+ReadStrategySelection select_read_strategy(const ReadPolicy& policy, CddaBackend backend,
+                                           bool request_c2_pointers, bool probe_complete,
+                                           Knowledge c2_supported) {
+    const auto fallback = read_policy_strategy(policy, backend);
+    if (!request_c2_pointers) return {fallback, fallback};
+
+    const auto requested = backend == CddaBackend::direct ? c2_strategy(policy) : fallback;
+    if (backend != CddaBackend::direct)
+        return {requested, fallback, ReadStrategyDowngrade::c2_backend_unsupported};
+    if (!probe_complete)
+        return {requested, fallback, ReadStrategyDowngrade::c2_probe_pending, true};
+    switch (c2_supported) {
+    case Knowledge::yes: return {requested, requested};
+    case Knowledge::no: return {requested, fallback, ReadStrategyDowngrade::c2_unsupported};
+    case Knowledge::unknown:
+        return {requested, fallback, ReadStrategyDowngrade::c2_capability_unknown};
+    }
+    return {requested, fallback, ReadStrategyDowngrade::c2_capability_unknown};
+}
+
+const char* read_strategy_downgrade_name(ReadStrategyDowngrade downgrade) {
+    switch (downgrade) {
+    case ReadStrategyDowngrade::none: return "NONE";
+    case ReadStrategyDowngrade::policy_restart_required: return "POLICY_RESTART_REQUIRED";
+    case ReadStrategyDowngrade::c2_probe_pending: return "C2_PROBE_PENDING";
+    case ReadStrategyDowngrade::c2_capability_unknown: return "C2_CAPABILITY_UNKNOWN";
+    case ReadStrategyDowngrade::c2_unsupported: return "C2_UNSUPPORTED";
+    case ReadStrategyDowngrade::c2_backend_unsupported: return "C2_BACKEND_UNSUPPORTED";
+    case ReadStrategyDowngrade::c2_stream_restart_required: return "C2_STREAM_RESTART_REQUIRED";
+    }
+    return "NONE";
+}

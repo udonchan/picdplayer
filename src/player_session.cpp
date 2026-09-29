@@ -126,6 +126,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
     auto reader_policy_mutex = std::make_shared<std::mutex>();
     auto direct_options = std::make_shared<DirectOptions>();
     auto direct_options_mutex = std::make_shared<std::mutex>();
+    DriveCapabilities drive_capabilities;
+    drive_capabilities.device = device;
+    bool drive_probe_complete = false;
+    auto applied_strategy = select_read_strategy(initial_read_policy, backend, direct_c2_pointers,
+                                                 drive_probe_complete,
+                                                 drive_capabilities.c2_supported.value);
     auto reader_factory = [=] {
                          ReadPolicy policy;
                          { std::lock_guard lock(*reader_policy_mutex); policy = *reader_policy; }
@@ -138,7 +144,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                      };
     const auto initial_block_frames = initial_read_policy.mode == ReadVerificationMode::repeat
         ? initial_read_policy.region_frames : pcm_block_cd_frames;
-    PcmWorker worker(std::move(reader_factory), read_policy_strategy(initial_read_policy, backend),
+    PcmWorker worker(std::move(reader_factory), applied_strategy.effective,
                      buffer_config, drive_access,
                      initial_read_policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
                      initial_block_frames);
@@ -172,7 +178,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
             std::lock_guard lock(*reader_policy_mutex);
             *reader_policy = policy;
         }
-        worker.reconfigure(read_policy_strategy(policy, backend),
+        applied_strategy = select_read_strategy(policy, backend, direct_c2_pointers,
+                                                drive_probe_complete,
+                                                drive_capabilities.c2_supported.value);
+        worker.reconfigure(applied_strategy.effective,
                            policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
                            block_frames);
         effective_read_policy = policy;
@@ -181,7 +190,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
         log_info("read_policy") << "applied mode=" << read_verification_mode_name(policy.mode)
                                 << " region_frames=" << policy.region_frames
                                 << " matches=" << policy.required_matches << '/' << policy.maximum_attempts
-                                << " budget_ms=" << policy.time_budget_ms;
+                                << " budget_ms=" << policy.time_budget_ms
+                                << " strategy=" << applied_strategy.effective
+                                << " downgrade=" << read_strategy_downgrade_name(
+                                       applied_strategy.downgrade);
     };
     struct StopOnExit {
         PlayerController& controller; PcmWorker& worker; AudioOutput& output;
@@ -196,7 +208,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                        << " alsa_latency_ms=" << audio_latency_ms
                        << " buffer_frames=" << buffer_config.capacity_cd_frames
                        << " startup_frames=" << buffer_config.startup_cd_frames
-                       << " verification=" << read_policy_strategy(initial_read_policy, backend)
+                       << " verification=" << applied_strategy.effective
                        << " requested_drive_speed_x="
                        << (configured_drive_speed_x ? std::to_string(*configured_drive_speed_x) : "default")
                        << " stdin_commands=" << (interactive ? "enabled" : "disabled");
@@ -204,8 +216,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
         log_info("player") << "Commands: play pause stop next previous track N seek SECONDS state quit";
     print_state(controller);
     MediaStateTracker media_state;
-    DriveCapabilities drive_capabilities;
-    drive_capabilities.device = device;
     (void)media_worker.request(MediaWork::probe_drive);
     std::optional<DiscToc> loaded_toc;
     std::uint64_t disc_generation = 0;
@@ -244,6 +254,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
         read.requested_policy = requested_read_policy;
         read.effective_policy = effective_read_policy;
         read.policy_pending = read_policy_pending;
+        read.requested_strategy = applied_strategy.requested;
+        read.strategy_downgrade = applied_strategy.downgrade;
+        read.strategy_pending = applied_strategy.pending;
         bool has_cover_asset = false;
 #ifdef ENABLE_METADATA
         if (metadata_enabled) has_cover_asset = enrichment.has_cover_asset();
@@ -305,6 +318,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         controller.state().playback == PlaybackState::no_disc) {
                         apply_read_policy(requested_read_policy);
                     } else {
+                        const auto selected = select_read_strategy(
+                            requested_read_policy, backend, direct_c2_pointers,
+                            drive_probe_complete, drive_capabilities.c2_supported.value);
+                        applied_strategy.requested = selected.requested;
+                        applied_strategy.downgrade =
+                            ReadStrategyDowngrade::policy_restart_required;
+                        applied_strategy.pending = true;
                         read_policy_pending = true;
                         log_info("read_policy") << "pending mode="
                                                 << read_verification_mode_name(requested_read_policy.mode);
@@ -487,6 +507,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             if (media_result.work == MediaWork::probe_drive) {
                 if (media_result.drive) {
                     drive_capabilities = std::move(*media_result.drive);
+                    drive_probe_complete = true;
                     if (direct_c2_pointers && backend == CddaBackend::direct) {
                         std::lock_guard lock(*direct_options_mutex);
                         direct_options->request_c2_pointers = drive_capabilities.c2_supported.value == Knowledge::yes;
@@ -495,6 +516,24 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         log_info("drive") << "c2_pointers=requested effective="
                                           << (direct_options->request_c2_pointers ? "YES" : "NO")
                                           << " support=" << knowledge_name(drive_capabilities.c2_supported.value);
+                    }
+                    const auto selected = select_read_strategy(
+                        requested_read_policy, backend, direct_c2_pointers, drive_probe_complete,
+                        drive_capabilities.c2_supported.value);
+                    if (controller.state().playback == PlaybackState::stopped ||
+                        controller.state().playback == PlaybackState::no_disc) {
+                        apply_read_policy(requested_read_policy);
+                    } else if (selected.effective != applied_strategy.effective) {
+                        // The reader owns an immutable stream configuration. The newly
+                        // probed C2 choice becomes effective only after a stopped boundary.
+                        applied_strategy.requested = selected.requested;
+                        applied_strategy.downgrade =
+                            ReadStrategyDowngrade::c2_stream_restart_required;
+                        applied_strategy.pending = true;
+                    } else {
+                        applied_strategy.requested = selected.requested;
+                        applied_strategy.downgrade = selected.downgrade;
+                        applied_strategy.pending = selected.pending;
                     }
                     log_info("drive") << "capabilities speed_control="
                                       << knowledge_name(drive_capabilities.speed_control.value)

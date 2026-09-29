@@ -93,7 +93,9 @@ kernelがspeed制御対応と報告したことは、速度変更成功や実測
 | session_id | string | daemon API起動時に生成する不透明ID。時間やdevice IDではない |
 | stream_generation, policy_revision | uint | workerのstream、方針世代。下記参照 |
 | activity | string | IDLE / READING / BUFFERING / COMPLETE / FAILED |
-| requested_mode, effective_strategy | string | backend構成の要求/実効識別文字列。固定enumとして推測しない |
+| requested_mode | string | 現行はLEGACY。将来のPlaybackMode用の要求識別子で、backendやstrategyではない |
+| effective_strategy | string | 現在のreaderへ適用済みのstrategy識別文字列。`strategy.effective`と同じ互換field |
+| strategy | object | requested/effective strategy、downgrade_reason、pending。下記参照 |
 | queued_blocks | uint | workerの待機PCM block数。可聴buffer秒数ではない |
 | buffer_capacity_frames, startup_buffer_frames, read_block_frames, prebuffer_target_frames | uint | 容量・開始閾値・read量・実効prebuffer閾値のCD frame数。充填frame数ではない |
 | last_prebuffer_wait_ms | int? | 直近prebuffer待ち時間ms |
@@ -106,6 +108,19 @@ kernelがspeed制御対応と報告したことは、速度変更成功や実測
 policy.requested/effectiveのfieldはmode（SINGLE/REPEAT）、region_frames、required_matches、
 maximum_attempts、time_budget_ms（いずれもuint）。pendingは要求が実効方針に未反映であることを示す。
 POSTの検証範囲・適用境界は機能設計を参照する。requested_modeとは別の概念である。
+
+`strategy.requested`はoperatorが要求したreader構成、`strategy.effective`は現在streamへ適用済みの
+構成である。reader構成はstream途中で変更しない。`pending=true`はprobeまたはpolicy変更による要求が
+次のSTOPPED境界まで実効readerへ反映されないことを示す。`downgrade_reason`は`NONE`、
+`POLICY_RESTART_REQUIRED`、`C2_PROBE_PENDING`、`C2_CAPABILITY_UNKNOWN`、`C2_UNSUPPORTED`、
+`C2_BACKEND_UNSUPPORTED`、`C2_STREAM_RESTART_REQUIRED`のいずれかである。これはoptionalな
+mechanismを選択できなかった理由であり、PCM品質・C2 trust・bit-perfect性の評価ではない。
+
+`--direct-c2-pointers`を要求したdirect backendでは、probe完了前は通常direct readを
+`C2_PROBE_PENDING`として使用する。support=YESなら次に生成するreaderでC2 pointer readを有効にする。
+support=NOは`C2_UNSUPPORTED`、UNKNOWNは`C2_CAPABILITY_UNKNOWN`で通常readを維持する。probe結果が
+PLAYING/PAUSED中に届いた場合、既存readerは切り替えず`C2_STREAM_RESTART_REQUIRED`としてSTOPPED後に
+適用する。C2が実際に取得されなかった理由は各readの`c2_status`であり、strategy理由と混同しない。
 
 block容量はworkerと同じく`floor(buffer_capacity_frames / read_block_frames)`。
 正のread量と非負の容量を検証して算出し、欠損/不正値では未取得表示にする。
