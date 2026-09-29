@@ -27,7 +27,7 @@ ioctl受理と物理停止を同じ保証として扱わない。
 同じrunで`POST /api/eject`は202を返し、約1秒後に`NO_DISC`へ遷移した。CD再挿入後は
 `AUDIO_READY → STOPPED`、14 tracks、track 1へ復帰した。daemon/kioskは全工程でactiveだった。
 この確認は通常CD、direct reader、短時間の再生復帰に限る。pause、unsupported/error、長時間STOPPED、
-drive/USB bridgeごとの差異は未確認である。
+drive/USB bridgeごとの差異は、物理媒体・drive横断の後続検証 #146 で扱う。
 
 ## Metadata JSON入力境界（#38、Docker自動試験）
 
@@ -376,8 +376,8 @@ reinstall後も`install ok installed`であること、purge後に現行package�
 維持された。その後、正常artifactを同scriptで再deployし、両serviceとAPIが復帰した。
 
 これは同版reinstallと展開前失敗からの復旧だけを確認する。異version upgrade、展開後またはmaintainer script途中の
-失敗、power loss、package removeをPiで実行したものではない。実機でのこれらの破壊的条件は、release運用を決める
-前に必要性と安全な手順を判断する。
+失敗、power loss、package removeをPiで実行したものではない。これらの破壊的条件は、安全に隔離した実機で行う
+後続検証 #147 へ移管する。
 
 ## 実機確認済み
 
