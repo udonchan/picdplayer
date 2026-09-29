@@ -19,6 +19,9 @@ void PlaybackEngine::reset_prebuffer_target() {
 void PlaybackEngine::synchronize() {
     last_tick_ = std::chrono::steady_clock::now();
     active_ = false;
+    // A deliberate Play/Seek/Pause transition starts a new recovery budget.
+    // 意図した再生世代の切替ではXRUN復帰回数を持ち越さない。
+    underrun_recoveries_ = 0;
     worker_.cancel();
     output_.reset();
     block_ = {}; offset_ = 0; submitted_ = 0; primed_ = false; draining_ = false;
@@ -100,6 +103,11 @@ void PlaybackEngine::tick() {
             // 終端では再読せずエラー停止し、通常のdrain成功とは区別する。
             if (draining_ || submitted_ >= (static_cast<std::int64_t>(end_) - start_) * 588)
                 throw;
+            if (underrun_recoveries_ >= maximum_underrun_recoveries) {
+                log_warning("player") << "underrun recovery_limit_exhausted limit="
+                                      << maximum_underrun_recoveries;
+                throw;
+            }
             // At XRUN ALSA has consumed everything it accepted. Resume at the
             // last whole CD frame submitted, avoiding a large audible repeat.
             const auto resume = static_cast<std::int32_t>(std::min<std::int64_t>(

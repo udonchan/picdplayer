@@ -29,6 +29,23 @@ ioctl受理と物理停止を同じ保証として扱わない。
 この確認は通常CD、direct reader、短時間の再生復帰に限る。pause、unsupported/error、長時間STOPPED、
 drive/USB bridgeごとの差異は、物理媒体・drive横断の後続検証 #146 で扱う。
 
+## Bounded ALSA underrun recovery（#34、Docker自動試験）
+
+同一streamでのALSA XRUN復帰を最大3回に制限した。各復帰では最後にALSAへ提出したCD frame境界から
+readerを再生成し、prebuffer targetを容量上限まで増やす。4回目のXRUNでは
+`underrun recovery_limit_exhausted limit=3`を記録してerror停止し、reader再生成を続けない。
+play、seek、pauseなど意図したstream切替は回数をリセットする。これはread retry、read error、
+Integrityの`RECOVERED`とは別の出力経路である。
+
+Docker Debian Trixie/aarch64で`playback_engine_test`を含むCTest 44件を実行し、3回の復帰、
+4回目の停止、既存の終端underrun停止を確認した。Piで意図的にXRUNを起こす確認、傷disc/長いread stall、
+read error後の復旧方針、buffering UIは未実施であり、#146および#34の残作業として扱う。
+
+同packageをPiへdeployして通常再生を開始したが、約3.45秒後に`usb 1-1-port2: over-current change`、
+ASUS USB driveのdisconnect/reset、`CDDA read failed ... errno=5`を同時に観測した。これはALSA underrun
+復帰に到達する前のphysical device resetであり、通常再生の成功や本変更の失敗を示すものではない。再enumeration後は
+`AUDIO_READY → STOPPED`へ戻った。根拠とphysical lifecycleの追跡は#88に記録し、連続再生による再現試験は行っていない。
+
 ## Metadata JSON入力境界（#38、Docker自動試験）
 
 MusicBrainzとCover Art ArchiveのJSON本文は既存の2 MiB/512 KiB HTTP受信上限に加え、parser callbackで
@@ -716,7 +733,8 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
   API snapshot処理の遅延に伴うunderrunと自動復旧は上記で一度観測した。
   傷disc・USB障害・長時間read stallによる復旧経路の実機確認は未完了。
 - direct/paranoiaの採用、性能、CPU負荷、startup/seek latencyは実測後に判断する。
-- pause再開の待ち時間、buffering表示、復旧回数上限を検討する。
+- pause再開の待ち時間とbuffering表示、傷disc/長いread stall時の復旧方針を検討する。同一streamの
+  ALSA underrun復帰上限は3回としてDocker自動試験済みだが、実機異常系は#146で未確認である。
 - mediaとPCMのdevice access直列化は実装済み。挿抜を含む実機回帰確認を継続する。
 - 同じTOCの別disc識別を検討する。LOADING後に同じTOCへ戻った場合のmetadata再要求は実装・確認済み。
 - 現在の独自AsyncLoggerは要件を満たしている。spdlog等との比較、Buildroot package化、binary size、

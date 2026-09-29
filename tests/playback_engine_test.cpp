@@ -497,6 +497,28 @@ int main() {
         wait_for([&] { return w.status().done; });
         engine.tick(); engine.tick(); engine.tick();
         check(readers_created == 3 && c.state().playback == PlaybackState::stopped);
+        // A repeated XRUN may restart a bounded number of times, then fails
+        // closed rather than keeping the drive and ALSA recovery loop alive.
+        {
+            PcmWorker bounded_worker([] { return std::make_unique<FakeReader>(); });
+            PlayerController bounded_controller;
+            bounded_controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 300));
+            FakeOutput bounded_output;
+            PlaybackEngine bounded_engine(bounded_controller, bounded_worker, bounded_output, 300);
+            bounded_controller.play(); bounded_engine.synchronize();
+            for (unsigned recovery = 0; recovery < maximum_underrun_recoveries; ++recovery) {
+                wait_for([&] { return bounded_worker.status().done; });
+                bounded_output.underrun_delay = true;
+                bounded_engine.tick();
+                bounded_output.underrun_delay = false;
+                check(bounded_controller.state().playback == PlaybackState::playing);
+            }
+            wait_for([&] { return bounded_worker.status().done; });
+            bounded_output.underrun_delay = true;
+            bool exhausted = false;
+            try { bounded_engine.tick(); } catch (const AudioUnderrun&) { exhausted = true; }
+            check(exhausted && bounded_controller.state().playback == PlaybackState::stopped);
+        }
         std::cout << "PASS: generation cancellation, bounded queue, partial writes, position, pause, finish, error\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }
