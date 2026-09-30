@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-09-30。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-01。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -45,6 +45,18 @@ CDPで照合した。長押し、異なるTV/remote、長期負荷・温度へ�
 DockerのLinux/aarch64で`ENABLE_API=OFF`もビルドできた。STOPPED画面の20秒・4 sampleの読み取り
 計測では全core CPU平均1.70%、最大2.18%、温度56.9〜58.0°C、現在throttling bitは全sampleで0だった。
 短時間かつ過去の基線と同条件ではないため、負荷回帰がないという保証には使わない。
+
+## 複数metadata候補の選択経路（#15、Docker自動試験）
+
+同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。作業branchでは
+`enrichment.selection`へ表示用候補とsession/disc/metadata世代を載せ、loopback限定の選択POSTで
+現行discの候補だけを適用する。選択後のcover artは別workerで取得し、世代またはrelease IDが変わった結果を
+適用しない。再挿入時の自動再選択は行わない。
+
+Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。候補選択・古い世代と画像結果の拒否、
+provider固有IDを公開しないPresentation Model、API入力境界を確認した。標準PlayerのCEC候補picker、
+実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
+#15の実機・統合確認として残る。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 

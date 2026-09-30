@@ -102,6 +102,8 @@ MetadataResult parse_musicbrainz_response(std::string_view input, std::string_vi
             for (std::size_t i = 0; i < value.tracks.size(); ++i)
                 if (value.tracks[i].track_number != static_cast<int>(i + 1))
                     throw std::runtime_error("track positions are not consecutive");
+            if (result.candidates.size() >= 100)
+                throw std::runtime_error("MusicBrainz response has too many matching media");
             result.candidates.push_back({std::move(value)});
         }
     }

@@ -55,8 +55,11 @@ Custom HTML内の参照は`/player.css`、`/player.js`、`/player/assets/...`の
 `/player`には末尾slashがないので相対URLの解釈に注意する。API/WebSocketの契約は従来どおり
 `/api/state`と`/api/events`である。API version 1はこのUI互換性の契約であり、URLにversionは付けない。
 `/api/state`と`/api/events`はprovider非依存のPresentation Modelを返す。曲名・artist・track長・
-enrichment status・same-origin artwork referenceだけを表示契約とし、MusicBrainz ID、CAA URL、
-候補index、cache pathには依存してはならない。coverがある場合の`artwork.cover.url`は
+enrichment status・same-origin artwork referenceを基本表示契約とし、MusicBrainz ID、CAA URL、
+cache pathには依存してはならない。候補選択を実装するUIは`enrichment.selection`の0起点indexと
+session/disc/metadata世代を`POST /api/metadata-selection`へ渡せる。候補のprovider IDは公開されない。
+選択UIは任意であり、実装しないCustom UIでも曖昧時のAudio CD fallbackで再生できる。
+CEC navigationへの対応も必須ではない。coverがある場合の`artwork.cover.url`は
 `/api/presentation/artwork/cover`である。CSPは外部script/style/image/provider接続を許可しない。
 将来、破壊的API変更時にはrequires_apiとの対応を更新する。
 
