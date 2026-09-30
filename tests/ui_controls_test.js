@@ -14,6 +14,7 @@ async function main() {
   let failPost = false;
   let now = 1000;
   const keys = {};
+  const timers = [];
   const snapshot = {
     schema_version: 1, revision: 1,
     player: { state: 'STOPPED', track_number: 1, position_frames: 0, track_duration_frames: 4500 },
@@ -55,7 +56,7 @@ async function main() {
       return { ok: true, status: 204, json: async () => ({}) };
     },
     WebSocket: class { constructor(url) { this.url = url; sockets.push(this); } close() { this.onclose?.(); } },
-    requestAnimationFrame() {}, setTimeout() { return 1; }, clearTimeout() {},
+    requestAnimationFrame() {}, setTimeout(fn) { timers.push(fn); return timers.length; }, clearTimeout() {},
   });
   for (let i = 0; i < 12; i++) await Promise.resolve();
   assert.equal(sockets.length, 2);
@@ -123,6 +124,17 @@ async function main() {
   snapshot.player.state = 'UNKNOWN';
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert(controls.every((button) => button.disabled));
+  snapshot.revision = 5;
+  snapshot.player.state = 'STOPPED';
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  now += 300;
+  sockets[1].onclose();
+  timers.at(-1)(); // navigation reconnect delay
+  assert.equal(sockets.length, 3);
+  sockets[2].onmessage({ data: JSON.stringify({ action: 'right' }) });
+  assert.equal(controls[0].dataset.focused, 'true');
+  sockets[1].onmessage({ data: JSON.stringify({ action: 'right' }) });
+  assert.equal(controls[0].dataset.focused, 'true'); // stale socket is ignored
   console.log('PASS: CEC/keyboard focus, command POST, authoritative state and No Disc');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

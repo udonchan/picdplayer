@@ -29,6 +29,7 @@ Linux/aarch64 DockerでCEC code変換、長押し/解放filter、API WebSocket�
 標準Playerに5つのtransport buttonを追加し、CECのsemantic navigationとkeyboardでfocusを移す。
 状態snapshotからbuttonの可否を計算し、POST受理だけでは再生状態を確定しない。
 NodeのUIテストではfocus、204/409、通信失敗、NO_DISCでの無効化を確認する。
+navigation WebSocket切断後の再接続と、古い接続からの遅延入力を無視することもNodeで確認した。
 MacのChrome headlessによる[1920×1080静的fixture](reports/2026-09-30-cec-controls/README.md)では
 5操作とIntegrity Monitor全体が画面内に見える。PiでTVリモコンからPlayを選んで決定すると、
 CDPに`REQUEST ACCEPTED`、APIに`PLAYING`が現れ、ユーザーがTVの音声を確認した。PauseもTV表示とAPIの
