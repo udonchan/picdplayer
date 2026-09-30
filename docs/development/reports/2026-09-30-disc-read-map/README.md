@@ -17,3 +17,17 @@ Pi kiosk ChromiumのCDPから取得した1920×1080画像と、Macのheadless Ch
 初回の実画面確認で、点のLBA角度は12時起点だが、観測色のCSS角度が9時起点という不一致を発見した。両方を12時起点へ合わせ、再デプロイ後の画像で点と観測色の方向一致を確認した。実機で確認したのは通常CDのみで、mixed異常状態はtest-only fixtureの自動試験とMac Chrome描画で確認した。
 
 Docker Desktopでharnessがcontainer loopbackだけにbindするため、文書の`docker run -p`だけではMac Chromeから到達しなかった。この撮影ではcontainer内に一時的なPython TCP relayを立て、host loopbackの公開portをharness loopbackへ転送した。relayはrepository・package・Piには含めていない。既存のmanual起動例は別途修正が必要である。
+
+## 右列の視覚階層を再調整
+
+基本の2カラム、Read observationの測定card、円盤215pxは維持した。Drive capabilityはCDPで[弱い枠](prototype-drive-weak-1920x1080.png)と[枠なし](prototype-drive-cardless-1920x1080.png)を試し、弱い枠では補助情報の四角い容器が残るため、透明な枠・背景を採用した。枠幅とpaddingを残して配置寸法を変えず、項目は見出しと整列でまとめる。両試作はPi CDP上でCSSを一時的に変更して撮影し、元へ戻した。以下のbefore/afterは通常再生中の別時点であり、read品質の比較には使わない。
+
+| 変更前・Pi通常再生 | 変更後・Pi通常再生 |
+|---|---|
+| ![Before](two-column-final-playing-1920x1080.png) | ![After](hierarchy-after-playing-1920x1080.png) |
+
+[変更後・STOPPED](hierarchy-after-stopped-1920x1080.png)と[test-only mixed fixture](hierarchy-after-mixed-1920x1080.png)も撮影した。後者はMac Chromeで同じ標準Playerを描画したもので、実ディスクの傷やhardware挙動の証拠ではない。Pi側では通常CDを短時間再生して撮影後にSTOPPEDへ戻した。
+
+latest observed readの位置を示す点は同色の記号とLBAを円盤の隣に表示し、領域色の凡例から分離した。`MAY BE AHEAD`を維持し、円盤脇の説明を「観測済みreadの根拠でありdisc全体の正しさではない」へ短縮した。TOC LBAの12時起点投影や物理headとの区別は`docs/design/functional-design.md`と`docs/manual/custom-ui.md`へ残す。手動のRefresh mapはSTOPPED時にも強制再取得できるため維持し、二次操作として色・枠を弱めた。
+
+変更後のPi CDP実寸は1920×1080でdocumentのscroll寸法も1920×1080。1280、700、450px幅で横overflowはなく、700px以下は1列へ縮退した。mixed fixtureも1920×1080でscroll寸法一致。UIでは表示色が観測分類の簡略表示である点を維持しており、disc-wide correctnessや物理head位置を推定していない。

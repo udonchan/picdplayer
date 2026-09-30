@@ -264,7 +264,12 @@ main {
 }
 
 .evidence-card { grid-area: evidence; }
-.drive-card { grid-area: drive; padding: 10px 12px; }
+.drive-card {
+  grid-area: drive;
+  padding: 10px 12px;
+  border-color: transparent;
+  background: transparent;
+}
 .drive-card .metrics.compact { gap: 4px 10px; }
 .drive-card .drive-name { margin: 6px 0; }
 .drive-card .integrity-note { margin-top: 6px; }
@@ -313,14 +318,17 @@ main {
 
 #refresh-read-map {
   flex: none;
-  padding: 6px 9px;
-  border: 1px solid var(--line);
+  padding: 2px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
-  color: var(--text);
+  color: var(--muted);
   font: inherit;
-  font-size: 12px;
+  font-size: 10px;
+  letter-spacing: .04em;
 }
+#refresh-read-map:hover, #refresh-read-map:focus-visible { color: var(--text); }
 
 .map-scene {
   grid-area: map;
@@ -340,6 +348,15 @@ main {
 
 .disc-visual .disc-map { width: min(100%, 215px); margin: 0; }
 .disc-caption { margin: 8px 0 0; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.disc-caption[data-marker="available"]::before {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: #d7e9ff;
+  content: '';
+}
 .map-readout { min-width: 0; }
 .map-readout .map-heading { gap: 8px; }
 .map-readout .map-heading h3 { font-size: 23px; }
@@ -376,7 +393,6 @@ main {
 }
 
 .map-marker.latest { background: #d7e9ff; }
-.legend.latest { color: #d7e9ff; }
 .map-legend { display: flex; flex-wrap: wrap; gap: 5px 10px; margin: 0; color: var(--muted); font-size: 10px; }
 .legend::before { display: inline-block; width: 9px; height: 9px; margin-right: 4px; content: ''; background: currentColor; }
 .legend.clean { color: var(--clean); }.legend.retry { color: var(--retry); }.legend.warning { color: var(--warning); }

@@ -62,10 +62,10 @@
           </figure>
           <section class="map-readout" aria-label="Disc read map details">
             <div class="map-heading"><div><h3>Disc read map</h3><p id="read-map-state">Waiting for an accepted disc layout</p></div><button id="refresh-read-map" type="button">Refresh map</button></div>
-            <p id="map-marker-label" class="disc-caption">LATEST READ · NOT AVAILABLE</p>
+            <p id="map-marker-label" class="disc-caption" data-marker="unavailable">LATEST OBSERVED READ · NOT AVAILABLE</p>
             <div class="map-details">
-              <p class="map-legend"><span class="legend clean">Observed clean</span><span class="legend retry">Retry / repeat</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain / anomaly</span><span class="legend unobserved">Unobserved</span><span class="legend latest">Latest observed read (may be ahead)</span></p>
-              <p class="integrity-note">Colors classify recorded observations, not disc-wide correctness. Angles project TOC LBA from 12 o'clock; the dot marks latest observed read, not the physical head.</p>
+              <p class="map-legend"><span class="legend clean">Observed clean</span><span class="legend retry">Retry / repeat</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain / anomaly</span><span class="legend unobserved">Unobserved</span></p>
+              <p class="integrity-note">Observed read evidence, not disc-wide correctness.</p>
             </div>
           </section>
         </div>

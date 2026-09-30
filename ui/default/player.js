@@ -271,7 +271,9 @@ function renderDiscMap(snapshot) {
     setStyle(map, 'background', '#202729');
     renderedMapIdentity = null;
     setMarker('map-latest', null, null);
-    set('map-marker-label', 'LATEST READ · NOT AVAILABLE');
+    if (byId('map-marker-label').dataset.marker !== 'unavailable')
+      byId('map-marker-label').dataset.marker = 'unavailable';
+    set('map-marker-label', 'LATEST OBSERVED READ · NOT AVAILABLE');
     return;
   }
   if (!discMap || discMap.key !== key) {
@@ -307,8 +309,11 @@ function renderDiscMap(snapshot) {
   }
   const latest = snapshot?.read?.latest;
   const hasLatest = setMarker('map-latest', layout, latest);
-  set('map-marker-label', hasLatest ? `LATEST READ · LBA ${latest.start_lba} · MAY BE AHEAD`
-    : 'LATEST READ · NOT AVAILABLE');
+  const markerState = hasLatest ? 'available' : 'unavailable';
+  if (byId('map-marker-label').dataset.marker !== markerState)
+    byId('map-marker-label').dataset.marker = markerState;
+  set('map-marker-label', hasLatest ? `LATEST OBSERVED READ · LBA ${latest.start_lba} · MAY BE AHEAD`
+    : 'LATEST OBSERVED READ · NOT AVAILABLE');
 }
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
