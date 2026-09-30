@@ -14,6 +14,7 @@ int main() {
         check(media.observe(MediaObservation::not_ready) == MediaLifecycleState::loading);
         check(media.observe(MediaObservation::unknown) == MediaLifecycleState::loading);
         check(media.observe(MediaObservation::audio_disc) == MediaLifecycleState::audio_ready);
+        check(!media.take_audio_insertion()); // Already inserted at daemon startup.
         media.begin_eject();
         check(media.state() == MediaLifecycleState::ejecting && media.error().empty());
         media.eject_failed("tray jammed");
@@ -25,10 +26,15 @@ int main() {
         check(media.error().empty());
         check(media.observe(MediaObservation::not_ready) == MediaLifecycleState::loading);
         check(media.observe(MediaObservation::audio_disc) == MediaLifecycleState::audio_ready);
+        check(media.take_audio_insertion());
+        check(!media.take_audio_insertion()); // TOC refresh is not another insertion.
         check(media.observe(MediaObservation::no_disc) == MediaLifecycleState::no_disc);
         check(media.observe(MediaObservation::unsupported_disc) == MediaLifecycleState::unsupported);
+        check(!media.take_audio_insertion());
         check(media.observe(MediaObservation::tray_open) == MediaLifecycleState::no_disc);
         check(media.observe(MediaObservation::tray_open) == MediaLifecycleState::no_disc);
+        check(media.observe(MediaObservation::audio_disc) == MediaLifecycleState::audio_ready);
+        check(media.take_audio_insertion());
         std::cout << "PASS: media lifecycle observations\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

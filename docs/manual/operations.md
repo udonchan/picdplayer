@@ -123,6 +123,10 @@ memory使用量が増える。開始閾値を増やすとplay・seek後の待ち
 player modeではAudio CDのTOC取得後、STOPPEDが5分連続した場合にLinux `CDROMSTOP`を一回だけ
 background要求する。PLAYING、disc未準備、LOADING、eject中には要求しない。成功時はINFO levelで次を記録する。
 
+サービス稼働中に明示的なdisc不在またはejectを経てAudio CDを挿入すると、TOC受理後に先頭trackから
+自動再生する。metadata候補が複数でも選択を待たない。daemon起動時に既に入っていたCDは自動再生せず、
+STOPPEDでPlay操作を待つ。STOP後のmedia pollやmetadata更新では再生を再開しない。
+
 ```text
 INFO drive: stop_command=accepted elapsed_ms=... rotation=UNVERIFIED
 ```
@@ -177,7 +181,8 @@ http://PI_ADDRESS:8080/player
 AVAILABLEの場合に表示する。metadataを有効にするには起動時に`--metadata musicbrainz`と必要なら
 `--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
 再生位置は表示できる。daemonが取得・cacheした画像をsame-originの`/api/presentation/artwork/cover`から読み、失敗時はCDの
-プレースホルダーを表示する。この画面は操作を送らない。任意のChromium/Cage kioskによる
+プレースホルダーを表示する。標準Playerはloopback APIで基本transport操作と曖昧metadata候補の選択を送れる。
+任意のChromium/Cage kioskによる
 tty1への自動表示は[systemd常駐運転](systemd.md#chromiumcage-kiosk)を参照する。
 
 `/debug/status`は以下のtechnical status画面であり、読み取り根拠やdrive能力を確認するために使う。

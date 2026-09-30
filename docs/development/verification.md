@@ -78,6 +78,20 @@ Mac headless Chromeの[1920×1080表示](reports/2026-10-01-metadata-picker/READ
 その後、曖昧候補の初回自動表示へ変更して再デプロイした。ユーザーはTVで`Choose album`を
 押さずにUS盤・JP盤の候補一覧が開くことと、Backで閉じた後に同じ候補群が勝手に再表示されないことを確認した。
 
+## Audio CD再挿入時の自動再生（#172、Pi確認）
+
+明示的なdisc不在/eject観測から新しいAudio CDのTOC受理へ進んだ場合だけ、自動でPlayを要求する。
+起動時にCDが既に入っている場合、metadata到着、同一TOCの再読込、STOP後のmedia pollでは再生を始めない。
+DockerのLinux/aarch64 buildとCTest 46件が通過し、media trackerの挿入根拠の一回消費を自動試験した。
+
+2026-10-01に#166を含むpackageをPiへ導入した。『The Slip』が入ったままdaemon PID `47033`へ
+再起動した直後は`AUDIO_READY / STOPPED`だった。loopback APIでejectし、ユーザーが同じCDを
+物理的に再挿入した。PID `47033`のままjournalに`auto_play=inserted_audio_disc disc_generation=2`、
+続けて`state=PLAYING track=1`と`metadata: status=LOADING`が記録された。APIは
+`PLAYING / AMBIGUOUS`を返し、ユーザーはTVで候補一覧の自動表示と実際の音声を確認した。
+選択前の音声再生が成立したため、metadata選択は再生開始条件ではない。最後にAPIのSTOPへ204が返り、
+その後も`STOPPED / AUDIO_READY`を確認した。異常媒体や別driveは未検証である。
+
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
 通常Audio CDを認識したPiで、従来のSTOPPED/PAUSED中15秒ごとの`CDROMSTART`要求を廃止した。
@@ -89,6 +103,7 @@ ioctl受理と物理停止を同じ保証として扱わない。
 停止要求後、loopback `POST /api/play`は204を返し、5秒後にtrack 1の`PLAYING`とposition進行を確認した。
 同じrunで`POST /api/eject`は202を返し、約1秒後に`NO_DISC`へ遷移した。CD再挿入後は
 `AUDIO_READY → STOPPED`、14 tracks、track 1へ復帰した。daemon/kioskは全工程でactiveだった。
+これは#172導入前の測定であり、現行の挿入後自動再生とは異なる。
 この確認は通常CD、direct reader、短時間の再生復帰に限る。pause、unsupported/error、長時間STOPPED、
 drive/USB bridgeごとの差異は、物理媒体・drive横断の後続検証 #146 で扱う。
 

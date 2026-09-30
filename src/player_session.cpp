@@ -617,6 +617,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     loaded_toc = *media_result.toc;
                     log_info("media") << "audio_disc tracks=" << loaded_toc->tracks.size()
                                       << " leadout_lba=" << loaded_toc->leadout_lba;
+                    if (media_state.take_audio_insertion()) {
+                        controller.play();
+                        engine.synchronize();
+                        log_info("media") << "auto_play=inserted_audio_disc disc_generation=" << disc_generation;
+                    }
                     print_state(controller);
                 }
                 // A newly accepted TOC starts a fresh stopped-idle interval.
