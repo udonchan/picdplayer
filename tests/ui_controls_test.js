@@ -12,6 +12,7 @@ async function main() {
   const posts = [];
   let postStatus = 204;
   let failPost = false;
+  let now = 1000;
   const keys = {};
   const snapshot = {
     schema_version: 1, revision: 1,
@@ -36,6 +37,7 @@ async function main() {
     return button;
   });
   vm.runInNewContext(source, {
+    Date: class extends Date { static now() { return now; } },
     performance: { now: () => 1 },
     document: {
       readyState: 'complete', getElementById: node,
@@ -62,6 +64,16 @@ async function main() {
   assert.equal(controls[1].disabled, false); // play
   assert.equal(controls[2].disabled, true); // pause
   const navigation = (action) => sockets[1].onmessage({ data: JSON.stringify({ action }) });
+  navigation('right');
+  keys.keydown({ key: 'ArrowRight', preventDefault() {} });
+  assert.equal(controls[0].dataset.focused, 'true'); // one TV press, two input paths
+  navigation('back');
+  now += 300;
+  keys.keydown({ key: 'ArrowRight', preventDefault() {} });
+  navigation('right');
+  assert.equal(controls[0].dataset.focused, 'true'); // reverse arrival order
+  navigation('back');
+  now += 300;
   navigation('right');
   assert.equal(controls[0].dataset.focused, 'true');
   navigation('right');

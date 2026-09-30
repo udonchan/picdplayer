@@ -68,6 +68,9 @@ navigationは選択状態や再生結果のsnapshotではない。Viewが状態�
 操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
 標準Playerはこのchannelで基本transport buttonのfocusを動かす参考実装である。
 Custom UIが同じfocus構造や操作UIを実装する義務はない。
+PiのCage/ChromiumではTVリモコンの同じ方向操作が、このchannelとbrowserの`keydown`の両方へ届くことを
+実機で確認した。両方を扱うViewは同じ押下を二重に反映しないようにする。これはChromium固有の
+key eventをCustom UIの必須契約にするものではなく、再生専用CECキーは引き続きdaemonが処理する。
 
 ## 検証とfallback
 

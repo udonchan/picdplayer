@@ -144,6 +144,20 @@ function handleNavigation(action) {
   else if (action === 'select') activateControl(controls[focusedControl]);
   else if (action === 'back') focusControl(-1);
 }
+// Some TVs deliver one CEC direction both through the daemon and as a Chromium key.
+// 同じリモコン操作がCECとChromiumのキー入力の両方へ届く場合、後着の一方だけを抑えます。
+let lastNavigationInput = null;
+function handleNavigationInput(action, source) {
+  const now = Date.now();
+  const duplicate = lastNavigationInput?.action === action
+    && lastNavigationInput.source !== source && now - lastNavigationInput.time < 250;
+  if (duplicate) {
+    lastNavigationInput = null;
+    return;
+  }
+  lastNavigationInput = { action, source, time: now };
+  handleNavigation(action);
+}
 controls.forEach((button, index) => button.addEventListener('click', () => {
   focusControl(index);
   activateControl(button);
@@ -152,7 +166,7 @@ document.addEventListener('keydown', (event) => {
   const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
   if (!actions[event.key] || !controls.length) return;
   event.preventDefault();
-  handleNavigation(actions[event.key]);
+  handleNavigationInput(actions[event.key], 'keyboard');
 });
 
 // CD frame is 1/75 second. Keep this conversion in the UI presentation layer.
@@ -613,7 +627,7 @@ function connectNavigation() {
     if (navigationSocket !== socket) return;
     try {
       const message = JSON.parse(event.data);
-      if (typeof message?.action === 'string') handleNavigation(message.action);
+      if (typeof message?.action === 'string') handleNavigationInput(message.action, 'cec');
     } catch { /* A malformed input is ignored; playback continues. */ }
   };
   socket.onerror = () => { if (navigationSocket === socket) socket.close(); };
