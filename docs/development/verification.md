@@ -27,6 +27,15 @@ provider固有IDを公開しないPresentation Model、API入力境界を確認�
 実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
 #15の実機・統合確認として残る。
 
+## Metadataとartworkの段階配信（#50、Docker自動試験）
+
+runtimeのMusicBrainz lookupはCAAを待たずにmetadataを先に返し、単一候補または明示選択後の
+artworkを別workerで取得する。metadata AVAILABLE時点のartworkはNOT_REQUESTEDで、後続の
+AVAILABLE/UNAVAILABLE/ERRORはmetadataのstatusを変えない。古い世代・別releaseの画像結果は適用しない。
+Docker Debian Trixie/aarch64でbuildとCTest 45件が通過した。metadata-only lookupでCAAを呼ばないこと、
+後続artwork失敗と古い世代の拒否をfixtureで確認した。Pi上のnetwork遅延下での更新順序と
+WebSocket観測は未確認であり、#25の統合時に確認する。
+
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
 通常Audio CDを認識したPiで、従来のSTOPPED/PAUSED中15秒ごとの`CDROMSTART`要求を廃止した。

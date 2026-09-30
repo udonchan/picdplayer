@@ -16,6 +16,9 @@ struct MetadataOptions {
     // Test-only callers may supply deterministic responses. Production leaves
     // this empty and uses HttpClient.
     HttpGet http_get;
+    // Runtime publishes metadata before the optional CAA lookup. Diagnostic
+    // probe callers keep the combined result unless they opt out.
+    bool include_artwork = true;
 };
 
 MetadataResult lookup_musicbrainz_disc(const DiscToc& toc, const MetadataOptions& options = {});

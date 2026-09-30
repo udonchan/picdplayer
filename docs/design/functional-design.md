@@ -268,9 +268,11 @@ loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
 artwork AVAILABLEはdaemonがJPEG/PNG/WebPのbytesを上限付きで取得し、same-origin local resourceとして
-配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。現在はCAA処理完了後に
-metadata結果全体をmainへ返す。明示選択後のCAA取得は別のworkerで進め、結果のmetadata世代とrelease IDが
-現在選択中のものに一致するときだけ適用する。
+配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。runtimeではMusicBrainzの
+metadata結果を先にmainへ返し、選択済みreleaseのCAA取得を別workerで進める。metadata AVAILABLE時点で
+artworkはNOT_REQUESTEDであり、後続結果の到着後にAVAILABLE、UNAVAILABLE、ERRORへ更新する。
+後続結果はmetadata世代とrelease IDが現在選択中のものに一致するときだけ適用する。
+診断用の単体lookupは引き続きmetadataとartworkをまとめて取得できる。
 
 raw JSONを`metadata/{disc-id}.json`、`cover-art/{release-id}.json`へ、検証済み画像bytesを
 `cover-art/{release-id}.image`へ保存する。

@@ -29,7 +29,9 @@ metadata世代、候補indexを送る。daemonは現行discとの一致を確認
 
 画像はさらに別の取得段階である。単一候補または明示選択されたreleaseについてCover Art Archiveへ
 問い合わせ、daemonがJPEG/PNG/WebPの画像bytesを上限付きで取得・検査してcacheへ保存する。
-明示選択後の画像取得もworkerで行い、再生を待たせない。古い選択に届いた画像結果は適用しない。
+単一候補でも明示選択後でも画像取得は別workerで行い、metadataを先に表示して再生を待たせない。
+metadataがAVAILABLEでも画像は当初NOT_REQUESTEDであり、後からAVAILABLE、UNAVAILABLE、ERRORに変わる。
+画像失敗はmetadataのstatusを変更しない。古いdisc世代や選択に届いた画像結果は適用しない。
 Now PlayingはPiCDPlayer originの`/api/presentation/artwork/cover`だけを読む。provider URLや
 cache pathはUIへ公開しない。曲名だけ取得できた場合、画像取得・cache・decodeに失敗した場合も、
 画像なしで表示と再生を続ける。
