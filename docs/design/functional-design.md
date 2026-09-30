@@ -164,6 +164,12 @@ Power StatusはON。自身宛のSET_STREAM_PATHでACTIVE_SOURCEを通知し、
 他機器のACTIVE_SOURCEで非activeになる。REQUEST_ACTIVE_SOURCEにはactive中だけ応答する。
 起動時に自動でTV入力を切り替えない。
 Play/Pause/Stop/Skip Forward/Skip Backward/Fast Forward/Rewindを再生操作へ変換する。
+方向・決定・戻るはtransport操作と分離し、`up/down/left/right/select/back`のsemantic navigationとして
+View向けの別WebSocketへ送る。対応するCEC UI codeは0x01/0x02/0x03/0x04/0x00/0x0d。
+方向の長押しは150 ms以上の間隔に抑え、決定・戻るの連続pressはreleaseまで一回だけ送る。
+releaseを送らない機器では500 ms以上pressが途切れた後を新しい押下とみなす。
+CEC transport専用キーは従来どおりdaemonが直接処理し、navigationと二重実行しない。
+Viewが未接続でも入力を保存せず、browser/API不在は再生を妨げない。
 登録後にREGZAとMarantzのARCが復帰する実機結果はあるが、全TVでの保証ではない。
 
 ## API
@@ -190,6 +196,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | GET /api/read-policy | requested/effective/pendingを即時取得 |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
+| WS /api/navigation | CECの短命なsemantic navigation入力。接続前の入力は再送しない。clientからのmessageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
 | GET /debug/status.css, /debug/status.js | diagnostic画面の埋め込みasset |
 | GET /player, /player/ | 選択中のUI。標準はalbum、track、位置、cover artを表示する読み取り専用Now Playing HTML |

@@ -165,6 +165,9 @@ ALSA underrunになり得る。
 [CecDevice](../../src/cec_device.cpp)のupdateはopen・adapter確認・非同期claim確認を担当する。
 receiveは一件dequeueし、応答が必要なmessageを処理して任意のCecCommandを返す。
 [cec_command_from_ui_code](../../src/cec_input.cpp)はhardware非依存でキーを意味的操作へ変換する。
+方向・決定・戻るは`CecNavigationFilter`でsemantic入力へ変換し、同じsourceのreleaseとpress間隔で
+長押しを制限する。`PlayerSession`はCEC transport commandをcontrollerへ適用し、navigationだけを
+`ApiServer`の別WebSocketへ渡す。未接続時は捨て、各接続の未送信queueは8件を上限とする。
 
 [make_daemon_snapshot](../../src/daemon_snapshot.cpp)はplayerとTOCの整合を検証し、
 track内位置と長さを追加した値コピーを作る。network/hardware I/Oはしない。

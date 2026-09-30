@@ -60,6 +60,13 @@ enrichment status・same-origin artwork referenceだけを表示契約とし、M
 `/api/presentation/artwork/cover`である。CSPは外部script/style/image/provider接続を許可しない。
 将来、破壊的API変更時にはrequires_apiとの対応を更新する。
 
+CEC方向・決定・戻るを使うCustom UIは、任意で別の`WS /api/navigation`へ接続できる。
+messageは`{"action":"up"}`形式で、actionは`up/down/left/right/select/back`。
+短命な入力なので、接続前・切断中の入力は復元されず、未送信入力は各接続8件までで古いものから捨てる。
+このchannelを使わないCustom UIも従来どおり動き、再生専用CECキーはdaemonが直接処理する。
+navigationは選択状態や再生結果のsnapshotではない。Viewが状態変更を求める場合はloopbackの
+操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
+
 ## 検証とfallback
 
 指定がなければdefaultを使用する。指定directoryが無い、読めない、manifestが不正、version非対応、
