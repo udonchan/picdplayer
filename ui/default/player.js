@@ -81,6 +81,7 @@ let feedbackTimer;
 const controlEnabled = (command, snapshot) => {
   if (snapshot?.disc?.state !== 'AUDIO_READY') return false;
   const state = snapshot?.player?.state;
+  if (!['STOPPED', 'PLAYING', 'PAUSED'].includes(state)) return false;
   if (command === 'play') return state === 'STOPPED' || state === 'PAUSED';
   if (command === 'pause') return state === 'PLAYING';
   if (command === 'stop') return state === 'PLAYING' || state === 'PAUSED';

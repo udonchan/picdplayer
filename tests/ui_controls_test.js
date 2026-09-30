@@ -96,6 +96,11 @@ async function main() {
   assert.deepEqual(posts, ['/api/play', '/api/pause', '/api/stop', '/api/next']);
   keys.keydown({ key: 'ArrowRight', preventDefault() {} });
   assert(controls.every((button) => button.disabled));
+  snapshot.revision = 4;
+  snapshot.disc.state = 'AUDIO_READY';
+  snapshot.player.state = 'UNKNOWN';
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert(controls.every((button) => button.disabled));
   console.log('PASS: CEC/keyboard focus, command POST, authoritative state and No Disc');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
