@@ -288,7 +288,7 @@ TOC再受理時にresetする。未検出の物理交換は#88の範囲で、永
 詳細応答rootのsession_idとmap.disc_generationを最新disc.layoutに照合し、不一致なら捨てる。
 STREAM historyは従来どおりstream_generationも照合する。mapだけをstream変更でresetしない。
 同discで古いmap revisionへの巻戻りを拒否し、layout=null/世代変更では旧mapを破棄する。
-取得は詳細展開/明示更新時を基本とし、常時pollingしない。最大256区間のdisc_map objectはテストで64 KiB未満を検査する。historyを含む応答全体の上限ではない。
+取得は詳細展開/明示更新時を基本とする。標準Playerだけは`PLAYING`中のmap進行表示のため2秒に一回を上限として再取得するが、WS更新ごとには取得しない。最大256区間のdisc_map objectはテストで64 KiB未満を検査する。historyを含む応答全体の上限ではない。
 
 ### stream終了と音声出力の終了待ち
 

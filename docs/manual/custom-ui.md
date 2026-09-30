@@ -102,7 +102,8 @@ CSS transitionやbrowserの合成処理は別に発生し得るため、DOM writ
 オンデマンドの`GET /api/read-history`にある`disc_map`を使う。Custom UIはこれを実装する義務を負わない。
 実装する場合は、map responseのroot `session_id`と最新snapshot、`disc_map.disc_generation`と
 `disc.layout.disc_generation`を照合し、layout/session/disc世代の変更時は旧mapを捨てる。
-通常のWS更新で詳細履歴をpollingせず、利用者の明示操作など有界な取得機会を選ぶ。
+標準Playerは`PLAYING`中に2秒に一回を上限としてdisc mapを更新するが、WS更新ごとには詳細履歴を取得しない。
+Custom UIは同じcadenceを実装する義務を負わず、利用者の明示操作など有界な取得機会を選ぶ。
 region flagsはbit集合で重なり得る。未観測、`observations_complete=false`、UNKNOWN、NOT_CHECKEDを
 正常値へ変換しない。bufferのblock比率は可聴秒数でもqueued frame数でもない。
 
@@ -111,6 +112,14 @@ region flagsはbit集合で重なり得る。未観測、`observations_complete=
 再生状態・進捗）、secondary（現在/最新read、方針、buffer、coverage、disc map）、diagnostic（LBA、
 観測窓、能力値など）の視覚的強さを、文字サイズ・contrast・spacingで分ける。これは最終的な常時表示
 項目を決めたものではない。次段階で評価して、削減や状態依存表示を検討する。
+
+#150の標準layoutでは、Now Playingの下にIntegrity Monitorを置き、その内部をRead observationの左列と、
+枠のないDisc read mapの円盤・説明および補助的なDrive capabilityの右列に分ける。
+標準UIの円盤上の点と隣の同色記号付きLBAはlatest observed read（先読みの可能性あり）を示し、PCM根拠位置や物理ヘッド位置ではない。位置注記は領域色の凡例とは分ける。
+Now Playingの最大幅は維持し、幅が不足するときは内容に応じて一列へ縮退する。これは
+default UIの表示方針であり、Custom UIに同じ配置を義務付けない。buffer meterを描く場合は、有効な
+`queued_blocks / floor(buffer_capacity_frames / read_block_frames)`と同じ正確な数値を必ず併記する。
+buffer以外のcoverage、速度、LBA、capabilityなどを見かけの割合に変換しない。
 
 Custom UIが同様の表示を実装する場合、`CLEAN`をdisc全体/原盤/bit-perfectの保証にしない。current playback
 evidenceとlatest readは別の観測であり、前者は出力PCM根拠、後者はread-aheadを含み得る最新readである。

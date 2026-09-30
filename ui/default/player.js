@@ -127,6 +127,13 @@ function integritySummary(read) {
   return `CURRENT READ · ${read.current_playback.status || 'UNKNOWN'}`;
 }
 
+function formatReadStall(value) {
+  if (!value || !safeNonNegative(value.timeout_ms)) return 'NOT AVAILABLE';
+  const inflight = safeNonNegative(value.inflight_ms) ? `in-flight ${value.inflight_ms} ms` : 'idle';
+  const last = safeNonNegative(value.last_timeout_ms) ? ` · last timeout ${value.last_timeout_ms} ms` : '';
+  return `${inflight} · limit ${value.timeout_ms} ms${last}`;
+}
+
 function discLayoutKey(snapshot) {
   const layout = snapshot?.disc?.layout;
   const session = snapshot?.read?.session_id;
@@ -147,7 +154,7 @@ let observationGap = false;
 let currentSnapshot = null;
 let mapKey = null;
 let mapLoadingKey = null;
-let mapRequestedKey = null;
+let mapLastRequestedAt = Number.NEGATIVE_INFINITY;
 let discMap = null;
 let renderedMapIdentity = null;
 let mapObservedStream = null;
@@ -182,7 +189,7 @@ function acceptSnapshot(snapshot) {
     mapKey = key;
     discMap = null;
     mapLoadingKey = null;
-    mapRequestedKey = null;
+    mapLastRequestedAt = Number.NEGATIVE_INFINITY;
     renderedMapIdentity = null;
     mapObservedStream = null;
   }
@@ -202,10 +209,16 @@ function mapMatchesSnapshot(snapshot, detail) {
   return { key, ...map };
 }
 
+const discMapRefreshIntervalMs = 2000;
+
 function requestDiscMap(snapshot, force = false) {
   const key = discLayoutKey(snapshot);
-  if (!key || (!force && (discMap?.key === key || mapLoadingKey === key || mapRequestedKey === key))) return;
-  mapRequestedKey = key;
+  const playing = snapshot?.player?.state === 'PLAYING' && snapshot?.read?.current_playback;
+  const now = performance.now();
+  const due = now - mapLastRequestedAt >= discMapRefreshIntervalMs;
+  if (!key || mapLoadingKey === key
+      || (!force && discMap?.key === key && (!playing || !due))) return;
+  mapLastRequestedAt = now;
   mapLoadingKey = key;
   renderDiscMap(snapshot);
   try {
@@ -233,19 +246,19 @@ function mapColor(flags) {
   return '#647174';
 }
 
-function setMarker(id, layout, evidence, label) {
+function setMarker(id, layout, evidence) {
   const marker = byId(id);
   const lba = evidence?.start_lba;
   if (!layout || !safeInteger(lba) || !safeNonNegative(evidence?.disc_generation)
       || evidence.disc_generation !== layout.disc_generation || lba < layout.start_lba || lba >= layout.leadout_lba) {
     setHidden(marker, true);
-    return;
+    return false;
   }
   const angle = 2 * Math.PI * (lba - layout.start_lba) / (layout.leadout_lba - layout.start_lba) - Math.PI / 2;
   setStyle(marker, 'left', `${50 + 36 * Math.cos(angle)}%`);
   setStyle(marker, 'top', `${50 + 36 * Math.sin(angle)}%`);
   setHidden(marker, false);
-  if (marker.textContent !== label) marker.textContent = label;
+  return true;
 }
 
 function renderDiscMap(snapshot) {
@@ -257,7 +270,10 @@ function renderDiscMap(snapshot) {
     set('read-map-state', snapshot?.disc?.state === 'NO_DISC' ? 'No accepted audio disc' : 'Waiting for an accepted disc layout');
     setStyle(map, 'background', '#202729');
     renderedMapIdentity = null;
-    setMarker('map-current', null, null, 'P'); setMarker('map-latest', null, null, 'R');
+    setMarker('map-latest', null, null);
+    if (byId('map-marker-label').dataset.marker !== 'unavailable')
+      byId('map-marker-label').dataset.marker = 'unavailable';
+    set('map-marker-label', 'LATEST OBSERVED READ · NOT AVAILABLE');
     return;
   }
   if (!discMap || discMap.key !== key) {
@@ -275,7 +291,8 @@ function renderDiscMap(snapshot) {
             || region.end_lba > layout.leadout_lba) continue;
         const begin = 100 * (region.start_lba - layout.start_lba) / span;
         const end = 100 * (region.end_lba - layout.start_lba) / span;
-        layers.push(`conic-gradient(from -90deg, transparent 0% ${begin}%, ${mapColor(region.flags)} ${begin}% ${end}%, transparent ${end}% 100%)`);
+        // CSS conic-gradient starts at 12 o'clock, matching setMarker's -PI/2 angle.
+        layers.push(`conic-gradient(from 0deg, transparent 0% ${begin}%, ${mapColor(region.flags)} ${begin}% ${end}%, transparent ${end}% 100%)`);
       }
       setStyle(map, 'background', layers.length ? layers.join(',') : '#202729');
       renderedMapIdentity = identity;
@@ -290,8 +307,13 @@ function renderDiscMap(snapshot) {
       : `${validRegions} valid regions / ${discMap.regions.length} reported`;
     set('read-map-state', `${regionLabel} · ${completeness} · revision ${discMap.revision}`);
   }
-  setMarker('map-current', layout, snapshot?.read?.current_playback, 'P');
-  setMarker('map-latest', layout, snapshot?.read?.latest, 'R');
+  const latest = snapshot?.read?.latest;
+  const hasLatest = setMarker('map-latest', layout, latest);
+  const markerState = hasLatest ? 'available' : 'unavailable';
+  if (byId('map-marker-label').dataset.marker !== markerState)
+    byId('map-marker-label').dataset.marker = markerState;
+  set('map-marker-label', hasLatest ? `LATEST OBSERVED READ · LBA ${latest.start_lba} · MAY BE AHEAD`
+    : 'LATEST OBSERVED READ · NOT AVAILABLE');
 }
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
@@ -401,8 +423,10 @@ function render(snapshot) {
     : (effectivePolicy || requestedPolicy || 'UNKNOWN'));
   const blockCapacity = safeNonNegative(read.buffer_capacity_frames) && safeInteger(read.read_block_frames)
     && read.read_block_frames > 0 ? Math.floor(read.buffer_capacity_frames / read.read_block_frames) : null;
-  set('read-buffer', safeNonNegative(read.queued_blocks) && blockCapacity !== null
-    ? `${read.queued_blocks} / ${blockCapacity} blocks` : 'N/A');
+  const bufferKnown = safeNonNegative(read.queued_blocks) && blockCapacity !== null && blockCapacity > 0;
+  set('read-buffer', bufferKnown ? `${read.queued_blocks} / ${blockCapacity} blocks` : 'N/A');
+  const bufferFraction = bufferKnown ? Math.min(1, read.queued_blocks / blockCapacity) : 0;
+  setStyle(byId('read-buffer-meter'), 'transform', `scaleX(${bufferFraction})`);
   set('read-current', formatEvidence(read.current_playback));
   set('read-latest', formatEvidence(read.latest));
   set('read-warning', read.active_warning ? formatEvidence(read.active_warning) : 'NONE');
@@ -413,6 +437,7 @@ function render(snapshot) {
     ? `${stats.read_calls} / ${stats.frames_accepted} frames` : 'NOT AVAILABLE');
   const coverage = read.coverage || {};
   set('read-coverage', `${coverage.scope || 'UNKNOWN'} · ${safeNonNegative(coverage.accepted_unique_frames) ? coverage.accepted_unique_frames : '—'} accepted unique frames`);
+  set('read-stall', formatReadStall(read.read_stall));
   set('integrity-summary', integritySummary(read));
   set('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ') || drive.device || 'UNKNOWN DRIVE');
   set('cap-dae', formatCapability(drive.digital_audio_extraction));

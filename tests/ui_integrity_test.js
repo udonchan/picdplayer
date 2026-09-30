@@ -13,9 +13,11 @@ async function settle() {
 
 async function main() {
   const nodes = new Map();
+  const listeners = new Map();
   const sockets = [];
   const frames = [];
   let historyRequests = 0;
+  let now = 0;
   const snapshot = {
     schema_version: 1, revision: 1,
     player: { state: 'PLAYING', track_number: 1, position_frames: 75, track_duration_frames: 4500 },
@@ -29,6 +31,7 @@ async function main() {
       speed_request_error: '', current_speed_x: null, read_offset_samples: null },
     read: { session_id: 'session-a', stream_generation: 4, activity: 'READING', effective_strategy: 'direct-single-read',
       queued_blocks: 1, buffer_capacity_frames: 90, read_block_frames: 75, dropped_events: 0,
+      read_stall: { inflight_ms: null, timeout_ms: 10000, last_timeout_ms: null },
       policy: { pending: true, requested: { mode: 'REPEAT' }, effective: { mode: 'SINGLE' } },
       history: { included: false, capacity: 128 }, event_window: { first_sequence: 1, last_sequence: 2, worker_dropped: 0 },
       current_playback: { status: 'CLEAN', local_verification: 'SINGLE_READ', start_lba: 20, frames_read: 15,
@@ -43,11 +46,12 @@ async function main() {
   function node(id) {
     if (nodes.has(id)) return nodes.get(id);
     const value = { textContent: '', hidden: false, dataset: {}, style: {}, complete: false, naturalWidth: 0,
-      classList: { contains() { return false; }, add() {}, remove() {} }, removeAttribute() {}, addEventListener() {} };
+      classList: { contains() { return false; }, add() {}, remove() {} }, removeAttribute() {},
+      addEventListener(event, callback) { listeners.set(`${id}:${event}`, callback); } };
     nodes.set(id, value); return value;
   }
   vm.runInNewContext(source, {
-    performance: { now: () => 1 }, document: { readyState: 'complete', getElementById: node, addEventListener() {} },
+    performance: { now: () => now }, document: { readyState: 'complete', getElementById: node, addEventListener() {} },
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url) => {
       if (url === '/api/read-history') ++historyRequests;
@@ -65,18 +69,39 @@ async function main() {
   assert.equal(node('drive-speed-request').textContent, '4x REQUEST ACCEPTED');
   assert.equal(node('drive-speed-current').textContent, 'NOT AVAILABLE');
   assert.equal(node('read-buffer').textContent, '1 / 1 blocks');
+  assert.equal(node('read-buffer-meter').style.transform, 'scaleX(1)');
+  assert.equal(node('read-stall').textContent, 'idle · limit 10000 ms');
   assert.equal(node('integrity-summary').textContent, 'CURRENT READ · CLEAN');
   assert.match(node('read-current').textContent, /LBA 20–35/);
   assert.match(node('read-current').textContent, /CACHE_POSSIBLE/);
   assert.match(node('read-current').textContent, /overlap MATCHED/);
   assert.match(node('read-map-state').textContent, /2 regions/);
-  assert.match(node('disc-map').style.background, /conic-gradient/);
-  assert.equal(node('map-current').hidden, false);
+  assert.match(node('disc-map').style.background, /conic-gradient\(from 0deg/);
   assert.equal(node('map-latest').hidden, false);
+  assert.equal(node('map-marker-label').textContent, 'LATEST OBSERVED READ · LBA 50 · MAY BE AHEAD');
+  assert.equal(node('map-marker-label').dataset.marker, 'available');
+  now = 1999;
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 2,
     player: { ...snapshot.player, position_frames: 90 } }) });
   await settle();
-  assert.equal(historyRequests, 1, 'snapshot updates must not poll read history');
+  assert.equal(historyRequests, 1, 'read-history must not be fetched for every snapshot');
+
+  now = 2000;
+  sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 3,
+    player: { ...snapshot.player, position_frames: 105 } }) });
+  await settle();
+  assert.equal(historyRequests, 2, 'playing snapshots refresh the map at the bounded cadence');
+
+  const stopped = structuredClone(snapshot);
+  stopped.revision = 4;
+  stopped.player.state = 'STOPPED';
+  stopped.read.current_playback = null;
+  sockets[0].onmessage({ data: JSON.stringify(stopped) });
+  await settle();
+  assert.equal(historyRequests, 2, 'STOPPED snapshots do not poll the map');
+  listeners.get('refresh-read-map:click')();
+  await settle();
+  assert.equal(historyRequests, 3, 'Refresh map explicitly refetches while STOPPED');
 
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 1,
     read: { ...snapshot.read, activity: 'FAILED' } }) });
@@ -92,7 +117,9 @@ async function main() {
   assert.match(node('read-map-state').textContent, /No accepted audio disc/);
   assert.equal(node('integrity-summary').textContent, 'CURRENT READ · NOT AVAILABLE');
   assert.equal(node('read-current').textContent, 'NOT AVAILABLE');
-  assert.equal(node('map-current').hidden, true);
+  assert.equal(node('map-latest').hidden, true);
+  assert.equal(node('map-marker-label').textContent, 'LATEST OBSERVED READ · NOT AVAILABLE');
+  assert.equal(node('map-marker-label').dataset.marker, 'unavailable');
   sockets[0].onclose();
   assert.equal(node('connection').textContent, 'DAEMON · RECONNECTING');
   assert.equal(node('connection').dataset.state, 'reconnecting');
