@@ -37,7 +37,13 @@ CDPに`REQUEST ACCEPTED`、APIに`PLAYING`が現れ、ユーザーがTVの音声
 決定キー由来のbutton clickとCEC selectの重複可能性にも同じ入力処理を適用し、自動試験した。
 修正後はSTOPPEDのPrevious→Play、PLAYINGの3回の右入力でStop選択、Stop決定後の
 API `STOPPED`、左でNext、上でPlay、下でNextを確認した。画面の選択結果はユーザーのTV目視と
-CDPで照合した。長押し、異なるTV/remote、CPU/温度への影響は未確認である。
+CDPで照合した。長押し、異なるTV/remote、長期負荷・温度への影響は未確認である。
+追加修正をPiへ再デプロイした後、リモコンでPlayを選び、CDPのresource timingで`/api/play`要求が
+1回だったことを確認した。このTVの決定キーではChromiumのbutton `click`は観測されず、
+二重click対策そのものの実機発火は未確認である。APIからStopを要求し、後続snapshotの`STOPPED`を確認した。
+DockerのLinux/aarch64で`ENABLE_API=OFF`もビルドできた。STOPPED画面の20秒・4 sampleの読み取り
+計測では全core CPU平均1.70%、最大2.18%、温度56.9〜58.0°C、現在throttling bitは全sampleで0だった。
+短時間かつ過去の基線と同条件ではないため、負荷回帰がないという保証には使わない。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
