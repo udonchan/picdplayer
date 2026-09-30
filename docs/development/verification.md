@@ -58,6 +58,17 @@ provider固有IDを公開しないPresentation Model、API入力境界を確認�
 実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
 #15の実機・統合確認として残る。
 
+## 標準Playerのmetadata候補picker（#166、Docker/Chrome fixture確認）
+
+#15の公開契約と#55のsemantic CEC navigationを使う標準UIを作業branchで実装した。
+複数候補のときだけ任意の入口を表示し、方向入力で候補移動、selectで選択POST、backで閉じる。
+HTTP 204は選択完了とみなさず、次のauthoritative snapshotでalbum/trackを更新する。
+同じcover URLで選択candidateが変わっても画像を再読込する。
+Debian Trixie/aarch64 DockerでbuildとCTest 46件を実行し、Node fixtureで候補表示、CEC操作、
+204待ち、409拒否、選択後snapshot、disc不在を確認した。
+Mac headless Chromeの[1920×1080表示](reports/2026-10-01-metadata-picker/README.md)は合成候補の
+レイアウト確認である。PiのTV・リモコン・『The Slip』実候補でのend-to-end確認は未実施。
+
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
 通常Audio CDを認識したPiで、従来のSTOPPED/PAUSED中15秒ごとの`CDROMSTART`要求を廃止した。

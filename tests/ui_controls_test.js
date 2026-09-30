@@ -10,6 +10,7 @@ async function main() {
   const nodes = new Map();
   const sockets = [];
   const posts = [];
+  const postBodies = [];
   let postStatus = 204;
   let failPost = false;
   let now = 1000;
@@ -21,18 +22,24 @@ async function main() {
     disc: { state: 'AUDIO_READY' }, tracks: [{ number: 1, duration_frames: 4500 }, { number: 2, duration_frames: 4500 }],
     enrichment: { status: 'NOT_REQUESTED' }, artwork: { cover: null },
   };
-  function node(id) {
-    if (nodes.has(id)) return nodes.get(id);
-    const element = {
+  function element() {
+    return {
       textContent: '', style: {}, dataset: {}, hidden: false, disabled: true,
       classList: { contains: () => false, add() {}, remove() {} },
       removeAttribute() {}, addEventListener(type, fn) { this[`on${type}`] = fn; },
       focus() { this.focused = true; }, blur() { this.focused = false; },
+      setAttribute(name, value) { this[name] = value; },
+      append(...children) { this.children = [...(this.children || []), ...children]; },
+      replaceChildren(...children) { this.children = children; },
     };
-    nodes.set(id, element);
-    return element;
   }
-  const controls = ['previous', 'play', 'pause', 'stop', 'next'].map((command) => {
+  function node(id) {
+    if (nodes.has(id)) return nodes.get(id);
+    const item = element();
+    nodes.set(id, item);
+    return item;
+  }
+  const controls = ['previous', 'play', 'pause', 'stop', 'next', 'metadata'].map((command) => {
     const button = node(`button-${command}`);
     button.dataset.command = command;
     return button;
@@ -42,6 +49,7 @@ async function main() {
     performance: { now: () => 1 },
     document: {
       readyState: 'complete', getElementById: node,
+      createElement: element,
       querySelectorAll: () => controls,
       addEventListener(type, fn) { keys[type] = fn; },
     },
@@ -50,6 +58,7 @@ async function main() {
       if (url === '/api/state') return { ok: true, json: async () => snapshot };
       if (options?.method === 'POST' && url !== '/api/ui-boot') {
         posts.push(url);
+        postBodies.push(options.body);
         if (failPost) throw new Error('offline');
         return { status: postStatus, ok: postStatus === 204 };
       }
@@ -135,6 +144,73 @@ async function main() {
   assert.equal(controls[0].dataset.focused, 'true');
   sockets[1].onmessage({ data: JSON.stringify({ action: 'right' }) });
   assert.equal(controls[0].dataset.focused, 'true'); // stale socket is ignored
+  failPost = false;
+  postStatus = 204;
+  snapshot.revision = 6;
+  snapshot.enrichment = { status: 'UNAVAILABLE', selection: {
+    state: 'AMBIGUOUS', session_id: 'session-1', disc_generation: 2, metadata_generation: 3,
+    selected_index: null,
+    candidates: [
+      { index: 0, title: 'The Slip', artist: 'Nine Inch Nails', date: '2008', country: 'US', track_count: 10 },
+      { index: 1, title: 'The Slip', artist: 'Nine Inch Nails', date: '2008', country: 'GB', track_count: 10 },
+    ],
+  } };
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(controls[5].hidden, false);
+  assert.equal(node('media-message').textContent, 'ALBUM SELECTION AVAILABLE');
+  controls[5].onclick({ detail: 1 });
+  assert.equal(node('metadata-picker').hidden, false);
+  assert.equal(node('metadata-candidates').children.length, 2);
+  const postsBeforeDuplicateOpen = posts.length;
+  controls[5].onclick({ detail: 0 }); // Delayed browser click from the same CEC press.
+  assert.equal(posts.length, postsBeforeDuplicateOpen);
+  assert.equal(node('metadata-candidates').children[0].dataset.focused, 'true');
+  const pickerNavigation = (action) => sockets[2].onmessage({ data: JSON.stringify({ action }) });
+  pickerNavigation('down');
+  assert.equal(node('metadata-candidates').children[1].dataset.focused, 'true');
+  pickerNavigation('select');
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  assert.equal(posts.at(-1), '/api/metadata-selection');
+  assert.equal(JSON.parse(postBodies.at(-1)).candidate_index, 1);
+  assert.equal(node('metadata-picker').hidden, false); // 204 is not application.
+  assert.equal(node('metadata-feedback').textContent, 'WAITING FOR ALBUM UPDATE');
+  pickerNavigation('select');
+  assert.equal(posts.filter((url) => url === '/api/metadata-selection').length, 1);
+  snapshot.revision = 7;
+  snapshot.enrichment.status = 'AVAILABLE';
+  snapshot.enrichment.selection.state = 'SELECTED';
+  snapshot.enrichment.selection.selected_index = 1;
+  snapshot.disc.title = 'The Slip';
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(node('metadata-picker').hidden, true);
+  assert.equal(node('album').textContent, 'The Slip');
+  assert.equal(controls[5].hidden, true);
+  snapshot.revision = 8;
+  snapshot.artwork.cover = { url: '/api/presentation/artwork/cover' };
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  const firstCoverIdentity = node('cover').dataset.identity;
+  snapshot.revision = 9;
+  snapshot.enrichment.selection.selected_index = 0;
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.notEqual(node('cover').dataset.identity, firstCoverIdentity);
+  snapshot.revision = 10;
+  snapshot.enrichment.status = 'UNAVAILABLE';
+  snapshot.enrichment.selection.state = 'AMBIGUOUS';
+  snapshot.enrichment.selection.selected_index = null;
+  snapshot.enrichment.selection.metadata_generation = 4;
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  postStatus = 409;
+  controls[5].onclick({ detail: 1 });
+  pickerNavigation('select');
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  assert.equal(node('metadata-feedback').textContent, 'SELECTION REJECTED · 409');
+  pickerNavigation('back');
+  assert.equal(node('metadata-picker').hidden, true);
+  snapshot.revision = 11;
+  snapshot.disc.state = 'NO_DISC';
+  snapshot.enrichment.selection = null;
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(controls[5].hidden, true);
   console.log('PASS: CEC/keyboard focus, command POST, authoritative state and No Disc');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

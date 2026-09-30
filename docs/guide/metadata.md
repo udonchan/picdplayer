@@ -25,7 +25,9 @@ positionが1から連続し、曲数が実TOCと一致する候補だけを受�
 loopback限定の`POST /api/metadata-selection`が有効な場合、Viewはsnapshot内のsession ID、disc世代、
 metadata世代、候補indexを送る。daemonは現行discとの一致を確認してから選択する。
 選択は現在のdisc世代のメモリ内に限り、取り出し・再挿入時には再選択が必要となる。
-選択操作が受理されても、次のsnapshotで表示反映を確認する。標準UIのCEC候補pickerは別Issueで扱う。
+選択操作が受理されても、次のsnapshotで表示反映を確認する。標準UIは複数候補があるときだけ
+`Choose album`を表示し、CECの方向/決定/戻るまたはkeyboardで任意にpickerを操作できる。
+候補には取得できたtitle/artist、date、country、medium情報を表示し、欠損値を推測しない。
 
 画像はさらに別の取得段階である。単一候補または明示選択されたreleaseについてCover Art Archiveへ
 問い合わせ、daemonがJPEG/PNG/WebPの画像bytesを上限付きで取得・検査してcacheへ保存する。

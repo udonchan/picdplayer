@@ -232,7 +232,9 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。technical stat
 keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
-候補選択やread policy編集はこのcontrol列に含めない。title/artistがなければ
+曖昧候補があるときだけ`Choose album`を操作列の末尾に表示し、任意に候補pickerを開ける。
+CEC/keyboardの方向入力で候補を移動し、selectで選択POST、backで閉じる。候補がないときは
+入口を表示せず、read policy編集はこの列に含めない。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
 戻る。外部文字列はtechnical statusと同様にtextContentで表示する。HTTP responseはCSPで
