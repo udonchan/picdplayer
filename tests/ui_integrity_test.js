@@ -13,6 +13,7 @@ async function settle() {
 
 async function main() {
   const nodes = new Map();
+  const listeners = new Map();
   const sockets = [];
   const frames = [];
   let historyRequests = 0;
@@ -45,7 +46,8 @@ async function main() {
   function node(id) {
     if (nodes.has(id)) return nodes.get(id);
     const value = { textContent: '', hidden: false, dataset: {}, style: {}, complete: false, naturalWidth: 0,
-      classList: { contains() { return false; }, add() {}, remove() {} }, removeAttribute() {}, addEventListener() {} };
+      classList: { contains() { return false; }, add() {}, remove() {} }, removeAttribute() {},
+      addEventListener(event, callback) { listeners.set(`${id}:${event}`, callback); } };
     nodes.set(id, value); return value;
   }
   vm.runInNewContext(source, {
@@ -89,6 +91,17 @@ async function main() {
     player: { ...snapshot.player, position_frames: 105 } }) });
   await settle();
   assert.equal(historyRequests, 2, 'playing snapshots refresh the map at the bounded cadence');
+
+  const stopped = structuredClone(snapshot);
+  stopped.revision = 4;
+  stopped.player.state = 'STOPPED';
+  stopped.read.current_playback = null;
+  sockets[0].onmessage({ data: JSON.stringify(stopped) });
+  await settle();
+  assert.equal(historyRequests, 2, 'STOPPED snapshots do not poll the map');
+  listeners.get('refresh-read-map:click')();
+  await settle();
+  assert.equal(historyRequests, 3, 'Refresh map explicitly refetches while STOPPED');
 
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 1,
     read: { ...snapshot.read, activity: 'FAILED' } }) });

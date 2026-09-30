@@ -952,6 +952,9 @@ Docker/aarch64 buildとCTest38/38は成功した。Node試験は同値snapshot�
 同URLcoverの世代更新、Integrity summary、bounded map、古いrevision拒否、session変更時のmap破棄、
 通常snapshotでの詳細API非pollingを確認する。
 
+注: これは2026-09-27時点の挙動。#150の変更後はPLAYING中に2秒に1回を上限として
+disc mapを再取得する。WebSocket更新ごとの取得やSTOPPED中の周期取得は行わない。
+
 Piで14曲Audio CDを`AUDIO_READY`として確認し、APIからtrack 1を通常再生した。再生中のAPIでは
 position 1203 frame、current PCM LBA 1200–1215、latest read LBA 1965–1980、132 read call、
 1980 accepted frame、retry/error/dropped event 0だった。CDP画面でもread mapの1 region/revision 6と

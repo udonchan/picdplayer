@@ -31,3 +31,9 @@ Docker Desktopでharnessがcontainer loopbackだけにbindするため、文書�
 latest observed readの位置を示す点は同色の記号とLBAを円盤の隣に表示し、領域色の凡例から分離した。`MAY BE AHEAD`を維持し、円盤脇の説明を「観測済みreadの根拠でありdisc全体の正しさではない」へ短縮した。TOC LBAの12時起点投影や物理headとの区別は`docs/design/functional-design.md`と`docs/manual/custom-ui.md`へ残す。手動のRefresh mapはSTOPPED時にも強制再取得できるため維持し、二次操作として色・枠を弱めた。
 
 変更後のPi CDP実寸は1920×1080でdocumentのscroll寸法も1920×1080。1280、700、450px幅で横overflowはなく、700px以下は1列へ縮退した。mixed fixtureも1920×1080でscroll寸法一致。UIでは表示色が観測分類の簡略表示である点を維持しており、disc-wide correctnessや物理head位置を推定していない。
+
+## 最終A/B確認
+
+Piで通常CDを短時間再生し、同じCDP画面で円盤と右側の情報群のgapを18pxから12pxへ一時変更した。6pxの差でまとまりはほぼ変わらず、現状のnegative spaceが自然なため採用しなかった。円盤内へ小さな`LATEST READ`を仮置きする案は既存のLBA注記と重複し、角度によって観測色や点の上に重なるため採用しなかった。両試作はCDP上の一時的なstyle/DOM変更のみで、撮影後に戻した。最終UIは上記[通常再生画像](hierarchy-after-playing-1920x1080.png)のままとした。
+
+`Refresh map`は開発専用機能ではなく、通常UIでSTOPPED中にも`GET /api/read-history`を明示再取得する操作である。PLAYING中は2秒に1回を上限として自動取得するが、STOPPED中は周期取得しない。現在の二次操作としての表示を維持した。
