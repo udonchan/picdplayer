@@ -81,7 +81,17 @@ async function main() {
   navigation('select');
   for (let i = 0; i < 4; i++) await Promise.resolve();
   assert.deepEqual(posts, ['/api/play']);
+  controls[1].onclick({ detail: 0 }); // Browser activation of the same CEC press
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  assert.deepEqual(posts, ['/api/play']);
   assert.equal(node('control-feedback').textContent, 'REQUEST ACCEPTED');
+  navigation('back');
+  now += 300;
+  controls[1].onclick({ detail: 0 }); // Browser activation arrives first
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  navigation('select');
+  assert.deepEqual(posts, ['/api/play', '/api/play']);
+  posts.pop();
   navigation('back');
   assert.equal(controls[1].dataset.focused, 'false');
   snapshot.revision = 2;

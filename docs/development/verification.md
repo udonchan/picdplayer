@@ -34,6 +34,7 @@ MacのChrome headlessによる[1920×1080静的fixture](reports/2026-09-30-cec-c
 CDPに`REQUEST ACCEPTED`、APIに`PLAYING`が現れ、ユーザーがTVの音声を確認した。PauseもTV表示とAPIの
 `PAUSED`で確認し、Backによる選択解除をユーザーが確認した。右キーの二重経路によりStop選択が
 不安定だったため、同一操作の近接した異経路入力をUIで抑える修正を加えて再デプロイした。
+決定キー由来のbutton clickとCEC selectの重複可能性にも同じ入力処理を適用し、自動試験した。
 修正後はSTOPPEDのPrevious→Play、PLAYINGの3回の右入力でStop選択、Stop決定後の
 API `STOPPED`、左でNext、上でPlay、下でNextを確認した。画面の選択結果はユーザーのTV目視と
 CDPで照合した。長押し、異なるTV/remote、CPU/温度への影響は未確認である。

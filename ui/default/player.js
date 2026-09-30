@@ -158,9 +158,13 @@ function handleNavigationInput(action, source) {
   lastNavigationInput = { action, source, time: now };
   handleNavigation(action);
 }
-controls.forEach((button, index) => button.addEventListener('click', () => {
+controls.forEach((button, index) => button.addEventListener('click', (event) => {
   focusControl(index);
-  activateControl(button);
+  // Keyboard activation produces a click with detail=0; a CEC select can
+  // arrive for the same remote press. Pointer clicks remain independent.
+  // キーボード由来のclickは同じリモコン操作のCEC selectと重複し得ます。
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else activateControl(button);
 }));
 document.addEventListener('keydown', (event) => {
   const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };

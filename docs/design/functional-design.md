@@ -228,6 +228,7 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。technical stat
 `play/pause/stop/previous/next`を状態snapshotから有効化し、CEC semantic navigationまたは
 keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
+同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
 候補選択やread policy編集はこのcontrol列に含めない。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
