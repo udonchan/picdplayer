@@ -206,6 +206,30 @@ main {
   margin-top: 14px;
 }
 
+.player-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.player-footer .state { margin: 0 auto 0 0; }
+.control-feedback { margin: 0; min-width: 8ch; color: var(--warning); font-size: 11px; }
+.player-controls { display: flex; flex-wrap: wrap; gap: 4px; }
+.player-controls button {
+  min-height: 38px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font: 650 13px/1.3 system-ui, sans-serif;
+}
+.player-controls button:disabled { opacity: .45; }
+.player-controls button[data-focused='true'],
+.player-controls button:focus-visible { border-color: var(--blue); outline: 2px solid var(--blue); outline-offset: 1px; }
+.player-controls button[data-pending='true'] { color: var(--blue); }
+
 .integrity {
   margin-top: clamp(16px, 2vh, 24px);
   padding-top: 12px;

@@ -66,6 +66,8 @@ messageは`{"action":"up"}`形式で、actionは`up/down/left/right/select/back`
 このchannelを使わないCustom UIも従来どおり動き、再生専用CECキーはdaemonが直接処理する。
 navigationは選択状態や再生結果のsnapshotではない。Viewが状態変更を求める場合はloopbackの
 操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
+標準Playerはこのchannelで基本transport buttonのfocusを動かす参考実装である。
+Custom UIが同じfocus構造や操作UIを実装する義務はない。
 
 ## 検証とfallback
 

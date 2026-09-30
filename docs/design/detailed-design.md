@@ -168,6 +168,9 @@ receiveは一件dequeueし、応答が必要なmessageを処理して任意のCe
 方向・決定・戻るは`CecNavigationFilter`でsemantic入力へ変換し、同じsourceのreleaseとpress間隔で
 長押しを制限する。`PlayerSession`はCEC transport commandをcontrollerへ適用し、navigationだけを
 `ApiServer`の別WebSocketへ渡す。未接続時は捨て、各接続の未送信queueは8件を上限とする。
+標準Playerはこのchannelで受けた前後移動を横一列の有効なtransport buttonへ投影し、
+selectでloopback POSTする。focusはbrowser内の一時状態で、再生状態はsnapshotから有効化する。
+通信失敗や409では再生状態を楽観更新せず、ボタン周辺へ短い結果を表示する。
 
 [make_daemon_snapshot](../../src/daemon_snapshot.cpp)はplayerとTOCの整合を検証し、
 track内位置と長さを追加した値コピーを作る。network/hardware I/Oはしない。

@@ -19,8 +19,16 @@ S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試�
 
 CEC方向・決定・戻るをtransport keyと分離し、`WS /api/navigation`へ短命な入力として配信する経路を追加した。
 Linux/aarch64 DockerでCEC code変換、長押し/解放filter、API WebSocket配信を自動試験した。
-標準Playerのfocus UIはまだこのchannelを消費しない。PiのTVリモコンが各codeとreleaseを実際に送るか、
+標準Playerのfocus UIは後述の#56でこのchannelを消費する。PiのTVリモコンが各codeとreleaseを実際に送るか、
 入力切替中の挙動、browserのfocus操作、CPU/温度への影響は未確認であり、#55/#56の実機確認へ残す。
+
+## 標準PlayerのCEC transport操作面（#56、Docker自動試験・Pi未確認）
+
+標準Playerに5つのtransport buttonを追加し、CECのsemantic navigationとkeyboardでfocusを移す。
+状態snapshotからbuttonの可否を計算し、POST受理だけでは再生状態を確定しない。
+NodeのUIテストではfocus、204/409、通信失敗、NO_DISCでの無効化を確認する。
+MacのChrome headlessによる[1920×1080静的fixture](reports/2026-09-30-cec-controls/README.md)では
+5操作とIntegrity Monitor全体が画面内に見える。PiのCage/Chromium表示、CEC実入力、試聴、負荷は未確認である。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 

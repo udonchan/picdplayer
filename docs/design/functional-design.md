@@ -199,7 +199,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | WS /api/navigation | CECの短命なsemantic navigation入力。接続前の入力は再送しない。clientからのmessageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
 | GET /debug/status.css, /debug/status.js | diagnostic画面の埋め込みasset |
-| GET /player, /player/ | 選択中のUI。標準はalbum、track、位置、cover artを表示する読み取り専用Now Playing HTML |
+| GET /player, /player/ | 選択中のUI。標準はalbum、track、位置、cover artと基本transport操作を表示するPlayer HTML |
 | GET /player.css, /player.js | 選択中のNow Playing asset（Custom UI未採用時はbuilt-in） |
 | GET /builtin/player, /builtin/player.css, /builtin/player.js | 常にbuilt-inの復旧用画面・asset |
 | POST /api/ui-boot | 任意の標準UI起動telemetry、受理204。再生commandとは独立 |
@@ -222,9 +222,13 @@ single時の実read量はregion_framesによらず15 frame。repeat時にregion_
 technical statusはeffective strategyとReadPolicyを別々に表示し、未適用の要求は
 `effective → requested (pending)`として示す。初回にGET stateを読み、以後WebSocketで更新する。接続断ではstateを再取得してから
 再接続するため、eventを一件ずつ完全に受信したことを状態復元の前提にしない。metadata文字列は
-DOMのtextContentとして扱い、HTMLとして解釈しない。画面から操作POSTは送信しない。
+DOMのtextContentとして扱い、HTMLとして解釈しない。technical statusは読み取り専用である。
 
-`/player`も初回GETとWebSocketで同じPresentation Modelを消費する。title/artistがなければ
+`/player`も初回GETとWebSocketで同じPresentation Modelを消費する。標準Playerは
+`play/pause/stop/previous/next`を状態snapshotから有効化し、CEC semantic navigationまたは
+keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
+selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
+候補選択やread policy編集はこのcontrol列に含めない。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
 戻る。外部文字列はtechnical statusと同様にtextContentで表示する。HTTP responseはCSPで
