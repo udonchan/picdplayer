@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-09-28。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-09-30。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -14,6 +14,13 @@
 Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
+
+## View向けloopback操作契約（#54、Docker自動試験）
+
+既存の`play/pause/stop/previous/next`のPOSTについて、method、空body、204受理、400/405/409、
+loopback制限とauthoritative snapshotの意味を仕様化した。Linux/aarch64 DockerのAPI testでは
+5操作のroute、本文不正、method不正、handler拒否、既存の外部peer試験を確認する。
+標準Playerからの操作、CEC方向・決定との結合、Pi実機のUI操作は#56で確認する。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
