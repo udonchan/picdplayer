@@ -27,6 +27,13 @@ metadata世代、候補indexを送る。daemonは現行discとの一致を確認
 選択は現在のdisc世代のメモリ内に限り、取り出し・再挿入時には再選択が必要となる。
 選択操作が受理されても、次のsnapshotで表示反映を確認する。標準UIのCEC候補pickerは別Issueで扱う。
 
+Artist Background向けのArtist MBIDは、選択済みreleaseのartist-creditに含まれるartist IDから
+Enrichment内部で判定する。単一の有効なMBIDが得られた場合だけ`AVAILABLE`とし、複数の異なるIDは
+`AMBIGUOUS`、ID欠損・不正形式・MusicBrainzのVarious Artists IDは`UNAVAILABLE`とする。
+候補未選択やdisc交換後も`UNAVAILABLE`であり、名前からIDを推測しない。artist-creditの表示名と
+join phraseは従来どおりalbum artist表示に使い、background取得のidentityとは区別する。
+この段階ではMBIDをPresentation Modelへ直接公開しない。Viewへ渡す画像情報の契約は後続Issueで定義する。
+
 画像はさらに別の取得段階である。単一候補または明示選択されたreleaseについてCover Art Archiveへ
 問い合わせ、daemonがJPEG/PNG/WebPの画像bytesを上限付きで取得・検査してcacheへ保存する。
 明示選択後の画像取得もworkerで行い、再生を待たせない。古い選択に届いた画像結果は適用しない。
@@ -38,5 +45,7 @@ cacheは繰り返しの問い合わせを減らすために使うが、書き込
 現在の形式と制限は[機能設計](../design/functional-design.md)、
 候補変換と世代照合は[詳細設計](../design/detailed-design.md)を参照する。
 依存libraryやAPIを選んだ経緯は[metadataの設計記録](../history/metadata-design.md)にある。
+Artist creditとVarious Artistsの識別については[MusicBrainz Artist Credits](https://musicbrainz.org/doc/Artist_Credits)と
+[Various ArtistsのMusicBrainz登録](https://musicbrainz.org/artist/89ad4ac3-39f7-470e-963a-56509c546377/details)を参照する。
 
 前：[読み取り結果について言えること](integrity.md) / [ドキュメントの案内](../README.md)

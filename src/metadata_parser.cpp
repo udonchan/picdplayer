@@ -1,5 +1,6 @@
 #include "metadata_parser.hpp"
 #include <nlohmann/json.hpp>
+#include <cctype>
 #include <stdexcept>
 
 using Json = nlohmann::json;
@@ -40,6 +41,40 @@ std::string artist_credit(const Json& object) {
     }
     return value;
 }
+bool valid_mbid(std::string_view value) {
+    if (value.size() != 36) return false;
+    for (std::size_t i = 0; i < value.size(); ++i) {
+        if (i == 8 || i == 13 || i == 18 || i == 23) {
+            if (value[i] != '-') return false;
+        } else if (!std::isxdigit(static_cast<unsigned char>(value[i]))) return false;
+    }
+    return true;
+}
+ArtistIdentity artist_identity(const Json& object) {
+    const auto it = object.find("artist-credit");
+    if (it == object.end() || !it->is_array() || it->empty()) return {};
+    constexpr std::string_view various_artists = "89ad4ac3-39f7-470e-963a-56509c546377";
+    std::string selected_id;
+    bool missing_id = false;
+    for (const auto& part : *it) {
+        if (!part.is_object() || !part.contains("artist") || !part["artist"].is_object()) {
+            missing_id = true;
+            continue;
+        }
+        auto id = text(part["artist"], "id");
+        if (!valid_mbid(id)) {
+            missing_id = true;
+            continue;
+        }
+        for (auto& ch : id) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (id == various_artists) return {};
+        if (!selected_id.empty() && selected_id != id)
+            return {ArtistIdentityStatus::ambiguous, {}};
+        selected_id = std::move(id);
+    }
+    if (missing_id || selected_id.empty()) return {};
+    return {ArtistIdentityStatus::available, std::move(selected_id)};
+}
 }
 
 const char* metadata_status_name(MetadataStatus status) {
@@ -78,6 +113,7 @@ MetadataResult parse_musicbrainz_response(std::string_view input, std::string_vi
             value.release_id = text(release, "id");
             value.album_title = text(release, "title");
             value.album_artist = artist_credit(release);
+            value.artist_identity = artist_identity(release);
             value.country = text(release, "country"); value.date = text(release, "date");
             if (release.contains("release-group") && release["release-group"].is_object())
                 value.release_group_id = text(release["release-group"], "id");

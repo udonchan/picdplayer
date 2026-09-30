@@ -15,6 +15,17 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## 選択済みreleaseのArtist MBID（#48、Docker自動試験）
+
+MusicBrainzのrelease artist-credit内に、同じ有効なArtist MBIDが一意にあるときだけ
+Enrichment内部の`ArtistIdentityStatus::available`へ投影する。異なるIDの複数creditは`ambiguous`、
+ID欠損・不正形式・Various Artistsの特殊IDは`unavailable`とする。選択前の複数候補や
+metadata sessionの失効後には、旧候補のMBIDを返さない。IDは現段階でPresentation Modelへ公開しない。
+
+Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。parser fixtureで単一・複数・
+同一IDの重複credit・ID欠損・Various Artists・不正IDを、session fixtureで候補選択変更と
+世代失効を確認した。外部Artist Background providerやPi実機表示は#49/#51の範囲である。
+
 ## 複数metadata候補の選択経路（#15、Docker自動試験）
 
 同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。作業branchでは

@@ -264,6 +264,9 @@ exact Disc ID lookupのみで、TOC fuzzy検索やCD stubは使用しない。
 loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で扱う。選択はdisc取り出し後に
 引き継がず、再挿入時は再び未選択とする。
 内部modelにalbum/track名・artist、release/release-group/recording ID、medium位置、country/dateを保持する。
+選択済みreleaseのartist-credit内のartist IDから、背景取得用の単一Artist MBIDも内部で判定する。
+異なるartist IDが複数ならAMBIGUOUS、ID欠損・不正形式・Various ArtistsならUNAVAILABLEとし、
+album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契約へ直接公開しない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
