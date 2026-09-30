@@ -1,5 +1,6 @@
 #pragma once
 #include "metadata_worker.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -10,6 +11,8 @@ public:
     std::optional<MetadataRequest> begin_if_needed(const DiscToc& toc);
     void invalidate();
     bool apply(MetadataWorkerResult result);
+    bool select_candidate(std::uint64_t generation, std::size_t index);
+    bool apply_artwork(std::uint64_t generation, const std::string& release_id, ArtworkInfo artwork);
     std::uint64_t generation() const { return generation_; }
     const MetadataResult& snapshot() const { return snapshot_; }
 private:

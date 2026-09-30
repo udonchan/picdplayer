@@ -20,10 +20,19 @@ public:
                 options.cancelled = cancelled;
                 return lookup_musicbrainz_disc(toc, options);
             });
+        MetadataOptions artwork_options{.cache_directory = cache_directory, .use_cache = true,
+                                        .cancelled = {}, .http_get = {}};
+        artwork_worker = std::make_unique<ArtworkWorker>(
+            [options = std::move(artwork_options)](const std::string& release_id,
+                                                  const MetadataWorker::Cancelled& cancelled) mutable {
+                options.cancelled = cancelled;
+                return lookup_cover_art_release(release_id, options);
+            });
     }
 
     MetadataSession session;
     std::unique_ptr<MetadataWorker> worker;
+    std::unique_ptr<ArtworkWorker> artwork_worker;
     std::string cache_directory;
 };
 
@@ -39,6 +48,7 @@ void EnrichmentService::begin_if_needed(const DiscToc& toc) {
 
 void EnrichmentService::invalidate() {
     if (implementation_->worker) implementation_->worker->cancel_pending();
+    if (implementation_->artwork_worker) implementation_->artwork_worker->cancel_pending();
     implementation_->session.invalidate();
 }
 
@@ -47,9 +57,24 @@ void EnrichmentService::poll() {
     MetadataWorkerResult result;
     while (implementation_->worker->pop(result))
         implementation_->session.apply(std::move(result));
+    ArtworkWorkerResult artwork_result;
+    while (implementation_->artwork_worker->pop(artwork_result))
+        implementation_->session.apply_artwork(artwork_result.request.generation,
+            artwork_result.request.release_id, std::move(artwork_result.artwork));
 }
 
 const MetadataResult& EnrichmentService::snapshot() const { return implementation_->session.snapshot(); }
+std::uint64_t EnrichmentService::generation() const { return implementation_->session.generation(); }
+bool EnrichmentService::select_candidate(std::uint64_t generation, std::size_t index) {
+    if (!implementation_->worker) return false;
+    const auto& before = implementation_->session.snapshot();
+    if (generation == implementation_->session.generation() && before.selected == index &&
+        before.status == MetadataStatus::available) return true;
+    if (!implementation_->session.select_candidate(generation, index)) return false;
+    const auto& selected = implementation_->session.snapshot().candidates[index].metadata;
+    implementation_->artwork_worker->request({generation, selected.release_id});
+    return true;
+}
 
 namespace {
 bool safe_key(const std::string& value) {

@@ -20,8 +20,16 @@ MusicBrainzの`tracks[].position`はmedium内の順序であり、物理CDのtra
 positionが1から連続し、曲数が実TOCと一致する候補だけを受け入れる。その後、TOC順に観測した物理track番号へ
 対応付ける。先頭がtrack 1以外でも、曲名を番号の違うtrackへ割り当てないためである。
 
-画像はさらに別の取得段階である。現在は単一候補のreleaseについてCover Art Archiveへ
+複数候補の場合、公開Presentation Modelの`enrichment.selection`に表示用候補と選択用世代を載せる。
+選択前は従来どおりAudio CDとして再生でき、既定では候補を自動決定しない。
+loopback限定の`POST /api/metadata-selection`が有効な場合、Viewはsnapshot内のsession ID、disc世代、
+metadata世代、候補indexを送る。daemonは現行discとの一致を確認してから選択する。
+選択は現在のdisc世代のメモリ内に限り、取り出し・再挿入時には再選択が必要となる。
+選択操作が受理されても、次のsnapshotで表示反映を確認する。標準UIのCEC候補pickerは別Issueで扱う。
+
+画像はさらに別の取得段階である。単一候補または明示選択されたreleaseについてCover Art Archiveへ
 問い合わせ、daemonがJPEG/PNG/WebPの画像bytesを上限付きで取得・検査してcacheへ保存する。
+明示選択後の画像取得もworkerで行い、再生を待たせない。古い選択に届いた画像結果は適用しない。
 Now PlayingはPiCDPlayer originの`/api/presentation/artwork/cover`だけを読む。provider URLや
 cache pathはUIへ公開しない。曲名だけ取得できた場合、画像取得・cache・decodeに失敗した場合も、
 画像なしで表示と再生を続ける。

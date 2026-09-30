@@ -14,8 +14,23 @@ int main() {
         MetadataResult old; old.status = MetadataStatus::available; old.disc_id = "old";
         check(!session.apply({request_a.generation, a, old}));
         MetadataResult current; current.status = MetadataStatus::ambiguous; current.disc_id = "current";
+        current.candidates.resize(2);
+        current.candidates[0].metadata.release_id = "release-a";
+        current.candidates[1].metadata.release_id = "release-b";
         check(session.apply({request_b.generation, b, current}));
         check(session.snapshot().disc_id == "current");
+        check(!session.select_candidate(request_a.generation, 0));
+        check(!session.select_candidate(request_b.generation, 2));
+        check(session.select_candidate(request_b.generation, 1));
+        check(session.snapshot().status == MetadataStatus::available && session.snapshot().selected == 1);
+        ArtworkInfo cover; cover.status = ArtworkStatus::available; cover.mime_type = "image/jpeg";
+        check(!session.apply_artwork(request_a.generation, "release-b", cover));
+        check(!session.apply_artwork(request_b.generation, "release-a", cover));
+        check(session.apply_artwork(request_b.generation, "release-b", cover));
+        check(session.snapshot().artwork.status == ArtworkStatus::available);
+        check(session.select_candidate(request_b.generation, 0));
+        check(session.snapshot().selected == 0 && session.snapshot().artwork.status == ArtworkStatus::not_requested);
+        check(!session.apply_artwork(request_b.generation, "release-b", cover));
         MetadataResult failed; failed.status = MetadataStatus::error; failed.error = "simulated metadata timeout";
         const auto request_failure = session.begin(a);
         check(!session.apply({request_b.generation, b, failed}));
@@ -23,6 +38,8 @@ int main() {
         check(session.snapshot().status == MetadataStatus::error &&
               session.snapshot().error == "simulated metadata timeout");
         session.invalidate();
+        check(!session.select_candidate(request_b.generation, 0));
+        check(!session.apply_artwork(request_b.generation, "release-a", cover));
         auto request_a_again = session.begin(a);
         check(!session.apply({request_a.generation, a, old}));
         check(session.apply({request_a_again.generation, a, old}));

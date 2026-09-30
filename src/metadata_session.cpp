@@ -23,3 +23,21 @@ bool MetadataSession::apply(MetadataWorkerResult result) {
     if (result.generation != generation_ || !toc_ || !same_toc(result.toc, *toc_)) return false;
     snapshot_ = std::move(result.metadata); return true;
 }
+bool MetadataSession::select_candidate(std::uint64_t generation, std::size_t index) {
+    if (generation != generation_ || !toc_ || snapshot_.candidates.size() < 2 ||
+        index >= snapshot_.candidates.size() ||
+        (snapshot_.status != MetadataStatus::ambiguous && snapshot_.status != MetadataStatus::available))
+        return false;
+    snapshot_.selected = index;
+    snapshot_.status = MetadataStatus::available;
+    snapshot_.artwork = {};
+    return true;
+}
+bool MetadataSession::apply_artwork(std::uint64_t generation, const std::string& release_id, ArtworkInfo artwork) {
+    if (generation != generation_ || !toc_ || !snapshot_.selected ||
+        *snapshot_.selected >= snapshot_.candidates.size() ||
+        snapshot_.candidates[*snapshot_.selected].metadata.release_id != release_id)
+        return false;
+    snapshot_.artwork = std::move(artwork);
+    return true;
+}

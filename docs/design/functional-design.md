@@ -199,9 +199,12 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | POST /api/play, /pause, /stop, /next, /previous | bodyなし、受理204 |
 | POST /api/seek | `{"offset_seconds":10}`、±86400秒、受理204 |
 | POST /api/track | `{"track":2}`、1〜99かつ実disc内、受理204 |
+| POST /api/metadata-selection | snapshotのsession/disc/metadata世代と0起点候補indexを指定。現行discに一致すると受理204 |
 | POST /api/eject | bodyなし、受理202。物理完了は状態で確認 |
 
 seek/trackはfieldを1個だけ持つJSON object。操作body上限4 KiB、state上限1 MiB。
+metadata-selectionは`session_id`、`disc_generation`、`metadata_generation`、`candidate_index`の4 fieldだけを
+持ち、body上限512 bytes。世代不一致、候補なし、disc不在は409。受理は表示更新や画像取得完了を意味しない。
 未知pathは404、不適切なmethodは405。不正入力は400、body上限超過は413。
 通常操作はdiscなし/EJECTING時に409。操作の受理は音声出力開始の完了を意味しない。
 状態は250 msごとに変化を検査し、revisionを増加して配信する。HTTP直後のstateも最大でこの更新待ちがある。
@@ -257,14 +260,17 @@ HTTPはlibcurl、JSONはnlohmann/json。HTTPSやJSON parserを独自実装しな
 exact Disc ID lookupのみで、TOC fuzzy検索やCD stubは使用しない。
 
 該当Disc IDを含むreleaseのmediumを候補とし、0件はNOT_FOUND、1件はAVAILABLE、複数はAMBIGUOUS。
-複数候補を自動選択しない。候補選択API/UIは未実装。
+複数候補を自動選択しない。表示用候補と世代を`enrichment.selection`で公開し、現行discの候補を
+loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で扱う。選択はdisc取り出し後に
+引き継がず、再挿入時は再び未選択とする。
 内部modelにalbum/track名・artist、release/release-group/recording ID、medium位置、country/dateを保持する。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
-単一候補の場合だけCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
+単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
 artwork AVAILABLEはdaemonがJPEG/PNG/WebPのbytesを上限付きで取得し、same-origin local resourceとして
 配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。現在はCAA処理完了後に
-metadata結果全体をmainへ返す。
+metadata結果全体をmainへ返す。明示選択後のCAA取得は別のworkerで進め、結果のmetadata世代とrelease IDが
+現在選択中のものに一致するときだけ適用する。
 
 raw JSONを`metadata/{disc-id}.json`、`cover-art/{release-id}.json`へ、検証済み画像bytesを
 `cover-art/{release-id}.image`へ保存する。
