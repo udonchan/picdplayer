@@ -76,6 +76,7 @@ async function main() {
   assert.match(node('read-map-state').textContent, /2 regions/);
   assert.match(node('disc-map').style.background, /conic-gradient\(from 0deg/);
   assert.equal(node('map-latest').hidden, false);
+  assert.equal(node('map-marker-label').textContent, 'LATEST READ · LBA 50 · MAY BE AHEAD');
   now = 1999;
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 2,
     player: { ...snapshot.player, position_frames: 90 } }) });
@@ -103,6 +104,7 @@ async function main() {
   assert.equal(node('integrity-summary').textContent, 'CURRENT READ · NOT AVAILABLE');
   assert.equal(node('read-current').textContent, 'NOT AVAILABLE');
   assert.equal(node('map-latest').hidden, true);
+  assert.equal(node('map-marker-label').textContent, 'LATEST READ · NOT AVAILABLE');
   sockets[0].onclose();
   assert.equal(node('connection').textContent, 'DAEMON · RECONNECTING');
   assert.equal(node('connection').dataset.state, 'reconnecting');

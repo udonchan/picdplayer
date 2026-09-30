@@ -53,37 +53,38 @@
           <p class="evidence-label">LATEST READ · MAY BE AHEAD</p><p id="read-latest" class="evidence-value">—</p>
           <p class="integrity-note">Playback evidence follows PCM submitted for output. Latest read is a separate read-ahead observation, not a physical head or audible position.</p>
         </article>
-        <div class="integrity-side">
-          <article class="integrity-card map-card">
-            <div class="map-heading"><div><h3>Disc read map</h3><p id="read-map-state">Waiting for an accepted disc layout</p></div><button id="refresh-read-map" type="button">Refresh map</button></div>
-            <div class="map-observation">
-              <div id="disc-map" class="disc-map" role="img" aria-label="Disc read map">
-                <span id="map-latest" class="map-marker latest" hidden></span>
-                <span class="map-hole" aria-hidden="true"></span>
-              </div>
-              <div class="map-details">
-                <p class="map-legend"><span class="legend clean">Observed clean</span><span class="legend retry">Retry / repeat</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain / anomaly</span><span class="legend unobserved">Unobserved</span><span class="legend latest">Latest observed read (may be ahead)</span></p>
-                <p class="integrity-note">Colors classify recorded observations, not disc-wide correctness. Angles project TOC LBA from 12 o'clock; the dot marks latest observed read, not the physical head.</p>
-              </div>
+        <div class="map-scene">
+          <figure class="disc-visual">
+            <div id="disc-map" class="disc-map" role="img" aria-label="Disc read map">
+              <span id="map-latest" class="map-marker latest" hidden></span>
+              <span class="map-hole" aria-hidden="true"></span>
             </div>
-          </article>
-          <article class="integrity-card drive-card">
-            <h3>Drive capability</h3>
-            <p id="drive-name" class="drive-name">UNKNOWN DRIVE</p>
-            <dl class="metrics compact">
-              <dt>DAE</dt><dd id="cap-dae">UNKNOWN</dd>
-              <dt>C2 support</dt><dd id="cap-c2">UNKNOWN</dd>
-              <dt>C2 trust</dt><dd id="cap-c2-trust">UNKNOWN</dd>
-              <dt>Read cache</dt><dd id="cap-cache">UNKNOWN</dd>
-              <dt>Accurate stream</dt><dd id="cap-stream">UNKNOWN</dd>
-              <dt>Speed control</dt><dd id="cap-speed">UNKNOWN</dd>
-              <dt>Speed request</dt><dd id="drive-speed-request">NOT REQUESTED</dd>
-              <dt>Speed observed</dt><dd id="drive-speed-current">NOT AVAILABLE</dd>
-              <dt>Read offset</dt><dd id="drive-offset">UNKNOWN</dd>
-            </dl>
-            <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
-          </article>
+          </figure>
+          <section class="map-readout" aria-label="Disc read map details">
+            <div class="map-heading"><div><h3>Disc read map</h3><p id="read-map-state">Waiting for an accepted disc layout</p></div><button id="refresh-read-map" type="button">Refresh map</button></div>
+            <p id="map-marker-label" class="disc-caption">LATEST READ · NOT AVAILABLE</p>
+            <div class="map-details">
+              <p class="map-legend"><span class="legend clean">Observed clean</span><span class="legend retry">Retry / repeat</span><span class="legend recovered">Recovered</span><span class="legend warning">Uncertain / anomaly</span><span class="legend unobserved">Unobserved</span><span class="legend latest">Latest observed read (may be ahead)</span></p>
+              <p class="integrity-note">Colors classify recorded observations, not disc-wide correctness. Angles project TOC LBA from 12 o'clock; the dot marks latest observed read, not the physical head.</p>
+            </div>
+          </section>
         </div>
+        <article class="integrity-card drive-card">
+          <h3>Drive capability</h3>
+          <p id="drive-name" class="drive-name">UNKNOWN DRIVE</p>
+          <dl class="metrics compact">
+            <dt>DAE</dt><dd id="cap-dae">UNKNOWN</dd>
+            <dt>C2 support</dt><dd id="cap-c2">UNKNOWN</dd>
+            <dt>C2 trust</dt><dd id="cap-c2-trust">UNKNOWN</dd>
+            <dt>Read cache</dt><dd id="cap-cache">UNKNOWN</dd>
+            <dt>Accurate stream</dt><dd id="cap-stream">UNKNOWN</dd>
+            <dt>Speed control</dt><dd id="cap-speed">UNKNOWN</dd>
+            <dt>Speed request</dt><dd id="drive-speed-request">NOT REQUESTED</dd>
+            <dt>Speed observed</dt><dd id="drive-speed-current">NOT AVAILABLE</dd>
+            <dt>Read offset</dt><dd id="drive-offset">UNKNOWN</dd>
+          </dl>
+          <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
+        </article>
       </div>
     </section>
   </main>

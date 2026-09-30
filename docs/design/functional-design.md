@@ -54,10 +54,12 @@ null/不正値、UNKNOWN、NOT_CHECKED、UNSUPPORTED、N/Aを0やCLEANへ変換�
 反復一致読み取りは既定75 frame区間で2-of-3比較を行う。設定変更の契約は以下に記す。
 
 #150ではPlayerの一次再生情報の最大幅を維持し、Now Playingの下にIntegrity Monitorを置く。Integrity
-Monitorの内部ではRead observationを左、Disc read mapとDrive capabilityを右の縦積みに置く。利用可能な
-幅が各列の内容を収められなくなったときは一列へ縮退し、事前に決め打ちしたviewport幅だけを根拠に情報を隠さない。
-Disc read mapは枠付きの独立カードを使わず、右列の上段で円盤を大きなvisual layerとして配置する。
-円盤のためにMonitor全体の高さを増やさず、低解像度では円盤と説明を通常のフローに戻す。
+Monitorの内部はRead observationを左、枠のない円盤visualizationと説明・Drive capabilityを右に置く
+二列構成とする。右上の円盤と説明は境界を持たない同じvisual scene内で横に配置し、
+Disc read mapの四角いcard containerは設けない。Drive capabilityは右下の補助領域とする。
+幅が不足するとRead observation、円盤と説明、Drive capabilityの順に一列へ縮退する。
+円盤のためにMonitor全体の高さを増やさず、viewport幅だけを根拠に情報を隠さない。
+円盤の隣には対応するlatest observed readのLBA、またはNOT AVAILABLEを表示する。
 block bufferは正の`read_block_frames`と容量から上式が算出できる場合だけmeterで補助表示し、常に
 `queued_blocks / block_capacity blocks`の正確なテキストを併記する。他の値に推測上の比率を作らない。
 `read_stall`はin-flight/last timeoutとlimitの診断値で、ioctlを中断したこと、PCMの回復、drive故障を意味しない。

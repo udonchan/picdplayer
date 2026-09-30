@@ -210,6 +210,7 @@ main {
   margin-top: clamp(16px, 2vh, 24px);
   padding-top: 12px;
   border-top: 1px solid var(--line);
+  container-type: inline-size;
 }
 
 .integrity-heading,
@@ -254,15 +255,19 @@ main {
 }
 
 .integrity-layout {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1.36fr) minmax(0, 1fr);
+  grid-template-areas: "evidence map" "evidence drive";
   gap: 12px;
   margin-top: 12px;
   align-items: start;
 }
 
-.evidence-card { flex: 1 1 570px; }
-.integrity-side { display: grid; flex: 1 1 350px; gap: 12px; min-width: min(100%, 350px); }
+.evidence-card { grid-area: evidence; }
+.drive-card { grid-area: drive; padding: 10px 12px; }
+.drive-card .metrics.compact { gap: 4px 10px; }
+.drive-card .drive-name { margin: 6px 0; }
+.drive-card .integrity-note { margin-top: 6px; }
 
 .metrics {
   display: grid;
@@ -317,33 +322,28 @@ main {
   font-size: 12px;
 }
 
-.map-observation {
-  display: block;
-  margin-top: 10px;
-}
-
-.map-details {
-  width: 100%;
+.map-scene {
+  grid-area: map;
   min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 215px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
 }
 
-.map-card {
-  position: relative;
-  min-height: 193px;
-  padding: 4px 188px 4px 0;
-  border: 0;
-  background: transparent;
-}
-
-.map-card h3 { font-size: 27px; }
-
-.map-observation .disc-map {
-  position: absolute;
-  top: 13px;
-  right: 8px;
-  width: 160px;
+.disc-visual {
+  min-width: 0;
   margin: 0;
+  display: grid;
+  justify-items: center;
 }
+
+.disc-visual .disc-map { width: min(100%, 215px); margin: 0; }
+.disc-caption { margin: 8px 0 0; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.map-readout { min-width: 0; }
+.map-readout .map-heading { gap: 8px; }
+.map-readout .map-heading h3 { font-size: 23px; }
+.map-readout .map-details { margin-top: 8px; }
 
 .disc-map {
   position: relative;
@@ -383,9 +383,20 @@ main {
 .legend.recovered { color: var(--recovered); }
 .legend.unobserved { color: #202729; }.legend.unobserved::before { border: 1px solid var(--line); }
 
-@media (max-width: 1200px) {
-  .map-card { padding-right: 145px; }
-  .map-observation .disc-map { width: 124px; }
+@container (max-width: 1000px) {
+  .integrity-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "evidence" "map" "drive";
+  }
+}
+
+@container (max-width: 520px) {
+  .map-scene {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+  .disc-visual { width: min(100%, 215px); }
+  .disc-visual .disc-map { width: 100%; }
 }
 
 @media (max-width: 720px) {
@@ -408,11 +419,7 @@ main {
     margin-bottom: 28px;
   }
 
-  .integrity-heading, .map-heading { align-items: stretch; flex-direction: column; }
+  .integrity-heading { align-items: stretch; flex-direction: column; }
   .integrity-signals { justify-content: start; }
   .buffer-measurement { grid-template-columns: 1fr; }
-  .map-card { min-height: 0; padding: 12px 0; }
-  .map-observation { display: flex; flex-wrap: wrap; gap: 16px; }
-  .map-observation .disc-map { position: relative; top: auto; right: auto; }
-  .map-details { flex: 1 1 180px; }
 }
