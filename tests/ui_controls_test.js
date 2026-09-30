@@ -158,6 +158,13 @@ async function main() {
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(controls[5].hidden, false);
   assert.equal(node('media-message').textContent, 'ALBUM SELECTION AVAILABLE');
+  assert.equal(node('metadata-picker').hidden, false); // New ambiguity opens automatically.
+  const pickerNavigation = (action) => sockets[2].onmessage({ data: JSON.stringify({ action }) });
+  pickerNavigation('back');
+  assert.equal(node('metadata-picker').hidden, true);
+  snapshot.revision += 1;
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(node('metadata-picker').hidden, true); // Back sticks for the same candidate set.
   controls[5].onclick({ detail: 1 });
   assert.equal(node('metadata-picker').hidden, false);
   assert.equal(node('metadata-candidates').children.length, 2);
@@ -165,7 +172,6 @@ async function main() {
   controls[5].onclick({ detail: 0 }); // Delayed browser click from the same CEC press.
   assert.equal(posts.length, postsBeforeDuplicateOpen);
   assert.equal(node('metadata-candidates').children[0].dataset.focused, 'true');
-  const pickerNavigation = (action) => sockets[2].onmessage({ data: JSON.stringify({ action }) });
   pickerNavigation('down');
   assert.equal(node('metadata-candidates').children[1].dataset.focused, 'true');
   pickerNavigation('select');
@@ -176,7 +182,7 @@ async function main() {
   assert.equal(node('metadata-feedback').textContent, 'WAITING FOR ALBUM UPDATE');
   pickerNavigation('select');
   assert.equal(posts.filter((url) => url === '/api/metadata-selection').length, 1);
-  snapshot.revision = 7;
+  snapshot.revision = 8;
   snapshot.enrichment.status = 'AVAILABLE';
   snapshot.enrichment.selection.state = 'SELECTED';
   snapshot.enrichment.selection.selected_index = 1;
@@ -185,28 +191,28 @@ async function main() {
   assert.equal(node('metadata-picker').hidden, true);
   assert.equal(node('album').textContent, 'The Slip');
   assert.equal(controls[5].hidden, true);
-  snapshot.revision = 8;
+  snapshot.revision = 9;
   snapshot.artwork.cover = { url: '/api/presentation/artwork/cover' };
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   const firstCoverIdentity = node('cover').dataset.identity;
-  snapshot.revision = 9;
+  snapshot.revision = 10;
   snapshot.enrichment.selection.selected_index = 0;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.notEqual(node('cover').dataset.identity, firstCoverIdentity);
-  snapshot.revision = 10;
+  snapshot.revision = 11;
   snapshot.enrichment.status = 'UNAVAILABLE';
   snapshot.enrichment.selection.state = 'AMBIGUOUS';
   snapshot.enrichment.selection.selected_index = null;
   snapshot.enrichment.selection.metadata_generation = 4;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(node('metadata-picker').hidden, false); // New generation opens once.
   postStatus = 409;
-  controls[5].onclick({ detail: 1 });
   pickerNavigation('select');
   for (let i = 0; i < 4; i++) await Promise.resolve();
   assert.equal(node('metadata-feedback').textContent, 'SELECTION REJECTED · 409');
   pickerNavigation('back');
   assert.equal(node('metadata-picker').hidden, true);
-  snapshot.revision = 11;
+  snapshot.revision = 12;
   snapshot.disc.state = 'NO_DISC';
   snapshot.enrichment.selection = null;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });

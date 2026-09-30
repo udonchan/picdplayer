@@ -81,6 +81,7 @@ let feedbackTimer;
 let pickerOpen = false;
 let pickerIndex = 0;
 let pickerKey = '';
+let autoOpenedPickerKey = '';
 let pendingSelection = null;
 let candidateButtons = [];
 let lastPickerFocused = null;
@@ -127,6 +128,14 @@ function renderPicker(snapshot) {
     if (pickerOpen) closePicker();
     pickerKey = '';
     candidateButtons = [];
+    if (!selection) return;
+  }
+  // Show each new ambiguity once. Back dismisses it without suppressing the
+  // transport controls, while Choose album can reopen the same candidate set.
+  // 新しい曖昧候補は一度だけ自動表示します。Back後は手動で開き直せます。
+  if (autoOpenedPickerKey !== nextKey) {
+    autoOpenedPickerKey = nextKey;
+    openPicker();
     return;
   }
   if (!pickerOpen) return;

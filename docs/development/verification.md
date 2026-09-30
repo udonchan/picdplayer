@@ -54,20 +54,29 @@ DockerのLinux/aarch64で`ENABLE_API=OFF`もビルドできた。STOPPED画面�
 適用しない。再挿入時の自動再選択は行わない。
 
 Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。候補選択・古い世代と画像結果の拒否、
-provider固有IDを公開しないPresentation Model、API入力境界を確認した。標準PlayerのCEC候補picker、
-実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
-#15の実機・統合確認として残る。
+provider固有IDを公開しないPresentation Model、API入力境界を確認した。
+2026-10-01にPiへ#15/#166を含むpackageを導入し、『The Slip』の実候補US盤・JP盤が
+`AMBIGUOUS`として公開されること、CEC操作後に`SELECTED`へ変わり、disc/track情報とcover URLが
+authoritative snapshotに反映されることを確認した。cover endpointはHTTP 200、image/jpeg、77911 bytesを返した。
+TV上のcover画像そのものと失敗系は別途確認対象とする。
 
-## 標準Playerのmetadata候補picker（#166、Docker/Chrome fixture確認）
+## 標準Playerのmetadata候補picker（#166、Docker/Chrome/Pi確認）
 
 #15の公開契約と#55のsemantic CEC navigationを使う標準UIを作業branchで実装した。
-複数候補のときだけ任意の入口を表示し、方向入力で候補移動、selectで選択POST、backで閉じる。
+曖昧候補の初回検出時にpickerを自動表示し、backで閉じた同じ候補群は自動再表示しない。
+`Choose album`で開き直せる。方向入力で候補移動、selectで選択POST、backで閉じる。
 HTTP 204は選択完了とみなさず、次のauthoritative snapshotでalbum/trackを更新する。
 同じcover URLで選択candidateが変わっても画像を再読込する。
 Debian Trixie/aarch64 DockerでbuildとCTest 46件を実行し、Node fixtureで候補表示、CEC操作、
 204待ち、409拒否、選択後snapshot、disc不在を確認した。
 Mac headless Chromeの[1920×1080表示](reports/2026-10-01-metadata-picker/README.md)は合成候補の
-レイアウト確認である。PiのTV・リモコン・『The Slip』実候補でのend-to-end確認は未実施。
+レイアウト確認である。2026-10-01にはPiの通常kioskで、ユーザーがTVリモコンから『The Slip』の
+候補を選択した。Pi APIでは2候補（US `2008-07-22`、JP `2008-09-10`）からindex 0が選択され、
+`enrichment.status=AVAILABLE`、disc title/artist、track 1 title `999,999`、cover URLを確認した。
+ユーザーはTV上のメタデータ表示、pickerの終了、表示欠け・意図しないscrollがないことを確認した。
+候補選択中のTV画像は保存しておらず、合成fixture画像を実機の証拠とは扱わない。
+その後、曖昧候補の初回自動表示へ変更して再デプロイした。ユーザーはTVで`Choose album`を
+押さずにUS盤・JP盤の候補一覧が開くことと、Backで閉じた後に同じ候補群が勝手に再表示されないことを確認した。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
