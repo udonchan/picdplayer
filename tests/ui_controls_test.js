@@ -10,6 +10,11 @@ async function main() {
   const nodes = new Map();
   const sockets = [];
   const posts = [];
+  const policyPosts = [];
+  let policyPostStatus = 204;
+  const policy = { requested: { mode: 'SINGLE', region_frames: 75,
+    required_matches: 2, maximum_attempts: 3, time_budget_ms: 10000 },
+  effective: { mode: 'SINGLE' }, pending: false };
   let postStatus = 204;
   let failPost = false;
   let now = 1000;
@@ -32,7 +37,7 @@ async function main() {
     nodes.set(id, element);
     return element;
   }
-  const controls = ['previous', 'play', 'pause', 'stop', 'next'].map((command) => {
+  const controls = ['previous', 'play', 'pause', 'stop', 'next', 'settings'].map((command) => {
     const button = node(`button-${command}`);
     button.dataset.command = command;
     return button;
@@ -48,6 +53,18 @@ async function main() {
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url, options) => {
       if (url === '/api/state') return { ok: true, json: async () => snapshot };
+      if (url === '/api/read-policy') {
+        if (options?.method === 'POST') {
+          const body = JSON.parse(options.body);
+          policyPosts.push(body);
+          if (policyPostStatus === 204) {
+            policy.requested = { ...body, mode: body.mode.toUpperCase() };
+            policy.pending = true;
+          }
+          return { ok: policyPostStatus === 204, status: policyPostStatus };
+        }
+        return { ok: true, json: async () => policy };
+      }
       if (options?.method === 'POST' && url !== '/api/ui-boot') {
         posts.push(url);
         if (failPost) throw new Error('offline');
@@ -65,6 +82,30 @@ async function main() {
   assert.equal(controls[1].disabled, false); // play
   assert.equal(controls[2].disabled, true); // pause
   const navigation = (action) => sockets[1].onmessage({ data: JSON.stringify({ action }) });
+  assert.equal(controls[5].disabled, false);
+  controls[5].onclick({ detail: 1 });
+  assert.equal(controls[5].disabled, false);
+  await new Promise(setImmediate);
+  assert.equal(node('policy-single').dataset.selected, 'true');
+  navigation('right');
+  assert.equal(node('policy-repeat').dataset.focused, 'true');
+  navigation('select');
+  await new Promise(setImmediate);
+  assert.equal(policyPosts.length, 1);
+  assert.equal(policyPosts[0].mode, 'repeat');
+  assert.match(node('settings-policy-status').textContent, /until playback stops/);
+  navigation('back');
+  assert.equal(node('settings-panel').hidden, true);
+  controls[5].onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  policyPostStatus = 409;
+  node('policy-single').onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.equal(node('settings-policy-status').textContent,
+    'Policy change failed. Current playback continues.');
+  assert.equal(policy.requested.mode, 'REPEAT');
+  navigation('back');
+  navigation('back');
   navigation('right');
   keys.keydown({ key: 'ArrowRight', preventDefault() {} });
   assert.equal(controls[0].dataset.focused, 'true'); // one TV press, two input paths
@@ -118,12 +159,14 @@ async function main() {
   navigation('select');
   assert.deepEqual(posts, ['/api/play', '/api/pause', '/api/stop', '/api/next']);
   keys.keydown({ key: 'ArrowRight', preventDefault() {} });
-  assert(controls.every((button) => button.disabled));
+  assert(controls.slice(0, 5).every((button) => button.disabled));
+  assert.equal(controls[5].disabled, false);
   snapshot.revision = 4;
   snapshot.disc.state = 'AUDIO_READY';
   snapshot.player.state = 'UNKNOWN';
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
-  assert(controls.every((button) => button.disabled));
+  assert(controls.slice(0, 5).every((button) => button.disabled));
+  assert.equal(controls[5].disabled, false);
   snapshot.revision = 5;
   snapshot.player.state = 'STOPPED';
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });

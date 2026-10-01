@@ -229,6 +229,12 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。technical stat
 keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
+標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
+部分実装する。CEC方向で選択し、決定で既存`POST /api/read-policy`を送る。BackでPlayerへ戻り、
+選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
+結果を示し、API失敗時は再生を止めない。詳細値の編集、永続化状態の表示、Artist Backgroundの
+有効化は未実装である。永続化は別ブランチの#177で実装中であり、この画面の操作を
+保存済みと表示しない。
 候補選択やread policy編集はこのcontrol列に含めない。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ

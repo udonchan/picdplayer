@@ -75,10 +75,16 @@ const setHidden = (element, value) => {
 // The View owns focus only; the daemon snapshot remains the playback authority.
 // View が保持するのは focus だけで、再生状態は daemon の snapshot を正とします。
 const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
+const policyButtons = [byId('policy-single'), byId('policy-repeat')];
 let focusedControl = -1;
 let pendingCommand = null;
 let feedbackTimer;
+let settingsOpen = false;
+let focusedPolicy = 0;
+let policyState = null;
+let pendingPolicy = false;
 const controlEnabled = (command, snapshot) => {
+  if (command === 'settings') return true;
   if (snapshot?.disc?.state !== 'AUDIO_READY') return false;
   const state = snapshot?.player?.state;
   if (!['STOPPED', 'PLAYING', 'PAUSED'].includes(state)) return false;
@@ -121,9 +127,85 @@ function controlFeedback(message) {
     if (label.textContent === message) label.textContent = '';
   }, 1800);
 }
+function renderPolicySettings() {
+  const requested = policyState?.requested;
+  const effective = policyState?.effective;
+  const valid = requested && ['SINGLE', 'REPEAT'].includes(requested.mode) &&
+    ['region_frames', 'required_matches', 'maximum_attempts', 'time_budget_ms']
+      .every((key) => Number.isInteger(requested[key]) && requested[key] >= 0);
+  policyButtons.forEach((button, index) => {
+    button.disabled = !valid || pendingPolicy;
+    button.dataset.selected = String(valid && requested.mode === (index ? 'REPEAT' : 'SINGLE'));
+    button.dataset.focused = String(settingsOpen && focusedPolicy === index);
+  });
+  set('settings-region', valid ? `${requested.region_frames} CD frames` : '—');
+  set('settings-matches', valid ? requested.required_matches : '—');
+  set('settings-attempts', valid ? requested.maximum_attempts : '—');
+  set('settings-budget', valid ? `${requested.time_budget_ms} ms` : '—');
+  if (!valid) set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
+  if (valid) set('settings-policy-status', policyState.pending
+    ? `Requested ${requested.mode}; effective ${effective?.mode || 'UNKNOWN'} until playback stops.`
+    : `Effective ${effective?.mode || requested.mode}.`);
+}
+async function loadPolicySettings() {
+  try {
+    const response = await fetch('/api/read-policy');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    policyState = await response.json();
+    renderPolicySettings();
+  } catch {
+    policyState = null;
+    renderPolicySettings();
+    set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
+  }
+}
+function focusPolicy(index) {
+  focusedPolicy = index;
+  renderPolicySettings();
+  policyButtons[index]?.focus?.({ preventScroll: true });
+}
+function openSettings() {
+  settingsOpen = true;
+  setHidden(byId('settings-panel'), false);
+  set('settings-policy-status', 'Loading read policy…');
+  focusPolicy(0);
+  void loadPolicySettings();
+}
+function closeSettings() {
+  settingsOpen = false;
+  setHidden(byId('settings-panel'), true);
+  const index = controls.findIndex((button) => button.dataset.command === 'settings');
+  if (index >= 0) focusControl(index);
+}
+async function selectPolicy(index) {
+  const requested = policyState?.requested;
+  if (!settingsOpen || pendingPolicy || policyButtons[index]?.disabled || !requested) return;
+  const mode = index ? 'repeat' : 'single';
+  pendingPolicy = true;
+  renderPolicySettings();
+  set('settings-policy-status', 'Saving policy…');
+  let failed = false;
+  try {
+    const response = await fetch('/api/read-policy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, region_frames: requested.region_frames,
+        required_matches: requested.required_matches, maximum_attempts: requested.maximum_attempts,
+        time_budget_ms: requested.time_budget_ms }),
+    });
+    if (response.status !== 204) throw new Error(`HTTP ${response.status}`);
+    await loadPolicySettings();
+  } catch {
+    failed = true;
+  } finally {
+    pendingPolicy = false;
+    renderPolicySettings();
+    if (failed) set('settings-policy-status', 'Policy change failed. Current playback continues.');
+  }
+}
 async function activateControl(button) {
   if (!button || button.disabled || pendingCommand) return;
   const command = button.dataset.command;
+  if (command === 'settings') { openSettings(); return; }
   if (!['play', 'pause', 'stop', 'previous', 'next'].includes(command)) return;
   pendingCommand = command;
   renderControls(currentSnapshot);
@@ -139,6 +221,13 @@ async function activateControl(button) {
   }
 }
 function handleNavigation(action) {
+  if (settingsOpen) {
+    if (action === 'back') closeSettings();
+    else if (action === 'left' || action === 'up') focusPolicy((focusedPolicy + 1) % 2);
+    else if (action === 'right' || action === 'down') focusPolicy((focusedPolicy + 1) % 2);
+    else if (action === 'select') void selectPolicy(focusedPolicy);
+    return;
+  }
   if (action === 'left' || action === 'up') moveControl(-1);
   else if (action === 'right' || action === 'down') moveControl(1);
   else if (action === 'select') activateControl(controls[focusedControl]);
@@ -166,9 +255,15 @@ controls.forEach((button, index) => button.addEventListener('click', (event) => 
   if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
   else activateControl(button);
 }));
+policyButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
+  focusPolicy(index);
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else void selectPolicy(index);
+}));
+byId('settings-close').addEventListener?.('click', closeSettings);
 document.addEventListener('keydown', (event) => {
   const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
-  if (!actions[event.key] || !controls.length) return;
+  if (!actions[event.key] || (!controls.length && !settingsOpen)) return;
   event.preventDefault();
   handleNavigationInput(actions[event.key], 'keyboard');
 });

@@ -1,5 +1,13 @@
 # 検証状況と残課題
 
+## Player設定画面の第一段階（#178、作業ブランチ）
+
+標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
+SINGLE/REPEATを選択できるようにした。`requested/effective/pending`と詳細4値を表示し、
+取得・変更失敗でも再生は継続する。Artist Backgroundは利用不能と明示してON操作を提供しない。
+Debian Trixie/aarch64 Dockerの46件のCTestとJS構文確認を通した。PiのTV実表示、CEC入力、
+1080p/狭幅の見た目、保存後の再起動復元はこのブランチでは未確認。
+
 更新日: 2026-09-30。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 

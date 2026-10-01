@@ -64,6 +64,7 @@
 | [#28 Hide the cursor in the Cage kiosk session](https://github.com/udonchan/picdplayer/issues/28) | kiosk上のcursorを非表示にする方法を調査・検証する。 |
 | [#124 Investigate unintended kiosk scrollbar display](https://github.com/udonchan/picdplayer/issues/124) | TVで意図しないscrollbarを目視した。CDPのDOM probeでは1920×1080 viewportにdocument/root/bodyのoverflowや画面外elementを検出できず、Chromium/Cage/Waylandを含む原因は未確定。UIの見た目変更とは切り分けて調査する。 |
 | [#31 Add CEC-driven controls to the Player view](https://github.com/udonchan/picdplayer/issues/31) | 親Issue。[#54 loopback操作契約](https://github.com/udonchan/picdplayer/issues/54)、[#55 CEC navigation配信](https://github.com/udonchan/picdplayer/issues/55)、[#56 Player操作UI](https://github.com/udonchan/picdplayer/issues/56)に分割済み。#54はPR #168、#55はDraft PR #167、#56はその上に積んだDraft PR #169。Piで上下左右・決定・Back、再生/音声・一時停止・停止を確認した。CECとChromium keydownの二重入力を#56で抑制し、長押しや別TVでの確認は残る。metadata候補pickerは[#166](https://github.com/udonchan/picdplayer/issues/166)で別途扱う。 |
+| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | #55/#56のCEC入力上に、既存Read Policy APIのSINGLE/REPEAT選択と詳細値表示を部分実装中。永続保存は[#177](https://github.com/udonchan/picdplayer/issues/177)、Artist Backgroundの明示ON/OFFは#49/#51と利用条件が揃ってから扱う。PiのSettings画面操作は未確認。 |
 
 ## 設計を先に確定する作業
 
