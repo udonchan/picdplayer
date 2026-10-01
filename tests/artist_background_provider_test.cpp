@@ -87,6 +87,18 @@ int main() {
               ArtistBackgroundLookupStatus::unavailable);
         check(lookup_artist_backgrounds(artist, "test-key", {}, failing, root).status ==
               ArtistBackgroundLookupStatus::unavailable);
+        const auto missing_marker = root / "artist-background" / (std::string(artist) + ".missing");
+        std::filesystem::last_write_time(missing_marker,
+            std::filesystem::file_time_type::clock::now() - std::chrono::days(2));
+        int renewed_requests = 0;
+        FanartHttpGet renewed = [&](std::string_view, std::string_view, std::size_t,
+                                   const std::function<bool()>&) {
+            ++renewed_requests;
+            return HttpResponse{.status = 200, .content_type = "application/json", .body = fixture};
+        };
+        check(lookup_artist_backgrounds(artist, "test-key", {}, renewed, root).status ==
+              ArtistBackgroundLookupStatus::available && renewed_requests == 1);
+        check(!std::filesystem::exists(missing_marker));
         std::filesystem::remove_all(root, ec);
         std::cout << "PASS: optional fanart.tv lookup and failure isolation\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
