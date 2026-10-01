@@ -300,7 +300,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             };
             return std::string("{\"requested\":") + policy_json(requested_read_policy) +
                    ",\"effective\":" + policy_json(effective_read_policy) +
-                   ",\"pending\":" + (read_policy_pending ? "true" : "false") + '}';
+                   ",\"pending\":" + (read_policy_pending ? "true" : "false") +
+                   ",\"persistence_configured\":" + (settings_file.empty() ? "false" : "true") + '}';
         };
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
                 if (command.type == ApiCommandType::eject) {

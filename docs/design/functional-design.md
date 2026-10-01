@@ -188,7 +188,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
 | GET /api/read-history | STREAM詳細履歴とDISC領域集計。通常snapshotとは別取得 |
-| GET /api/read-policy | requested/effective/pendingを即時取得 |
+| GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |

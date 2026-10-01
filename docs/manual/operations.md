@@ -108,6 +108,8 @@ version付きJSONへ保存し、次のdaemon起動時に読み戻す。保存済
 破損・非対応version・範囲外の保存値は採用せず、起動引数側へ戻してwarningを記録する。
 この機能はAPI有効buildの`--player`で使い、親directoryは事前にservice userが書ける状態にする。
 指定しなければ従来どおりruntime変更は再起動後に残らない。設定画面と背景ON/OFFは未実装。
+`GET /api/read-policy`の`persistence_configured`は保存先を指定したかだけを示し、個々のPOSTの
+保存成功はHTTP応答で確認する。falseのとき変更は現在のdaemon sessionだけに有効である。
 
 開始閾値は容量以下でなければならない。大きなbufferは短いread stallへの余裕を増やす一方、
 memory使用量が増える。開始閾値を増やすとplay・seek後の待ち時間も増える。

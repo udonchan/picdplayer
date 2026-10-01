@@ -12,7 +12,7 @@
 | GET /api/state | 最後に公開したPresentation Model全体 |
 | WS /api/events | 接続時と状態変更時の同じ全体snapshot。差分event protocolではない |
 | GET /api/read-history | 要求時のSTREAM履歴とDISC集計。stateとは独立した取得 |
-| GET /api/read-policy | requested/effective/pending。設定操作の契約は機能設計参照 |
+| GET /api/read-policy | requested/effective/pending、`persistence_configured`（boolean、保存先指定の有無）。後者は保存成功の保証ではない。設定操作の契約は機能設計参照 |
 
 `PlayerSession` → `make_presentation_model` → `serialize_presentation_model`が公開経路。
 `diagnostic_fields`を共有してdrive/read/recent_eventsを投影する。
