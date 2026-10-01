@@ -65,9 +65,13 @@ HttpClient::HttpClient() {
 }
 HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
                              const std::function<bool()>& cancelled,
-                             RedirectPolicy redirects) const {
+                             RedirectPolicy redirects, std::string_view api_key) const {
     if (!url.starts_with("https://")) throw std::invalid_argument("HTTP URL must use HTTPS");
     const bool follow_cover_art = redirects == RedirectPolicy::follow_cover_art_archive;
+    if (!api_key.empty() && (redirects != RedirectPolicy::reject ||
+        !url.starts_with("https://webservice.fanart.tv/v3.2/music/") ||
+        url.find_first_of("?#") != std::string_view::npos))
+        throw std::invalid_argument("API key is only allowed for fanart.tv music requests");
     if (follow_cover_art && !is_allowed_cover_art_url(url))
         throw std::invalid_argument("Cover Art URL host is not allowed");
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
@@ -76,6 +80,16 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
     const std::string owned_url(url);
     curl_easy_setopt(curl.get(), CURLOPT_URL, owned_url.c_str());
     curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, "PiCDPlayer/0.1.0 (https://github.com/udonchan/picdplayer)");
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> headers(nullptr, curl_slist_free_all);
+    if (!api_key.empty()) {
+        if (api_key.size() > 256 || std::any_of(api_key.begin(), api_key.end(), [](unsigned char c) {
+                return c <= 0x20 || c >= 0x7f;
+            })) throw std::invalid_argument("invalid API key");
+        const std::string header = "api-key: " + std::string(api_key);
+        headers.reset(curl_slist_append(nullptr, header.c_str()));
+        if (!headers) throw std::runtime_error("HTTP header allocation failed");
+        curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
+    }
     curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT_MS, 5000L);
     curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, 15000L);
     curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, follow_cover_art ? 1L : 0L);
@@ -85,12 +99,14 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
     curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_body);
     curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &target);
     RedirectTarget redirect_target;
-    if (follow_cover_art) {
+    if (follow_cover_art || !api_key.empty()) {
         // Do not let a proxy bypass direct peer-address checks.
         curl_easy_setopt(curl.get(), CURLOPT_PROXY, "");
+        curl_easy_setopt(curl.get(), CURLOPT_OPENSOCKETFUNCTION, open_public_socket);
+    }
+    if (follow_cover_art) {
         curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, receive_header);
         curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, &redirect_target);
-        curl_easy_setopt(curl.get(), CURLOPT_OPENSOCKETFUNCTION, open_public_socket);
     }
     if (cancelled) {
         curl_easy_setopt(curl.get(), CURLOPT_NOPROGRESS, 0L);

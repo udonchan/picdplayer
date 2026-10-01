@@ -42,8 +42,10 @@ provider固有IDを公開しないPresentation Model、API入力境界を確認�
 
 fanart.tv v3.2の`artistbackground`応答を、要求したArtist MBIDと照合し、最大512 KiB・32画像の範囲で
 解析するparserを作業branchで検証した。画像のID、URL、寸法を入力として扱い、別hostやpath traversalの
-URLを候補から除く。Debian Trixie/aarch64でbuildとfixture試験を確認した。この段階のparserはruntimeへ
-未接続であり、API key設定、HTTP取得、画像cache/配信、attribution、実機表示は未実装・未検証である。
+URLを候補から除く。候補取得adapterではkeyが空ならrequestせず、keyはURLではなくHTTP headerへ渡す。
+200/404/401、取消、timeoutのfixtureを確認した。Debian Trixie/aarch64でbuildと関連試験を確認した。
+この段階の取得口はruntimeへ未接続であり、key file設定、実provider通信、画像cache/配信、
+権利表示の確認、実機表示は未実装・未検証である。APIが画像の権利者を返すと推定しない。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 

@@ -61,7 +61,7 @@ if(ENABLE_METADATA)
     target_sources(cdplayerd PRIVATE src/musicbrainz_disc_id.cpp src/metadata_probe.cpp
         src/metadata_parser.cpp src/http_client.cpp src/metadata_lookup.cpp src/metadata_worker.cpp
         src/metadata_session.cpp src/enrichment_service.cpp src/metadata_retry_policy.cpp src/metadata_cache.cpp
-        src/http_security_policy.cpp)
+        src/http_security_policy.cpp src/artist_background_parser.cpp src/artist_background_provider.cpp)
     target_compile_definitions(cdplayerd PRIVATE ENABLE_METADATA=1)
     target_link_libraries(cdplayerd PRIVATE PkgConfig::DISCID CURL::libcurl nlohmann_json::nlohmann_json)
 endif()
@@ -338,6 +338,14 @@ if(BUILD_TESTING)
         target_compile_options(artist_background_parser_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(artist_background_parser_test PRIVATE nlohmann_json::nlohmann_json)
         add_test(NAME artist_background_parser COMMAND artist_background_parser_test)
+        add_executable(artist_background_provider_test tests/artist_background_provider_test.cpp
+            src/artist_background_provider.cpp src/artist_background_parser.cpp src/http_client.cpp
+            src/http_security_policy.cpp)
+        target_include_directories(artist_background_provider_test PRIVATE include)
+        target_compile_features(artist_background_provider_test PRIVATE cxx_std_20)
+        target_compile_options(artist_background_provider_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(artist_background_provider_test PRIVATE CURL::libcurl nlohmann_json::nlohmann_json)
+        add_test(NAME artist_background_provider COMMAND artist_background_provider_test)
         add_executable(metadata_retry_policy_test tests/metadata_retry_policy_test.cpp src/metadata_retry_policy.cpp)
         target_include_directories(metadata_retry_policy_test PRIVATE include)
         target_compile_features(metadata_retry_policy_test PRIVATE cxx_std_20)
