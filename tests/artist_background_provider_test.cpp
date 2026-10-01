@@ -1,8 +1,12 @@
 #include "artist_background_provider.hpp"
 
 #include <iostream>
+#include <filesystem>
+#include <fstream>
+#include <chrono>
 #include <stdexcept>
 #include <string>
+#include <unistd.h>
 
 namespace {
 void check(bool value) { if (!value) throw std::runtime_error("artist background provider test failed"); }
@@ -55,6 +59,35 @@ int main() {
             throw std::runtime_error("simulated timeout");
         };
         check(lookup_artist_backgrounds(artist, "test-key", {}, failing).status == ArtistBackgroundLookupStatus::error);
+        const auto root = std::filesystem::temp_directory_path() /
+            ("picdplayer-artist-provider-" + std::to_string(::getpid()));
+        std::error_code ec;
+        std::filesystem::remove_all(root, ec);
+        const auto cached_first = lookup_artist_backgrounds(artist, "test-key", {}, get, root);
+        check(cached_first.status == ArtistBackgroundLookupStatus::available && calls == 2);
+        check(lookup_artist_backgrounds(artist, "test-key", {}, failing, root).status ==
+              ArtistBackgroundLookupStatus::available);
+        check(lookup_artist_backgrounds(artist, "", {}, failing, root).status ==
+              ArtistBackgroundLookupStatus::disabled);
+        const auto json = root / "artist-background" / (std::string(artist) + ".json");
+        std::filesystem::last_write_time(json,
+            std::filesystem::file_time_type::clock::now() - std::chrono::days(8));
+        check(lookup_artist_backgrounds(artist, "test-key", {}, failing, root).status ==
+              ArtistBackgroundLookupStatus::available);
+        check(lookup_artist_backgrounds(artist, "test-key", {}, limited, root).status ==
+              ArtistBackgroundLookupStatus::available);
+        {
+            std::ofstream corrupt(json, std::ios::trunc);
+            corrupt << "invalid";
+        }
+        check(lookup_artist_backgrounds(artist, "test-key", {}, failing, root).status ==
+              ArtistBackgroundLookupStatus::error);
+        check(!std::filesystem::exists(json));
+        check(lookup_artist_backgrounds(artist, "test-key", {}, missing, root).status ==
+              ArtistBackgroundLookupStatus::unavailable);
+        check(lookup_artist_backgrounds(artist, "test-key", {}, failing, root).status ==
+              ArtistBackgroundLookupStatus::unavailable);
+        std::filesystem::remove_all(root, ec);
         std::cout << "PASS: optional fanart.tv lookup and failure isolation\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

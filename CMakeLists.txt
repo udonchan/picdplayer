@@ -340,7 +340,7 @@ if(BUILD_TESTING)
         target_link_libraries(artist_background_parser_test PRIVATE nlohmann_json::nlohmann_json)
         add_test(NAME artist_background_parser COMMAND artist_background_parser_test)
         add_executable(artist_background_provider_test tests/artist_background_provider_test.cpp
-            src/artist_background_provider.cpp src/artist_background_parser.cpp src/http_client.cpp
+            src/artist_background_provider.cpp src/artist_background_parser.cpp src/metadata_cache.cpp src/http_client.cpp
             src/http_security_policy.cpp)
         target_include_directories(artist_background_provider_test PRIVATE include)
         target_compile_features(artist_background_provider_test PRIVATE cxx_std_20)

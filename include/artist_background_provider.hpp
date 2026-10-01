@@ -2,6 +2,7 @@
 
 #include "artist_background_parser.hpp"
 #include "http_client.hpp"
+#include <filesystem>
 #include <functional>
 #include <string_view>
 #include <vector>
@@ -20,4 +21,5 @@ using FanartHttpGet = std::function<HttpResponse(std::string_view url, std::stri
 // display, download images, or publish provider URLs to a View.
 ArtistBackgroundLookup lookup_artist_backgrounds(
     std::string_view artist_mbid, std::string_view api_key,
-    const std::function<bool()>& cancelled = {}, const FanartHttpGet& get = {});
+    const std::function<bool()>& cancelled = {}, const FanartHttpGet& get = {},
+    const std::filesystem::path& cache_directory = {});
