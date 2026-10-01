@@ -48,6 +48,25 @@ TOMLは候補で、parserや追加依存は未採用。`secure`等の未実装mo
 - 表示不能・取得不能・未確認の権利条件ではONを成功として返さない。metadataやproviderの失敗が
   再生を止めないこと、Custom UIが設定機能を実装しなくても動くことを確認する。
 
+### 第一段階の実装案（現行仕様ではない）
+
+#177の実装に着手する際は、次の小さなcontractを#41で確定してからAPIを追加する。
+曖昧なまま画面から保存したように見せないための案であり、実装完了までは有効な設定方式ではない。
+
+| 論点 | 第一段階の案 | 確認すべき失敗例 |
+|---|---|---|
+| 対象 | Read Policyの全5項目を一組、Artist Backgroundの真偽値を独立項目 | 一部だけ書いたpolicy、未知field、型違い |
+| 優先順位 | built-in値→起動引数をsystem/deviceの初期値→保存済みuser値。user管理対象以外は起動引数を維持 | 明示`--read-verification`と保存済みmodeの競合、user値のreset |
+| 保存先 | systemdの`StateDirectory`内のversion付き小容量ファイル。cacheやCustom UI rootとは別 | directory不在、service userの権限不足、read-only root |
+| 保存手順 | validation後に同一directoryへ一時書込、file sync、rename、directory syncを検討。保存完了後だけ成功応答 | write途中の電源断、rename失敗、容量不足、再起動 |
+| 起動時復元 | version・全field・組合せを検証し、不正なら安全な既定OFF/起動引数へfallbackして理由をlog/APIへ表示 | 壊れたJSON、旧version、未知version、無効範囲 |
+| 適用 | Read Policyは停止境界のrequested/effective/pendingを維持。背景OFFは即時に新規取得/表示を止める。背景ONはproviderと表示条件が利用可能な時だけ受理 | 再生中のpolicy変更、offline、keyなし、provider拒否 |
+| 公開 | 値、出所、保存成否、適用状態、利用不能理由を返し、秘密鍵や内部pathは返さない | network越しPOST、Custom UI未対応、API接続断 |
+
+権利に関しては、写真をpackageへ含めないことと、家庭内利用を目的に明示ONを求めることを
+製品側の境界とする。ただし、それだけでproviderの条件や画像の権利をすべて利用者へ移転できると
+断定しない。確認できた利用条件と必要な表示を実装し、満たせない経路はOFFのままにする。
+
 設定の読み込み、型・範囲・組合せvalidation、適用を分離する。CEC/audio/CD device/networkは
 操作不能につながり得るので、起動時fallback、last-known-good保存、適用確認とrollbackを項目別に設計する。
 現行ReadPolicyのrequested/effective/pendingと停止境界の契約を再利用できるか検討する。
