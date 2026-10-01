@@ -45,6 +45,9 @@ fanart.tv v3.2の`artistbackground`応答を、要求したArtist MBIDと照合�
 URLを候補から除く。候補取得adapterではkeyが空ならrequestせず、keyはURLではなくHTTP headerへ渡す。
 200/404/401、取消、timeoutのfixtureを確認した。Debian Trixie/aarch64でbuildと関連試験を確認した。
 一つの有界workerで旧artist要求を置換・取消した結果がmain側へ出ないこともfixtureで確認した。
+保護されたregular fileからkeyを読む部品は作業branchで追加し、symlink、過大入力、弱い権限、
+不正文字を拒否するDocker/aarch64単体試験を通した。全CTest 49件も通過した。
+ただしdaemonの設定経路にはまだ接続していない。
 この段階の取得口はruntimeへ未接続であり、key file設定、実provider通信、画像cache/配信、
 権利表示の確認、実機表示は未実装・未検証である。APIが画像の権利者を返すと推定しない。
 
