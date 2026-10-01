@@ -68,12 +68,16 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
                              RedirectPolicy redirects, std::string_view api_key) const {
     if (!url.starts_with("https://")) throw std::invalid_argument("HTTP URL must use HTTPS");
     const bool follow_cover_art = redirects == RedirectPolicy::follow_cover_art_archive;
+    const bool fanart_asset = redirects == RedirectPolicy::fanart_asset;
     if (!api_key.empty() && (redirects != RedirectPolicy::reject ||
         !url.starts_with("https://webservice.fanart.tv/v3.2/music/") ||
         url.find_first_of("?#") != std::string_view::npos))
         throw std::invalid_argument("API key is only allowed for fanart.tv music requests");
     if (follow_cover_art && !is_allowed_cover_art_url(url))
         throw std::invalid_argument("Cover Art URL host is not allowed");
+    if (fanart_asset && (!url.starts_with("https://assets.fanart.tv/fanart/music/") ||
+                         url.find_first_of("?#") != std::string_view::npos))
+        throw std::invalid_argument("Artist background asset URL is not allowed");
     std::unique_ptr<CURL, decltype(&curl_easy_cleanup)> curl(curl_easy_init(), curl_easy_cleanup);
     if (!curl) throw std::runtime_error("curl allocation failed");
     WriteTarget target{{}, maximum_bytes};
@@ -99,7 +103,7 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
     curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, write_body);
     curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &target);
     RedirectTarget redirect_target;
-    if (follow_cover_art || !api_key.empty()) {
+    if (follow_cover_art || fanart_asset || !api_key.empty()) {
         // Do not let a proxy bypass direct peer-address checks.
         curl_easy_setopt(curl.get(), CURLOPT_PROXY, "");
         curl_easy_setopt(curl.get(), CURLOPT_OPENSOCKETFUNCTION, open_public_socket);
