@@ -334,6 +334,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                             log_warning("settings") << "read_policy_save_failed reason=" << error;
                             return false;
                         }
+                        if (!error.empty())
+                            log_warning("settings") << "read_policy_save_warning reason=" << error;
                     }
                     requested_read_policy = command.read_policy;
                     if (controller.state().playback == PlaybackState::stopped ||

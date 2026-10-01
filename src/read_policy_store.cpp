@@ -100,7 +100,7 @@ bool save_read_policy(const std::string& path, const ReadPolicy& policy,
     std::string template_path = (directory / temporary).string();
     std::vector<char> name(template_path.begin(), template_path.end());
     name.push_back('\0');
-    const int fd = mkstemp(name.data());
+    const int fd = mkostemp(name.data(), O_CLOEXEC);
     if (fd < 0) { error = os_error(); close(dirfd); return false; }
     bool okay = fchmod(fd, 0600) == 0;
     std::size_t written = 0;
@@ -112,8 +112,12 @@ bool save_read_policy(const std::string& path, const ReadPolicy& policy,
     if (okay) okay = fsync(fd) == 0;
     if (close(fd) != 0) okay = false;
     if (okay) okay = rename(name.data(), path.c_str()) == 0;
-    if (okay) okay = fsync(dirfd) == 0;
     if (!okay) { error = os_error(); unlink(name.data()); }
+    else if (fsync(dirfd) != 0) {
+        // The rename has already made the new value visible. Report degraded
+        // crash durability without telling the caller that nothing changed.
+        error = "settings directory sync failed: " + os_error();
+    }
     close(dirfd);
     return okay;
 }
