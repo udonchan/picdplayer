@@ -74,7 +74,8 @@ UIのHTML/CSS/JSは`ui/default/`を単一のソースとし、ビルド時にfal
 不正なCustom UIはWARNを記録してdefaultへ戻り、`/player`上でも無効化を通知する。
 `/builtin/player`とtechnical statusはCustom UIから独立して配信する。通常の再生状態や
 metadata modelはUI選択によって変更しない。manifest version・ファイル上限・URL契約は
-[Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、設定APIは未実装。
+[Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、一般設定APIは未実装。
+Read Policyのみ、`--settings-file`を指定したAPI有効Playerで保存・起動時復元する部分実装がある。
 
 ## media・TOC
 

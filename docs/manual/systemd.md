@@ -55,6 +55,9 @@ sudo useradd --system --user-group --no-create-home \
 
 unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspberry Pi OS上で
 各groupが存在し、`/dev/cec0`、`/dev/sr0`、ALSA deviceへアクセスできることを確認する。
+unitは将来の永続設定用に`StateDirectory=picdplayer`を作成する。Read Policy保存を試す場合だけ
+`PICDPLAYER_EXTRA_ARGS`へ`--settings-file /var/lib/picdplayer/settings.json`を追加する。
+通常のunitはこの引数を自動付与しない。設定画面やArtist Backgroundの有効化はまだない。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
 scriptはCMake install規則から生成したDebian packageをinstallする。package postinstはdaemon-reload後に

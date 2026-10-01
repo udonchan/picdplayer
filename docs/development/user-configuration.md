@@ -1,7 +1,8 @@
-# ユーザー設定基盤の拡張案（未実装）
+# ユーザー設定基盤の拡張案と部分実装
 
-第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。ここは将来案であり、
-設定ファイル、Settings UI、設定API、hot reloadはまだ存在しない。
+第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。
+現在は`--settings-file`を明示した場合のRead Policy保存・復元のみ実装中で、Settings UI、
+一般設定API、Artist BackgroundのON/OFF、hot reloadはまだ存在しない。
 
 ## 現行の設定項目と画面候補（2026-10-01）
 
@@ -10,7 +11,7 @@
 
 | 項目 | 現行経路 | 設定画面での扱い | 適用・制約 |
 |---|---|---|---|
-| Read Policy（SINGLE/REPEAT、region、matches、attempts、budget） | `--read-verification`は起動時、5項目は`GET/POST /api/read-policy` | 最初の画面候補。基本modeと詳細値を分け、requested/effective/pendingを表示 | 再生中の変更は停止境界までpending。API変更は再起動後に残らない |
+| Read Policy（SINGLE/REPEAT、region、matches、attempts、budget） | `--read-verification`は起動時、5項目は`GET/POST /api/read-policy` | 最初の画面候補。基本modeと詳細値を分け、requested/effective/pendingを表示 | 再生中の変更は停止境界までpending。`--settings-file`を指定した場合だけ変更を保存し、保存済み値は次回起動時にCLIの初期値を上書きする |
 | Artist Backgroundの有効/無効 | 未実装。開発中のprovider key fileは起動オプション | 明示的な任意有効化候補。既定OFF、利用可能になるまで操作不能と理由を示す | #49/#51のruntime配信・表示と権利/利用条件確認が前提。選択だけで写真利用許諾が生じるわけではない |
 | metadata照会 | `--metadata off\|musicbrainz` | 後続候補 | network利用と再起動境界を要設計。Artist Backgroundはartist MBIDがなければ利用不可 |
 | drive速度要求 | `--drive-speed-x 1..255` | 後続の詳細設定候補 | 停止/一時停止中に要求。受理は実測速度や騒音低下を保証しない |
@@ -27,16 +28,16 @@ Artist Backgroundの明示的なON/OFFである。画面はdaemonが返す状態
 表示を行わず、Album Artworkまたは既定背景へのfallbackを維持する。外部写真を配布物へ同梱しない。
 家庭内での利用を想定しても、providerのAPI条件や画像ごとの権利・表示条件は別に確認する。
 
-設定の優先順はbuilt-in defaults → system/device configuration → user configurationを候補とする。
-現行CLIと`/etc/default/picdplayer`は維持し、将来のCLI上書き順位も導入時に決める。
+Read Policyの部分実装ではbuilt-in値→起動引数→保存済みuser値の順に採用する。
+他の設定の優先順は未確定であり、現行CLIと`/etc/default/picdplayer`は維持する。
 TOMLは候補で、parserや追加依存は未採用。`secure`等の未実装modeを受け付ける予定仕様にはしない。
 
 ## #41で確定すべき契約
 
-画面実装に先立って#41で以下を決め、機能設計へ移す。上記の優先順はまだ採用済みの仕様ではない。
+画面実装に先立って#41で以下を決め、機能設計へ移す。Read Policy以外の優先順はまだ採用済みの仕様ではない。
 
 - 利用者設定で上書きできる項目と、運用者のCLI/systemd設定が優先する項目を個別に決める。
-  特に現行`--read-verification`と保存済みRead Policyの競合を未定義のまま実装しない。
+  Read Policyでは保存済みの5項目が`--read-verification`から作った初期値より優先する。
 - 保存先は再生成可能なcacheと分離し、service userだけが書ける領域とする。`StateDirectory`の
   利用を候補とし、read-only rootを将来採用しても状態領域を分離できるようにする。
 - schema version、未知field、旧版、破損、不完全なwrite、容量上限、権限不足の動作を決める。
@@ -48,15 +49,16 @@ TOMLは候補で、parserや追加依存は未採用。`secure`等の未実装mo
 - 表示不能・取得不能・未確認の権利条件ではONを成功として返さない。metadataやproviderの失敗が
   再生を止めないこと、Custom UIが設定機能を実装しなくても動くことを確認する。
 
-### 第一段階の実装案（現行仕様ではない）
+### 第一段階の実装案（部分実装）
 
 #177の実装に着手する際は、次の小さなcontractを#41で確定してからAPIを追加する。
-曖昧なまま画面から保存したように見せないための案であり、実装完了までは有効な設定方式ではない。
+曖昧なまま画面から保存したように見せないための案である。Read Policyの保存・復元だけ
+`--settings-file`指定時に実装中であり、他の行は未実装/未確定である。
 
 | 論点 | 第一段階の案 | 確認すべき失敗例 |
 |---|---|---|
 | 対象 | Read Policyの全5項目を一組、Artist Backgroundの真偽値を独立項目 | 一部だけ書いたpolicy、未知field、型違い |
-| 優先順位 | built-in値→起動引数をsystem/deviceの初期値→保存済みuser値。user管理対象以外は起動引数を維持 | 明示`--read-verification`と保存済みmodeの競合、user値のreset |
+| 優先順位 | Read Policyはbuilt-in値→起動引数→保存済みuser値。user管理対象以外は起動引数を維持 | 明示`--read-verification`と保存済みmodeの競合は後者を採用。user値のresetは未実装 |
 | 保存先 | systemdの`StateDirectory`内のversion付き小容量ファイル。cacheやCustom UI rootとは別 | directory不在、service userの権限不足、read-only root |
 | 保存手順 | validation後に同一directoryへ一時書込、file sync、rename、directory syncを検討。保存完了後だけ成功応答 | write途中の電源断、rename失敗、容量不足、再起動 |
 | 起動時復元 | version・全field・組合せを検証し、不正なら安全な既定OFF/起動引数へfallbackして理由をlog/APIへ表示 | 壊れたJSON、旧version、未知version、無効範囲 |

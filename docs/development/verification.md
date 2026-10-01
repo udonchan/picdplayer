@@ -1,7 +1,16 @@
 # 検証状況と残課題
 
-更新日: 2026-09-28。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
+
+## 利用者設定の保存（#177、部分実装）
+
+`--settings-file`を明示したAPI有効Playerで、Read Policyの5項目をversion付きJSONへ保存し、
+起動時に復元する経路を作業ブランチで実装した。Docker Debian Trixie/aarch64ではビルドと
+46件のCTestを通し、新規`read_policy_store` testで保存/復元、無効値の拒否、破損・旧schema・
+symlink・保存先directory欠落を確認した。Piのsystemd権限・再起動後復元とCEC設定画面は未確認/未実装。
+Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unitは
+`--settings-file`を自動指定しないため、現行Piへのdeployだけで永続化は有効にならない。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
 [残課題とIssue一覧](backlog.md)を参照する。末尾の継続課題は検証上の根拠として残す。
