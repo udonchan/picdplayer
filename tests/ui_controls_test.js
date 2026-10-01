@@ -14,7 +14,7 @@ async function main() {
   let policyPostStatus = 204;
   const policy = { requested: { mode: 'SINGLE', region_frames: 75,
     required_matches: 2, maximum_attempts: 3, time_budget_ms: 10000 },
-  effective: { mode: 'SINGLE' }, pending: false };
+  effective: { mode: 'SINGLE' }, pending: false, persistence_configured: false };
   let postStatus = 204;
   let failPost = false;
   let now = 1000;
@@ -87,6 +87,7 @@ async function main() {
   assert.equal(controls[5].disabled, false);
   await new Promise(setImmediate);
   assert.equal(node('policy-single').dataset.selected, 'true');
+  assert.match(node('settings-persistence').textContent, /session only/);
   navigation('right');
   assert.equal(node('policy-repeat').dataset.focused, 'true');
   navigation('select');

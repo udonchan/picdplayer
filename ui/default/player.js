@@ -142,6 +142,9 @@ function renderPolicySettings() {
   set('settings-matches', valid ? requested.required_matches : '—');
   set('settings-attempts', valid ? requested.maximum_attempts : '—');
   set('settings-budget', valid ? `${requested.time_budget_ms} ms` : '—');
+  set('settings-persistence', policyState?.persistence_configured === true
+    ? 'A successful change is saved for daemon restarts.'
+    : 'Changes apply to this daemon session only.');
   if (!valid) set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
   if (valid) set('settings-policy-status', policyState.pending
     ? `Requested ${requested.mode}; effective ${effective?.mode || 'UNKNOWN'} until playback stops.`
