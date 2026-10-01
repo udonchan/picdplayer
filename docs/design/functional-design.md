@@ -267,6 +267,9 @@ loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で
 選択済みreleaseのartist-credit内のartist IDから、背景取得用の単一Artist MBIDも内部で判定する。
 異なるartist IDが複数ならAMBIGUOUS、ID欠損・不正形式・Various ArtistsならUNAVAILABLEとし、
 album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契約へ直接公開しない。
+任意のfanart.tv key fileが指定された場合だけ、単一の選択済みArtist MBIDについて背景画像候補の
+metadataを別workerで取得する。候補JSONは上限付きfile cacheへ保存するが、画像本体の取得やViewへの
+公開はまだ行わない。key不在・provider失敗はCD再生と通常metadataを妨げない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。

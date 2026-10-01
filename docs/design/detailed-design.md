@@ -252,6 +252,7 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | lookup_musicbrainz_disc | Disc ID計算と上記lookup後、各候補の曲数を実TOCと照合。一致時はTOC順でmedium positionを物理track番号へ対応付ける。不一致はmetadata ERROR |
 | [MetadataWorker::request/pop](../../src/metadata_worker.cpp) | pending最新1件、結果1件。worker内でlookup例外をERROR結果へ変換 |
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
+| [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | 任意のkey fileが有効な場合だけ作成。選択済みArtist MBIDとmetadata世代を要求に持ち、旧要求を取消す。mainは両方が現行値と一致する結果だけを内部に採用し、画像URLをViewへ出さない |
 
 MetadataWorker.cancel_pendingは未開始requestと保存結果を消す。実行中HTTPの中断はshutdownの
 closingフラグだけに連動する。交換時の安全性は中断ではなくMetadataSession.applyで保証する。
@@ -267,6 +268,10 @@ freshとして用い、期限切れentryはnetwork取得失敗時だけoffline f
 不正は無効化し、metadataまたはCAA JSONがcache hitでparse不能なら無効化してnetworkから一度再取得する。
 MusicBrainzの404は空releasesとして扱う。書込み不能やcache処理失敗は取得済み結果を無効にしない。
 HTTP本文上限はあるが、全JSON fieldへの厳密な型検証は保証しない。
+Artist候補は`artist-background/{artist-mbid}.json`を同じ64 MiB総量のcacheに含める。
+検証済みJSONは7日、404の空markerは1日を期限とし、期限切れJSONはprovider失敗時だけ利用する。
+key fileの読込みと失敗警告は`Signals`がsignal maskを設定した後に行い、logger threadを先に
+起動しない。keyの値・path・provider URLはsnapshotとlogへ出さない。
 
 ## drive spindle control
 

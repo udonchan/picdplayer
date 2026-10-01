@@ -1,4 +1,7 @@
 #include "player_session.hpp"
+#ifdef ENABLE_METADATA
+#include "artist_background_key.hpp"
+#endif
 #include "playback_engine.hpp"
 #include "cd_device.hpp"
 #include "cec_device.hpp"
@@ -106,13 +109,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         const std::string& audio_device, unsigned audio_latency_ms,
                         bool use_cec, const std::string& cec_device,
                         bool cec_diagnostics, bool interactive, bool metadata_enabled,
-                        const std::string& metadata_cache, const std::string& api_listen,
+                        const std::string& metadata_cache, const std::string& artist_background_key_file,
+                        const std::string& api_listen,
                         int api_port, PcmBufferConfig buffer_config,
                         ReadPolicy initial_read_policy, const std::string& custom_ui,
                         std::optional<unsigned> configured_drive_speed_x,
                         bool direct_c2_pointers) {
 #ifndef ENABLE_METADATA
-    (void)metadata_enabled; (void)metadata_cache;
+    (void)metadata_enabled; (void)metadata_cache; (void)artist_background_key_file;
 #endif
 #ifndef ENABLE_API
     (void)api_listen; (void)api_port; (void)custom_ui;
@@ -164,7 +168,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
             }); },
         [device, drive_access] { drive_access->invoke([&] { request_cd_stop(device); }); });
 #ifdef ENABLE_METADATA
-    EnrichmentService enrichment(metadata_enabled, metadata_cache);
+    std::string artist_background_key;
+    if (!artist_background_key_file.empty()) {
+        try { artist_background_key = load_artist_background_key(artist_background_key_file); }
+        catch (const std::exception&) {
+            log_warning("artist_background") << "disabled invalid_key_file";
+        }
+    }
+    EnrichmentService enrichment(metadata_enabled, metadata_cache, std::move(artist_background_key));
 #endif
     PlaybackEngine engine(controller, worker, *audio, 0,
                           std::chrono::milliseconds(initial_read_policy.time_budget_ms));

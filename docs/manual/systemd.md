@@ -83,6 +83,15 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 `--interactive`は指定しない。serviceのstdinは`null`なので、指定するとEOFで正常終了する。
 設定変更は`sudo systemctl restart picdplayer.service`で反映する。
 
+Artist Backgroundの候補取得を任意で試す場合は、`--metadata musicbrainz`とともに
+`--artist-background-key-file /etc/picdplayer/fanart-api-key`を`PICDPLAYER_EXTRA_ARGS`へ指定する。
+引数やEnvironmentFileにkeyの**値**を書かない。ファイルはservice userが読める通常ファイルとし、
+symlinkやgroup/world writableを許可しない。最大256文字の空白を含まないASCII keyを置き、末尾の
+改行1文字だけは許可する。例としてroot所有・group `picdplayer`・mode `0640`を使える。
+ファイルが存在しない、または無効な場合はkey/pathをlogへ出さず、Artist候補取得だけを無効化する。
+metadata取得とCD再生は続ける。この段階では候補情報を内部で取得するだけで、写真本体のdownload、
+API配信、Playerへの表示は行わない。
+
 手動のplayerやCD読み取り診断を実行する前には`sudo systemctl stop picdplayer.service`で
 serviceを停止する。同じdrive・ALSA・CECを複数のplayerから同時操作しない。
 試験後は`sudo systemctl start picdplayer.service`で常駐運転へ戻す。

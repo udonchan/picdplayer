@@ -47,11 +47,12 @@ URLを候補から除く。候補取得adapterではkeyが空ならrequestせず
 一つの有界workerで旧artist要求を置換・取消した結果がmain側へ出ないこともfixtureで確認した。
 保護されたregular fileからkeyを読む部品は作業branchで追加し、symlink、過大入力、弱い権限、
 不正文字を拒否するDocker/aarch64単体試験を通した。全CTest 49件も通過した。
-ただしdaemonの設定経路にはまだ接続していない。
+daemonの`--artist-background-key-file`設定経路へ接続し、有効・無効なファイルのいずれでも
+playerが起動・終了でき、key/pathをlogへ出さないことをhardware非依存のdaemon試験で確認した。
 候補JSONは同じ64 MiB file cacheの管理対象に加え、正常応答は7日、404の候補なしは1日を期限とする。
 期限切れの有効JSONはprovider失敗時だけ再利用し、破損したentryは破棄する。
 これは候補情報のcacheであり、写真本体のdownload/cacheや表示を有効にするものではない。
-この段階の取得口はruntimeへ未接続であり、key file設定、実provider通信、画像cache/配信、
+選択済みArtist MBIDの候補取得は別workerからruntimeへ接続済み。ただし実provider通信、写真本体のcache/配信、
 権利表示の確認、実機表示は未実装・未検証である。APIが画像の権利者を返すと推定しない。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
