@@ -58,6 +58,24 @@ playerが起動・終了でき、key/pathをlogへ出さないことをhardware�
 選択済みArtist MBIDの候補取得は別workerからruntimeへ接続済み。ただし実provider通信、写真本体のruntime接続・配信、
 権利表示の確認、実機表示は未実装・未検証である。APIが画像の権利者を返すと推定しない。
 
+### fanart.tv画像の権利条件（2026-10-01確認）
+
+[公式のMusic Fanart説明](https://fanart.tv/music-fanart/)はArtist Backgroundをメディアセンターでの背景・
+スライドショー用途として紹介し、投稿時に出典や権利者をコメントへ記すよう求めている。
+[利用条件](https://fanart.tv/terms-and-conditions/)は投稿者へのクレジットや対価なしの利用に言及する一方、
+画像の著作権は各権利者に残り、権利侵害となる利用には権利者の許可が必要と明記する。
+サイト自身のfair useに関する見解を、PiCDPlayerへの包括的な利用許諾と扱わない。
+
+[公式API仕様](https://api.fanart.tv/)の`artistbackground`応答には画像URL等はあるが、
+画像ごとの権利者・ライセンス・許諾範囲を確定できる項目は確認できない。
+API仕様に表示されるCreative Commons Attribution 3.0を、写真本体のライセンスと読み替えない。
+端末内へのdownload/cache、同一端末のUIへの配信・表示、公開配布版での既定有効化について、
+全画像へ一律に適用できる権利条件は確認できていない。写真をrepo・`.deb`・bootable imageへ同梱しない
+方針でも、この未確認事項は解消しない。#49ではruntimeでの写真表示を有効化する前に、providerの
+正式な利用条件と個々の写真の権利・必要な表示方法を確認し、記録する。確認不能なら、権利条件が
+明確な画像ソースへ切り替えるかArtist Backgroundを無効のままにする。候補取得・画像取得部品の
+Docker試験は、公開版での写真利用許可を意味しない。
+
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
 通常Audio CDを認識したPiで、従来のSTOPPED/PAUSED中15秒ごとの`CDROMSTART`要求を廃止した。
