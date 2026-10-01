@@ -38,6 +38,13 @@ provider固有IDを公開しないPresentation Model、API入力境界を確認�
 実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
 #15の実機・統合確認として残る。
 
+## Artist Background provider入力（#49、Docker自動試験）
+
+fanart.tv v3.2の`artistbackground`応答を、要求したArtist MBIDと照合し、最大512 KiB・32画像の範囲で
+解析するparserを作業branchで検証した。画像のID、URL、寸法を入力として扱い、別hostやpath traversalの
+URLを候補から除く。Debian Trixie/aarch64でbuildとfixture試験を確認した。この段階のparserはruntimeへ
+未接続であり、API key設定、HTTP取得、画像cache/配信、attribution、実機表示は未実装・未検証である。
+
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
 通常Audio CDを認識したPiで、従来のSTOPPED/PAUSED中15秒ごとの`CDROMSTART`要求を廃止した。
