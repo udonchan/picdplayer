@@ -39,6 +39,17 @@ int main() {
             return HttpResponse{.status = 401};
         };
         check(lookup_artist_backgrounds(artist, "test-key", {}, rejected).status == ArtistBackgroundLookupStatus::error);
+        FanartHttpGet limited = [](std::string_view, std::string_view, std::size_t,
+                                   const std::function<bool()>&) {
+            return HttpResponse{.status = 429, .retry_after_seconds = 60};
+        };
+        check(lookup_artist_backgrounds(artist, "test-key", {}, limited).status == ArtistBackgroundLookupStatus::error);
+        FanartHttpGet wrong_artist = [](std::string_view, std::string_view, std::size_t,
+                                        const std::function<bool()>&) {
+            return HttpResponse{.status = 200, .content_type = "application/json",
+                .body = R"({"mbid_id":"89ad4ac3-39f7-470e-963a-56509c546377"})"};
+        };
+        check(lookup_artist_backgrounds(artist, "test-key", {}, wrong_artist).status == ArtistBackgroundLookupStatus::error);
         FanartHttpGet failing = [](std::string_view, std::string_view, std::size_t,
                                    const std::function<bool()>&) -> HttpResponse {
             throw std::runtime_error("simulated timeout");
