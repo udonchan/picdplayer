@@ -38,7 +38,8 @@ Linux/aarch64 DockerでCEC code変換、長押し/解放filter、API WebSocket�
 標準Playerのfocus UIは後述の#56でこのchannelを消費する。2026-09-30のPiではTVリモコンの右方向キー1押下で
 `WS /api/navigation`の`right`とChromiumの`ArrowRight`の両方が届くことをCDPで確認した。
 修正後、左右上下・決定・戻るをTVリモコンで操作し、標準Playerの選択移動を確認した。
-長押し/解放code、入力切替中の挙動は未確認であり、#55/#56の実機確認へ残す。
+2026-10-03には同じTVでBack後に右方向キーを約2秒長押しし、離した後は選択枠が止まり、
+音声も正常なことをユーザーが確認した。CECの生code/releaseの詳細と入力切替中・別TVは未確認。
 
 ## 標準PlayerのCEC transport操作面（#56、Docker自動試験・Pi部分確認）
 
@@ -54,7 +55,7 @@ CDPに`REQUEST ACCEPTED`、APIに`PLAYING`が現れ、ユーザーがTVの音声
 決定キー由来のbutton clickとCEC selectの重複可能性にも同じ入力処理を適用し、自動試験した。
 修正後はSTOPPEDのPrevious→Play、PLAYINGの3回の右入力でStop選択、Stop決定後の
 API `STOPPED`、左でNext、上でPlay、下でNextを確認した。画面の選択結果はユーザーのTV目視と
-CDPで照合した。長押し、異なるTV/remote、長期負荷・温度への影響は未確認である。
+CDPで照合した。異なるTV/remote、長期負荷・温度への影響は未確認である。
 追加修正をPiへ再デプロイした後、リモコンでPlayを選び、CDPのresource timingで`/api/play`要求が
 1回だったことを確認した。このTVの決定キーではChromiumのbutton `click`は観測されず、
 二重click対策そのものの実機発火は未確認である。APIからStopを要求し、後続snapshotの`STOPPED`を確認した。
@@ -104,6 +105,9 @@ Mac headless Chromeの[1920×1080表示](reports/2026-10-01-metadata-picker/READ
 候補選択中のTV画像は保存しておらず、合成fixture画像を実機の証拠とは扱わない。
 その後、曖昧候補の初回自動表示へ変更して再デプロイした。ユーザーはTVで`Choose album`を
 押さずにUS盤・JP盤の候補一覧が開くことと、Backで閉じた後に同じ候補群が勝手に再表示されないことを確認した。
+2026-10-03には更新済みpackageで同じCDを再挿入し、ユーザーが候補一覧の自動表示、
+CECでの候補選択後のdisc/track情報とcover画像をTVで確認した。CDPでも同じ画面を確認した。
+再生は選択前に開始しており、候補選択が再生開始の条件ではない。異常候補やCEC入力切替時は未確認。
 
 ## Audio CD再挿入時の自動再生（#172、Pi確認）
 
