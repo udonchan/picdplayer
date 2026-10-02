@@ -81,6 +81,8 @@ let pendingCommand = null;
 let feedbackTimer;
 let settingsOpen = false;
 let focusedPolicy = 0;
+let settingsFocusMoved = false;
+let settingsRequestId = 0;
 let policyState = null;
 let pendingPolicy = false;
 const controlEnabled = (command, snapshot) => {
@@ -151,12 +153,20 @@ function renderPolicySettings() {
     : `Effective ${effective?.mode || requested.mode}.`);
 }
 async function loadPolicySettings() {
+  const requestId = settingsRequestId;
   try {
     const response = await fetch('/api/read-policy');
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    policyState = await response.json();
+    const loaded = await response.json();
+    if (!settingsOpen || requestId !== settingsRequestId) return;
+    policyState = loaded;
+    if (settingsOpen && !settingsFocusMoved &&
+        ['SINGLE', 'REPEAT'].includes(policyState?.requested?.mode)) {
+      focusPolicy(policyState.requested.mode === 'REPEAT' ? 1 : 0);
+    }
     renderPolicySettings();
   } catch {
+    if (!settingsOpen || requestId !== settingsRequestId) return;
     policyState = null;
     renderPolicySettings();
     set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
@@ -169,13 +179,18 @@ function focusPolicy(index) {
 }
 function openSettings() {
   settingsOpen = true;
+  settingsFocusMoved = false;
+  settingsRequestId += 1;
+  policyState = null;
   setHidden(byId('settings-panel'), false);
-  set('settings-policy-status', 'Loading read policy…');
   focusPolicy(0);
+  set('settings-policy-status', 'Loading read policy…');
+  set('settings-persistence', 'Checking whether changes are saved…');
   void loadPolicySettings();
 }
 function closeSettings() {
   settingsOpen = false;
+  settingsRequestId += 1;
   setHidden(byId('settings-panel'), true);
   const index = controls.findIndex((button) => button.dataset.command === 'settings');
   if (index >= 0) focusControl(index);
@@ -183,6 +198,7 @@ function closeSettings() {
 async function selectPolicy(index) {
   const requested = policyState?.requested;
   if (!settingsOpen || pendingPolicy || policyButtons[index]?.disabled || !requested) return;
+  const requestId = settingsRequestId;
   const mode = index ? 'repeat' : 'single';
   pendingPolicy = true;
   renderPolicySettings();
@@ -196,13 +212,14 @@ async function selectPolicy(index) {
         time_budget_ms: requested.time_budget_ms }),
     });
     if (response.status !== 204) throw new Error(`HTTP ${response.status}`);
-    await loadPolicySettings();
+    if (settingsOpen && requestId === settingsRequestId) await loadPolicySettings();
   } catch {
     failed = true;
   } finally {
     pendingPolicy = false;
     renderPolicySettings();
-    if (failed) set('settings-policy-status', 'Policy change failed. Current playback continues.');
+    if (failed && settingsOpen && requestId === settingsRequestId)
+      set('settings-policy-status', 'Policy change failed. Current playback continues.');
   }
 }
 async function activateControl(button) {
@@ -226,8 +243,10 @@ async function activateControl(button) {
 function handleNavigation(action) {
   if (settingsOpen) {
     if (action === 'back') closeSettings();
-    else if (action === 'left' || action === 'up') focusPolicy((focusedPolicy + 1) % 2);
-    else if (action === 'right' || action === 'down') focusPolicy((focusedPolicy + 1) % 2);
+    else if (action === 'left' || action === 'up' || action === 'right' || action === 'down') {
+      settingsFocusMoved = true;
+      focusPolicy((focusedPolicy + 1) % 2);
+    }
     else if (action === 'select') void selectPolicy(focusedPolicy);
     return;
   }

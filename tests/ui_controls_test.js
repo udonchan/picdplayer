@@ -11,6 +11,8 @@ async function main() {
   const sockets = [];
   const posts = [];
   const policyPosts = [];
+  const pendingPolicyGets = [];
+  let deferPolicyGet = false;
   let policyPostStatus = 204;
   const policy = { requested: { mode: 'SINGLE', region_frames: 75,
     required_matches: 2, maximum_attempts: 3, time_budget_ms: 10000 },
@@ -63,6 +65,7 @@ async function main() {
           }
           return { ok: policyPostStatus === 204, status: policyPostStatus };
         }
+        if (deferPolicyGet) return new Promise((resolve) => pendingPolicyGets.push(resolve));
         return { ok: true, json: async () => policy };
       }
       if (options?.method === 'POST' && url !== '/api/ui-boot') {
@@ -99,6 +102,7 @@ async function main() {
   assert.equal(node('settings-panel').hidden, true);
   controls[5].onclick({ detail: 1 });
   await new Promise(setImmediate);
+  assert.equal(node('policy-repeat').dataset.focused, 'true'); // Reopening follows requested mode.
   policyPostStatus = 409;
   node('policy-single').onclick({ detail: 1 });
   await new Promise(setImmediate);
@@ -179,6 +183,27 @@ async function main() {
   assert.equal(controls[0].dataset.focused, 'true');
   sockets[1].onmessage({ data: JSON.stringify({ action: 'right' }) });
   assert.equal(controls[0].dataset.focused, 'true'); // stale socket is ignored
+  deferPolicyGet = true;
+  controls[5].onclick({ detail: 1 });
+  assert.equal(node('policy-single').disabled, true); // No stale value before GET completes.
+  assert.equal(node('settings-policy-status').textContent, 'Loading read policy…');
+  now += 300;
+  keys.keydown({ key: 'ArrowRight', preventDefault() {} });
+  pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
+    requested: { ...policy.requested, mode: 'SINGLE' } }) });
+  await new Promise(setImmediate);
+  assert.equal(node('policy-repeat').dataset.focused, 'true'); // Preserve deliberate focus.
+  keys.keydown({ key: 'Escape', preventDefault() {} });
+  controls[5].onclick({ detail: 1 });
+  keys.keydown({ key: 'Escape', preventDefault() {} });
+  controls[5].onclick({ detail: 1 });
+  pendingPolicyGets.pop()({ ok: true, json: async () => ({ ...policy,
+    requested: { ...policy.requested, mode: 'REPEAT' } }) });
+  await new Promise(setImmediate);
+  pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
+    requested: { ...policy.requested, mode: 'SINGLE' } }) });
+  await new Promise(setImmediate);
+  assert.equal(node('policy-repeat').dataset.selected, 'true'); // Old GET cannot replace it.
   console.log('PASS: CEC/keyboard focus, command POST, authoritative state and No Disc');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
