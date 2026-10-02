@@ -1,8 +1,9 @@
 # ユーザー設定基盤の拡張案と部分実装
 
 第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。
-現在は`--settings-file`を明示した場合のRead Policy保存・復元のみ実装中で、Settings UI、
-一般設定API、Artist BackgroundのON/OFF、hot reloadはまだ存在しない。
+Draft PR #179では`--settings-file`を明示した場合のRead Policy保存・復元のみ実装中である。
+Settings UIの第一段階は別のDraft PR #180で進行中。一般設定API、Artist BackgroundのON/OFF、
+hot reloadはまだ存在しない。
 
 ## 現行の設定項目と画面候補（2026-10-01）
 

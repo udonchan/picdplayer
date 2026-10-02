@@ -7,8 +7,10 @@
 
 `--settings-file`を明示したAPI有効Playerで、Read Policyの5項目をversion付きJSONへ保存し、
 起動時に復元する経路を作業ブランチで実装した。Docker Debian Trixie/aarch64ではビルドと
-46件のCTestを通し、新規`read_policy_store` testで保存/復元、無効値の拒否、破損・旧schema・
-symlink・保存先directory欠落を確認した。Piのsystemd権限・再起動後復元とCEC設定画面は未確認/未実装。
+47件のCTestを通し、`read_policy_store` testで保存/復元、無効値の拒否、破損・旧schema・
+symlink・保存先directory欠落を確認した。`read_policy_persistence` testでは実daemonのloopback APIで
+変更→再起動後復元→破損時fallbackをドライブなしで確認した。Piのsystemd権限・再起動後復元と
+CEC設定画面は未確認。設定画面の第一段階はDraft PR #180で別途実装中。
 Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unitは
 `--settings-file`を自動指定しないため、現行Piへのdeployだけで永続化は有効にならない。
 

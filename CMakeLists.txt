@@ -408,6 +408,9 @@ if(BUILD_TESTING)
             add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
             set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
+            add_test(NAME read_policy_persistence COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_policy_persistence.py $<TARGET_FILE:cdplayerd>)
+            set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
         endif()
         add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
         add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
