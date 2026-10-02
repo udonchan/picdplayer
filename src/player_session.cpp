@@ -264,8 +264,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::chrono::steady_clock::time_point api_eject_requested_at{};
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
+        std::optional<std::uint64_t> metadata_generation;
 #ifdef ENABLE_METADATA
-        if (metadata_enabled) metadata = enrichment.snapshot();
+        if (metadata_enabled) {
+            metadata = enrichment.snapshot();
+            metadata_generation = enrichment.generation();
+        }
 #endif
         const auto state = controller.state();
         auto read = engine.read_diagnostics();
@@ -283,7 +287,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
         auto candidate = serialize_presentation_model(make_presentation_model(
             api_revision + 1, state, media_state.state(), loaded_toc, metadata,
             drive_capabilities, read, recent_events, has_cover_asset,
-            toc_needs_refresh ? std::nullopt : std::optional<std::uint64_t>(disc_generation)));
+            toc_needs_refresh ? std::nullopt : std::optional<std::uint64_t>(disc_generation),
+            metadata_generation));
         if (!api_state_json.empty() &&
             presentation_json_equal_ignoring_revision(candidate, api_state_json)) return false;
         ++api_revision;
@@ -364,6 +369,20 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     }
                     return true;
                 }
+                if (command.type == ApiCommandType::select_metadata_candidate) {
+#ifdef ENABLE_METADATA
+                    if (!metadata_enabled || command.session_id != diagnostic_session_id ||
+                        command.disc_generation != disc_generation || toc_needs_refresh || !loaded_toc ||
+                        media_state.state() != MediaLifecycleState::audio_ready ||
+                        !enrichment.select_candidate(command.metadata_generation, command.candidate_index))
+                        return false;
+                    log_info("metadata") << "selected candidate=" << command.candidate_index
+                                         << " disc_generation=" << disc_generation;
+                    return true;
+#else
+                    return false;
+#endif
+                }
                 if (media_state.state() == MediaLifecycleState::ejecting ||
                     controller.state().playback == PlaybackState::no_disc) return false;
                 CecCommand player_command = CecCommand::play;
@@ -380,6 +399,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     if (!controller.select_track(command.value)) return false;
                     engine.synchronize(); print_state(controller); return true;
                 case ApiCommandType::set_read_policy: return false; // handled above
+                case ApiCommandType::select_metadata_candidate: return false; // handled above
                 case ApiCommandType::eject: break;
                 }
                 if (apply_cec_command(controller, player_command)) {

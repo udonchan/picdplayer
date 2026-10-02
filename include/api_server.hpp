@@ -1,4 +1,6 @@
 #pragma once
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -8,8 +10,17 @@
 #include "ui_bundle.hpp"
 
 struct ApiResponse { int status; std::string content_type; std::string body; };
-enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track, eject, set_read_policy };
-struct ApiCommand { ApiCommandType type; int value = 0; ReadPolicy read_policy{}; };
+enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track, eject,
+                            set_read_policy, select_metadata_candidate };
+struct ApiCommand {
+    ApiCommandType type;
+    int value = 0;
+    ReadPolicy read_policy{};
+    std::string session_id;
+    std::uint64_t disc_generation = 0;
+    std::uint64_t metadata_generation = 0;
+    std::size_t candidate_index = 0;
+};
 using ApiUiBootHandler = std::function<bool(std::string_view, std::string_view, double)>;
 using ApiStateProvider = std::function<std::string()>;
 using ApiReadPolicyProvider = std::function<std::string()>;

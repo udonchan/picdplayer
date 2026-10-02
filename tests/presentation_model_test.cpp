@@ -135,6 +135,38 @@ int main() {
         check(layout_json(MediaLifecycleState::audio_ready, unusual, 2)["disc"]["layout"]["session_id"] == "session-b");
         identity.session_id.clear();
         check(layout_json(MediaLifecycleState::audio_ready, unusual, 2)["disc"]["layout"].is_null());
+        MetadataResult ambiguous;
+        ambiguous.status = MetadataStatus::ambiguous;
+        DiscMetadata first; first.release_id = "private-release-a";
+        first.album_title = "The Slip"; first.album_artist = "Nine Inch Nails";
+        first.country = "US"; first.date = "2008"; first.medium_position = 1;
+        DiscMetadata second = first; second.release_id = "private-release-b";
+        second.country = "GB"; second.date = "2009";
+        ambiguous.candidates = {{first}, {second}};
+        ReadDiagnostics selection_read;
+        selection_read.session_id = "session-a";
+        const auto ambiguous_json = nlohmann::json::parse(serialize_presentation_model(
+            make_presentation_model(9, player, MediaLifecycleState::audio_ready, unusual,
+                                    ambiguous, {}, selection_read, {}, false, 2, 8)));
+        check(ambiguous_json["enrichment"]["status"] == "UNAVAILABLE");
+        check(ambiguous_json["enrichment"]["selection"]["state"] == "AMBIGUOUS");
+        check(ambiguous_json["enrichment"]["selection"]["metadata_generation"] == 8);
+        check(ambiguous_json["enrichment"]["selection"]["session_id"] == "session-a");
+        check(ambiguous_json["enrichment"]["selection"]["disc_generation"] == 2);
+        check(ambiguous_json["enrichment"]["selection"]["candidates"][1]["country"] == "GB");
+        check(ambiguous_json["enrichment"]["selection"]["selected_index"].is_null());
+        check(ambiguous_json["disc"]["title"].is_null());
+        check(ambiguous_json.dump().find("private-release") == std::string::npos);
+        ambiguous.selected = 1; ambiguous.status = MetadataStatus::available;
+        const auto chosen_json = nlohmann::json::parse(serialize_presentation_model(
+            make_presentation_model(10, player, MediaLifecycleState::audio_ready, unusual,
+                                    ambiguous, {}, selection_read, {}, false, 2, 8)));
+        check(chosen_json["enrichment"]["selection"]["state"] == "SELECTED");
+        check(chosen_json["enrichment"]["selection"]["selected_index"] == 1);
+        check(chosen_json["disc"]["title"] == "The Slip");
+        check(nlohmann::json::parse(serialize_presentation_model(make_presentation_model(
+            11, player, MediaLifecycleState::no_disc, std::nullopt, ambiguous,
+            {}, {}, {}, false, 2, 8)))["enrichment"]["selection"].is_null());
         std::cout << "PASS: provider-neutral presentation model\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

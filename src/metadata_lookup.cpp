@@ -210,7 +210,7 @@ MetadataResult lookup_musicbrainz_id(const std::string& disc_id, const MetadataO
         result = parse_musicbrainz_response(*body, disc_id);
     }
     result.from_cache = cache_hit;
-    if (result.selected) {
+    if (result.selected && options.include_artwork) {
         bool artwork_cache = false;
         try { result.artwork = fetch_artwork(result.candidates[*result.selected].metadata.release_id, options, artwork_cache); }
         catch (const std::exception& e) { result.artwork.status = ArtworkStatus::error; result.artwork.error = e.what(); }
@@ -235,6 +235,10 @@ MetadataResult lookup_musicbrainz_disc(const DiscToc& toc, const MetadataOptions
             candidate.metadata.tracks[index].track_number = toc.tracks[index].number;
     }
     return result;
+}
+ArtworkInfo lookup_cover_art_release(const std::string& release_id, const MetadataOptions& options) {
+    bool cache_hit = false;
+    return fetch_artwork(release_id, options, cache_hit);
 }
 void probe_metadata_device(const std::string& device, const MetadataOptions& options) { print_result(lookup_musicbrainz_disc(read_cd_toc(device), options)); }
 void probe_metadata_id(const std::string& disc_id, const MetadataOptions& options) { print_result(lookup_musicbrainz_id(disc_id, options)); }

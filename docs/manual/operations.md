@@ -14,6 +14,19 @@
 `seek 10`は10秒先、`seek -10`は10秒前。対話CLIにeject commandはない。
 標準入力を使わない運転では--interactiveを外し、CECまたはAPIで操作する。
 
+API有効時、Pi自身のloopbackから基本transport操作を要求できる。次は例であり、
+`play`、`pause`、`stop`、`previous`、`next`はすべてbodyなしPOSTで受理時は204となる。
+
+```sh
+curl --fail --show-error -X POST http://127.0.0.1:8080/api/play
+curl --fail --show-error http://127.0.0.1:8080/api/state | python3 -m json.tool
+```
+
+204は要求を受け付けたことだけを示す。現在の状態と同じ操作ではsnapshotが変わらないこともある。
+discなし/EJECTING時などは409、bodyを付けた基本操作は400、GET等の誤methodは405である。
+外部peerからの操作POSTは本文の有無に関係なく403となる。通信失敗後に自動でPOSTを再送せず、
+stateを再取得してから次の操作を判断する。再生状態の正本はdaemonのsnapshotである。
+
 先読みbufferはCD frame単位で指定できる。75 frameが1秒、値は15の倍数、容量上限は2250 frame。
 省略時は容量750 frame（10秒）、開始45 frame（0.6秒）。次は開始を4秒へ増やす例である。
 

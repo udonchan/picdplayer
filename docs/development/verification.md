@@ -31,6 +31,45 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
+## 選択済みreleaseのArtist MBID（#48、Docker自動試験）
+
+MusicBrainzのrelease artist-credit内に、同じ有効なArtist MBIDが一意にあるときだけ
+Enrichment内部の`ArtistIdentityStatus::available`へ投影する。異なるIDの複数creditは`ambiguous`、
+ID欠損・不正形式・Various Artistsの特殊IDは`unavailable`とする。選択前の複数候補や
+metadata sessionの失効後には、旧候補のMBIDを返さない。IDは現段階でPresentation Modelへ公開しない。
+
+Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。parser fixtureで単一・複数・
+同一IDの重複credit・ID欠損・Various Artists・不正IDを、session fixtureで候補選択変更と
+世代失効を確認した。外部Artist Background providerやPi実機表示は#49/#51の範囲である。
+
+## 複数metadata候補の選択経路（#15、Docker自動試験）
+
+同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。現行実装では
+`enrichment.selection`へ表示用候補とsession/disc/metadata世代を載せ、loopback限定の選択POSTで
+現行discの候補だけを適用する。選択後のcover artは別workerで取得し、世代またはrelease IDが変わった結果を
+適用しない。再挿入時の自動再選択は行わない。
+
+Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。候補選択・古い世代と画像結果の拒否、
+provider固有IDを公開しないPresentation Model、API入力境界を確認した。標準PlayerのCEC候補picker、
+実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
+#15の実機・統合確認として残る。
+
+## Metadataとartworkの段階配信（#50、Docker自動試験）
+
+runtimeのMusicBrainz lookupはCAAを待たずにmetadataを先に返し、単一候補または明示選択後の
+artworkを別workerで取得する。metadata AVAILABLE時点のartworkはNOT_REQUESTEDで、後続の
+AVAILABLE/UNAVAILABLE/ERRORはmetadataのstatusを変えない。古い世代・別releaseの画像結果は適用しない。
+Docker Debian Trixie/aarch64でbuildとCTest 45件が通過した。metadata-only lookupでCAAを呼ばないこと、
+後続artwork失敗と古い世代の拒否をfixtureで確認した。Pi上のnetwork遅延下での更新順序と
+WebSocket観測は未確認であり、#25の統合時に確認する。
+
+## View向けloopback操作契約（#54、Docker自動試験）
+
+既存の`play/pause/stop/previous/next`のPOSTについて、method、空body、204受理、400/405/409、
+loopback制限とauthoritative snapshotの意味を仕様化した。Linux/aarch64 DockerのAPI testでは
+5操作のroute、本文不正、method不正、handler拒否、既存の外部peer試験を確認する。
+標準Playerからの操作、CEC方向・決定との結合、Pi実機のUI操作は#56で確認する。
+
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
 通常Audio CDを認識したPiで、従来のSTOPPED/PAUSED中15秒ごとの`CDROMSTART`要求を廃止した。
