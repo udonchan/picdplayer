@@ -62,6 +62,19 @@ int main() {
         check(!session.apply({request_a_again.generation, a, old}));
         check(session.apply({refreshed->generation, a, old}));
         check(session.begin_if_needed(b).has_value());
+        MetadataSession progressive;
+        MetadataResult single; single.status = MetadataStatus::available; single.selected = 0;
+        single.candidates.resize(1); single.candidates[0].metadata.release_id = "release-single";
+        const auto single_request = progressive.begin(a);
+        check(progressive.apply({single_request.generation, a, single}));
+        check(progressive.snapshot().status == MetadataStatus::available &&
+              progressive.snapshot().artwork.status == ArtworkStatus::not_requested);
+        ArtworkInfo failed_cover; failed_cover.status = ArtworkStatus::error;
+        check(progressive.apply_artwork(single_request.generation, "release-single", failed_cover));
+        check(progressive.snapshot().status == MetadataStatus::available &&
+              progressive.snapshot().artwork.status == ArtworkStatus::error);
+        progressive.begin(b);
+        check(!progressive.apply_artwork(single_request.generation, "release-single", cover));
         std::cout << "PASS: stale metadata generations and TOCs are rejected\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

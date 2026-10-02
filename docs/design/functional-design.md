@@ -207,6 +207,13 @@ metadata-selectionは`session_id`、`disc_generation`、`metadata_generation`、
 持ち、body上限512 bytes。世代不一致、候補なし、disc不在は409。受理は表示更新や画像取得完了を意味しない。
 未知pathは404、不適切なmethodは405。不正入力は400、body上限超過は413。
 通常操作はdiscなし/EJECTING時に409。操作の受理は音声出力開始の完了を意味しない。
+View向けの基本transport操作は`play/pause/stop/previous/next`のbodyなしPOSTである。
+API routeは正しいmethod/bodyだけをmain-thread handlerへ渡す。`204`は要求の受理であり、
+状態変化・音声出力・CEC受信の完了を意味しない。同じ状態へのplay/stopなどは受理されても
+snapshotが変わらない場合がある。`409`はdiscなし/EJECTING等、現在の状態で適用できない要求を示す。
+Viewは失敗・timeout時に再生状態を推測せず、`GET /api/state`または`WS /api/events`の次のsnapshotを正とする。
+連打・古いsnapshotでの操作可否はdaemon側の検証で安全に拒否し、非冪等POSTの自動再送はしない。
+再生専用CECキーはdaemonが従来どおり直接扱い、将来のView操作と二重実行しない。
 状態は250 msごとに変化を検査し、revisionを増加して配信する。HTTP直後のstateも最大でこの更新待ちがある。
 
 read-policyのbodyはmode、region_frames、required_matches、maximum_attempts、time_budget_msの
@@ -277,9 +284,11 @@ metadataを別workerで取得する。候補JSONは上限付きfile cacheへ保�
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
 artwork AVAILABLEはdaemonがJPEG/PNG/WebPのbytesを上限付きで取得し、same-origin local resourceとして
-配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。現在はCAA処理完了後に
-metadata結果全体をmainへ返す。明示選択後のCAA取得は別のworkerで進め、結果のmetadata世代とrelease IDが
-現在選択中のものに一致するときだけ適用する。
+配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。runtimeではMusicBrainzの
+metadata結果を先にmainへ返し、選択済みreleaseのCAA取得を別workerで進める。metadata AVAILABLE時点で
+artworkはNOT_REQUESTEDであり、後続結果の到着後にAVAILABLE、UNAVAILABLE、ERRORへ更新する。
+後続結果はmetadata世代とrelease IDが現在選択中のものに一致するときだけ適用する。
+診断用の単体lookupは引き続きmetadataとartworkをまとめて取得できる。
 
 raw JSONを`metadata/{disc-id}.json`、`cover-art/{release-id}.json`へ、検証済み画像bytesを
 `cover-art/{release-id}.image`へ保存する。

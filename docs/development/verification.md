@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-10-01。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -28,7 +28,7 @@ Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。parser fixtu
 
 ## 複数metadata候補の選択経路（#15、Docker自動試験）
 
-同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。作業branchでは
+同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。現行実装では
 `enrichment.selection`へ表示用候補とsession/disc/metadata世代を載せ、loopback限定の選択POSTで
 現行discの候補だけを適用する。選択後のcover artは別workerで取得し、世代またはrelease IDが変わった結果を
 適用しない。再挿入時の自動再選択は行わない。
@@ -86,6 +86,22 @@ providerへOSSの専用端末でのAPI/CDN利用、cache保持・削除、出典
 personal keyの入力経路ではない。key fileの指定は候補metadata照会を開始するが、写真本体の取得・
 配信・表示や利用者の写真表示ONを意味しない。将来の設定画面ではkey種別と写真表示ONを別に扱い、
 secretをAPIへ返さない。API文書にあるCC BY 3.0表記は写真本体のライセンスとして扱わない。
+
+## Metadataとartworkの段階配信（#50、Docker自動試験）
+
+runtimeのMusicBrainz lookupはCAAを待たずにmetadataを先に返し、単一候補または明示選択後の
+artworkを別workerで取得する。metadata AVAILABLE時点のartworkはNOT_REQUESTEDで、後続の
+AVAILABLE/UNAVAILABLE/ERRORはmetadataのstatusを変えない。古い世代・別releaseの画像結果は適用しない。
+Docker Debian Trixie/aarch64でbuildとCTest 45件が通過した。metadata-only lookupでCAAを呼ばないこと、
+後続artwork失敗と古い世代の拒否をfixtureで確認した。Pi上のnetwork遅延下での更新順序と
+WebSocket観測は未確認であり、#25の統合時に確認する。
+
+## View向けloopback操作契約（#54、Docker自動試験）
+
+既存の`play/pause/stop/previous/next`のPOSTについて、method、空body、204受理、400/405/409、
+loopback制限とauthoritative snapshotの意味を仕様化した。Linux/aarch64 DockerのAPI testでは
+5操作のroute、本文不正、method不正、handler拒否、既存の外部peer試験を確認する。
+標準Playerからの操作、CEC方向・決定との結合、Pi実機のUI操作は#56で確認する。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
