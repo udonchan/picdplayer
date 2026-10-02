@@ -207,6 +207,13 @@ metadata-selectionは`session_id`、`disc_generation`、`metadata_generation`、
 持ち、body上限512 bytes。世代不一致、候補なし、disc不在は409。受理は表示更新や画像取得完了を意味しない。
 未知pathは404、不適切なmethodは405。不正入力は400、body上限超過は413。
 通常操作はdiscなし/EJECTING時に409。操作の受理は音声出力開始の完了を意味しない。
+View向けの基本transport操作は`play/pause/stop/previous/next`のbodyなしPOSTである。
+API routeは正しいmethod/bodyだけをmain-thread handlerへ渡す。`204`は要求の受理であり、
+状態変化・音声出力・CEC受信の完了を意味しない。同じ状態へのplay/stopなどは受理されても
+snapshotが変わらない場合がある。`409`はdiscなし/EJECTING等、現在の状態で適用できない要求を示す。
+Viewは失敗・timeout時に再生状態を推測せず、`GET /api/state`または`WS /api/events`の次のsnapshotを正とする。
+連打・古いsnapshotでの操作可否はdaemon側の検証で安全に拒否し、非冪等POSTの自動再送はしない。
+再生専用CECキーはdaemonが従来どおり直接扱い、将来のView操作と二重実行しない。
 状態は250 msごとに変化を検査し、revisionを増加して配信する。HTTP直後のstateも最大でこの更新待ちがある。
 
 read-policyのbodyはmode、region_frames、required_matches、maximum_attempts、time_budget_msの

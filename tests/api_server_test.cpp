@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <unistd.h>
 
 namespace { void check(bool value) { if (!value) throw std::runtime_error("API route test failed"); } }
@@ -63,13 +64,24 @@ int main() {
         const ApiCommandHandler commands = [&](const ApiCommand& command) {
             received_command = command; ++command_calls; return true;
         };
-        response = route_api_request("POST", "/api/next", provider, commands);
-        check(response.status == 204 && response.body.empty());
-        check(command_calls == 1 && received_command.type == ApiCommandType::next);
-        check(route_api_request("GET", "/api/next", provider, commands).status == 405);
+        for (const auto& [path, type] : {
+                 std::pair{"/api/play", ApiCommandType::play},
+                 std::pair{"/api/pause", ApiCommandType::pause},
+                 std::pair{"/api/stop", ApiCommandType::stop},
+                 std::pair{"/api/previous", ApiCommandType::previous},
+                 std::pair{"/api/next", ApiCommandType::next}}) {
+            const auto before = command_calls;
+            response = route_api_request("POST", path, provider, commands);
+            check(response.status == 204 && response.body.empty());
+            check(command_calls == before + 1 && received_command.type == type);
+            check(route_api_request("GET", path, provider, commands).status == 405);
+            check(route_api_request("POST", path, provider, commands, "{}").status == 400);
+            check(command_calls == before + 1);
+        }
         check(route_api_request("POST", "/api/play", provider).status == 403);
         const ApiCommandHandler rejecting = [](const ApiCommand&) { return false; };
-        check(route_api_request("POST", "/api/stop", provider, rejecting).status == 409);
+        for (const auto* path : {"/api/play", "/api/pause", "/api/stop", "/api/previous", "/api/next"})
+            check(route_api_request("POST", path, provider, rejecting).status == 409);
         response = route_api_request("POST", "/api/seek", provider, commands,
                                      R"({"offset_seconds":-10})");
         check(response.status == 204 && received_command.type == ApiCommandType::seek_relative &&
@@ -273,7 +285,7 @@ int main() {
         }
         post_client.join();
         check(received.find("HTTP/1.1 204") != std::string::npos);
-        check(command_calls == 7 && received_command.type == ApiCommandType::select_track &&
+        check(command_calls == 11 && received_command.type == ApiCommandType::select_track &&
               received_command.value == 4);
 
         std::atomic<bool> got_initial_event = false;

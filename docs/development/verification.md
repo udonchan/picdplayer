@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-10-01。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
@@ -26,6 +26,13 @@ Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。候補選択
 provider固有IDを公開しないPresentation Model、API入力境界を確認した。標準PlayerのCEC候補picker、
 実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
 #15の実機・統合確認として残る。
+
+## View向けloopback操作契約（#54、Docker自動試験）
+
+既存の`play/pause/stop/previous/next`のPOSTについて、method、空body、204受理、400/405/409、
+loopback制限とauthoritative snapshotの意味を仕様化した。Linux/aarch64 DockerのAPI testでは
+5操作のroute、本文不正、method不正、handler拒否、既存の外部peer試験を確認する。
+標準Playerからの操作、CEC方向・決定との結合、Pi実機のUI操作は#56で確認する。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
