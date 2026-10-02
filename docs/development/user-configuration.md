@@ -3,7 +3,8 @@
 第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。Draft PR #180では
 標準PlayerにRead PolicyのSINGLE/REPEATを選ぶSettings画面を部分実装している。
 このブランチに保存設定ファイル、一般設定API、Artist BackgroundのON/OFF、hot reloadはない。
-Read Policyの保存・復元は別のDraft PR #179（#177）で進行中である。
+Read Policyの任意保存・復元はPR #179でmasterへ統合済みだが、このstacked branchにはまだ取り込んでいない。
+#177はArtist Backgroundの明示ON/OFFと実service上の保存検証が残りOpenである。
 
 設定の優先順はbuilt-in defaults → system/device configuration → user configurationを候補とする。
 現行CLIと`/etc/default/picdplayer`は維持し、将来のCLI上書き順位も導入時に決める。
