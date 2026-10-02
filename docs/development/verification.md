@@ -54,6 +54,55 @@ provider固有IDを公開しないPresentation Model、API入力境界を確認�
 実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
 #15の実機・統合確認として残る。
 
+## Artist Background provider入力（#49、Docker自動試験）
+
+fanart.tv v3.2の`artistbackground`応答を、要求したArtist MBIDと照合し、最大512 KiB・32画像の範囲で
+解析するparserを作業branchで検証した。画像のID、URL、寸法を入力として扱い、別hostやpath traversalの
+URLを候補から除く。候補取得adapterではkeyが空ならrequestせず、keyはURLではなくHTTP headerへ渡す。
+200/404/401、取消、timeoutのfixtureを確認した。Debian Trixie/aarch64でbuildと関連試験を確認した。
+一つの有界workerで旧artist要求を置換・取消した結果がmain側へ出ないこともfixtureで確認した。
+保護されたregular fileからkeyを読む部品は作業branchで追加し、symlink、過大入力、弱い権限、
+不正文字を拒否するDocker/aarch64単体試験を通した。全CTest 50件も通過した。
+daemonの`--artist-background-key-file`設定経路へ接続し、有効・無効なファイルのいずれでも
+playerが起動・終了でき、key/pathをlogへ出さないことをhardware非依存のdaemon試験で確認した。
+候補JSONは同じ64 MiB file cacheの管理対象に加え、正常応答は7日、404の候補なしは1日を期限とする。
+期限切れの有効JSONはprovider失敗時だけ再利用し、破損したentryは破棄する。
+これは候補情報のcacheであり、写真本体のdownload/cacheや表示を有効にするものではない。
+写真本体の1件取得部品は、URL再検証、8 MiB上限、JPEG/PNG/WebPの外形・Content-Type、
+30日/64 MiB file cache、offline fallback、破損entry・明示的な403/404/410の破棄を
+合成fixtureで確認した。完全な画像decodeや実provider通信の確認ではない。
+選択済みArtist MBIDの候補取得は別workerからruntimeへ接続済み。ただし実provider通信、写真本体のruntime接続・配信、
+権利表示の確認、実機表示は未実装・未検証である。APIが画像の権利者を返すと推定しない。
+
+### fanart.tv画像の権利条件（2026-10-02再確認）
+
+[公式のMusic Fanart説明](https://fanart.tv/music-fanart/)はArtist Backgroundをメディアセンターでの背景・
+スライドショー用途として紹介し、投稿時に出典や権利者をコメントへ記すよう求めている。
+[利用条件](https://fanart.tv/terms-and-conditions/)は投稿者へのクレジットや対価なしの利用に言及する一方、
+画像の著作権は各権利者に残り、権利侵害となる利用には権利者の許可が必要と明記する。
+サイト自身のfair useに関する見解を、PiCDPlayerへの包括的な利用許諾と扱わない。
+
+[公式API仕様](https://api.fanart.tv/)の`artistbackground`応答には画像URL等はあるが、
+画像ごとの権利者・ライセンス・許諾範囲を確定できる項目は確認できない。
+API仕様に表示されるCreative Commons Attribution 3.0を、写真本体のライセンスと読み替えない。
+端末内へのdownload/cache、同一端末のUIへの配信・表示、公開配布版での既定有効化について、
+全画像へ一律に適用できる権利条件は確認できていない。写真をrepo・`.deb`・bootable imageへ同梱しない
+方針でも、この未確認事項は解消しない。#49ではruntimeでの写真表示を有効化する前に、providerの
+正式な利用条件と個々の写真の権利・必要な表示方法を確認し、記録する。確認不能なら、権利条件が
+明確な画像ソースへ切り替えるかArtist Backgroundを無効のままにする。候補取得・画像取得部品の
+Docker試験は、公開版での写真利用許可を意味しない。
+
+判断: 画像を同梱しない・利用者の明示ONを求める設計の準備と、合成/利用許諾済み画像での試験は進める。
+fanart.tv画像の自動取得・端末内cache・公開版での表示を完成機能として有効化する判断は保留する。
+providerへOSSの専用端末でのAPI/CDN利用、cache保持・削除、出典/権利者表示の条件を確認し、
+画像ごとの条件を満たせる経路が必要。確認できない場合は権利条件が明確な利用者指定画像等へ限定する。
+
+[API認証仕様](https://api.fanart.tv/)はproject keyの`api-key`とpersonal keyの`client-key`を区別する。
+現行`--artist-background-key-file`は`api-key`ヘッダーだけを送る開発中の**project key用**経路であり、
+personal keyの入力経路ではない。key fileの指定は候補metadata照会を開始するが、写真本体の取得・
+配信・表示や利用者の写真表示ONを意味しない。将来の設定画面ではkey種別と写真表示ONを別に扱い、
+secretをAPIへ返さない。API文書にあるCC BY 3.0表記は写真本体のライセンスとして扱わない。
+
 ## Metadataとartworkの段階配信（#50、Docker自動試験）
 
 runtimeのMusicBrainz lookupはCAAを待たずにmetadataを先に返し、単一候補または明示選択後の

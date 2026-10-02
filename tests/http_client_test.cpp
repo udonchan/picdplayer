@@ -46,6 +46,15 @@ int main() {
             connection_failure = std::string_view(error.what()).starts_with("HTTP request failed:");
         }
         check(connection_failure);
+        bool key_scope_rejected = false;
+        try { (void)client.get("https://example.com/", 1024, {}, RedirectPolicy::reject, "secret"); }
+        catch (const std::invalid_argument&) { key_scope_rejected = true; }
+        check(key_scope_rejected);
+        bool key_redirect_rejected = false;
+        try { (void)client.get("https://webservice.fanart.tv/v3.2/music/id", 1024, {},
+                               RedirectPolicy::follow_cover_art_archive, "secret"); }
+        catch (const std::invalid_argument&) { key_redirect_rejected = true; }
+        check(key_redirect_rejected);
         std::cout << "PASS: HTTP client reports deterministic connection failure\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
