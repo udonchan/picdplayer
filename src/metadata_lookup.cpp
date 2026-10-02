@@ -210,7 +210,7 @@ MetadataResult lookup_musicbrainz_id(const std::string& disc_id, const MetadataO
         result = parse_musicbrainz_response(*body, disc_id);
     }
     result.from_cache = cache_hit;
-    if (result.selected) {
+    if (result.selected && options.include_artwork) {
         bool artwork_cache = false;
         try { result.artwork = fetch_artwork(result.candidates[*result.selected].metadata.release_id, options, artwork_cache); }
         catch (const std::exception& e) { result.artwork.status = ArtworkStatus::error; result.artwork.error = e.what(); }

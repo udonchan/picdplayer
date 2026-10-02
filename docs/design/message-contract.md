@@ -13,7 +13,7 @@
 | WS /api/events | 接続時と状態変更時の同じ全体snapshot。差分event protocolではない |
 | WS /api/navigation | CECの短命なView入力。snapshotとは独立し、接続前・切断中の入力は復元しない |
 | GET /api/read-history | 要求時のSTREAM履歴とDISC集計。stateとは独立した取得 |
-| GET /api/read-policy | requested/effective/pending。設定操作の契約は機能設計参照 |
+| GET /api/read-policy | requested/effective/pending、`requested_source`/`effective_source`（`startup`/`restored`/`saved`/`session`）、`persistence_configured`（boolean、保存先指定の有無）。出所は要求と実効値それぞれに対応し、pending中は異なり得る。保存先指定だけでは保存成功を保証しない。設定操作の契約は機能設計参照 |
 | POST /api/metadata-selection | loopback限定。現在の候補を明示選択し、受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
 
 `PlayerSession` → `make_presentation_model` → `serialize_presentation_model`が公開経路。

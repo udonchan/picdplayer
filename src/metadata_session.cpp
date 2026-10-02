@@ -1,5 +1,11 @@
 #include "metadata_session.hpp"
 
+ArtistIdentity selected_artist_identity(const MetadataResult& result) {
+    if (result.status != MetadataStatus::available || !result.selected ||
+        *result.selected >= result.candidates.size()) return {};
+    return result.candidates[*result.selected].metadata.artist_identity;
+}
+
 namespace {
 bool same_toc(const DiscToc& left, const DiscToc& right) {
     if (left.leadout_lba != right.leadout_lba || left.tracks.size() != right.tracks.size()) return false;
