@@ -74,7 +74,8 @@ UIのHTML/CSS/JSは`ui/default/`を単一のソースとし、ビルド時にfal
 不正なCustom UIはWARNを記録してdefaultへ戻り、`/player`上でも無効化を通知する。
 `/builtin/player`とtechnical statusはCustom UIから独立して配信する。通常の再生状態や
 metadata modelはUI選択によって変更しない。manifest version・ファイル上限・URL契約は
-[Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、設定APIは未実装。
+[Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、一般設定APIは未実装。
+Read Policyのみ、`--settings-file`を指定したAPI有効Playerで保存・起動時復元する部分実装がある。
 
 ## media・TOC
 
@@ -193,7 +194,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
 | GET /api/read-history | STREAM詳細履歴とDISC領域集計。通常snapshotとは別取得 |
-| GET /api/read-policy | requested/effective/pendingを即時取得 |
+| GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | WS /api/navigation | CECの短命なsemantic navigation入力。接続前の入力は再送しない。clientからのmessageは不可 |
@@ -214,6 +215,13 @@ metadata-selectionは`session_id`、`disc_generation`、`metadata_generation`、
 持ち、body上限512 bytes。世代不一致、候補なし、disc不在は409。受理は表示更新や画像取得完了を意味しない。
 未知pathは404、不適切なmethodは405。不正入力は400、body上限超過は413。
 通常操作はdiscなし/EJECTING時に409。操作の受理は音声出力開始の完了を意味しない。
+View向けの基本transport操作は`play/pause/stop/previous/next`のbodyなしPOSTである。
+API routeは正しいmethod/bodyだけをmain-thread handlerへ渡す。`204`は要求の受理であり、
+状態変化・音声出力・CEC受信の完了を意味しない。同じ状態へのplay/stopなどは受理されても
+snapshotが変わらない場合がある。`409`はdiscなし/EJECTING等、現在の状態で適用できない要求を示す。
+Viewは失敗・timeout時に再生状態を推測せず、`GET /api/state`または`WS /api/events`の次のsnapshotを正とする。
+連打・古いsnapshotでの操作可否はdaemon側の検証で安全に拒否し、非冪等POSTの自動再送はしない。
+再生専用CECキーはdaemonが従来どおり直接扱い、将来のView操作と二重実行しない。
 状態は250 msごとに変化を検査し、revisionを増加して配信する。HTTP直後のstateも最大でこの更新待ちがある。
 
 read-policyのbodyはmode、region_frames、required_matches、maximum_attempts、time_budget_msの
@@ -279,13 +287,18 @@ exact Disc ID lookupのみで、TOC fuzzy検索やCD stubは使用しない。
 loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で扱う。選択はdisc取り出し後に
 引き継がず、再挿入時は再び未選択とする。
 内部modelにalbum/track名・artist、release/release-group/recording ID、medium位置、country/dateを保持する。
+選択済みreleaseのartist-credit内のartist IDから、背景取得用の単一Artist MBIDも内部で判定する。
+異なるartist IDが複数ならAMBIGUOUS、ID欠損・不正形式・Various ArtistsならUNAVAILABLEとし、
+album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契約へ直接公開しない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
 artwork AVAILABLEはdaemonがJPEG/PNG/WebPのbytesを上限付きで取得し、same-origin local resourceとして
-配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。現在はCAA処理完了後に
-metadata結果全体をmainへ返す。明示選択後のCAA取得は別のworkerで進め、結果のmetadata世代とrelease IDが
-現在選択中のものに一致するときだけ適用する。
+配信できることを意味する。画像取得/検証失敗はmetadata候補を破棄しない。runtimeではMusicBrainzの
+metadata結果を先にmainへ返し、選択済みreleaseのCAA取得を別workerで進める。metadata AVAILABLE時点で
+artworkはNOT_REQUESTEDであり、後続結果の到着後にAVAILABLE、UNAVAILABLE、ERRORへ更新する。
+後続結果はmetadata世代とrelease IDが現在選択中のものに一致するときだけ適用する。
+診断用の単体lookupは引き続きmetadataとartworkをまとめて取得できる。
 
 raw JSONを`metadata/{disc-id}.json`、`cover-art/{release-id}.json`へ、検証済み画像bytesを
 `cover-art/{release-id}.image`へ保存する。

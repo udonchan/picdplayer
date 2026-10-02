@@ -29,9 +29,18 @@ metadata世代、候補indexを送る。daemonは現行discとの一致を確認
 `Choose album`を表示し、CECの方向/決定/戻るまたはkeyboardで任意にpickerを操作できる。
 候補には取得できたtitle/artist、date、country、medium情報を表示し、欠損値を推測しない。
 
+Artist Background向けのArtist MBIDは、選択済みreleaseのartist-creditに含まれるartist IDから
+Enrichment内部で判定する。単一の有効なMBIDが得られた場合だけ`AVAILABLE`とし、複数の異なるIDは
+`AMBIGUOUS`、ID欠損・不正形式・MusicBrainzのVarious Artists IDは`UNAVAILABLE`とする。
+候補未選択やdisc交換後も`UNAVAILABLE`であり、名前からIDを推測しない。artist-creditの表示名と
+join phraseは従来どおりalbum artist表示に使い、background取得のidentityとは区別する。
+この段階ではMBIDをPresentation Modelへ直接公開しない。Viewへ渡す画像情報の契約は後続Issueで定義する。
+
 画像はさらに別の取得段階である。単一候補または明示選択されたreleaseについてCover Art Archiveへ
 問い合わせ、daemonがJPEG/PNG/WebPの画像bytesを上限付きで取得・検査してcacheへ保存する。
-明示選択後の画像取得もworkerで行い、再生を待たせない。古い選択に届いた画像結果は適用しない。
+単一候補でも明示選択後でも画像取得は別workerで行い、metadataを先に表示して再生を待たせない。
+metadataがAVAILABLEでも画像は当初NOT_REQUESTEDであり、後からAVAILABLE、UNAVAILABLE、ERRORに変わる。
+画像失敗はmetadataのstatusを変更しない。古いdisc世代や選択に届いた画像結果は適用しない。
 Now PlayingはPiCDPlayer originの`/api/presentation/artwork/cover`だけを読む。provider URLや
 cache pathはUIへ公開しない。曲名だけ取得できた場合、画像取得・cache・decodeに失敗した場合も、
 画像なしで表示と再生を続ける。
@@ -40,5 +49,7 @@ cacheは繰り返しの問い合わせを減らすために使うが、書き込
 現在の形式と制限は[機能設計](../design/functional-design.md)、
 候補変換と世代照合は[詳細設計](../design/detailed-design.md)を参照する。
 依存libraryやAPIを選んだ経緯は[metadataの設計記録](../history/metadata-design.md)にある。
+Artist creditとVarious Artistsの識別については[MusicBrainz Artist Credits](https://musicbrainz.org/doc/Artist_Credits)と
+[Various ArtistsのMusicBrainz登録](https://musicbrainz.org/artist/89ad4ac3-39f7-470e-963a-56509c546377/details)を参照する。
 
 前：[読み取り結果について言えること](integrity.md) / [ドキュメントの案内](../README.md)
