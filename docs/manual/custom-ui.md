@@ -60,7 +60,8 @@ cache pathには依存してはならない。候補選択を実装するUIは`e
 session/disc/metadata世代を`POST /api/metadata-selection`へ渡せる。候補のprovider IDは公開されない。
 選択UIは任意であり、実装しないCustom UIでも曖昧時のAudio CD fallbackで再生できる。
 CEC navigationへの対応も必須ではない。coverがある場合の`artwork.cover.url`は
-`/api/presentation/artwork/cover`である。CSPは外部script/style/image/provider接続を許可しない。
+`/api/presentation/artwork/cover`である。metadataが先に届き、artworkが後のsnapshotで更新される。
+`artwork.cover`がまだない、または取得失敗でもmetadataと再生表示を維持する。CSPは外部script/style/image/provider接続を許可しない。
 将来、破壊的API変更時にはrequires_apiとの対応を更新する。
 
 ## 検証とfallback

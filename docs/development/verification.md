@@ -28,7 +28,7 @@ Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。parser fixtu
 
 ## 複数metadata候補の選択経路（#15、Docker自動試験）
 
-同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。作業branchでは
+同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。現行実装では
 `enrichment.selection`へ表示用候補とsession/disc/metadata世代を載せ、loopback限定の選択POSTで
 現行discの候補だけを適用する。選択後のcover artは別workerで取得し、世代またはrelease IDが変わった結果を
 適用しない。再挿入時の自動再選択は行わない。
@@ -37,6 +37,15 @@ Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。候補選択
 provider固有IDを公開しないPresentation Model、API入力境界を確認した。標準PlayerのCEC候補picker、
 実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
 #15の実機・統合確認として残る。
+
+## Metadataとartworkの段階配信（#50、Docker自動試験）
+
+runtimeのMusicBrainz lookupはCAAを待たずにmetadataを先に返し、単一候補または明示選択後の
+artworkを別workerで取得する。metadata AVAILABLE時点のartworkはNOT_REQUESTEDで、後続の
+AVAILABLE/UNAVAILABLE/ERRORはmetadataのstatusを変えない。古い世代・別releaseの画像結果は適用しない。
+Docker Debian Trixie/aarch64でbuildとCTest 45件が通過した。metadata-only lookupでCAAを呼ばないこと、
+後続artwork失敗と古い世代の拒否をfixtureで確認した。Pi上のnetwork遅延下での更新順序と
+WebSocket観測は未確認であり、#25の統合時に確認する。
 
 ## View向けloopback操作契約（#54、Docker自動試験）
 
