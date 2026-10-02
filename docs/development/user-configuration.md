@@ -30,6 +30,9 @@ Artist Backgroundの明示的なON/OFFである。画面はdaemonが返す状態
 家庭内での利用を想定しても、providerのAPI条件や画像ごとの権利・表示条件は別に確認する。
 
 Read Policyの部分実装ではbuilt-in値→起動引数→保存済みuser値の順に採用する。
+`GET /api/read-policy`では要求値・適用済み値ごとに`startup`/`restored`/`saved`/`session`の
+出所を返す。`startup`はbuilt-in値と起動引数を区別しない。再生中の変更では要求と適用済みの
+出所が異なり得る。`persistence_configured`は保存先の指定だけを表し、各POSTの成否は応答で判断する。
 他の設定の優先順は未確定であり、現行CLIと`/etc/default/picdplayer`は維持する。
 TOMLは候補で、parserや追加依存は未採用。`secure`等の未実装modeを受け付ける予定仕様にはしない。
 

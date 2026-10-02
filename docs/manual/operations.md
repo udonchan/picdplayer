@@ -110,6 +110,9 @@ version付きJSONへ保存し、次のdaemon起動時に読み戻す。保存済
 指定しなければ従来どおりruntime変更は再起動後に残らない。設定画面と背景ON/OFFは未実装。
 `GET /api/read-policy`の`persistence_configured`は保存先を指定したかだけを示し、個々のPOSTの
 保存成功はHTTP応答で確認する。falseのとき変更は現在のdaemon sessionだけに有効である。
+`requested_source`と`effective_source`はそれぞれ要求値と適用済み値の出所を示す。
+`startup`はbuilt-in値または起動引数、`restored`は起動時に検証して読み込んだ保存値、
+`saved`は保存成功後のAPI変更、`session`は保存先なしのAPI変更である。pending中は両者が異なり得る。
 
 開始閾値は容量以下でなければならない。大きなbufferは短いread stallへの余裕を増やす一方、
 memory使用量が増える。開始閾値を増やすとplay・seek後の待ち時間も増える。

@@ -29,8 +29,9 @@ def get_policy(port):
 def run_daemon(path, check):
     port = free_port()
     args = [binary, "--player", "/nonexistent", "--cdda-reader", "direct",
-            "--audio-device", "null", "--no-cec", "--api-port", str(port),
-            "--settings-file", str(path)]
+            "--audio-device", "null", "--no-cec", "--api-port", str(port)]
+    if path is not None:
+        args += ["--settings-file", str(path)]
     with tempfile.TemporaryFile() as log:
         proc = subprocess.Popen(args, stdout=log, stderr=log)
         try:
@@ -62,6 +63,7 @@ with tempfile.TemporaryDirectory(prefix="picdplayer-policy-persistence-") as tmp
     def save(port, policy):
         assert policy["persistence_configured"] is True
         assert policy["requested"]["mode"] == "SINGLE"
+        assert policy["requested_source"] == policy["effective_source"] == "startup"
         requested = {"mode": "repeat", "region_frames": 75, "required_matches": 2,
                      "maximum_attempts": 3, "time_budget_ms": 5000}
         request = urllib.request.Request(
@@ -74,6 +76,7 @@ with tempfile.TemporaryDirectory(prefix="picdplayer-policy-persistence-") as tmp
         assert current["requested"] == current["effective"]
         assert current["requested"]["mode"] == "REPEAT"
         assert current["pending"] is False
+        assert current["requested_source"] == current["effective_source"] == "saved"
 
     run_daemon(settings, save)
     saved = json.loads(settings.read_text())
@@ -84,6 +87,7 @@ with tempfile.TemporaryDirectory(prefix="picdplayer-policy-persistence-") as tmp
         assert policy["requested"]["mode"] == "REPEAT"
         assert policy["effective"]["mode"] == "REPEAT"
         assert policy["pending"] is False
+        assert policy["requested_source"] == policy["effective_source"] == "restored"
 
     run_daemon(settings, restored)
     settings.write_text("{broken")
@@ -91,7 +95,23 @@ with tempfile.TemporaryDirectory(prefix="picdplayer-policy-persistence-") as tmp
     def fallback(_port, policy):
         assert policy["requested"]["mode"] == "SINGLE"
         assert policy["effective"]["mode"] == "SINGLE"
+        assert policy["requested_source"] == policy["effective_source"] == "startup"
 
     run_daemon(settings, fallback)
+
+    def session_only(port, policy):
+        assert policy["persistence_configured"] is False
+        requested = {"mode": "repeat", "region_frames": 75, "required_matches": 2,
+                     "maximum_attempts": 3, "time_budget_ms": 5000}
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/read-policy",
+            data=json.dumps(requested).encode(), method="POST",
+            headers={"Content-Type": "application/json"})
+        with opener.open(request, timeout=2) as response:
+            assert response.status == 204
+        current = get_policy(port)
+        assert current["requested_source"] == current["effective_source"] == "session"
+
+    run_daemon(None, session_only)
 
 print("PASS: API read policy persists across restart and rejects corrupt saved data")

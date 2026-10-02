@@ -11,6 +11,8 @@
 symlink・保存先directory欠落を確認した。`read_policy_persistence` testでは実daemonのloopback APIで
 変更→再起動後復元→破損時fallbackをドライブなしで確認した。Piのsystemd権限・再起動後復元と
 CEC設定画面は未確認。設定画面の第一段階はDraft PR #180で別途実装中。
+同じ試験で`requested_source`/`effective_source`がstartup→saved→restoredとなり、
+破損時にstartupへ戻ることを確認した。保存先を指定しないAPI変更は`session`を返す。
 Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unitは
 `--settings-file`を自動指定しないため、現行Piへのdeployだけで永続化は有効にならない。
 
