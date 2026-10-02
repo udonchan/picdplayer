@@ -7,10 +7,12 @@
 標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
 SINGLE/REPEATを選択できるようにした。`requested/effective/pending`と詳細4値を表示し、
 取得・変更失敗でも再生は継続する。Artist Backgroundは利用不能と明示してON操作を提供しない。
-Debian Trixie/aarch64 DockerのビルドとCTestを再確認する。PiのTV実表示、CEC入力、
-保存後の再起動復元はこのブランチでは未確認。Mac headless Chromeのmock APIでは
+Debian Trixie/aarch64 DockerのビルドとCTest 48件を確認した。PiのChromium上でCDPから
+1920×1080のSettings画面、overflowなし、Read PolicyのREPEAT→SINGLE反映を確認した。
+TVでの目視、CEC入力、保存後の再起動復元はこのブランチでは未確認。Mac headless Chromeのmock APIでは
 [1920×1080と720×720の表示記録](reports/2026-10-02-player-settings/README.md)を保存し、
 Settings surfaceがviewportへ収まり、内部scrollを必要としないことを確認した。
+PiでのCDP結果も[同じ表示記録](reports/2026-10-02-player-settings/README.md)に追記した。
 
 日付付きの測定は当該条件だけの結果である。
 
