@@ -270,6 +270,9 @@ album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契�
 任意のfanart.tv key fileが指定された場合だけ、単一の選択済みArtist MBIDについて背景画像候補の
 metadataを別workerで取得する。候補JSONは上限付きfile cacheへ保存するが、画像本体の取得やViewへの
 公開はまだ行わない。key不在・provider失敗はCD再生と通常metadataを妨げない。
+現行key fileはproject keyを`api-key`ヘッダーで送る開発用設定であり、personal keyの`client-key`には
+対応しない。候補取得と利用者の写真表示ONは別の状態とし、公開版での自動取得・表示は
+利用条件を満たせる経路が確定するまで有効にしない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。

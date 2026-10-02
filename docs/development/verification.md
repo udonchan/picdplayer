@@ -58,7 +58,7 @@ playerが起動・終了でき、key/pathをlogへ出さないことをhardware�
 選択済みArtist MBIDの候補取得は別workerからruntimeへ接続済み。ただし実provider通信、写真本体のruntime接続・配信、
 権利表示の確認、実機表示は未実装・未検証である。APIが画像の権利者を返すと推定しない。
 
-### fanart.tv画像の権利条件（2026-10-01確認）
+### fanart.tv画像の権利条件（2026-10-02再確認）
 
 [公式のMusic Fanart説明](https://fanart.tv/music-fanart/)はArtist Backgroundをメディアセンターでの背景・
 スライドショー用途として紹介し、投稿時に出典や権利者をコメントへ記すよう求めている。
@@ -75,6 +75,17 @@ API仕様に表示されるCreative Commons Attribution 3.0を、写真本体の
 正式な利用条件と個々の写真の権利・必要な表示方法を確認し、記録する。確認不能なら、権利条件が
 明確な画像ソースへ切り替えるかArtist Backgroundを無効のままにする。候補取得・画像取得部品の
 Docker試験は、公開版での写真利用許可を意味しない。
+
+判断: 画像を同梱しない・利用者の明示ONを求める設計の準備と、合成/利用許諾済み画像での試験は進める。
+fanart.tv画像の自動取得・端末内cache・公開版での表示を完成機能として有効化する判断は保留する。
+providerへOSSの専用端末でのAPI/CDN利用、cache保持・削除、出典/権利者表示の条件を確認し、
+画像ごとの条件を満たせる経路が必要。確認できない場合は権利条件が明確な利用者指定画像等へ限定する。
+
+[API認証仕様](https://api.fanart.tv/)はproject keyの`api-key`とpersonal keyの`client-key`を区別する。
+現行`--artist-background-key-file`は`api-key`ヘッダーだけを送る開発中の**project key用**経路であり、
+personal keyの入力経路ではない。key fileの指定は候補metadata照会を開始するが、写真本体の取得・
+配信・表示や利用者の写真表示ONを意味しない。将来の設定画面ではkey種別と写真表示ONを別に扱い、
+secretをAPIへ返さない。API文書にあるCC BY 3.0表記は写真本体のライセンスとして扱わない。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
