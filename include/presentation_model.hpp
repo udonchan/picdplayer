@@ -27,6 +27,24 @@ struct PresentationDisc {
 
 struct PresentationEnrichment {
     MetadataStatus status = MetadataStatus::not_requested;
+    struct Candidate {
+        std::size_t index = 0;
+        std::optional<std::string> title;
+        std::optional<std::string> artist;
+        std::optional<std::string> country;
+        std::optional<std::string> date;
+        std::optional<int> medium_position;
+        std::optional<std::string> medium_title;
+        std::size_t track_count = 0;
+    };
+    struct Selection {
+        std::string session_id;
+        std::uint64_t disc_generation = 0;
+        std::uint64_t metadata_generation = 0;
+        std::optional<std::size_t> selected_index;
+        std::vector<Candidate> candidates;
+    };
+    std::optional<Selection> selection;
 };
 
 struct PresentationArtwork {
@@ -56,4 +74,5 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
                                            const MetadataResult& enrichment, DriveCapabilities drive,
                                            ReadDiagnostics read, std::vector<PlayerEvent> recent_events,
                                            bool has_cover_asset = false,
-                                           std::optional<std::uint64_t> disc_generation = std::nullopt);
+                                           std::optional<std::uint64_t> disc_generation = std::nullopt,
+                                           std::optional<std::uint64_t> metadata_generation = std::nullopt);

@@ -14,6 +14,19 @@
 `seek 10`は10秒先、`seek -10`は10秒前。対話CLIにeject commandはない。
 標準入力を使わない運転では--interactiveを外し、CECまたはAPIで操作する。
 
+API有効時、Pi自身のloopbackから基本transport操作を要求できる。次は例であり、
+`play`、`pause`、`stop`、`previous`、`next`はすべてbodyなしPOSTで受理時は204となる。
+
+```sh
+curl --fail --show-error -X POST http://127.0.0.1:8080/api/play
+curl --fail --show-error http://127.0.0.1:8080/api/state | python3 -m json.tool
+```
+
+204は要求を受け付けたことだけを示す。現在の状態と同じ操作ではsnapshotが変わらないこともある。
+discなし/EJECTING時などは409、bodyを付けた基本操作は400、GET等の誤methodは405である。
+外部peerからの操作POSTは本文の有無に関係なく403となる。通信失敗後に自動でPOSTを再送せず、
+stateを再取得してから次の操作を判断する。再生状態の正本はdaemonのsnapshotである。
+
 先読みbufferはCD frame単位で指定できる。75 frameが1秒、値は15の倍数、容量上限は2250 frame。
 省略時は容量750 frame（10秒）、開始45 frame（0.6秒）。次は開始を4秒へ増やす例である。
 
@@ -101,6 +114,18 @@ PAUSED中は保留する。停止中またはNO DISC中の変更は直ちにeffe
 technical status画面の`Read policy`は適用済みmodeを表示し、保留中は
 `REPEAT → SINGLE (pending)`のように適用済み値から要求値への遷移を示す。
 外部listenを使うdebug構成でも、policy変更を含む操作APIはloopbackからだけ受け付ける。
+
+`--settings-file /var/lib/picdplayer/settings.json`を明示した場合だけ、受理前にRead Policyの全5項目を
+version付きJSONへ保存し、次のdaemon起動時に読み戻す。保存済みpolicyは起動引数の
+`--read-verification`から作った初期値より優先する。保存失敗時はPOSTを拒否して現在値を維持する。
+破損・非対応version・範囲外の保存値は採用せず、起動引数側へ戻してwarningを記録する。
+この機能はAPI有効buildの`--player`で使い、親directoryは事前にservice userが書ける状態にする。
+指定しなければ従来どおりruntime変更は再起動後に残らない。設定画面と背景ON/OFFは未実装。
+`GET /api/read-policy`の`persistence_configured`は保存先を指定したかだけを示し、個々のPOSTの
+保存成功はHTTP応答で確認する。falseのとき変更は現在のdaemon sessionだけに有効である。
+`requested_source`と`effective_source`はそれぞれ要求値と適用済み値の出所を示す。
+`startup`はbuilt-in値または起動引数、`restored`は起動時に検証して読み込んだ保存値、
+`saved`は保存成功後のAPI変更、`session`は保存先なしのAPI変更である。pending中は両者が異なり得る。
 
 開始閾値は容量以下でなければならない。大きなbufferは短いread stallへの余裕を増やす一方、
 memory使用量が増える。開始閾値を増やすとplay・seek後の待ち時間も増える。

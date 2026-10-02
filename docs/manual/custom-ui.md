@@ -55,9 +55,13 @@ Custom HTML内の参照は`/player.css`、`/player.js`、`/player/assets/...`の
 `/player`には末尾slashがないので相対URLの解釈に注意する。API/WebSocketの契約は従来どおり
 `/api/state`と`/api/events`である。API version 1はこのUI互換性の契約であり、URLにversionは付けない。
 `/api/state`と`/api/events`はprovider非依存のPresentation Modelを返す。曲名・artist・track長・
-enrichment status・same-origin artwork referenceだけを表示契約とし、MusicBrainz ID、CAA URL、
-候補index、cache pathには依存してはならない。coverがある場合の`artwork.cover.url`は
-`/api/presentation/artwork/cover`である。CSPは外部script/style/image/provider接続を許可しない。
+enrichment status・same-origin artwork referenceを基本表示契約とし、MusicBrainz ID、CAA URL、
+cache pathには依存してはならない。候補選択を実装するUIは`enrichment.selection`の0起点indexと
+session/disc/metadata世代を`POST /api/metadata-selection`へ渡せる。候補のprovider IDは公開されない。
+選択UIは任意であり、実装しないCustom UIでも曖昧時のAudio CD fallbackで再生できる。
+CEC navigationへの対応も必須ではない。coverがある場合の`artwork.cover.url`は
+`/api/presentation/artwork/cover`である。metadataが先に届き、artworkが後のsnapshotで更新される。
+`artwork.cover`がまだない、または取得失敗でもmetadataと再生表示を維持する。CSPは外部script/style/image/provider接続を許可しない。
 将来、破壊的API変更時にはrequires_apiとの対応を更新する。
 
 CEC方向・決定・戻るを使うCustom UIは、任意で別の`WS /api/navigation`へ接続できる。
@@ -92,6 +96,11 @@ CSPは既存の制約を保持し、inline script/styleや外部scriptを許可�
 
 Custom UIは信頼するユーザーが編集するコードである。同一originで動くJSはAPIへアクセスでき、
 kioskのloopback接続では操作POSTも可能。静的検証はJavaScript sandboxや権限制限ではない。
+基本transport操作を実装する場合は`POST /api/play`、`/api/pause`、`/api/stop`、
+`/api/previous`、`/api/next`をbodyなしで送る。
+受理204は実際の再生状態の確定ではない。409や通信失敗ではUIを止めず、次のstate snapshotを正とする。
+連打や古いsnapshotに基づく操作は拒否され得るため、失敗した非冪等POSTを自動再送しない。
+操作UIを実装しないCustom UIは従来どおり読み取り専用で動作する。
 外部UIによる大量requestやbrowserのCPU/memory消費まで、この段階で隔離・保証はしない。
 壊れたファイルによるloaderエラーをdaemon起動失敗にしないことと、悪意あるコードの隔離は別である。
 

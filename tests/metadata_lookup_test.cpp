@@ -49,6 +49,27 @@ int main() {
         check(result.artwork.status == ArtworkStatus::available);
         check(musicbrainz_calls == 3 && cover_art_calls == 1);
 
+        options.include_artwork = false;
+        const auto metadata_only = lookup_musicbrainz_id("disc", options);
+        check(metadata_only.status == MetadataStatus::available && metadata_only.selected == 0);
+        check(metadata_only.artwork.status == ArtworkStatus::not_requested);
+        check(musicbrainz_calls == 4 && cover_art_calls == 1,
+              "metadata-only lookup must not wait for Cover Art Archive");
+
+        MetadataOptions selected_artwork_options{
+            .cache_directory = {}, .use_cache = false, .cancelled = {},
+            .http_get = [](std::string_view url, std::size_t, const std::function<bool()>&,
+                           RedirectPolicy redirects) {
+                check(url == "https://coverartarchive.org/release/chosen/");
+                check(redirects == RedirectPolicy::follow_cover_art_archive);
+                return HttpResponse{.status = 404, .content_type = {}, .body = {}, .retry_after_seconds = {}};
+            }};
+        check(lookup_cover_art_release("chosen", selected_artwork_options).status == ArtworkStatus::unavailable);
+        bool invalid_release_rejected = false;
+        try { (void)lookup_cover_art_release("../invalid", selected_artwork_options); }
+        catch (const std::runtime_error&) { invalid_release_rejected = true; }
+        check(invalid_release_rejected);
+
         bool cancelled = false;
         options.cancelled = [&] { return cancelled; };
         options.http_get = [&](std::string_view, std::size_t, const std::function<bool()>&, RedirectPolicy) {
