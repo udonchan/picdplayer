@@ -52,6 +52,39 @@ int main() {
         for (int i = 0; i < 100 && !failing.pop(result); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(5));
         check(result.generation == 4 && result.metadata.status == MetadataStatus::error &&
               result.metadata.error == "bounded metadata input rejected");
+        ArtworkWorker artwork([](const std::string& release, const MetadataWorker::Cancelled&) {
+            ArtworkInfo info;
+            info.status = ArtworkStatus::available;
+            info.image_url = release;
+            return info;
+        });
+        artwork.request({5, "release-a"});
+        ArtworkWorkerResult artwork_result{};
+        for (int i = 0; i < 100 && !artwork.pop(artwork_result); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        check(artwork_result.request.generation == 5 && artwork_result.request.release_id == "release-a" &&
+              artwork_result.artwork.status == ArtworkStatus::available);
+        bool rejected_empty_artwork_callback = false;
+        try { ArtworkWorker invalid({}); }
+        catch (const std::invalid_argument&) { rejected_empty_artwork_callback = true; }
+        check(rejected_empty_artwork_callback);
+        std::atomic<bool> first_artwork_started = false;
+        ArtworkWorker replacing([&](const std::string& release, const MetadataWorker::Cancelled& cancelled) {
+            if (release == "old") {
+                first_artwork_started = true;
+                while (!cancelled()) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            ArtworkInfo info; info.status = ArtworkStatus::available; info.image_url = release;
+            return info;
+        });
+        replacing.request({6, "old"});
+        for (int i = 0; i < 100 && !first_artwork_started; ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        check(first_artwork_started);
+        replacing.request({6, "new"});
+        for (int i = 0; i < 100 && !replacing.pop(artwork_result); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        check(artwork_result.request.release_id == "new" && artwork_result.artwork.image_url == "new");
         std::cout << "PASS: metadata worker latest request and cancellation\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

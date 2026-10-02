@@ -139,6 +139,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         if (path == "/api/track") return ApiCommand{ApiCommandType::select_track};
         if (path == "/api/eject") return ApiCommand{ApiCommandType::eject};
         if (path == "/api/read-policy") return ApiCommand{ApiCommandType::set_read_policy};
+        if (path == "/api/metadata-selection") return ApiCommand{ApiCommandType::select_metadata_candidate};
         return std::nullopt;
     }();
     if (!command)
@@ -147,14 +148,33 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         return {HTTP_STATUS_METHOD_NOT_ALLOWED, "application/json", R"({"error":"method_not_allowed"})"};
     if (!command_handler)
         return {HTTP_STATUS_FORBIDDEN, "application/json", R"({"error":"commands_disabled"})"};
-    if (command->type == ApiCommandType::set_read_policy ||
+    if (command->type == ApiCommandType::select_metadata_candidate ||
+        command->type == ApiCommandType::set_read_policy ||
         command->type == ApiCommandType::seek_relative || command->type == ApiCommandType::select_track) {
-        constexpr std::size_t maximum_command_bytes = 4096;
+        const std::size_t maximum_command_bytes = command->type == ApiCommandType::select_metadata_candidate
+            ? 512 : 4096;
         if (body.size() > maximum_command_bytes)
             return {HTTP_STATUS_REQ_ENTITY_TOO_LARGE, "application/json", R"({"error":"body_too_large"})"};
         try {
             const auto json = nlohmann::json::parse(body);
-            if (command->type == ApiCommandType::set_read_policy) {
+            if (command->type == ApiCommandType::select_metadata_candidate) {
+                if (!json.is_object() || json.size() != 4 ||
+                    !json.contains("session_id") || !json["session_id"].is_string() ||
+                    !json.contains("disc_generation") || !json["disc_generation"].is_number_unsigned() ||
+                    !json.contains("metadata_generation") || !json["metadata_generation"].is_number_unsigned() ||
+                    !json.contains("candidate_index") || !json["candidate_index"].is_number_unsigned())
+                    return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+                command->session_id = json["session_id"].get<std::string>();
+                command->disc_generation = json["disc_generation"].get<std::uint64_t>();
+                command->metadata_generation = json["metadata_generation"].get<std::uint64_t>();
+                command->candidate_index = json["candidate_index"].get<std::size_t>();
+                if (command->session_id.empty() || command->session_id.size() > 64 ||
+                    command->session_id.find_first_not_of(
+                        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != std::string::npos ||
+                    command->disc_generation == 0 || command->metadata_generation == 0 ||
+                    command->candidate_index >= 100)
+                    return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
+            } else if (command->type == ApiCommandType::set_read_policy) {
                 if (!json.is_object() || json.size() != 5 || !json.contains("mode") ||
                     !json["mode"].is_string() || !json.contains("region_frames") ||
                     !json.contains("required_matches") || !json.contains("maximum_attempts") ||

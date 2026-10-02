@@ -1,5 +1,7 @@
 # 検証状況と残課題
 
+更新日: 2026-10-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
 標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
@@ -10,8 +12,23 @@ Debian Trixie/aarch64 Dockerの46件のCTestとJS構文確認を通した。Pi�
 [1920×1080と720×720の表示記録](reports/2026-10-02-player-settings/README.md)を保存し、
 Settings surfaceがviewportへ収まり、内部scrollを必要としないことを確認した。
 
-更新日: 2026-09-30。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
+
+## 利用者設定の保存（#177、部分実装）
+
+`--settings-file`を明示したAPI有効Playerで、Read Policyの5項目をversion付きJSONへ保存し、
+起動時に復元する経路をPR #179で実装した。Docker Debian Trixie/aarch64ではビルドと
+47件のCTestを通し、`read_policy_store` testで保存/復元、無効値の拒否、破損・旧schema・
+symlink・保存先directory欠落を確認した。`read_policy_persistence` testでは実daemonのloopback APIで
+変更→再起動後復元→破損時fallbackをドライブなしで確認した。Piでも2026-10-02にaarch64 binaryを
+一時directoryへ転送し、`/nonexistent` drive・null ALSA・CEC無効・別loopback portの独立processで
+同じAPI試験を通した。稼働中serviceはactiveのままで再起動せず、試験用ファイルは削除した。
+Piの**systemd service userでの保存権限**・実service再起動後復元とCEC設定画面は未確認。
+設定画面の第一段階はDraft PR #180で別途実装中。
+同じ試験で`requested_source`/`effective_source`がstartup→saved→restoredとなり、
+破損時にstartupへ戻ることを確認した。保存先を指定しないAPI変更は`session`を返す。
+Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unitは
+`--settings-file`を自動指定しないため、現行Piへのdeployだけで永続化は有効にならない。
 
 現在の到達点は[実機確認済み](#実機確認済み)、次に取り組む作業と進捗は
 [残課題とIssue一覧](backlog.md)を参照する。末尾の継続課題は検証上の根拠として残す。
@@ -32,7 +49,7 @@ Linux/aarch64 DockerでCEC code変換、長押し/解放filter、API WebSocket�
 標準Playerのfocus UIは後述の#56でこのchannelを消費する。2026-09-30のPiではTVリモコンの右方向キー1押下で
 `WS /api/navigation`の`right`とChromiumの`ArrowRight`の両方が届くことをCDPで確認した。
 修正後、左右上下・決定・戻るをTVリモコンで操作し、標準Playerの選択移動を確認した。
-長押し/解放code、入力切替中の挙動、CPU/温度への影響は未確認であり、#55/#56の実機確認へ残す。
+長押し/解放code、入力切替中の挙動は未確認であり、#55/#56の実機確認へ残す。
 
 ## 標準PlayerのCEC transport操作面（#56、Docker自動試験・Pi部分確認）
 
@@ -55,6 +72,45 @@ CDPで照合した。長押し、異なるTV/remote、長期負荷・温度へ�
 DockerのLinux/aarch64で`ENABLE_API=OFF`もビルドできた。STOPPED画面の20秒・4 sampleの読み取り
 計測では全core CPU平均1.70%、最大2.18%、温度56.9〜58.0°C、現在throttling bitは全sampleで0だった。
 短時間かつ過去の基線と同条件ではないため、負荷回帰がないという保証には使わない。
+
+## 選択済みreleaseのArtist MBID（#48、Docker自動試験）
+
+MusicBrainzのrelease artist-credit内に、同じ有効なArtist MBIDが一意にあるときだけ
+Enrichment内部の`ArtistIdentityStatus::available`へ投影する。異なるIDの複数creditは`ambiguous`、
+ID欠損・不正形式・Various Artistsの特殊IDは`unavailable`とする。選択前の複数候補や
+metadata sessionの失効後には、旧候補のMBIDを返さない。IDは現段階でPresentation Modelへ公開しない。
+
+Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。parser fixtureで単一・複数・
+同一IDの重複credit・ID欠損・Various Artists・不正IDを、session fixtureで候補選択変更と
+世代失効を確認した。外部Artist Background providerやPi実機表示は#49/#51の範囲である。
+
+## 複数metadata候補の選択経路（#15、Docker自動試験）
+
+同じDisc IDに複数候補がある場合、未選択ではAudio CD fallbackを維持する。現行実装では
+`enrichment.selection`へ表示用候補とsession/disc/metadata世代を載せ、loopback限定の選択POSTで
+現行discの候補だけを適用する。選択後のcover artは別workerで取得し、世代またはrelease IDが変わった結果を
+適用しない。再挿入時の自動再選択は行わない。
+
+Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。候補選択・古い世代と画像結果の拒否、
+provider固有IDを公開しないPresentation Model、API入力境界を確認した。標準PlayerのCEC候補picker、
+実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
+#15の実機・統合確認として残る。
+
+## Metadataとartworkの段階配信（#50、Docker自動試験）
+
+runtimeのMusicBrainz lookupはCAAを待たずにmetadataを先に返し、単一候補または明示選択後の
+artworkを別workerで取得する。metadata AVAILABLE時点のartworkはNOT_REQUESTEDで、後続の
+AVAILABLE/UNAVAILABLE/ERRORはmetadataのstatusを変えない。古い世代・別releaseの画像結果は適用しない。
+Docker Debian Trixie/aarch64でbuildとCTest 45件が通過した。metadata-only lookupでCAAを呼ばないこと、
+後続artwork失敗と古い世代の拒否をfixtureで確認した。Pi上のnetwork遅延下での更新順序と
+WebSocket観測は未確認であり、#25の統合時に確認する。
+
+## View向けloopback操作契約（#54、Docker自動試験）
+
+既存の`play/pause/stop/previous/next`のPOSTについて、method、空body、204受理、400/405/409、
+loopback制限とauthoritative snapshotの意味を仕様化した。Linux/aarch64 DockerのAPI testでは
+5操作のroute、本文不正、method不正、handler拒否、既存の外部peer試験を確認する。
+標準Playerからの操作、CEC方向・決定との結合、Pi実機のUI操作は#56で確認する。
 
 ## Bounded stopped-idle drive stop（#144、Pi確認）
 
