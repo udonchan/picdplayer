@@ -207,6 +207,13 @@ metadata-selectionは`session_id`、`disc_generation`、`metadata_generation`、
 持ち、body上限512 bytes。世代不一致、候補なし、disc不在は409。受理は表示更新や画像取得完了を意味しない。
 未知pathは404、不適切なmethodは405。不正入力は400、body上限超過は413。
 通常操作はdiscなし/EJECTING時に409。操作の受理は音声出力開始の完了を意味しない。
+View向けの基本transport操作は`play/pause/stop/previous/next`のbodyなしPOSTである。
+API routeは正しいmethod/bodyだけをmain-thread handlerへ渡す。`204`は要求の受理であり、
+状態変化・音声出力・CEC受信の完了を意味しない。同じ状態へのplay/stopなどは受理されても
+snapshotが変わらない場合がある。`409`はdiscなし/EJECTING等、現在の状態で適用できない要求を示す。
+Viewは失敗・timeout時に再生状態を推測せず、`GET /api/state`または`WS /api/events`の次のsnapshotを正とする。
+連打・古いsnapshotでの操作可否はdaemon側の検証で安全に拒否し、非冪等POSTの自動再送はしない。
+再生専用CECキーはdaemonが従来どおり直接扱い、将来のView操作と二重実行しない。
 状態は250 msごとに変化を検査し、revisionを増加して配信する。HTTP直後のstateも最大でこの更新待ちがある。
 
 read-policyのbodyはmode、region_frames、required_matches、maximum_attempts、time_budget_msの
@@ -264,6 +271,9 @@ exact Disc ID lookupのみで、TOC fuzzy検索やCD stubは使用しない。
 loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で扱う。選択はdisc取り出し後に
 引き継がず、再挿入時は再び未選択とする。
 内部modelにalbum/track名・artist、release/release-group/recording ID、medium位置、country/dateを保持する。
+選択済みreleaseのartist-credit内のartist IDから、背景取得用の単一Artist MBIDも内部で判定する。
+異なるartist IDが複数ならAMBIGUOUS、ID欠損・不正形式・Various ArtistsならUNAVAILABLEとし、
+album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契約へ直接公開しない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。

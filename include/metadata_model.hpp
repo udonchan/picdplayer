@@ -6,6 +6,13 @@
 
 enum class MetadataStatus { not_requested, loading, available, not_found, ambiguous, error };
 enum class ArtworkStatus { not_requested, available, unavailable, error };
+enum class ArtistIdentityStatus { unavailable, available, ambiguous };
+
+struct ArtistIdentity {
+    ArtistIdentityStatus status = ArtistIdentityStatus::unavailable;
+    // MusicBrainz Artist MBID. Empty unless this release has one usable artist.
+    std::string mbid;
+};
 
 struct TrackMetadata {
     int track_number = 0;
@@ -20,6 +27,7 @@ struct DiscMetadata {
     std::string release_group_id;
     std::string album_title;
     std::string album_artist;
+    ArtistIdentity artist_identity;
     std::string country;
     std::string date;
     int medium_position = 0;
@@ -49,3 +57,4 @@ struct MetadataResult {
 };
 
 const char* metadata_status_name(MetadataStatus status);
+ArtistIdentity selected_artist_identity(const MetadataResult& result);
