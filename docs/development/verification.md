@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-10-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 ## 利用者設定の保存（#177、部分実装）
@@ -117,7 +117,12 @@ DockerのLinux/aarch64 buildとCTest 46件が通過し、media trackerの挿入�
 続けて`state=PLAYING track=1`と`metadata: status=LOADING`が記録された。APIは
 `PLAYING / AMBIGUOUS`を返し、ユーザーはTVで候補一覧の自動表示と実際の音声を確認した。
 選択前の音声再生が成立したため、metadata選択は再生開始条件ではない。最後にAPIのSTOPへ204が返り、
-その後も`STOPPED / AUDIO_READY`を確認した。異常媒体や別driveは未検証である。
+その後も`STOPPED / AUDIO_READY`を確認した。2026-10-03には競合解消後のpackageを再導入し、
+既挿入CDでのdaemon再起動後は`STOPPED`、同一PID `51063`での物理再挿入後は
+`auto_play=inserted_audio_disc disc_generation=2`、`PLAYING / AMBIGUOUS`を再確認した。
+ユーザーはTV上の候補一覧と選択前の音声再生、候補選択後のカバー画像を確認した。
+APIのSTOPは204で、5秒後も`STOPPED`を維持した。Docker統合後のCTestは48件成功。
+異常媒体や別driveは未検証である。
 
 ## Metadataとartworkの段階配信（#50、Docker自動試験）
 
