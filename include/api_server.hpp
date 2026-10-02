@@ -8,6 +8,7 @@
 #include <string_view>
 #include "read_policy.hpp"
 #include "ui_bundle.hpp"
+#include "cec_input.hpp"
 
 struct ApiResponse { int status; std::string content_type; std::string body; };
 enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track, eject,
@@ -47,6 +48,7 @@ public:
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;
     void publish_state(std::string_view state_json);
+    void publish_navigation(CecNavigation navigation);
     void service();
     int port() const;
 private:

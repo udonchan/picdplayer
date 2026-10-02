@@ -11,6 +11,7 @@
 |---|---|
 | GET /api/state | 最後に公開したPresentation Model全体 |
 | WS /api/events | 接続時と状態変更時の同じ全体snapshot。差分event protocolではない |
+| WS /api/navigation | CECの短命なView入力。snapshotとは独立し、接続前・切断中の入力は復元しない |
 | GET /api/read-history | 要求時のSTREAM履歴とDISC集計。stateとは独立した取得 |
 | GET /api/read-policy | requested/effective/pending、`requested_source`/`effective_source`（`startup`/`restored`/`saved`/`session`）、`persistence_configured`（boolean、保存先指定の有無）。出所は要求と実効値それぞれに対応し、pending中は異なり得る。保存先指定だけでは保存成功を保証しない。設定操作の契約は機能設計参照 |
 | POST /api/metadata-selection | loopback限定。現在の候補を明示選択し、受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
@@ -23,6 +24,9 @@
 状態はmain loopで250 msごとに変化を検査し、revision以外が変わった場合にrevisionを増加する。
 250 msは検査間隔であって配信期限の保証ではない。GETは更新待ちの状態を返し得る。
 WSは最新snapshotを保持し、各中間revisionや全readの受信を保証しない。受信messageによる再生操作は提供しない。
+`WS /api/navigation`は`{"action":"up"}`の形で`up/down/left/right/select/back`を配信する。
+各接続の未送信入力は最大8件で、超過時は古い入力を捨てる。接続時の初期messageや永続queueはない。
+このchannelは操作commandではない。Viewが入力を解釈し、状態変更が必要ならloopback POSTを使う。
 既定はlistenなし。有効時の既定listenは127.0.0.1。読み取りGET/WSは外部listen時にも利用可能で、
 操作POST/telemetryのloopback制限とは区別する。認証/TLSは実装されていない。
 stateサイズ上限は1 MiB。read-historyのprovider未提供は503。コマンドの204/202受理は音声/物理操作完了の通知ではない。

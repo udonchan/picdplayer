@@ -6,7 +6,7 @@
 ## 利用者設定の保存（#177、部分実装）
 
 `--settings-file`を明示したAPI有効Playerで、Read Policyの5項目をversion付きJSONへ保存し、
-起動時に復元する経路を作業ブランチで実装した。Docker Debian Trixie/aarch64ではビルドと
+起動時に復元する経路をPR #179で実装した。Docker Debian Trixie/aarch64ではビルドと
 47件のCTestを通し、`read_policy_store` testで保存/復元、無効値の拒否、破損・旧schema・
 symlink・保存先directory欠落を確認した。`read_policy_persistence` testでは実daemonのloopback APIで
 変更→再起動後復元→破損時fallbackをドライブなしで確認した。Piでも2026-10-02にaarch64 binaryを
@@ -30,6 +30,14 @@ Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unit
 Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認済み。CEC操作後の画面追従や異常時表示は
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
+
+## Semantic CEC navigation（#55、Docker自動試験・Piで入力確認）
+
+CEC方向・決定・戻るをtransport keyと分離し、`WS /api/navigation`へ短命な入力として配信する経路を追加した。
+Linux/aarch64 DockerでCEC code変換、長押し/解放filter、API WebSocket配信を自動試験した。
+2026-09-30には#56の標準Playerを重ねたPiで、TVリモコンの上下左右・決定・Backが
+画面のfocus操作へ届くことを確認した。CECとChromium keydownの二重入力は#56側で抑制する。
+長押し/解放code、入力切替中、別TV、CPU/温度への影響は未確認。
 
 ## 選択済みreleaseのArtist MBID（#48、Docker自動試験）
 

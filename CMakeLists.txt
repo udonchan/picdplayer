@@ -215,7 +215,7 @@ if(BUILD_TESTING)
         target_link_libraries(daemon_snapshot_json_test PRIVATE nlohmann_json::nlohmann_json)
         add_test(NAME daemon_snapshot_json COMMAND daemon_snapshot_json_test)
         add_executable(api_server_test tests/api_server_test.cpp src/api_server.cpp src/logger.cpp
-                       src/ui_bundle.cpp src/repeated_read_policy.cpp
+                       src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp
                        src/repeated_read_verifier.cpp)
         target_include_directories(api_server_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
         target_compile_features(api_server_test PRIVATE cxx_std_20)
@@ -225,7 +225,7 @@ if(BUILD_TESTING)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
         add_executable(diagnostic_isolation_test tests/diagnostic_isolation_test.cpp
-            src/api_server.cpp src/logger.cpp src/ui_bundle.cpp src/repeated_read_policy.cpp
+            src/api_server.cpp src/logger.cpp src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp
             src/repeated_read_verifier.cpp src/pcm_worker.cpp src/integrity_state.cpp
             src/playback_engine.cpp src/player_controller.cpp src/disc_toc.cpp
             src/daemon_snapshot_json.cpp src/drive_capabilities.cpp src/player_event.cpp)
@@ -242,7 +242,7 @@ if(BUILD_TESTING)
             set_tests_properties(ui_diagnostic_integration PROPERTIES TIMEOUT 15)
         endif()
         add_executable(ui_bundle_test tests/ui_bundle_test.cpp src/ui_bundle.cpp src/api_server.cpp src/logger.cpp
-            src/repeated_read_policy.cpp
+            src/cec_input.cpp src/repeated_read_policy.cpp
             src/repeated_read_verifier.cpp)
         target_include_directories(ui_bundle_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
         target_compile_features(ui_bundle_test PRIVATE cxx_std_20)
@@ -250,7 +250,7 @@ if(BUILD_TESTING)
         target_link_libraries(ui_bundle_test PRIVATE PkgConfig::WEBSOCKETS nlohmann_json::nlohmann_json Threads::Threads)
         add_test(NAME ui_bundle COMMAND ui_bundle_test)
         add_executable(integrity_scenario_harness tests/integrity_scenario_harness.cpp
-            src/api_server.cpp src/ui_bundle.cpp src/logger.cpp src/pcm_worker.cpp src/integrity_state.cpp
+            src/api_server.cpp src/ui_bundle.cpp src/logger.cpp src/cec_input.cpp src/pcm_worker.cpp src/integrity_state.cpp
             src/playback_engine.cpp src/player_controller.cpp src/disc_toc.cpp src/presentation_model.cpp
             src/presentation_json.cpp src/daemon_snapshot_json.cpp src/drive_capabilities.cpp src/player_event.cpp
             src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)

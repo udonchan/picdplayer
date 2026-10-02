@@ -141,7 +141,7 @@ CecReceiveResult CecDevice::receive() {
                          (std::int64_t(after.tv_nsec) - before.tv_nsec) / 1'000;
     const auto kernel_to_daemon_us = message.rx_ts && now_ns >= message.rx_ts
         ? (now_ns - message.rx_ts) / 1'000ULL : 0;
-    CecReceiveResult result{true, std::nullopt};
+    CecReceiveResult result{true, std::nullopt, std::nullopt};
     if (!(message.rx_status & CEC_RX_STATUS_OK) || message.len < 2)
         return result;
     if (cec_msg_opcode(&message) == CEC_MSG_GIVE_DEVICE_POWER_STATUS && message.len == 2) {
@@ -170,10 +170,18 @@ CecReceiveResult CecDevice::receive() {
         if (active_source_) report_active_source("request_active_source");
         return result;
     }
+    if (cec_msg_opcode(&message) == CEC_MSG_USER_CONTROL_RELEASED && message.len == 2) {
+        navigation_filter_.release(cec_msg_initiator(&message));
+        return result;
+    }
     if (message.len < 3 || cec_msg_opcode(&message) != CEC_MSG_USER_CONTROL_PRESSED)
         return result;
     const auto command = cec_command_from_ui_code(message.msg[2]);
     result.command = command;
+    const auto navigation = cec_navigation_from_ui_code(message.msg[2]);
+    if (navigation)
+        result.navigation = navigation_filter_.press(message.msg[2], cec_msg_initiator(&message),
+                                                      std::chrono::steady_clock::now());
     const auto timing = diagnostics_
         ? " kernel_to_daemon_us=" + std::to_string(kernel_to_daemon_us) +
           " receive_ioctl_us=" + std::to_string(call_us)
@@ -181,7 +189,7 @@ CecReceiveResult CecDevice::receive() {
     if (command) {
         log_info("cec") << "command=" << cec_command_name(*command)
                         << " source=" << unsigned(cec_msg_initiator(&message)) << timing;
-    } else {
+    } else if (!navigation) {
         log_debug("cec") << "ignored UI code=0x" << std::hex << unsigned(message.msg[2])
                          << std::dec << " source=" << unsigned(cec_msg_initiator(&message)) << timing;
     }

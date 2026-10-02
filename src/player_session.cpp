@@ -764,6 +764,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.synchronize();
                     print_state(controller);
                 }
+#ifdef ENABLE_API
+                if (received.navigation && api_server)
+                    api_server->publish_navigation(*received.navigation);
+#endif
             }
             report_slow_stage("cec_receive", receive_started);
         }
