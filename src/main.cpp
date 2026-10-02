@@ -43,6 +43,7 @@ int main(int argc, char** argv) {
     bool metadata_option = false, metadata_cache_option = false;
     int api_port = 0;
     std::string custom_ui;
+    std::string settings_file;
     bool custom_ui_option = false;
     PcmBufferConfig buffer_config;
     bool buffer_option = false;
@@ -65,6 +66,14 @@ int main(int argc, char** argv) {
         else if (arg == "--metadata" && i + 1 < argc) { metadata_mode = argv[++i]; metadata_option = true; }
         else if (arg == "--metadata-cache" && i + 1 < argc) { metadata_cache = argv[++i]; metadata_cache_option = true; }
         else if (arg == "--custom-ui" && i + 1 < argc) { custom_ui = argv[++i]; custom_ui_option = true; }
+        else if (arg == "--settings-file" && i + 1 < argc) {
+            settings_file = argv[++i];
+            if (settings_file.empty() || settings_file.front() != '/' ||
+                settings_file.back() == '/') {
+                std::cerr << "Invalid --settings-file: expected an absolute file path\n";
+                return 2;
+            }
+        }
         else if (arg == "--api-port" && i + 1 < argc) {
             const std::string_view value(argv[++i]);
             const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), api_port);
@@ -211,6 +220,9 @@ int main(int argc, char** argv) {
     if (api_listen_option && !api_port) {
         std::cerr << "--api-listen requires --api-port\n"; return 2;
     }
+    if (!settings_file.empty() && (player_device.empty() || !api_port)) {
+        std::cerr << "--settings-file requires --player and --api-port\n"; return 2;
+    }
     if (buffer_option && player_device.empty()) {
         std::cerr << "buffer options require --player\n"; return 2;
     }
@@ -227,7 +239,7 @@ int main(int argc, char** argv) {
         std::cerr << "Invalid playback buffer: " << error.what() << '\n'; return 2;
     }
 #ifndef ENABLE_API
-    if (api_port || api_listen_option) { std::cerr << "API support is not built (ENABLE_API=OFF)\n"; return 2; }
+    if (api_port || api_listen_option || !settings_file.empty()) { std::cerr << "API support is not built (ENABLE_API=OFF)\n"; return 2; }
 #endif
 #ifndef ENABLE_METADATA
     if (metadata_mode != "off" || !metadata_device.empty() || !lookup_disc.empty()) {
@@ -275,7 +287,8 @@ int main(int argc, char** argv) {
                                cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
                                metadata_cache, api_listen, api_port, buffer_config,
-                               read_policy, custom_ui, drive_speed_x, direct_c2_pointers);
+                               read_policy, custom_ui, drive_speed_x, direct_c2_pointers,
+                               settings_file);
             return 0;
         }
         if (!cdda_device.empty()) {

@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 #include <unistd.h>
 
 namespace { void check(bool value) { if (!value) throw std::runtime_error("API route test failed"); } }
@@ -58,18 +59,29 @@ int main() {
         check(route_api_request("POST", "/player", provider).status == 405);
         response = route_api_request("GET", "/missing", provider);
         check(response.status == 404 && calls == 1);
-        ApiCommand received_command{ApiCommandType::play};
+        ApiCommand received_command{ApiCommandType::play, 0, {}, {}, 0, 0, 0};
         int command_calls = 0;
         const ApiCommandHandler commands = [&](const ApiCommand& command) {
             received_command = command; ++command_calls; return true;
         };
-        response = route_api_request("POST", "/api/next", provider, commands);
-        check(response.status == 204 && response.body.empty());
-        check(command_calls == 1 && received_command.type == ApiCommandType::next);
-        check(route_api_request("GET", "/api/next", provider, commands).status == 405);
+        for (const auto& [path, type] : {
+                 std::pair{"/api/play", ApiCommandType::play},
+                 std::pair{"/api/pause", ApiCommandType::pause},
+                 std::pair{"/api/stop", ApiCommandType::stop},
+                 std::pair{"/api/previous", ApiCommandType::previous},
+                 std::pair{"/api/next", ApiCommandType::next}}) {
+            const auto before = command_calls;
+            response = route_api_request("POST", path, provider, commands);
+            check(response.status == 204 && response.body.empty());
+            check(command_calls == before + 1 && received_command.type == type);
+            check(route_api_request("GET", path, provider, commands).status == 405);
+            check(route_api_request("POST", path, provider, commands, "{}").status == 400);
+            check(command_calls == before + 1);
+        }
         check(route_api_request("POST", "/api/play", provider).status == 403);
         const ApiCommandHandler rejecting = [](const ApiCommand&) { return false; };
-        check(route_api_request("POST", "/api/stop", provider, rejecting).status == 409);
+        for (const auto* path : {"/api/play", "/api/pause", "/api/stop", "/api/previous", "/api/next"})
+            check(route_api_request("POST", path, provider, rejecting).status == 409);
         response = route_api_request("POST", "/api/seek", provider, commands,
                                      R"({"offset_seconds":-10})");
         check(response.status == 204 && received_command.type == ApiCommandType::seek_relative &&
@@ -83,6 +95,24 @@ int main() {
                                 R"({"offset_seconds":18446744073709551615})").status == 400);
         check(route_api_request("POST", "/api/track", provider, commands,
                                 R"({"track":0})").status == 400);
+        const std::string selection_body =
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":1})";
+        response = route_api_request("POST", "/api/metadata-selection", provider, commands, selection_body);
+        check(response.status == 204 && received_command.type == ApiCommandType::select_metadata_candidate &&
+              received_command.session_id == "session-1" && received_command.disc_generation == 2 &&
+              received_command.metadata_generation == 3 && received_command.candidate_index == 1);
+        check(route_api_request("POST", "/api/metadata-selection", provider).status == 403);
+        check(route_api_request("GET", "/api/metadata-selection", provider, commands).status == 405);
+        check(route_api_request("POST", "/api/metadata-selection", provider, rejecting, selection_body).status == 409);
+        for (const auto* invalid : {
+            R"({"session_id":"bad\nlog","disc_generation":2,"metadata_generation":3,"candidate_index":1})",
+            R"({"session_id":"session-1","disc_generation":0,"metadata_generation":3,"candidate_index":1})",
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":100})",
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":-1})",
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":1,"extra":1})"
+        }) check(route_api_request("POST", "/api/metadata-selection", provider, commands, invalid).status == 400);
+        check(route_api_request("POST", "/api/metadata-selection", provider, commands,
+                                std::string(513, 'x')).status == 413);
         response = route_api_request("POST", "/api/eject", provider, commands);
         check(response.status == 202 && received_command.type == ApiCommandType::eject);
         const ApiStateProvider huge = [] { return std::string(1024 * 1024 + 1, 'x'); };
@@ -165,6 +195,8 @@ int main() {
             return reply;
         };
         const in_addr loopback{htonl(INADDR_LOOPBACK)};
+        check(post("/api/metadata-selection", selection_body, loopback).find("HTTP/1.1 204") != std::string::npos);
+        check(post("/api/metadata-selection", "", loopback).find("HTTP/1.1 400") != std::string::npos);
         check(post("/api/ui-boot", boot_body, loopback).find("HTTP/1.1 204") != std::string::npos);
         check(post("/api/ui-boot", "", loopback).find("HTTP/1.1 400") != std::string::npos);
         check(post("/api/ui-boot", std::string(513, 'x'), loopback).find("HTTP/1.1 413") != std::string::npos);
@@ -189,7 +221,7 @@ int main() {
         freeifaddrs(interfaces);
         // A loopback-only test namespace has no address for an external-peer probe.
         if (external.s_addr != 0) {
-            for (const auto* path : {"/api/ui-boot", "/api/play"}) {
+            for (const auto* path : {"/api/ui-boot", "/api/play", "/api/metadata-selection"}) {
                 check(post(path, "", external).find("HTTP/1.1 403") != std::string::npos);
                 check(post(path, boot_body, external).find("HTTP/1.1 403") != std::string::npos);
             }
@@ -253,7 +285,7 @@ int main() {
         }
         post_client.join();
         check(received.find("HTTP/1.1 204") != std::string::npos);
-        check(command_calls == 5 && received_command.type == ApiCommandType::select_track &&
+        check(command_calls == 11 && received_command.type == ApiCommandType::select_track &&
               received_command.value == 4);
 
         std::atomic<bool> got_initial_event = false;

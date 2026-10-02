@@ -28,13 +28,27 @@ std::string serialize_presentation_model(const PresentationModel& model) {
                   {"tracks", std::move(regions)}};
     }
     const auto& player = model.player;
+    Json selection = nullptr;
+    if (model.enrichment.selection) {
+        const auto& source = *model.enrichment.selection;
+        Json candidates = Json::array();
+        for (const auto& item : source.candidates)
+            candidates.push_back({{"index", item.index}, {"title", optional(item.title)},
+                {"artist", optional(item.artist)}, {"country", optional(item.country)},
+                {"date", optional(item.date)}, {"medium_position", optional(item.medium_position)},
+                {"medium_title", optional(item.medium_title)}, {"track_count", item.track_count}});
+        selection = {{"state", source.selected_index ? "SELECTED" : "AMBIGUOUS"},
+            {"session_id", source.session_id}, {"disc_generation", source.disc_generation},
+            {"metadata_generation", source.metadata_generation},
+            {"selected_index", optional(source.selected_index)}, {"candidates", std::move(candidates)}};
+    }
     Json root{{"schema_version", 1}, {"revision", model.revision},
               {"player", {{"state", playback_name(player.playback)}, {"track_number", optional(player.track)},
                           {"position_frames", optional(model.position_frames)},
                           {"track_duration_frames", optional(model.track_duration_frames)}}},
               {"disc", {{"layout", std::move(layout)}, {"state", media_name(model.disc.state)}, {"title", optional(model.disc.title)},
                         {"artist", optional(model.disc.artist)}}}, {"tracks", std::move(tracks)},
-              {"enrichment", {{"status", metadata_name(model.enrichment.status)}}},
+              {"enrichment", {{"status", metadata_name(model.enrichment.status)}, {"selection", std::move(selection)}}},
               {"artwork", {{"cover", model.artwork.cover_url ? Json{{"url", *model.artwork.cover_url}, {"mime_type", nullptr}, {"width", nullptr}, {"height", nullptr}} : Json(nullptr)}}}};
     root.update(diagnostic_fields(model.drive, model.read, model.recent_events));
     return root.dump();

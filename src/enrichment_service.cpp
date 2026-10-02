@@ -15,15 +15,25 @@ public:
         // Keep this path for serving validated same-origin artwork after the
         // worker has finished. The worker receives its own copy.
         MetadataOptions options{.cache_directory = cache_directory, .use_cache = true, .cancelled = {}, .http_get = {}};
+        options.include_artwork = false;
         worker = std::make_unique<MetadataWorker>(
             [options = std::move(options)](const DiscToc& toc, const MetadataWorker::Cancelled& cancelled) mutable {
                 options.cancelled = cancelled;
                 return lookup_musicbrainz_disc(toc, options);
             });
+        MetadataOptions artwork_options{.cache_directory = cache_directory, .use_cache = true,
+                                        .cancelled = {}, .http_get = {}};
+        artwork_worker = std::make_unique<ArtworkWorker>(
+            [options = std::move(artwork_options)](const std::string& release_id,
+                                                  const MetadataWorker::Cancelled& cancelled) mutable {
+                options.cancelled = cancelled;
+                return lookup_cover_art_release(release_id, options);
+            });
     }
 
     MetadataSession session;
     std::unique_ptr<MetadataWorker> worker;
+    std::unique_ptr<ArtworkWorker> artwork_worker;
     std::string cache_directory;
 };
 
@@ -33,23 +43,48 @@ EnrichmentService::~EnrichmentService() = default;
 
 void EnrichmentService::begin_if_needed(const DiscToc& toc) {
     if (!implementation_->worker) return;
-    if (const auto request = implementation_->session.begin_if_needed(toc))
+    if (const auto request = implementation_->session.begin_if_needed(toc)) {
+        implementation_->artwork_worker->cancel_pending();
         implementation_->worker->request(*request);
+    }
 }
 
 void EnrichmentService::invalidate() {
     if (implementation_->worker) implementation_->worker->cancel_pending();
+    if (implementation_->artwork_worker) implementation_->artwork_worker->cancel_pending();
     implementation_->session.invalidate();
 }
 
 void EnrichmentService::poll() {
     if (!implementation_->worker) return;
     MetadataWorkerResult result;
-    while (implementation_->worker->pop(result))
-        implementation_->session.apply(std::move(result));
+    while (implementation_->worker->pop(result)) {
+        if (!implementation_->session.apply(std::move(result))) continue;
+        const auto& current = implementation_->session.snapshot();
+        if (current.status == MetadataStatus::available && current.selected &&
+            *current.selected < current.candidates.size() &&
+            current.artwork.status == ArtworkStatus::not_requested)
+            implementation_->artwork_worker->request({implementation_->session.generation(),
+                current.candidates[*current.selected].metadata.release_id});
+    }
+    ArtworkWorkerResult artwork_result;
+    while (implementation_->artwork_worker->pop(artwork_result))
+        implementation_->session.apply_artwork(artwork_result.request.generation,
+            artwork_result.request.release_id, std::move(artwork_result.artwork));
 }
 
 const MetadataResult& EnrichmentService::snapshot() const { return implementation_->session.snapshot(); }
+std::uint64_t EnrichmentService::generation() const { return implementation_->session.generation(); }
+bool EnrichmentService::select_candidate(std::uint64_t generation, std::size_t index) {
+    if (!implementation_->worker) return false;
+    const auto& before = implementation_->session.snapshot();
+    if (generation == implementation_->session.generation() && before.selected == index &&
+        before.status == MetadataStatus::available) return true;
+    if (!implementation_->session.select_candidate(generation, index)) return false;
+    const auto& selected = implementation_->session.snapshot().candidates[index].metadata;
+    implementation_->artwork_worker->request({generation, selected.release_id});
+    return true;
+}
 
 namespace {
 bool safe_key(const std::string& value) {
@@ -75,12 +110,14 @@ std::optional<std::string> mime_for(std::string_view bytes) {
 }
 
 bool EnrichmentService::has_cover_asset() const {
+    if (implementation_->session.snapshot().artwork.status != ArtworkStatus::available) return false;
     const auto path = cover_path(*implementation_);
     std::error_code error;
     return path && std::filesystem::is_regular_file(*path, error) && !error;
 }
 
 std::optional<EnrichmentArtworkAsset> EnrichmentService::cover_asset() const {
+    if (implementation_->session.snapshot().artwork.status != ArtworkStatus::available) return std::nullopt;
     const auto path = cover_path(*implementation_);
     if (!path) return std::nullopt;
     std::error_code error;
