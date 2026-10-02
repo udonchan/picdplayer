@@ -66,7 +66,14 @@ int main(int argc, char** argv) {
         else if (arg == "--metadata" && i + 1 < argc) { metadata_mode = argv[++i]; metadata_option = true; }
         else if (arg == "--metadata-cache" && i + 1 < argc) { metadata_cache = argv[++i]; metadata_cache_option = true; }
         else if (arg == "--custom-ui" && i + 1 < argc) { custom_ui = argv[++i]; custom_ui_option = true; }
-        else if (arg == "--settings-file" && i + 1 < argc) settings_file = argv[++i];
+        else if (arg == "--settings-file" && i + 1 < argc) {
+            settings_file = argv[++i];
+            if (settings_file.empty() || settings_file.front() != '/' ||
+                settings_file.back() == '/') {
+                std::cerr << "Invalid --settings-file: expected an absolute file path\n";
+                return 2;
+            }
+        }
         else if (arg == "--api-port" && i + 1 < argc) {
             const std::string_view value(argv[++i]);
             const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), api_port);
