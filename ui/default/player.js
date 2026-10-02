@@ -72,6 +72,107 @@ const setHidden = (element, value) => {
   if (element.hidden !== value) element.hidden = value;
 };
 
+// The View owns focus only; the daemon snapshot remains the playback authority.
+// View が保持するのは focus だけで、再生状態は daemon の snapshot を正とします。
+const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
+let focusedControl = -1;
+let pendingCommand = null;
+let feedbackTimer;
+const controlEnabled = (command, snapshot) => {
+  if (snapshot?.disc?.state !== 'AUDIO_READY') return false;
+  const state = snapshot?.player?.state;
+  if (!['STOPPED', 'PLAYING', 'PAUSED'].includes(state)) return false;
+  if (command === 'play') return state === 'STOPPED' || state === 'PAUSED';
+  if (command === 'pause') return state === 'PLAYING';
+  if (command === 'stop') return state === 'PLAYING' || state === 'PAUSED';
+  return Array.isArray(snapshot?.tracks) && snapshot.tracks.length > 1;
+};
+function renderControls(snapshot) {
+  if (focusedControl >= 0 && !controlEnabled(controls[focusedControl]?.dataset.command, snapshot))
+    focusedControl = -1;
+  controls.forEach((button, index) => {
+    const stateAvailable = controlEnabled(button.dataset.command, snapshot);
+    const available = stateAvailable && pendingCommand !== button.dataset.command;
+    if (button.disabled === available) button.disabled = !available;
+    const focused = focusedControl === index && stateAvailable;
+    if (button.dataset.focused !== String(focused)) button.dataset.focused = String(focused);
+  });
+}
+function focusControl(index) {
+  if (index < 0 && focusedControl >= 0) controls[focusedControl]?.blur?.();
+  focusedControl = index;
+  renderControls(currentSnapshot);
+  if (index >= 0) controls[index]?.focus?.({ preventScroll: true });
+}
+function moveControl(direction) {
+  if (!controls.length) return;
+  const enabled = controls.map((button, index) => !button.disabled ? index : -1).filter((index) => index >= 0);
+  if (!enabled.length) return;
+  const position = enabled.indexOf(focusedControl);
+  const next = position < 0 ? (direction > 0 ? enabled[0] : enabled[enabled.length - 1])
+    : enabled[(position + direction + enabled.length) % enabled.length];
+  focusControl(next);
+}
+function controlFeedback(message) {
+  const label = byId('control-feedback');
+  if (label.textContent !== message) label.textContent = message;
+  clearTimeout(feedbackTimer);
+  if (message) feedbackTimer = setTimeout(() => {
+    if (label.textContent === message) label.textContent = '';
+  }, 1800);
+}
+async function activateControl(button) {
+  if (!button || button.disabled || pendingCommand) return;
+  const command = button.dataset.command;
+  if (!['play', 'pause', 'stop', 'previous', 'next'].includes(command)) return;
+  pendingCommand = command;
+  renderControls(currentSnapshot);
+  controlFeedback('SENDING');
+  try {
+    const response = await fetch(`/api/${command}`, { method: 'POST' });
+    controlFeedback(response.status === 204 ? 'REQUEST ACCEPTED' : `REJECTED · ${response.status}`);
+  } catch {
+    controlFeedback('CONNECTION ERROR');
+  } finally {
+    pendingCommand = null;
+    renderControls(currentSnapshot);
+  }
+}
+function handleNavigation(action) {
+  if (action === 'left' || action === 'up') moveControl(-1);
+  else if (action === 'right' || action === 'down') moveControl(1);
+  else if (action === 'select') activateControl(controls[focusedControl]);
+  else if (action === 'back') focusControl(-1);
+}
+// Some TVs deliver one CEC direction both through the daemon and as a Chromium key.
+// 同じリモコン操作がCECとChromiumのキー入力の両方へ届く場合、後着の一方だけを抑えます。
+let lastNavigationInput = null;
+function handleNavigationInput(action, source) {
+  const now = Date.now();
+  const duplicate = lastNavigationInput?.action === action
+    && lastNavigationInput.source !== source && now - lastNavigationInput.time < 250;
+  if (duplicate) {
+    lastNavigationInput = null;
+    return;
+  }
+  lastNavigationInput = { action, source, time: now };
+  handleNavigation(action);
+}
+controls.forEach((button, index) => button.addEventListener('click', (event) => {
+  focusControl(index);
+  // Keyboard activation produces a click with detail=0; a CEC select can
+  // arrive for the same remote press. Pointer clicks remain independent.
+  // キーボード由来のclickは同じリモコン操作のCEC selectと重複し得ます。
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else activateControl(button);
+}));
+document.addEventListener('keydown', (event) => {
+  const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
+  if (!actions[event.key] || !controls.length) return;
+  event.preventDefault();
+  handleNavigationInput(actions[event.key], 'keyboard');
+});
+
 // CD frame is 1/75 second. Keep this conversion in the UI presentation layer.
 // CD frame は 1/75 秒です。この変換は表示層だけで行います。
 const formatTime = (frames) => {
@@ -413,6 +514,7 @@ function render(snapshot) {
     progressScale = scale;
   }
   set('player-state', player.state || 'NO_DISC');
+  renderControls(snapshot);
   showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id);
   set('read-activity', read.activity || 'UNKNOWN');
   set('read-strategy', read.effective_strategy || 'UNKNOWN');
@@ -518,4 +620,26 @@ function connect() {
 
 byId('refresh-read-map').addEventListener?.('click', () => requestDiscMap(currentSnapshot, true));
 
-load().finally(connect);
+let navigationSocket;
+let navigationRetry;
+function connectNavigation() {
+  clearTimeout(navigationRetry);
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const socket = new WebSocket(`${scheme}://${location.host}/api/navigation`);
+  navigationSocket = socket;
+  socket.onmessage = (event) => {
+    if (navigationSocket !== socket) return;
+    try {
+      const message = JSON.parse(event.data);
+      if (typeof message?.action === 'string') handleNavigationInput(message.action, 'cec');
+    } catch { /* A malformed input is ignored; playback continues. */ }
+  };
+  socket.onerror = () => { if (navigationSocket === socket) socket.close(); };
+  socket.onclose = () => {
+    if (navigationSocket !== socket) return;
+    navigationSocket = null;
+    navigationRetry = setTimeout(connectNavigation, 1500);
+  };
+}
+
+load().finally(() => { connect(); if (controls.length) connectNavigation(); });

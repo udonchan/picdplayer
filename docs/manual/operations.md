@@ -198,7 +198,7 @@ APIを有効にしたplayerへブラウザから次のURLで接続する。
 http://PI_ADDRESS:8080/player
 ```
 
-`/player`は読み取り専用のNow Playing画面である。album/artist/track titleはselected metadataが
+`/player`は再生情報と基本transport操作を表示するPlayer画面である。album/artist/track titleはselected metadataが
 AVAILABLEの場合に表示する。metadataを有効にするには起動時に`--metadata musicbrainz`と必要なら
 `--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
 再生位置は表示できる。daemonが取得・cacheした画像をsame-originの`/api/presentation/artwork/cover`から読み、失敗時はCDの

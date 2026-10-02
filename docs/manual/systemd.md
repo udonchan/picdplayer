@@ -286,7 +286,7 @@ IDは照合用で、認証情報ではない。
 
 `first_render`はbrowserへ描画機会を与えた近似値。HDMI scanout、実際のfirst pixelや
 ジャケット画像読込完了を保証しない。非表示ページではrAFが遅延し得る。
-`ui_ready`は読み取り専用Now Playingの準備完了であり、CEC・ディスク・音声の再生準備ではない。
+`ui_ready`は初期snapshot反映・描画機会・状態WebSocket接続の成立であり、CEC入力channel・ディスク・音声の再生準備ではない。
 REST失敗時はWebSocket snapshotでも準備条件を満たせる。イベント順序や受信順序は仮定しない。
 標準のdefer scriptでDOMContentLoadedを観測する。イベント後に動的読込されたscriptについては
 過去の発火時刻を捏造せず、イベントを記録できないことがある。

@@ -1,6 +1,6 @@
 # 検証状況と残課題
 
-更新日: 2026-10-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
 
 ## 利用者設定の保存（#177、部分実装）
@@ -31,13 +31,37 @@ Now Playingのcold boot後TV表示、停止中metadata・画像表示は確認�
 [Now Playing実機確認結果](#now-playing実機確認結果)に残る範囲を記す。
 S/PDIFは[将来候補](digital-audio-output.md)であり、現在の必須試験ではない。
 
-## Semantic CEC navigation（#55、Docker自動試験・Piで入力確認）
+## Semantic CEC navigation（#55、Docker自動試験・Pi部分確認）
 
 CEC方向・決定・戻るをtransport keyと分離し、`WS /api/navigation`へ短命な入力として配信する経路を追加した。
 Linux/aarch64 DockerでCEC code変換、長押し/解放filter、API WebSocket配信を自動試験した。
-2026-09-30には#56の標準Playerを重ねたPiで、TVリモコンの上下左右・決定・Backが
-画面のfocus操作へ届くことを確認した。CECとChromium keydownの二重入力は#56側で抑制する。
-長押し/解放code、入力切替中、別TV、CPU/温度への影響は未確認。
+標準Playerのfocus UIは後述の#56でこのchannelを消費する。2026-09-30のPiではTVリモコンの右方向キー1押下で
+`WS /api/navigation`の`right`とChromiumの`ArrowRight`の両方が届くことをCDPで確認した。
+修正後、左右上下・決定・戻るをTVリモコンで操作し、標準Playerの選択移動を確認した。
+2026-10-03には同じTVでBack後に右方向キーを約2秒長押しし、離した後は選択枠が止まり、
+音声も正常なことをユーザーが確認した。CECの生code/releaseの詳細と入力切替中・別TVは未確認。
+
+## 標準PlayerのCEC transport操作面（#56、Docker自動試験・Pi部分確認）
+
+標準Playerに5つのtransport buttonを追加し、CECのsemantic navigationとkeyboardでfocusを移す。
+状態snapshotからbuttonの可否を計算し、POST受理だけでは再生状態を確定しない。
+NodeのUIテストではfocus、204/409、通信失敗、NO_DISCでの無効化を確認する。
+navigation WebSocket切断後の再接続と、古い接続からの遅延入力を無視することもNodeで確認した。
+MacのChrome headlessによる[1920×1080静的fixture](reports/2026-09-30-cec-controls/README.md)では
+5操作とIntegrity Monitor全体が画面内に見える。PiでTVリモコンからPlayを選んで決定すると、
+CDPに`REQUEST ACCEPTED`、APIに`PLAYING`が現れ、ユーザーがTVの音声を確認した。PauseもTV表示とAPIの
+`PAUSED`で確認し、Backによる選択解除をユーザーが確認した。右キーの二重経路によりStop選択が
+不安定だったため、同一操作の近接した異経路入力をUIで抑える修正を加えて再デプロイした。
+決定キー由来のbutton clickとCEC selectの重複可能性にも同じ入力処理を適用し、自動試験した。
+修正後はSTOPPEDのPrevious→Play、PLAYINGの3回の右入力でStop選択、Stop決定後の
+API `STOPPED`、左でNext、上でPlay、下でNextを確認した。画面の選択結果はユーザーのTV目視と
+CDPで照合した。異なるTV/remote、長期負荷・温度への影響は未確認である。
+追加修正をPiへ再デプロイした後、リモコンでPlayを選び、CDPのresource timingで`/api/play`要求が
+1回だったことを確認した。このTVの決定キーではChromiumのbutton `click`は観測されず、
+二重click対策そのものの実機発火は未確認である。APIからStopを要求し、後続snapshotの`STOPPED`を確認した。
+DockerのLinux/aarch64で`ENABLE_API=OFF`もビルドできた。STOPPED画面の20秒・4 sampleの読み取り
+計測では全core CPU平均1.70%、最大2.18%、温度56.9〜58.0°C、現在throttling bitは全sampleで0だった。
+短時間かつ過去の基線と同条件ではないため、負荷回帰がないという保証には使わない。
 
 ## 選択済みreleaseのArtist MBID（#48、Docker自動試験）
 

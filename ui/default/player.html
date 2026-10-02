@@ -18,7 +18,17 @@
         <p id="album-artist" class="album-artist">Insert an audio CD</p>
         <div class="track-row"><span id="track-number">—</span><div><h2 id="track-title">—</h2><p id="track-artist">—</p></div></div>
         <div class="timeline"><div class="progress"><span id="progress"></span></div><div><span id="position">0:00</span><span id="duration">0:00</span></div></div>
-        <p id="player-state" class="state">NO_DISC</p>
+        <div class="player-footer">
+          <p id="player-state" class="state">NO_DISC</p>
+          <p id="control-feedback" class="control-feedback" aria-live="polite"></p>
+          <nav class="player-controls" aria-label="Playback controls">
+            <button type="button" data-command="previous" disabled>Previous</button>
+            <button type="button" data-command="play" disabled>Play</button>
+            <button type="button" data-command="pause" disabled>Pause</button>
+            <button type="button" data-command="stop" disabled>Stop</button>
+            <button type="button" data-command="next" disabled>Next</button>
+          </nav>
+        </div>
       </div>
     </section>
     <section class="integrity" aria-labelledby="integrity-title">
