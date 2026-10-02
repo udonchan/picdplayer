@@ -1,7 +1,9 @@
-# ユーザー設定基盤の拡張案（未実装）
+# ユーザー設定基盤の拡張案と標準画面の部分実装
 
-第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。ここは将来案であり、
-設定ファイル、Settings UI、設定API、hot reloadはまだ存在しない。
+第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。Draft PR #180では
+標準PlayerにRead PolicyのSINGLE/REPEATを選ぶSettings画面を部分実装している。
+このブランチに保存設定ファイル、一般設定API、Artist BackgroundのON/OFF、hot reloadはない。
+Read Policyの保存・復元は別のDraft PR #179（#177）で進行中である。
 
 設定の優先順はbuilt-in defaults → system/device configuration → user configurationを候補とする。
 現行CLIと`/etc/default/picdplayer`は維持し、将来のCLI上書き順位も導入時に決める。

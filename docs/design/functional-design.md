@@ -232,8 +232,8 @@ selectで実行、backでfocusを解除する。POST受理は状態確定では�
 標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
 部分実装する。CEC方向で選択し、決定で既存`POST /api/read-policy`を送る。BackでPlayerへ戻り、
 選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
-結果を示し、API失敗時は再生を止めない。詳細値の編集、永続化状態の表示、Artist Backgroundの
-有効化は未実装である。永続化は別ブランチの#177で実装中で、同APIの
+結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
+有効化は未実装である。永続化自体は別ブランチの#177で実装中で、同APIの
 `persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
 session限りと扱い、単なるPOST受理を保存済みと表示しない。
 候補選択やread policy編集はこのcontrol列に含めない。title/artistがなければ
