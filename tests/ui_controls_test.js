@@ -20,6 +20,7 @@ async function main() {
   let postStatus = 204;
   let failPost = false;
   let now = 1000;
+  let activeElement = null;
   const keys = {};
   const timers = [];
   const snapshot = {
@@ -34,7 +35,7 @@ async function main() {
       textContent: '', style: {}, dataset: {}, hidden: false, disabled: true,
       classList: { contains: () => false, add() {}, remove() {} },
       removeAttribute() {}, addEventListener(type, fn) { this[`on${type}`] = fn; },
-      focus() { this.focused = true; }, blur() { this.focused = false; },
+      focus() { this.focused = true; activeElement = this; }, blur() { this.focused = false; },
     };
     nodes.set(id, element);
     return element;
@@ -49,6 +50,7 @@ async function main() {
     performance: { now: () => 1 },
     document: {
       readyState: 'complete', getElementById: node,
+      get activeElement() { return activeElement; },
       querySelectorAll: () => controls,
       addEventListener(type, fn) { keys[type] = fn; },
     },
@@ -204,6 +206,12 @@ async function main() {
     requested: { ...policy.requested, mode: 'SINGLE' } }) });
   await new Promise(setImmediate);
   assert.equal(node('policy-repeat').dataset.selected, 'true'); // Old GET cannot replace it.
+  keys.keydown({ key: 'Tab', preventDefault() {} });
+  assert.equal(activeElement, node('settings-close'));
+  keys.keydown({ key: 'Tab', preventDefault() {} });
+  assert.equal(activeElement, node('policy-single')); // Focus stays inside the dialog.
+  keys.keydown({ key: 'Tab', shiftKey: true, preventDefault() {} });
+  assert.equal(activeElement, node('settings-close'));
   console.log('PASS: CEC/keyboard focus, command POST, authoritative state and No Disc');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

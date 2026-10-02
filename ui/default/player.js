@@ -76,6 +76,7 @@ const setHidden = (element, value) => {
 // View が保持するのは focus だけで、再生状態は daemon の snapshot を正とします。
 const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
 const policyButtons = [byId('policy-single'), byId('policy-repeat')];
+const settingsCloseButton = byId('settings-close');
 let focusedControl = -1;
 let pendingCommand = null;
 let feedbackTimer;
@@ -184,6 +185,7 @@ function openSettings() {
   policyState = null;
   setHidden(byId('settings-panel'), false);
   focusPolicy(0);
+  settingsCloseButton.focus?.({ preventScroll: true });
   set('settings-policy-status', 'Loading read policy…');
   set('settings-persistence', 'Checking whether changes are saved…');
   void loadPolicySettings();
@@ -282,8 +284,18 @@ policyButtons.forEach((button, index) => button.addEventListener?.('click', (eve
   if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
   else void selectPolicy(index);
 }));
-byId('settings-close').addEventListener?.('click', closeSettings);
+settingsCloseButton.addEventListener?.('click', closeSettings);
 document.addEventListener('keydown', (event) => {
+  if (settingsOpen && event.key === 'Tab') {
+    event.preventDefault();
+    settingsFocusMoved = true;
+    const targets = [...policyButtons.filter((button) => !button.disabled), settingsCloseButton];
+    const current = targets.indexOf(document.activeElement);
+    const next = current < 0 ? (event.shiftKey ? targets.length - 1 : 0)
+      : (current + (event.shiftKey ? targets.length - 1 : 1)) % targets.length;
+    targets[next].focus?.({ preventScroll: true });
+    return;
+  }
   const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
   if (!actions[event.key] || (!controls.length && !settingsOpen)) return;
   event.preventDefault();
