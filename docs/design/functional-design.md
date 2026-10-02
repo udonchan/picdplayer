@@ -74,7 +74,8 @@ UIのHTML/CSS/JSは`ui/default/`を単一のソースとし、ビルド時にfal
 不正なCustom UIはWARNを記録してdefaultへ戻り、`/player`上でも無効化を通知する。
 `/builtin/player`とtechnical statusはCustom UIから独立して配信する。通常の再生状態や
 metadata modelはUI選択によって変更しない。manifest version・ファイル上限・URL契約は
-[Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、設定APIは未実装。
+[Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、一般設定APIは未実装。
+Read Policyのみ、`--settings-file`を指定したAPI有効Playerで保存・起動時復元する部分実装がある。
 
 ## media・TOC
 
@@ -187,7 +188,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
 | GET /api/read-history | STREAM詳細履歴とDISC領域集計。通常snapshotとは別取得 |
-| GET /api/read-policy | requested/effective/pendingを即時取得 |
+| GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |

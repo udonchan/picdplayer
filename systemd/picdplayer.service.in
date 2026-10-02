@@ -27,6 +27,8 @@ StandardError=journal
 NoNewPrivileges=true
 CacheDirectory=picdplayer
 CacheDirectoryMode=0750
+StateDirectory=picdplayer
+StateDirectoryMode=0700
 
 [Install]
 WantedBy=multi-user.target

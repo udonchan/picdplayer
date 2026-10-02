@@ -15,6 +15,7 @@
 #endif
 #ifdef ENABLE_API
 #include "api_server.hpp"
+#include "read_policy_store.hpp"
 #include "presentation_model.hpp"
 #include "presentation_json.hpp"
 #include "diagnostics_json.hpp"
@@ -114,18 +115,31 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         int api_port, PcmBufferConfig buffer_config,
                         ReadPolicy initial_read_policy, const std::string& custom_ui,
                         std::optional<unsigned> configured_drive_speed_x,
-                        bool direct_c2_pointers) {
+                        bool direct_c2_pointers, const std::string& settings_file) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache; (void)artist_background_key_file;
 #endif
 #ifndef ENABLE_API
-    (void)api_listen; (void)api_port; (void)custom_ui;
+    (void)api_listen; (void)api_port; (void)custom_ui; (void)settings_file;
 #endif
     Signals signals; // Worker inherits the blocked signal mask.
     PlayerController controller;
     auto audio = make_alsa_output(audio_device, audio_latency_ms * 1000U);
     auto drive_access = std::make_shared<DriveAccessCoordinator>();
     validate_read_policy(initial_read_policy, buffer_config.capacity_cd_frames);
+    const char* initial_read_policy_source = "startup";
+#ifdef ENABLE_API
+    if (!settings_file.empty()) {
+        std::string error;
+        if (auto saved = load_saved_read_policy(settings_file, buffer_config.capacity_cd_frames, error)) {
+            initial_read_policy = *saved;
+            initial_read_policy_source = "restored";
+            log_info("settings") << "loaded read_policy";
+        } else if (!error.empty()) {
+            log_warning("settings") << "read_policy_load_failed reason=" << error;
+        }
+    }
+#endif
     auto reader_policy = std::make_shared<ReadPolicy>(initial_read_policy);
     auto reader_policy_mutex = std::make_shared<std::mutex>();
     auto direct_options = std::make_shared<DirectOptions>();
@@ -181,6 +195,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                           std::chrono::milliseconds(initial_read_policy.time_budget_ms));
     ReadPolicy requested_read_policy = initial_read_policy;
     ReadPolicy effective_read_policy = initial_read_policy;
+    const char* requested_read_policy_source = initial_read_policy_source;
+    const char* effective_read_policy_source = initial_read_policy_source;
     bool read_policy_pending = false;
     const auto apply_read_policy = [&](const ReadPolicy& policy) {
         validate_read_policy(policy, buffer_config.capacity_cd_frames);
@@ -198,6 +214,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                            policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
                            block_frames);
         effective_read_policy = policy;
+        effective_read_policy_source = requested_read_policy_source;
         read_policy_pending = false;
         engine.reset_prebuffer_target();
         log_info("read_policy") << "applied mode=" << read_verification_mode_name(policy.mode)
@@ -304,7 +321,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
             };
             return std::string("{\"requested\":") + policy_json(requested_read_policy) +
                    ",\"effective\":" + policy_json(effective_read_policy) +
-                   ",\"pending\":" + (read_policy_pending ? "true" : "false") + '}';
+                   ",\"pending\":" + (read_policy_pending ? "true" : "false") +
+                   ",\"requested_source\":\"" + requested_read_policy_source +
+                   "\",\"effective_source\":\"" + effective_read_policy_source + '"' +
+                   ",\"persistence_configured\":" + (settings_file.empty() ? "false" : "true") + '}';
         };
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
                 if (command.type == ApiCommandType::eject) {
@@ -331,7 +351,18 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     try {
                         validate_read_policy(command.read_policy, buffer_config.capacity_cd_frames);
                     } catch (const std::invalid_argument&) { return false; }
+                    if (!settings_file.empty()) {
+                        std::string error;
+                        if (!save_read_policy(settings_file, command.read_policy,
+                                              buffer_config.capacity_cd_frames, error)) {
+                            log_warning("settings") << "read_policy_save_failed reason=" << error;
+                            return false;
+                        }
+                        if (!error.empty())
+                            log_warning("settings") << "read_policy_save_warning reason=" << error;
+                    }
                     requested_read_policy = command.read_policy;
+                    requested_read_policy_source = settings_file.empty() ? "session" : "saved";
                     if (controller.state().playback == PlaybackState::stopped ||
                         controller.state().playback == PlaybackState::no_disc) {
                         apply_read_policy(requested_read_policy);
