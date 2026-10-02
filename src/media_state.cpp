@@ -8,6 +8,7 @@ MediaLifecycleState MediaStateTracker::observe(MediaObservation observation) noe
     case MediaObservation::tray_open:
     case MediaObservation::no_disc:
         state_ = MediaLifecycleState::no_disc;
+        observed_empty_ = true;
         error_.clear();
         break;
     case MediaObservation::not_ready:
@@ -21,6 +22,7 @@ MediaLifecycleState MediaStateTracker::observe(MediaObservation observation) noe
         break;
     case MediaObservation::unsupported_disc:
         state_ = MediaLifecycleState::unsupported;
+        observed_empty_ = false;
         error_.clear();
         break;
     case MediaObservation::unknown:
@@ -28,6 +30,12 @@ MediaLifecycleState MediaStateTracker::observe(MediaObservation observation) noe
         break;
     }
     return state_;
+}
+
+bool MediaStateTracker::take_audio_insertion() noexcept {
+    if (state_ != MediaLifecycleState::audio_ready || !observed_empty_) return false;
+    observed_empty_ = false;
+    return true;
 }
 
 void MediaStateTracker::begin_eject() noexcept {

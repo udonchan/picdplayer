@@ -92,9 +92,9 @@ MusicBrainz向け150 frame加算はmetadata境界だけで行い、DiscTocを変
 ## ライフサイクル
 
 1. 起動時はPlayerState=NO_DISC。CECの準備を状態確認しながら待つ。
-2. media観測でAudio CDを検出するとTOCを取得・検証し、先頭trackのSTOPPEDになる。
-3. 任意のmetadata lookupを非同期に開始する。再生操作はmetadata完了を待たない。
-4. PlayでPCM先読み後にALSA出力。Pause/Seek/Track変更では古いPCMを無効化する。
+2. media観測でAudio CDを検出するとTOCを取得・検証する。サービス稼働中に明示的なdisc不在・ejectを観測した後の挿入なら、先頭trackから自動再生する。daemon起動時に既に入っているCDはSTOPPEDとし、起動だけを挿入と見なさない。
+3. 任意のmetadata lookupを非同期に開始する。再生開始はmetadataや候補選択の完了を待たない。
+4. 自動再生またはPlay操作でPCM先読み後にALSA出力。Pause/Seek/Track変更では古いPCMを無効化する。
 5. 取り出しを観測するとTOC・metadataを無効化しNO_DISCへ戻る。
 6. API ejectはEJECTINGとして要求を保持し、reader解放とmedia workerの空きを待って実行する。
 7. SIGINT/SIGTERMでは音声を止め、workerをjoinして終了する。
