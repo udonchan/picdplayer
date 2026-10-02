@@ -86,9 +86,136 @@ let settingsFocusMoved = false;
 let settingsRequestId = 0;
 let policyState = null;
 let pendingPolicy = false;
+let pickerOpen = false;
+let pickerIndex = 0;
+let pickerKey = '';
+let autoOpenedPickerKey = '';
+let pendingSelection = null;
+let candidateButtons = [];
+let lastPickerFocused = null;
+const ambiguousSelection = (snapshot) => {
+  const selection = snapshot?.enrichment?.selection;
+  return snapshot?.disc?.state === 'AUDIO_READY' && selection?.state === 'AMBIGUOUS'
+    && Array.isArray(selection.candidates) && selection.candidates.length > 1 ? selection : null;
+};
+const selectionKey = (selection) => selection
+  ? JSON.stringify([selection.session_id, selection.disc_generation, selection.metadata_generation]) : '';
+const candidateDescription = (candidate) => [candidate.artist, candidate.date, candidate.country,
+  Number.isInteger(candidate.medium_position) ? `Disc ${candidate.medium_position}` : null,
+  candidate.medium_title, Number.isInteger(candidate.track_count) ? `${candidate.track_count} tracks` : null]
+  .filter(Boolean).join(' · ');
+function closePicker() {
+  pickerOpen = false;
+  lastPickerFocused = null;
+  pendingSelection = null;
+  setHidden(byId('metadata-picker'), true);
+  set('metadata-feedback', '');
+  focusControl(-1);
+}
+function renderPickerFocus() {
+  candidateButtons.forEach((button, index) => {
+    const focused = String(pickerOpen && index === pickerIndex);
+    if (button.dataset.focused !== focused) {
+      button.dataset.focused = focused;
+      button.setAttribute('aria-selected', focused);
+    }
+    const disabled = Boolean(pendingSelection);
+    if (button.disabled !== disabled) button.disabled = disabled;
+  });
+  const active = pickerOpen ? candidateButtons[pickerIndex] : null;
+  if (active && active !== lastPickerFocused) {
+    active.focus?.({ preventScroll: true });
+    active.scrollIntoView?.({ block: 'nearest' });
+  }
+  lastPickerFocused = active;
+}
+function renderPicker(snapshot) {
+  const selection = ambiguousSelection(snapshot);
+  const nextKey = selectionKey(selection);
+  if (!selection || (pickerOpen && pickerKey && pickerKey !== nextKey)) {
+    if (pickerOpen) closePicker();
+    pickerKey = '';
+    candidateButtons = [];
+    if (!selection) return;
+  }
+  if (settingsOpen) return;
+  // Show each new ambiguity once. Back dismisses it without suppressing the
+  // transport controls, while Choose album can reopen the same candidate set.
+  // 新しい曖昧候補は一度だけ自動表示します。Back後は手動で開き直せます。
+  if (autoOpenedPickerKey !== nextKey) {
+    autoOpenedPickerKey = nextKey;
+    openPicker();
+    return;
+  }
+  if (!pickerOpen) return;
+  if (pickerKey !== nextKey) {
+    pickerKey = nextKey;
+    pickerIndex = 0;
+    lastPickerFocused = null;
+    const list = byId('metadata-candidates');
+    candidateButtons = selection.candidates.map((candidate, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'option');
+      const title = document.createElement('span');
+      title.className = 'candidate-title';
+      title.textContent = candidate.title || `Candidate ${index + 1}`;
+      const details = document.createElement('span');
+      details.className = 'candidate-details';
+      details.textContent = candidateDescription(candidate) || 'Additional details not available';
+      button.append(title, details);
+      button.addEventListener('click', (event) => {
+        pickerIndex = index;
+        if (event.detail === 0) handleNavigationInput('select', 'keyboard');
+        else requestCandidate(index);
+      });
+      return button;
+    });
+    list.replaceChildren(...candidateButtons);
+  }
+  renderPickerFocus();
+}
+function openPicker() {
+  const selection = ambiguousSelection(currentSnapshot);
+  if (!selection) return;
+  pickerOpen = true;
+  pickerKey = '';
+  focusControl(-1);
+  setHidden(byId('metadata-picker'), false);
+  renderPicker(currentSnapshot);
+}
+async function requestCandidate(index) {
+  const selection = ambiguousSelection(currentSnapshot);
+  if (!pickerOpen || !selection || pendingSelection || !selection.candidates[index]) return;
+  const key = selectionKey(selection);
+  pendingSelection = { key, index };
+  renderPickerFocus();
+  set('metadata-feedback', 'SENDING SELECTION');
+  let accepted = false;
+  try {
+    const response = await fetch('/api/metadata-selection', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: selection.session_id,
+        disc_generation: selection.disc_generation, metadata_generation: selection.metadata_generation,
+        candidate_index: selection.candidates[index].index }),
+    });
+    if (!pickerOpen || selectionKey(ambiguousSelection(currentSnapshot)) !== key) return;
+    accepted = response.status === 204;
+    set('metadata-feedback', response.status === 204 ? 'WAITING FOR ALBUM UPDATE'
+      : `SELECTION REJECTED · ${response.status}`);
+    if (response.status === 409) load();
+  } catch {
+    if (pickerOpen && selectionKey(ambiguousSelection(currentSnapshot)) === key)
+      set('metadata-feedback', 'CONNECTION ERROR');
+  } finally {
+    if (!accepted) pendingSelection = null;
+    renderPickerFocus();
+  }
+}
 const controlEnabled = (command, snapshot) => {
   if (command === 'settings') return true;
   if (snapshot?.disc?.state !== 'AUDIO_READY') return false;
+  if (command === 'metadata') return Boolean(ambiguousSelection(snapshot));
   const state = snapshot?.player?.state;
   if (!['STOPPED', 'PLAYING', 'PAUSED'].includes(state)) return false;
   if (command === 'play') return state === 'STOPPED' || state === 'PAUSED';
@@ -100,6 +227,7 @@ function renderControls(snapshot) {
   if (focusedControl >= 0 && !controlEnabled(controls[focusedControl]?.dataset.command, snapshot))
     focusedControl = -1;
   controls.forEach((button, index) => {
+    if (button.dataset.command === 'metadata') setHidden(button, !ambiguousSelection(snapshot));
     const stateAvailable = controlEnabled(button.dataset.command, snapshot);
     const available = stateAvailable && pendingCommand !== button.dataset.command;
     if (button.disabled === available) button.disabled = !available;
@@ -196,6 +324,7 @@ function closeSettings() {
   setHidden(byId('settings-panel'), true);
   const index = controls.findIndex((button) => button.dataset.command === 'settings');
   if (index >= 0) focusControl(index);
+  renderPicker(currentSnapshot);
 }
 async function selectPolicy(index) {
   const requested = policyState?.requested;
@@ -228,6 +357,7 @@ async function activateControl(button) {
   if (!button || button.disabled || pendingCommand) return;
   const command = button.dataset.command;
   if (command === 'settings') { openSettings(); return; }
+  if (command === 'metadata') { openPicker(); return; }
   if (!['play', 'pause', 'stop', 'previous', 'next'].includes(command)) return;
   pendingCommand = command;
   renderControls(currentSnapshot);
@@ -252,6 +382,17 @@ function handleNavigation(action) {
     else if (action === 'select') void selectPolicy(focusedPolicy);
     return;
   }
+  if (pickerOpen) {
+    if (action === 'back') closePicker();
+    else if ((action === 'up' || action === 'left') && !pendingSelection) {
+      pickerIndex = (pickerIndex + candidateButtons.length - 1) % candidateButtons.length;
+      renderPickerFocus();
+    } else if ((action === 'down' || action === 'right') && !pendingSelection) {
+      pickerIndex = (pickerIndex + 1) % candidateButtons.length;
+      renderPickerFocus();
+    } else if (action === 'select') requestCandidate(pickerIndex);
+    return;
+  }
   if (action === 'left' || action === 'up') moveControl(-1);
   else if (action === 'right' || action === 'down') moveControl(1);
   else if (action === 'select') activateControl(controls[focusedControl]);
@@ -272,6 +413,7 @@ function handleNavigationInput(action, source) {
   handleNavigation(action);
 }
 controls.forEach((button, index) => button.addEventListener('click', (event) => {
+  if (pickerOpen || settingsOpen) return;
   focusControl(index);
   // Keyboard activation produces a click with detail=0; a CEC select can
   // arrive for the same remote press. Pointer clicks remain independent.
@@ -297,7 +439,7 @@ document.addEventListener('keydown', (event) => {
     return;
   }
   const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
-  if (!actions[event.key] || (!controls.length && !settingsOpen)) return;
+  if (!actions[event.key] || (!controls.length && !settingsOpen && !pickerOpen)) return;
   event.preventDefault();
   handleNavigationInput(actions[event.key], 'keyboard');
 });
@@ -548,7 +690,7 @@ function renderDiscMap(snapshot) {
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
 // ジャケットは任意の付加情報です。画像読込失敗でアルバム情報を消しません。
-function showArt(artwork, layout, session) {
+function showArt(artwork, layout, session, selection) {
   const container = byId('art');
   const image = byId('cover');
   const url = typeof artwork?.url === 'string'
@@ -556,7 +698,8 @@ function showArt(artwork, layout, session) {
     : '';
 
   const identity = url ? JSON.stringify([url, layout?.session_id || session || null,
-    layout?.disc_generation ?? null]) : '';
+    layout?.disc_generation ?? null, selection?.metadata_generation ?? null,
+    selection?.selected_index ?? null]) : '';
 
   // Compare image identity before touching attributes or event handlers.
   // 同じ画像なら属性・handler を書き換えず、失敗時も毎回再試行しません。
@@ -590,10 +733,11 @@ function showArt(artwork, layout, session) {
   if (image.complete && image.naturalWidth > 0) image.onload();
 }
 
-function mediaMessage(hasDisc, mediaState, enrichmentStatus) {
+function mediaMessage(hasDisc, mediaState, enrichmentStatus, selection) {
   if (!hasDisc) return mediaState === 'LOADING' ? 'READING DISC' : 'WAITING FOR DISC';
   if (enrichmentStatus === 'LOADING') return 'LOOKING UP ALBUM';
-  if (enrichmentStatus === 'UNAVAILABLE') return 'ALBUM SELECTION REQUIRED';
+  if (selection?.state === 'AMBIGUOUS') return 'ALBUM SELECTION AVAILABLE';
+  if (enrichmentStatus === 'UNAVAILABLE') return 'METADATA UNAVAILABLE';
   if (enrichmentStatus === 'ERROR') return 'METADATA UNAVAILABLE';
   return 'NOW PLAYING';
 }
@@ -617,7 +761,7 @@ function render(snapshot) {
     ? `Track ${String(player.track_number).padStart(2, '0')}`
     : '—';
 
-  set('media-message', mediaMessage(hasDisc, disc.state, enrichment.status));
+  set('media-message', mediaMessage(hasDisc, disc.state, enrichment.status, enrichment.selection));
   set('album', hasDisc ? (disc.title || 'Audio CD') : 'No disc');
   set('album-artist', hasDisc
     ? (disc.artist || (enrichment.status === 'LOADING'
@@ -644,7 +788,9 @@ function render(snapshot) {
   }
   set('player-state', player.state || 'NO_DISC');
   renderControls(snapshot);
-  showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id);
+  renderPicker(snapshot);
+  showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id,
+    enrichment.selection);
   set('read-activity', read.activity || 'UNKNOWN');
   set('read-strategy', read.effective_strategy || 'UNKNOWN');
   const requestedPolicy = read.policy?.requested?.mode;
@@ -748,6 +894,7 @@ function connect() {
 }
 
 byId('refresh-read-map').addEventListener?.('click', () => requestDiscMap(currentSnapshot, true));
+byId('metadata-close').addEventListener?.('click', closePicker);
 
 let navigationSocket;
 let navigationRetry;

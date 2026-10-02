@@ -74,7 +74,7 @@ Read PolicyのSINGLE/REPEATをCECの方向/決定/Backで選択する初期画�
 選択できず、Custom UIにも実装を要求しない。
 navigationは選択状態や再生結果のsnapshotではない。Viewが状態変更を求める場合はloopbackの
 操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
-標準Playerはこのchannelで基本transport buttonのfocusを動かす参考実装である。
+標準Playerはこのchannelで基本transport buttonと任意のmetadata候補pickerのfocusを動かす参考実装である。
 Custom UIが同じfocus構造や操作UIを実装する義務はない。
 PiのCage/ChromiumではTVリモコンの同じ方向操作が、このchannelとbrowserの`keydown`の両方へ届くことを
 実機で確認した。決定キーもbrowserのbutton `click`とCEC `select`の両方に届く可能性がある。

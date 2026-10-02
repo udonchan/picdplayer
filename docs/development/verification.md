@@ -1,13 +1,13 @@
 # 検証状況と残課題
 
-更新日: 2026-10-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
 標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
 SINGLE/REPEATを選択できるようにした。`requested/effective/pending`と詳細4値を表示し、
 取得・変更失敗でも再生は継続する。Artist Backgroundは利用不能と明示してON操作を提供しない。
-Debian Trixie/aarch64 Dockerの46件のCTestとJS構文確認を通した。PiのTV実表示、CEC入力、
+Debian Trixie/aarch64 DockerのビルドとCTestを再確認する。PiのTV実表示、CEC入力、
 保存後の再起動復元はこのブランチでは未確認。Mac headless Chromeのmock APIでは
 [1920×1080と720×720の表示記録](reports/2026-10-02-player-settings/README.md)を保存し、
 Settings surfaceがviewportへ収まり、内部scrollを必要としないことを確認した。
@@ -49,7 +49,8 @@ Linux/aarch64 DockerでCEC code変換、長押し/解放filter、API WebSocket�
 標準Playerのfocus UIは後述の#56でこのchannelを消費する。2026-09-30のPiではTVリモコンの右方向キー1押下で
 `WS /api/navigation`の`right`とChromiumの`ArrowRight`の両方が届くことをCDPで確認した。
 修正後、左右上下・決定・戻るをTVリモコンで操作し、標準Playerの選択移動を確認した。
-長押し/解放code、入力切替中の挙動は未確認であり、#55/#56の実機確認へ残す。
+2026-10-03には同じTVでBack後に右方向キーを約2秒長押しし、離した後は選択枠が止まり、
+音声も正常なことをユーザーが確認した。CECの生code/releaseの詳細と入力切替中・別TVは未確認。
 
 ## 標準PlayerのCEC transport操作面（#56、Docker自動試験・Pi部分確認）
 
@@ -65,7 +66,7 @@ CDPに`REQUEST ACCEPTED`、APIに`PLAYING`が現れ、ユーザーがTVの音声
 決定キー由来のbutton clickとCEC selectの重複可能性にも同じ入力処理を適用し、自動試験した。
 修正後はSTOPPEDのPrevious→Play、PLAYINGの3回の右入力でStop選択、Stop決定後の
 API `STOPPED`、左でNext、上でPlay、下でNextを確認した。画面の選択結果はユーザーのTV目視と
-CDPで照合した。長押し、異なるTV/remote、長期負荷・温度への影響は未確認である。
+CDPで照合した。異なるTV/remote、長期負荷・温度への影響は未確認である。
 追加修正をPiへ再デプロイした後、リモコンでPlayを選び、CDPのresource timingで`/api/play`要求が
 1回だったことを確認した。このTVの決定キーではChromiumのbutton `click`は観測されず、
 二重click対策そのものの実機発火は未確認である。APIからStopを要求し、後続snapshotの`STOPPED`を確認した。
@@ -92,9 +93,51 @@ Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。parser fixtu
 適用しない。再挿入時の自動再選択は行わない。
 
 Debian Trixie/aarch64 DockerでbuildとCTest 45件が通過した。候補選択・古い世代と画像結果の拒否、
-provider固有IDを公開しないPresentation Model、API入力境界を確認した。標準PlayerのCEC候補picker、
-実機『The Slip』での候補選択、実ネットワークからの選択後CAA取得は未検証であり、それぞれ#166と
-#15の実機・統合確認として残る。
+provider固有IDを公開しないPresentation Model、API入力境界を確認した。
+2026-10-01にPiへ#15/#166を含むpackageを導入し、『The Slip』の実候補US盤・JP盤が
+`AMBIGUOUS`として公開されること、CEC操作後に`SELECTED`へ変わり、disc/track情報とcover URLが
+authoritative snapshotに反映されることを確認した。cover endpointはHTTP 200、image/jpeg、77911 bytesを返した。
+TV上のcover画像そのものと失敗系は別途確認対象とする。
+
+## 標準Playerのmetadata候補picker（#166、Docker/Chrome/Pi確認）
+
+#15の公開契約と#55のsemantic CEC navigationを使う標準UIを作業branchで実装した。
+曖昧候補の初回検出時にpickerを自動表示し、backで閉じた同じ候補群は自動再表示しない。
+`Choose album`で開き直せる。方向入力で候補移動、selectで選択POST、backで閉じる。
+HTTP 204は選択完了とみなさず、次のauthoritative snapshotでalbum/trackを更新する。
+同じcover URLで選択candidateが変わっても画像を再読込する。
+Debian Trixie/aarch64 DockerでbuildとCTest 46件を実行し、Node fixtureで候補表示、CEC操作、
+204待ち、409拒否、選択後snapshot、disc不在を確認した。
+Mac headless Chromeの[1920×1080表示](reports/2026-10-01-metadata-picker/README.md)は合成候補の
+レイアウト確認である。2026-10-01にはPiの通常kioskで、ユーザーがTVリモコンから『The Slip』の
+候補を選択した。Pi APIでは2候補（US `2008-07-22`、JP `2008-09-10`）からindex 0が選択され、
+`enrichment.status=AVAILABLE`、disc title/artist、track 1 title `999,999`、cover URLを確認した。
+ユーザーはTV上のメタデータ表示、pickerの終了、表示欠け・意図しないscrollがないことを確認した。
+候補選択中のTV画像は保存しておらず、合成fixture画像を実機の証拠とは扱わない。
+その後、曖昧候補の初回自動表示へ変更して再デプロイした。ユーザーはTVで`Choose album`を
+押さずにUS盤・JP盤の候補一覧が開くことと、Backで閉じた後に同じ候補群が勝手に再表示されないことを確認した。
+2026-10-03には更新済みpackageで同じCDを再挿入し、ユーザーが候補一覧の自動表示、
+CECでの候補選択後のdisc/track情報とcover画像をTVで確認した。CDPでも同じ画面を確認した。
+再生は選択前に開始しており、候補選択が再生開始の条件ではない。異常候補やCEC入力切替時は未確認。
+
+## Audio CD再挿入時の自動再生（#172、Pi確認）
+
+明示的なdisc不在/eject観測から新しいAudio CDのTOC受理へ進んだ場合だけ、自動でPlayを要求する。
+起動時にCDが既に入っている場合、metadata到着、同一TOCの再読込、STOP後のmedia pollでは再生を始めない。
+DockerのLinux/aarch64 buildとCTest 46件が通過し、media trackerの挿入根拠の一回消費を自動試験した。
+
+2026-10-01に#166を含むpackageをPiへ導入した。『The Slip』が入ったままdaemon PID `47033`へ
+再起動した直後は`AUDIO_READY / STOPPED`だった。loopback APIでejectし、ユーザーが同じCDを
+物理的に再挿入した。PID `47033`のままjournalに`auto_play=inserted_audio_disc disc_generation=2`、
+続けて`state=PLAYING track=1`と`metadata: status=LOADING`が記録された。APIは
+`PLAYING / AMBIGUOUS`を返し、ユーザーはTVで候補一覧の自動表示と実際の音声を確認した。
+選択前の音声再生が成立したため、metadata選択は再生開始条件ではない。最後にAPIのSTOPへ204が返り、
+その後も`STOPPED / AUDIO_READY`を確認した。2026-10-03には競合解消後のpackageを再導入し、
+既挿入CDでのdaemon再起動後は`STOPPED`、同一PID `51063`での物理再挿入後は
+`auto_play=inserted_audio_disc disc_generation=2`、`PLAYING / AMBIGUOUS`を再確認した。
+ユーザーはTV上の候補一覧と選択前の音声再生、候補選択後のカバー画像を確認した。
+APIのSTOPは204で、5秒後も`STOPPED`を維持した。Docker統合後のCTestは48件成功。
+異常媒体や別driveは未検証である。
 
 ## Metadataとartworkの段階配信（#50、Docker自動試験）
 
@@ -123,6 +166,7 @@ ioctl受理と物理停止を同じ保証として扱わない。
 停止要求後、loopback `POST /api/play`は204を返し、5秒後にtrack 1の`PLAYING`とposition進行を確認した。
 同じrunで`POST /api/eject`は202を返し、約1秒後に`NO_DISC`へ遷移した。CD再挿入後は
 `AUDIO_READY → STOPPED`、14 tracks、track 1へ復帰した。daemon/kioskは全工程でactiveだった。
+これは#172導入前の測定であり、現行の挿入後自動再生とは異なる。
 この確認は通常CD、direct reader、短時間の再生復帰に限る。pause、unsupported/error、長時間STOPPED、
 drive/USB bridgeごとの差異は、物理媒体・drive横断の後続検証 #146 で扱う。
 

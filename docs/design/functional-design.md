@@ -244,10 +244,13 @@ selectで実行、backでfocusを解除する。POST受理は状態確定では�
 部分実装する。CEC方向で選択し、決定で既存`POST /api/read-policy`を送る。BackでPlayerへ戻り、
 選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
 結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
-有効化は未実装である。永続化自体は別ブランチの#177で実装中で、同APIの
+有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの
 `persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
 session限りと扱い、単なるPOST受理を保存済みと表示しない。
-候補選択やread policy編集はこのcontrol列に含めない。title/artistがなければ
+曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
+操作列の`Choose album`から開き直せる。CEC/keyboardの方向入力で候補を移動し、selectで選択POST、
+backで閉じる。候補がないときは入口を表示しない。Settings表示中に候補が届いた場合は、
+Settingsを閉じた後にpickerを表示する。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
 戻る。外部文字列はtechnical statusと同様にtextContentで表示する。HTTP responseはCSPで
