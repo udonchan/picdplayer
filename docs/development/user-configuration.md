@@ -20,7 +20,7 @@ hot reloadはまだ存在しない。
 | buffer容量/startup量 | `--read-buffer-frames`、`--startup-buffer-frames` | 後続候補 | 15 frame刻み、15..2250、startup≦capacity。現状は起動時設定 |
 | CDDA reader | `--cdda-reader direct\|paranoia` | 初期画面から除外 | build optionとライセンス・reader再生成に関わる運用者設定 |
 | audio/CEC/CD device、audio latency、API listen/port、Custom UI path | 起動引数とsystemd environment | 初期画面から除外 | 誤設定で操作不能になり得る機器/運用者設定。rollbackと再起動境界が必要 |
-| metadata cache path、Artist Background API key file | 起動引数または開発中の起動引数 | 初期画面から除外 | cacheの保存先とsecretの管理はUI表示設定から分離し、keyをAPIへ返さない |
+| metadata cache path、Artist Background API key file | 起動引数または開発中の起動引数 | 初期画面から除外 | 現行のkey fileは`api-key`ヘッダーを使うproject key用。personal keyの`client-key`は未実装。cacheの保存先とsecretの管理はUI表示設定から分離し、keyをAPIへ返さない |
 | diagnostic/probe/fixture flag | 起動引数 | 除外 | 通常の利用者設定ではない |
 
 画面へ載せる最初の実用範囲は、既存APIのRead Policyと、#49/#51が利用可能になった後の
@@ -28,6 +28,11 @@ Artist Backgroundの明示的なON/OFFである。画面はdaemonが返す状態
 保存・検証・適用の唯一のownerはdaemonとする。背景がOFFのときは外部写真の取得・配信・
 表示を行わず、Album Artworkまたは既定背景へのfallbackを維持する。外部写真を配布物へ同梱しない。
 家庭内での利用を想定しても、providerのAPI条件や画像ごとの権利・表示条件は別に確認する。
+公式の[API認証仕様](https://api.fanart.tv/)と[キー取得案内](https://fanart.tv/get-an-api-key/)は
+project keyとpersonal keyを区別する。設定画面で利用者のpersonal keyを扱う場合は`client-key`経路を
+別途実装・検証する。写真を同梱しないことや利用者の明示ONだけでは、個々の写真の許諾や端末内cacheの
+条件を確定できない。#49の権利・利用条件が未確認の間はONを操作不能とし、合成/利用許諾済み画像で
+UIとfallbackの試験だけを進める。
 
 Read Policyの部分実装ではbuilt-in値→起動引数→保存済みuser値の順に採用する。
 `GET /api/read-policy`では要求値・適用済み値ごとに`startup`/`restored`/`saved`/`session`の
