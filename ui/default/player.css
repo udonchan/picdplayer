@@ -230,6 +230,51 @@ main {
 .player-controls button:focus-visible { border-color: var(--blue); outline: 2px solid var(--blue); outline-offset: 1px; }
 .player-controls button[data-pending='true'] { color: var(--blue); }
 
+.metadata-picker[hidden], .player-controls button[hidden] { display: none; }
+.metadata-picker {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #080b0de8;
+}
+.metadata-picker-panel {
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100vh - 48px));
+  overflow: auto;
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 24px 80px #000a;
+}
+.metadata-picker-panel h2 { margin: 0 0 8px; font-size: clamp(23px, 3vw, 34px); }
+.metadata-picker-note { margin: 0 0 18px; color: var(--muted); }
+.metadata-candidates { display: grid; gap: 7px; max-height: min(540px, 55vh); overflow: auto; }
+.metadata-candidates button, #metadata-close {
+  display: block;
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #202729;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+}
+.metadata-candidates button[data-focused='true'],
+.metadata-candidates button:focus-visible, #metadata-close:focus-visible {
+  border-color: var(--blue);
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+.metadata-candidates button:disabled { opacity: .6; }
+.metadata-candidates .candidate-title { display: block; font-weight: 700; }
+.metadata-candidates .candidate-details { display: block; color: var(--muted); font-size: 13px; }
+.metadata-feedback { min-height: 1.4em; color: var(--retry); font-size: 13px; }
+#metadata-close { width: auto; margin-top: 12px; color: var(--muted); }
+
 .integrity {
   margin-top: clamp(16px, 2vh, 24px);
   padding-top: 12px;

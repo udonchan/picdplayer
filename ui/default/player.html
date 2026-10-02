@@ -27,8 +27,19 @@
             <button type="button" data-command="pause" disabled>Pause</button>
             <button type="button" data-command="stop" disabled>Stop</button>
             <button type="button" data-command="next" disabled>Next</button>
+            <button type="button" data-command="metadata" hidden disabled>Choose album</button>
           </nav>
         </div>
+      </div>
+    </section>
+    <section id="metadata-picker" class="metadata-picker" aria-label="Album candidates" hidden>
+      <div class="metadata-picker-panel">
+        <p class="eyebrow">ALBUM CANDIDATES</p>
+        <h2>Select album information</h2>
+        <p class="metadata-picker-note">Playback continues as Audio CD until a candidate is selected. A match here does not prove which physical release is inserted.</p>
+        <div id="metadata-candidates" class="metadata-candidates" role="listbox" aria-label="Available album candidates"></div>
+        <p id="metadata-feedback" class="metadata-feedback" aria-live="polite"></p>
+        <button id="metadata-close" type="button">Back to player</button>
       </div>
     </section>
     <section class="integrity" aria-labelledby="integrity-title">
