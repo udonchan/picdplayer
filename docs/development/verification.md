@@ -184,9 +184,10 @@ MetadataWorkerがERROR結果へ変換するため、CD再生を待たせない�
 `metadata_parser` testを実行し、既存の正常/不正入力に加え、33段のnestingと4097 byte文字列の拒否を確認した。
 
 429/503ではlibcurlが解釈したRetry-After秒数を最大15秒まで待ち、値がない場合は1.1秒待つ。
-retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。実際のHTTPS response headerを使う
+retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。
 `http_security_policy` testではCAA初期URLとredirect host、相対redirect、IPv4/IPv6のpublic/private/link-local
-判定を確認した。実際のHTTPS redirect headerを使う統合試験、network切断、実機のmetadata lookup挙動は未確認である。
+判定を確認した。実際のHTTPS response headerとredirectは下記#135のfixture試験で確認した。
+Piでのnetwork切断時の挙動は未確認である。
 
 ## Metadata cache lifecycle（#37、Docker自動試験）
 
@@ -209,7 +210,15 @@ error文字列に変換されること、古いgenerationのERROR結果を`Metad
 `http_client` testは空けたloopback TCP portへ実際にHTTPS接続し、libcurlのconnection failureが
 `HTTP request failed:`例外として返ることも確認する。この試験は外部networkへ接続しない。
 
-実HTTPS responseを使うtimeout・redirect header、Pi上の通常metadata/CAA lookupは未確認である。
+2026-10-04の追加試験では、test専用の自己署名証明書とloopback TLS serverを用い、libcurlの実HTTPS応答で
+200 JSON、429の`Retry-After: 4`、CAAの許可/拒否redirect、本文上限、timeout、private peer拒否を確認した。
+test専用buildだけがfixture用CA・DNS override・loopback許可を指定でき、製品binaryは従来どおり
+CAAのprivate/link-local peerを拒否する。壊れたJSONがworkerのERRORになること、HTTP lookupを待つ間も
+hardware非依存の再生commandが進むこと、古いdisc世代のERRORを現在のsessionが採用しないことも確認した。
+Debian Trixie/aarch64の全ビルドとCTest 48件が通過した。これらはPiでのnetwork異常や音声継続の証明ではない。
+Piの通常系では2026-10-01〜03に『The Slip』のMusicBrainz候補、選択後のcover endpointとTV画像を確認済み。
+その画像が当該時点の新規CAA通信かcache由来かは区別していない。Piでのnetwork切断、fresh CAA lookup、
+実機再生中のtimeout影響は未確認である。
 
 ## Optional paranoia license warning（#66、Docker自動試験）
 

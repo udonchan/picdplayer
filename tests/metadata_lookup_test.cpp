@@ -102,6 +102,25 @@ int main() {
         check(failure.metadata.status == MetadataStatus::error, "worker did not map lookup failure to ERROR");
         check(failure.metadata.error == "simulated connection failure", "worker did not preserve lookup failure message");
 
+        MetadataOptions malformed_options{
+            .cache_directory = {}, .use_cache = false, .cancelled = {},
+            .http_get = [](std::string_view, std::size_t, const std::function<bool()>&,
+                           RedirectPolicy) {
+                return HttpResponse{.status = 200, .content_type = "application/json",
+                                    .body = "{broken", .retry_after_seconds = {}};
+            }};
+        MetadataWorker malformed_worker([malformed_options = std::move(malformed_options)](
+                                            const DiscToc&, const MetadataWorker::Cancelled& cancelled) mutable {
+            malformed_options.cancelled = cancelled;
+            return lookup_musicbrainz_id("disc", malformed_options);
+        });
+        malformed_worker.request({43, toc});
+        MetadataWorkerResult malformed{};
+        for (int i = 0; i < 500 && !malformed_worker.pop(malformed); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        check(malformed.generation == 43 && malformed.metadata.status == MetadataStatus::error &&
+              !malformed.metadata.error.empty(), "malformed JSON did not become a bounded worker error");
+
         const auto non_one_based_toc = make_audio_toc(3, std::vector<std::int32_t>{0, 75}, 150);
         const auto non_one_based_id = calculate_musicbrainz_disc_id(non_one_based_toc).id;
         bool return_short_medium = false;
