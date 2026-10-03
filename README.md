@@ -47,8 +47,8 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | Audio CDの自動認識・TOC取得・HDMI連続再生 | 実装済み、通常動作を実機確認済み |
 | TVリモコンのCEC再生・一時停止・停止・曲移動・シーク | 実装済み、実機確認済み |
 | HTTP操作・eject・WebSocket状態配信 | 実装済み、状態照会とejectを実機確認済み |
-| MusicBrainz metadata・JSON cache | 任意機能として実装済み、単一候補CDで実機確認済み |
-| 読み取り専用Now Playing画面 | 実装済み。Presentation Modelの曲情報とsame-origin cover artをブラウザに表示。Chromium/Cage kiosk unitを実装、cold boot後のTV表示を確認済み。長期継続運転は確認待ち |
+| MusicBrainz metadata・JSON cache | 任意機能として実装済み。単一候補CDと『The Slip』の複数候補を実機確認済み。Piでのnetwork異常系は未確認 |
+| Player画面 | 実装済み。Presentation Modelの曲情報とsame-origin cover artを表示し、CECから再生操作・metadata候補選択が可能。Chromium/Cage kiosk unitを実装、cold boot後のTV表示を確認済み。長期継続運転は確認待ち |
 | ジャケット画像 | daemonの画像binary cacheとsame-origin配信を実装。破損画像・offline等の実機確認は継続課題 |
 | systemd常駐・自動起動 | 実装・基本構成で実機確認済み |
 | ALSA underrun自動復旧 | 実装・自動試験済み。実機の異常系評価は未完了 |
@@ -56,7 +56,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | Player Integrity monitor・disc read map | Phase 1を実装済み。通常CDのPi CDP・1080p表示を確認。異常scenario・実機異常系・長期評価は継続課題 |
 | 読み取り専用technical status画面 | Phase 1bとして実装、通常再生・再読み込み・再接続をブラウザで実機確認済み |
 | CD-DA先読みbuffer設定・drive access直列化 | Phase 2の基礎を実装。通常CDで容量・開始閾値と操作応答を実機比較済み。任意の1x速度要求と短時間API再生を実機確認済み。効果・長時間再生・比較は確認待ち |
-| 複数metadata候補の選択 | 未実装 |
+| 複数metadata候補の選択 | daemonの候補公開・選択APIと標準PlayerのCEC候補pickerを実装済み。『The Slip』で実候補の選択とTV表示を確認済み |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 
 対象は音声のみのCDです。傷ディスクの評価やdirect/paranoia backendの性能比較は今後の課題です。

@@ -900,10 +900,11 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 - 現在の独自AsyncLoggerは要件を満たしている。spdlog等との比較、Buildroot package化、binary size、
   非同期queueの満杯時挙動、runtime level変更、追加sink、rotation、ライセンスを調査し、必要性が確認できた
   段階で置換を検討する。現時点では再生経路へ影響する変更を行わない。
-- metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
-- stale cacheのoffline fallbackと破損JSON再取得の統合試験、書込み不能、候補選択、非1始まりtrack対応、
-  実HTTPS response headerを使うRetry-After/redirect統合試験、
-  network切断とPi上metadata lookupの確認は未完了または継続確認とする。
+- metadata lookup中交換、network切断、CAA失敗時の扱いを実機確認する。複数候補の通常選択は
+  Piの『The Slip』で確認済みだが、lookup中交換やnetwork異常と重なるケースは未確認。
+- stale cacheのoffline fallbackと破損JSON再取得の統合試験、書込み不能、非1始まりtrack対応、
+  network切断とPi上のfresh CAA lookupは未完了または継続確認とする。実HTTPS response headerを使う
+  Retry-After/redirect統合試験は#135のloopback TLS fixtureで確認済み。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
 - Now Playingはdaemonが配信するsame-origin artworkを表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。
   長期継続運転と起動時間短縮を継続確認する。quiet boot・read-only root・Buildroot imageは未実装。
