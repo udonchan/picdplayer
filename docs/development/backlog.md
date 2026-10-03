@@ -75,6 +75,7 @@
 | Issue | 主な範囲 |
 |---|---|
 | [#18 Specify persistent settings and custom UI updates](https://github.com/udonchan/picdplayer/issues/18) | 親Issue。Custom UIの起動時静的検証とfallbackは実装済み。[#41 永続設定の契約](https://github.com/udonchan/picdplayer/issues/41)と[#42 Custom UI更新・復旧](https://github.com/udonchan/picdplayer/issues/42)を追跡する。契約後の実装は[#177](https://github.com/udonchan/picdplayer/issues/177)、標準画面は[#178](https://github.com/udonchan/picdplayer/issues/178)。 |
+| [#41 Specify persistent configuration and apply boundaries](https://github.com/udonchan/picdplayer/issues/41) | #179で先行実装したRead Policyの優先順位、保存失敗時、起動時fallback、停止境界を機能設計へ整理する。他の設定項目は各項目の所有者と失敗時の復旧条件を決めてから拡張し、現行Read Policyの部分実装を一般設定APIの完成とみなさない。 |
 | [#21 Plan reproducible releases and appliance images](https://github.com/udonchan/picdplayer/issues/21) | 親Issue。PR向けDocker/aarch64 CIと[#43 開発用Debian package](https://github.com/udonchan/picdplayer/issues/43)は完了済み。[#44 更新・削除](https://github.com/udonchan/picdplayer/issues/44)では使い捨てcontainerでinstall/upgrade/reinstall/purgeをCI化し、Piのactive serviceで同版reinstallと不正archive拒否後の正常artifact復旧を確認した。通常lifecycleの完了により#44をCloseし、異version upgradeと展開後/maintainer script中断からの破壊的復旧確認は [#147](https://github.com/udonchan/picdplayer/issues/147) へ移管する。[#45 版付きrelease artifact](https://github.com/udonchan/picdplayer/issues/45)、[#46 image要件](https://github.com/udonchan/picdplayer/issues/46)、[#47 bootable image](https://github.com/udonchan/picdplayer/issues/47)を追跡する。最終imageに開発用`.deb`を使うかは未決定。 |
 
 ## 未実装の製品機能
