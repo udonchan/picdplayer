@@ -1,6 +1,25 @@
 # 検証状況と残課題
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## Player設定画面の第一段階（#178、作業ブランチ）
+
+標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
+SINGLE/REPEATを選択できるようにした。`requested/effective/pending`と詳細4値を表示し、
+取得・変更失敗でも再生は継続する。Artist Backgroundは利用不能と明示してON操作を提供しない。
+Debian Trixie/aarch64 DockerのビルドとCTest 48件を確認した。PiのChromium上でCDPから
+1920×1080のSettings画面、overflowなし、Read PolicyのREPEAT→SINGLE反映を確認した。
+TVではSettingsを表示し、リモコンの物理「戻る」キーでPlayerへ戻れることを確認した。
+修正版BackのCEC方向・決定操作と、実serviceでの保存後の再起動復元は未確認。
+Mac headless Chromeのmock APIでは
+[1920×1080と720×720の表示記録](reports/2026-10-02-player-settings/README.md)を保存し、
+Settings surfaceがviewportへ収まり、内部scrollを必要としないことを確認した。
+PiでのCDP結果も[同じ表示記録](reports/2026-10-02-player-settings/README.md)に追記した。
+TVでの確認ではSettingsのBackボタンへCEC方向キーで移動できないことが判明した。
+リモコンの物理「戻る」キーではPlayerへ戻れることをユーザーが確認した。
+Backを3番目の選択対象に追加し、CECの方向・決定で閉じる回帰試験を追加した。
+修正版はPiへ再デプロイ済み。BackのCEC実操作は未確認である。
+
 日付付きの測定は当該条件だけの結果である。
 
 ## 利用者設定の保存（#177、部分実装）

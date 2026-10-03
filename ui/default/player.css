@@ -230,6 +230,50 @@ main {
 .player-controls button:focus-visible { border-color: var(--blue); outline: 2px solid var(--blue); outline-offset: 1px; }
 .player-controls button[data-pending='true'] { color: var(--blue); }
 
+[hidden] { display: none !important; }
+.settings-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #080c0de8;
+}
+.settings-surface {
+  width: min(620px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: clamp(22px, 4vw, 38px);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 24px 70px #0009;
+}
+.settings-heading { display: flex; justify-content: space-between; gap: 20px; align-items: start; }
+.settings-heading h2 { margin: 0; font-size: clamp(25px, 4vw, 36px); }
+.settings-heading button,
+.settings-choices button {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  background: #202729;
+  color: var(--text);
+  font: 650 14px/1.3 system-ui, sans-serif;
+}
+.settings-choices { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.settings-choices button[data-selected='true'] { border-color: var(--blue); color: var(--blue); }
+.settings-choices button[data-focused='true'],
+.settings-heading button[data-focused='true'],
+.settings-choices button:focus-visible,
+.settings-heading button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.settings-choices button:disabled { opacity: .55; }
+.settings-note, .settings-unavailable p { color: var(--muted); font-size: 14px; }
+.settings-status { min-height: 2em; color: var(--retry); }
+.settings-details { display: grid; grid-template-columns: 1fr auto; gap: 6px 18px; margin: 18px 0; }
+.settings-details dt { color: var(--muted); }
+.settings-details dd { margin: 0; font-variant-numeric: tabular-nums; }
+.settings-unavailable { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.settings-unavailable h3 { margin: 0; font-size: 16px; }
 .metadata-picker[hidden], .player-controls button[hidden] { display: none; }
 .metadata-picker {
   position: fixed;
