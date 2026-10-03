@@ -134,7 +134,39 @@ fail-closedで再生を停止する。既定の`single`は従来どおり一回�
 API有効buildではread policyをruntimeで要求できる。daemonはrequested/effective/pendingを公開し、再生中の
 変更はSTOPPEDまたはNO_DISCで適用し、次回playでreaderを作り直す。PAUSED中も保留する。
 readerの設定をread途中で変えないため、現在再生中のPCMとその根拠は維持される。
-設定の永続保存、backendの稼働中切替、QUIET/BALANCED/SECUREへの対応は未実装。
+Read Policyの任意保存・復元は下記の範囲で実装済み。backendの稼働中切替、
+QUIET/BALANCED/SECUREへの対応は未実装。
+
+### 設定の所有・保存・適用境界
+
+daemonを設定値の検証、保存、適用、状態公開のownerとする。ViewやCustom UIは
+設定ファイルを直接編集しない。現行の利用者変更対象はRead Policyの5項目だけで、
+`GET/POST /api/read-policy`を使う。機器、ALSA、CEC、API bind/port、CDDA reader、
+Custom UI path、cache path、providerのsecretは起動引数またはsystemd設定を所有者とし、
+このAPIから変更できない。今後利用者変更対象を増やす場合は、項目ごとに型、優先順位、
+適用境界、失敗時の復旧、公開してよい情報を決めてからAPIとschemaを拡張する。
+
+Read Policyの初期値はbuilt-in値に起動引数を反映したものとする。`--settings-file`を
+指定したAPI有効Playerでは、検証に成功した保存済み5項目がその初期値を上書きする。
+保存先が未指定ならAPI変更はそのdaemon session限りであり、再起動後は初期値へ戻る。
+保存先を指定してもファイルがない場合は初期値を使う。破損、未対応schema、型・範囲・
+組合せの不正、読込失敗では警告して初期値へ戻し、再生を止めない。現行APIの
+`startup`はbuilt-in値と起動引数を区別しない。復元時は`restored`、保存を伴うAPI変更時は
+`saved`、保存先なしのAPI変更時は`session`をrequested/effectiveそれぞれの出所として返す。
+`persistence_configured`は保存先の指定だけを表し、最後の保存成否や耐クラッシュ性を表さない。
+
+POSTは5項目を一組として検証する。保存先がある場合は保存に失敗した要求を受理せず、
+requested/effectiveを変更しない。保存後は要求値を更新し、STOPPED/NO_DISCなら適用し、
+PLAYING/PAUSEDなら停止境界までpendingにする。204は要求の受理であり、再生中の即時適用や
+将来の電源断後の復元完了を保証しない。保存処理は一時ファイルのsync、同じdirectory内での
+rename、directory syncを試みる。現行実装ではrename後のdirectory sync失敗を警告として扱う。
+この場合、新値が現在見えていても電源断後の耐久性は確認できない。完全な耐久性を要件にする場合は
+この失敗時のAPI結果と復旧動作を#177で再検討する。
+
+Artist Backgroundの表示設定は未実装で、既定OFFのままとする。provider key fileの存在は
+利用者による表示許可ではない。ONを公開する前に、#49/#51の取得・配信・表示経路、
+利用条件、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
+一般設定API、全CLI optionの永続化、hot reload、機器設定の稼働中変更はこの部分実装に含めない。
 
 single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
 既定はqueue上限750 frame（10秒、PCM約1.68 MiB）、
