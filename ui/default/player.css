@@ -263,6 +263,7 @@ main {
 .settings-choices { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
 .settings-choices button[data-selected='true'] { border-color: var(--blue); color: var(--blue); }
 .settings-choices button[data-focused='true'],
+.settings-heading button[data-focused='true'],
 .settings-choices button:focus-visible,
 .settings-heading button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .settings-choices button:disabled { opacity: .55; }

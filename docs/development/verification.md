@@ -13,6 +13,10 @@ TVでの目視、CEC入力、保存後の再起動復元はこのブランチで
 [1920×1080と720×720の表示記録](reports/2026-10-02-player-settings/README.md)を保存し、
 Settings surfaceがviewportへ収まり、内部scrollを必要としないことを確認した。
 PiでのCDP結果も[同じ表示記録](reports/2026-10-02-player-settings/README.md)に追記した。
+TVでの確認ではSettingsのBackボタンへCEC方向キーで移動できないことが判明した。
+リモコンの物理「戻る」キーではPlayerへ戻れることをユーザーが確認した。
+Backを3番目の選択対象に追加し、CECの方向・決定で閉じる回帰試験を追加した。
+修正後のPiへの再デプロイと実機CEC確認は未実施である。
 
 日付付きの測定は当該条件だけの結果である。
 

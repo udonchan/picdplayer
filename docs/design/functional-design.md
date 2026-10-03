@@ -241,7 +241,8 @@ keyboardでfocusを移してloopback POSTで要求する。方向入力は現在
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
 標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
-部分実装する。CEC方向で選択し、決定で既存`POST /api/read-policy`を送る。BackでPlayerへ戻り、
+部分実装する。CEC方向でSINGLE/REPEAT/Backを選択し、決定でpolicy変更または画面を閉じる。
+リモコンの戻るキーでもPlayerへ戻り、
 選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
 結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
 有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの

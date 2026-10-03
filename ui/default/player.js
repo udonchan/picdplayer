@@ -77,6 +77,7 @@ const setHidden = (element, value) => {
 const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
 const policyButtons = [byId('policy-single'), byId('policy-repeat')];
 const settingsCloseButton = byId('settings-close');
+const settingsActions = [...policyButtons, settingsCloseButton];
 let focusedControl = -1;
 let pendingCommand = null;
 let feedbackTimer;
@@ -269,6 +270,7 @@ function renderPolicySettings() {
     button.dataset.selected = String(valid && requested.mode === (index ? 'REPEAT' : 'SINGLE'));
     button.dataset.focused = String(settingsOpen && focusedPolicy === index);
   });
+  settingsCloseButton.dataset.focused = String(settingsOpen && focusedPolicy === 2);
   set('settings-region', valid ? `${requested.region_frames} CD frames` : '—');
   set('settings-matches', valid ? requested.required_matches : '—');
   set('settings-attempts', valid ? requested.maximum_attempts : '—');
@@ -304,7 +306,7 @@ async function loadPolicySettings() {
 function focusPolicy(index) {
   focusedPolicy = index;
   renderPolicySettings();
-  policyButtons[index]?.focus?.({ preventScroll: true });
+  settingsActions[index]?.focus?.({ preventScroll: true });
 }
 function openSettings() {
   settingsOpen = true;
@@ -313,7 +315,6 @@ function openSettings() {
   policyState = null;
   setHidden(byId('settings-panel'), false);
   focusPolicy(0);
-  settingsCloseButton.focus?.({ preventScroll: true });
   set('settings-policy-status', 'Loading read policy…');
   set('settings-persistence', 'Checking whether changes are saved…');
   void loadPolicySettings();
@@ -377,9 +378,13 @@ function handleNavigation(action) {
     if (action === 'back') closeSettings();
     else if (action === 'left' || action === 'up' || action === 'right' || action === 'down') {
       settingsFocusMoved = true;
-      focusPolicy((focusedPolicy + 1) % 2);
+      const direction = action === 'left' || action === 'up' ? -1 : 1;
+      focusPolicy((focusedPolicy + direction + settingsActions.length) % settingsActions.length);
     }
-    else if (action === 'select') void selectPolicy(focusedPolicy);
+    else if (action === 'select') {
+      if (focusedPolicy === 2) closeSettings();
+      else void selectPolicy(focusedPolicy);
+    }
     return;
   }
   if (pickerOpen) {

@@ -215,6 +215,14 @@ async function main() {
     requested: { ...policy.requested, mode: 'SINGLE' } }) });
   await new Promise(setImmediate);
   assert.equal(node('policy-repeat').dataset.selected, 'true'); // Old GET cannot replace it.
+  now += 300;
+  sockets[2].onmessage({ data: JSON.stringify({ action: 'right' }) });
+  assert.equal(node('settings-close').dataset.focused, 'true');
+  sockets[2].onmessage({ data: JSON.stringify({ action: 'select' }) });
+  assert.equal(node('settings-panel').hidden, true); // CEC can reach and activate Back.
+  deferPolicyGet = false;
+  controls[6].onclick({ detail: 1 });
+  await new Promise(setImmediate);
   keys.keydown({ key: 'Tab', preventDefault() {} });
   assert.equal(activeElement, node('settings-close'));
   keys.keydown({ key: 'Tab', preventDefault() {} });
