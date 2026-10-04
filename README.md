@@ -59,7 +59,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | 複数metadata候補の選択 | 未実装 |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 
-対象は音声のみのCDです。傷ディスクの評価やdirect/paranoia backendの性能比較は今後の課題です。
+対象は音声のみのCDです。傷ディスクの評価は今後の課題です。標準のCD-DA readerはdirectで、libcdio-paranoiaはライセンス・再配布条件の確認が必要なため公式配布への採用とbackend比較を見送っています（[#6](https://github.com/udonchan/picdplayer/issues/6)、[#66](https://github.com/udonchan/picdplayer/issues/66)）。
 詳しい確認範囲と残課題は[検証状況](docs/development/verification.md)にまとめています。
 
 ## はじめる

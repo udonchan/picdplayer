@@ -161,7 +161,7 @@ service restartを対象driveで確認する。
 
 probe-cddaは既定でPCMを捨て、再生しない。保存には`--pcm-output /tmp/track1.pcm`を追加する。
 保存形式はraw S16_LE・44.1 kHz・stereo。既存ファイルを上書きしない。framesは1〜750。
-paranoia比較時はENABLE_PARANOIA=ONのbuildで`--cdda-reader paranoia`を指定する。
+paranoiaの実験・検証時はENABLE_PARANOIA=ONのbuildで`--cdda-reader paranoia`を指定する。公式配布には採用しない。
 
 ```sh
 /usr/local/bin/cdplayerd --probe-disc-id /dev/sr0

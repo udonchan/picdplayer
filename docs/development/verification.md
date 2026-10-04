@@ -912,7 +912,7 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。
   API snapshot処理の遅延に伴うunderrunと自動復旧は上記で一度観測した。
   傷disc・USB障害・長時間read stallによる復旧経路の実機確認は未完了。
-- direct/paranoiaの採用、性能、CPU負荷、startup/seek latencyは実測後に判断する。
+- direct/paranoiaの同条件比較は未実施。ライセンス・再配布条件の確認が必要なためparanoiaの公式採用を見送り、比較Issue #6は終了した。標準運用はdirectを維持し、現行構成の性能と速度要求は#83/#8で評価する。
 - pause再開の待ち時間とbuffering表示、傷disc/長いread stall時の復旧方針を検討する。同一streamの
   ALSA underrun復帰上限は3回としてDocker自動試験済みだが、実機異常系は#146で未確認である。
 - mediaとPCMのdevice access直列化は実装済み。挿抜を含む実機回帰確認を継続する。
@@ -1026,7 +1026,7 @@ Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に�
 ### 実機異常系の担当と記録の共有
 
 [物理媒体・USB drive実機評価 #146](https://github.com/udonchan/picdplayer/issues/146)で、観測できたread異常と
-音声/操作影響、API/警告/再接続の整合を同じrun記録で確認する。backend比較は#6、特殊TOCのmetadata対応・
+音声/操作影響、API/警告/再接続の整合を同じrun記録で確認する。paranoiaのbackend比較は#6で採用見送りとして終了し、特殊TOCのmetadata対応・
 同一TOC識別は#39/#40、物理hotplugは#88が引き続き担当する。
 試験手順・結果はreports配下の同じrunを参照し、本Issueのために媒体試験を重複実施しない。
 本書の過去の未確認記述は当時の記録として保持し、実施後に確認範囲と参照先を更新する。

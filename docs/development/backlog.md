@@ -26,7 +26,7 @@
 | [#122 Prevent duplicate WebSocket state delivery](https://github.com/udonchan/picdplayer/issues/122) | STOPPED中に同一snapshotを繰り返し送るAPI serverの不具合を#83のCDP測定で検出した。PR #123で接続ごとの送信済みgeneration追跡を追加し、当時のDocker 38/38とPiのSTOPPED 0 frame / PLAYING 40 frame確認を記録した。 |
 | [#134 Eliminate timing flake in diagnostic isolation test](https://github.com/udonchan/picdplayer/issues/134) | クローズ済み。client切断後のPCM progressを固定20 tickではなくdeadline内で待つ試験へ修正し、Dockerで10回反復と全CTestを確認した。productionの再生・diagnosticsは変更していない。 |
 | [#5 Evaluate read stalls and bound playback recovery](https://github.com/udonchan/picdplayer/issues/5) | クローズ済みの旧tracking Issue。子Issue #33はdeterministicな確認と物理試験の#146への移管を記録して終了し、#34は有界なread stall復旧を実装して終了した。傷・劣化媒体や別driveでの効果・音声影響は[#146](https://github.com/udonchan/picdplayer/issues/146)で未確認。未解決PCMの追加fallback方針は[#156](https://github.com/udonchan/picdplayer/issues/156)で検討する。旧親Issueの終了を実機異常系の検証完了とは扱わない。 |
-| [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | `PICDPLAYER_ENABLE_PARANOIA=ON`で同じDocker build scriptからparanoia有効packageを生成でき、CTest 39件を確認した。direct/paranoiaの保存PCM正常再生とdirect single/repeatの限定的な比較はあるが、drive回転・cache条件をそろえたPi上のbackend性能比較は未完了。現行運用はdirect。 |
+| [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | クローズ済み（採用見送り）。`PICDPLAYER_ENABLE_PARANOIA=ON`でのDocker/aarch64 package生成とCTest 39件は確認済みだが、Pi上の同条件backend比較・試聴は未実施。ライセンス・再配布条件の確認が必要なためparanoiaは公式配布へ採用せず、標準運用はdirectを維持する。依存監査は#66、現行構成の性能・速度要求は#83/#8で追跡する。 |
 
 ## integrity仕様の実装
 
