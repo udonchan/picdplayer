@@ -51,6 +51,7 @@ struct MetadataResult {
     std::string toc;
     std::vector<ReleaseCandidate> candidates;
     std::optional<std::size_t> selected;
+    bool candidates_declined = false;
     ArtworkInfo artwork;
     std::string error;
     bool from_cache = false;

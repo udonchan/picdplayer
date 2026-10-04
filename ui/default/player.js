@@ -87,7 +87,7 @@ let candidateButtons = [];
 let lastPickerFocused = null;
 const multipleCandidateSelection = (snapshot) => {
   const selection = snapshot?.enrichment?.selection;
-  return snapshot?.disc?.state === 'AUDIO_READY' && ['AMBIGUOUS', 'SELECTED'].includes(selection?.state)
+  return snapshot?.disc?.state === 'AUDIO_READY' && ['AMBIGUOUS', 'SELECTED', 'DECLINED'].includes(selection?.state)
     && Array.isArray(selection.candidates) && selection.candidates.length > 1 ? selection : null;
 };
 const selectionKey = (selection) => selection
@@ -112,7 +112,8 @@ function renderPickerFocus() {
     if (button.dataset.focused !== focused) {
       button.dataset.focused = focused;
     }
-    button.setAttribute('aria-selected', String(button.dataset.candidateIndex === String(selectedIndex)));
+    button.setAttribute('aria-selected', String(button.dataset.candidateIndex === String(selectedIndex) ||
+      (button.dataset.candidateIndex === 'none' && selection?.state === 'DECLINED')));
     const candidate = selection?.candidates[index];
     if (candidate && button.children?.[1]) {
       const details = `${candidate.index === selectedIndex ? 'CURRENT SELECTION · ' : ''}${candidateDescription(candidate) || 'Additional details not available'}`;
@@ -150,11 +151,17 @@ function renderPicker(snapshot) {
     closePicker();
     return;
   }
+  if (pendingSelection && selection.state === 'DECLINED' &&
+      pendingSelection.index === selection.candidates.length) {
+    closePicker();
+    return;
+  }
   if (!pickerOpen) return;
   if (pickerKey !== nextKey) {
     pickerKey = nextKey;
     const selectedPosition = selection.candidates.findIndex((candidate) => candidate.index === selection.selected_index);
-    pickerIndex = selectedPosition >= 0 ? selectedPosition : 0;
+    pickerIndex = selection.state === 'DECLINED' ? selection.candidates.length
+      : selectedPosition >= 0 ? selectedPosition : 0;
     lastPickerFocused = null;
     set('metadata-picker-note', selection.state === 'SELECTED'
       ? 'Choose different album information. The current choice does not prove which physical release is inserted.'
@@ -179,6 +186,23 @@ function renderPicker(snapshot) {
       });
       return button;
     });
+    const none = document.createElement('button');
+    none.type = 'button';
+    none.dataset.candidateIndex = 'none';
+    none.setAttribute('role', 'option');
+    const noneTitle = document.createElement('span');
+    noneTitle.className = 'candidate-title';
+    noneTitle.textContent = 'None of these';
+    const noneDetails = document.createElement('span');
+    noneDetails.className = 'candidate-details';
+    noneDetails.textContent = 'Use Audio CD information for this disc';
+    none.append(noneTitle, noneDetails);
+    none.addEventListener('click', (event) => {
+      pickerIndex = selection.candidates.length;
+      if (event.detail === 0) handleNavigationInput('select', 'keyboard');
+      else requestCandidate(pickerIndex);
+    });
+    candidateButtons.push(none);
     list.replaceChildren(...candidateButtons);
   }
   renderPickerFocus();
@@ -194,8 +218,10 @@ function openPicker() {
 }
 async function requestCandidate(index) {
   const selection = multipleCandidateSelection(currentSnapshot);
-  if (!pickerOpen || !selection || pendingSelection || !selection.candidates[index]) return;
-  if (selection.state === 'SELECTED' && selection.selected_index === selection.candidates[index].index) {
+  if (!pickerOpen || !selection || pendingSelection || index < 0 || index > selection.candidates.length) return;
+  const decline = index === selection.candidates.length;
+  if (decline && selection.state === 'DECLINED') { closePicker(); return; }
+  if (!decline && selection.state === 'SELECTED' && selection.selected_index === selection.candidates[index].index) {
     closePicker();
     return;
   }
@@ -209,7 +235,7 @@ async function requestCandidate(index) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: selection.session_id,
         disc_generation: selection.disc_generation, metadata_generation: selection.metadata_generation,
-        candidate_index: selection.candidates[index].index }),
+        candidate_index: decline ? null : selection.candidates[index].index }),
     });
     if (!pickerOpen || selectionKey(multipleCandidateSelection(currentSnapshot)) !== key) return;
     accepted = response.status === 204;
@@ -242,6 +268,7 @@ function renderControls(snapshot) {
     const selectedPosition = selection.candidates.findIndex((candidate) => candidate.index === selection.selected_index);
     set('metadata-match-status', selection.state === 'AMBIGUOUS'
       ? `MULTIPLE ALBUM MATCHES · ${selection.candidates.length} OPTIONS`
+      : selection.state === 'DECLINED' ? 'MULTIPLE ALBUM MATCHES · NONE SELECTED'
       : selectedPosition >= 0
         ? `MULTIPLE ALBUM MATCHES · ${selectedPosition + 1} OF ${selection.candidates.length} SELECTED`
         : 'MULTIPLE ALBUM MATCHES · SELECTION UNKNOWN');
@@ -251,7 +278,7 @@ function renderControls(snapshot) {
   controls.forEach((button, index) => {
     if (button.dataset.command === 'metadata') {
       setHidden(button, !selection);
-      button.textContent = selection?.state === 'SELECTED' ? 'Change album' : 'Choose album';
+      button.textContent = selection && selection.state !== 'AMBIGUOUS' ? 'Change album' : 'Choose album';
     }
     const stateAvailable = controlEnabled(button.dataset.command, snapshot);
     const available = stateAvailable && pendingCommand !== button.dataset.command;
@@ -641,6 +668,7 @@ function mediaMessage(hasDisc, mediaState, enrichmentStatus, selection) {
   if (!hasDisc) return mediaState === 'LOADING' ? 'READING DISC' : 'WAITING FOR DISC';
   if (enrichmentStatus === 'LOADING') return 'LOOKING UP ALBUM';
   if (selection?.state === 'AMBIGUOUS') return 'ALBUM SELECTION AVAILABLE';
+  if (selection?.state === 'DECLINED') return 'NO ALBUM MATCH SELECTED';
   if (enrichmentStatus === 'UNAVAILABLE') return 'METADATA UNAVAILABLE';
   if (enrichmentStatus === 'ERROR') return 'METADATA UNAVAILABLE';
   return 'NOW PLAYING';

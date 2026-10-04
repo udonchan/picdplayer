@@ -42,6 +42,7 @@ struct PresentationEnrichment {
         std::uint64_t disc_generation = 0;
         std::uint64_t metadata_generation = 0;
         std::optional<std::size_t> selected_index;
+        bool candidates_declined = false;
         std::vector<Candidate> candidates;
     };
     std::optional<Selection> selection;

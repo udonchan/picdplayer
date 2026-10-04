@@ -164,6 +164,14 @@ int main() {
         check(chosen_json["enrichment"]["selection"]["state"] == "SELECTED");
         check(chosen_json["enrichment"]["selection"]["selected_index"] == 1);
         check(chosen_json["disc"]["title"] == "The Slip");
+        ambiguous.selected.reset(); ambiguous.status = MetadataStatus::ambiguous;
+        ambiguous.candidates_declined = true;
+        const auto declined_json = nlohmann::json::parse(serialize_presentation_model(
+            make_presentation_model(11, player, MediaLifecycleState::audio_ready, unusual,
+                                    ambiguous, {}, selection_read, {}, false, 2, 8)));
+        check(declined_json["enrichment"]["selection"]["state"] == "DECLINED");
+        check(declined_json["enrichment"]["selection"]["selected_index"].is_null());
+        check(declined_json["disc"]["title"].is_null());
         check(nlohmann::json::parse(serialize_presentation_model(make_presentation_model(
             11, player, MediaLifecycleState::no_disc, std::nullopt, ambiguous,
             {}, {}, {}, false, 2, 8)))["enrichment"]["selection"].is_null());

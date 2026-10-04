@@ -162,17 +162,20 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                     !json.contains("session_id") || !json["session_id"].is_string() ||
                     !json.contains("disc_generation") || !json["disc_generation"].is_number_unsigned() ||
                     !json.contains("metadata_generation") || !json["metadata_generation"].is_number_unsigned() ||
-                    !json.contains("candidate_index") || !json["candidate_index"].is_number_unsigned())
+                    !json.contains("candidate_index") ||
+                    (!json["candidate_index"].is_number_unsigned() && !json["candidate_index"].is_null()))
                     return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
                 command->session_id = json["session_id"].get<std::string>();
                 command->disc_generation = json["disc_generation"].get<std::uint64_t>();
                 command->metadata_generation = json["metadata_generation"].get<std::uint64_t>();
-                command->candidate_index = json["candidate_index"].get<std::size_t>();
+                if (json["candidate_index"].is_null())
+                    command->type = ApiCommandType::decline_metadata_candidates;
+                else command->candidate_index = json["candidate_index"].get<std::size_t>();
                 if (command->session_id.empty() || command->session_id.size() > 64 ||
                     command->session_id.find_first_not_of(
                         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != std::string::npos ||
                     command->disc_generation == 0 || command->metadata_generation == 0 ||
-                    command->candidate_index >= 100)
+                    (command->type == ApiCommandType::select_metadata_candidate && command->candidate_index >= 100))
                     return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
             } else if (command->type == ApiCommandType::set_read_policy) {
                 if (!json.is_object() || json.size() != 5 || !json.contains("mode") ||

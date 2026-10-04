@@ -96,7 +96,9 @@ TV上のcover画像そのものと失敗系は別途確認対象とする。
 選択後にも複数候補の表示と`Change album`を残す変更はNode fixtureで再選択POST、選択済み候補の表示、
 選択前の自動表示と選択後の非自動表示を確認した。Mac Chromeの
 [1920×1080合成snapshot](reports/2026-10-04-metadata-reselect/README.md)で選択後の配置も確認した。
-Piでの選び直しは未確認。
+2026-10-04、PiへPR #183のpackageを導入し、ユーザーがTVリモコンで『The Slip』の候補0を選択後、
+`Change album`からCDを取り出さず候補1へ変更した。Pi APIでも`selected_index=0→1`を確認し、
+CDPで選択番号の表示を確認した。`None of these`によるAudio CDへの復帰はこの時点では未検証。
 HTTP 204は選択完了とみなさず、次のauthoritative snapshotでalbum/trackを更新する。
 同じcover URLで選択candidateが変わっても画像を再読込する。
 Debian Trixie/aarch64 DockerでbuildとCTest 46件を実行し、Node fixtureで候補表示、CEC操作、
