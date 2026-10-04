@@ -240,6 +240,9 @@ daemon自身がmetadata HTTP失敗を受けても再生制御・PCM進行は止�
 接続失敗の試験であり、実network切断や15秒timeout、音声の無欠落を証明しない。
 試験後は隔離daemonと一時cacheを削除し、元のsystemd daemon/kioskをactiveへ戻した。
 JP候補を再選択して再生を再開し、試験前の4曲目・約125秒へAPIで位置を戻した。
+長期安定運転は[#4](https://github.com/udonchan/picdplayer/issues/4)、傷disc・別driveの
+物理異常試験は[#146](https://github.com/udonchan/picdplayer/issues/146)で保留する。
+これらは#135のHTTP失敗経路の自動試験・限定的なPi確認を完了する条件には含めない。
 
 ## Optional paranoia license warning（#66、Docker自動試験）
 
