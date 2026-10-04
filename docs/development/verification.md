@@ -196,8 +196,9 @@ play、seek、pauseなど意図したstream切替は回数をリセットする�
 Integrityの`RECOVERED`とは別の出力経路である。
 
 Docker Debian Trixie/aarch64で`playback_engine_test`を含むCTest 44件を実行し、3回の復帰、
-4回目の停止、既存の終端underrun停止を確認した。Piで意図的にXRUNを起こす確認、傷disc/長いread stall、
-read error後の復旧方針、buffering UIは未実施であり、#146および#34の残作業として扱う。
+4回目の停止、既存の終端underrun停止を確認した。Piで意図的にXRUNを起こす確認は未実施。
+傷discや長いread stallの実機評価は#146、未解決PCMの追加fallback方針は#156で扱う。
+buffering UIはこの試験で検証しておらず、#34の未完了条件とは扱わない。
 
 同packageをPiへdeployして通常再生を開始したが、約3.45秒後に`usb 1-1-port2: over-current change`、
 ASUS USB driveのdisconnect/reset、`CDDA read failed ... errno=5`を同時に観測した。これはALSA underrun
@@ -342,7 +343,7 @@ queueが0へ戻った。`picdplayer.service` restart後にはdaemon/kioskともa
 [通常runtime API実機記録](reports/2026-09-28-normal-runtime-api/README.md)に保存した。
 
 これはSSH/API経路の確認であり、TV実表示・試聴・CEC・Custom UI・cold boot・長時間運転・eject/drive消失は
-確認していない。#4をこれだけで完了扱いにしない。
+確認していない。この短時間確認を通常系の継続運転を扱う#184の完了とはしない。
 
 ## C2 capability probe（#7、Docker確認）
 
@@ -433,7 +434,7 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 
 #52のクローズに向け、[完了判定と制約](reports/2026-09-25-kiosk-baseline/README.md#完了判定の整理2026-09-26追記)を追記した。
 既存rawを再集計し、新規測定は行っていない。Cage単独は改善対象の特定に不要として省略し、
-過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、長期運転・実表示・音声は#4で別途確認する。
+過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、通常系の継続運転・実表示・音声は#184で別途確認する。
 
 2026-09-28には、Issue #122の修正候補を導入したPiで、通常14 track Audio CDのCDP未接続PLAYINGを
 30秒warm-up後に300秒測定した。system CPU平均は13.27%、最高温度は66.6°C、現在のthrottlingは0だった。
@@ -1017,7 +1018,7 @@ Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加し�
   同一世代の受理、異なるsession/stream、欠損、included=false、未知schemaの拒否を検証する。
   要求時ではなく応答到着時の最新snapshotに照合し、世代変更で保持済み表示も破棄する契約を明記する。
 
-今回の成功は実機音声の保証ではない。実機音声・長時間運転は#4、長期負荷は#83の検証と区別する。
+今回の成功は実機音声の保証ではない。実機音声・通常系の継続運転は#184、性能測定は#83の検証と区別する。
 #24は当時Draftとして維持し、実際のPlayer側の履歴consumerを追加する場合は同じ条件の統合試験を必要とした。
 Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に対する再現可能な回帰検証であり、
 任意接続数への防御、無期限sink停止時のshutdown完了、real-time性能を新たに保証するものではない。
@@ -1120,7 +1121,7 @@ PCM/read markerを確認した。API stop後はSTOPPED、queue 0、current/lates
 underrun、recovery、failure context、ERRORはなかった。CDP接続中の2秒測定でLayout/RecalcStyleは各8件。
 
 これは通常disc・短時間・CDP接続中の確認である。TV目視・試聴、傷disc、物理交換、終端drain、
-長期運転、CDP未接続のCPU/温度比較は未確認であり、#146/#4/#83の記録と重複しない。
+通常系の継続運転、CDP未接続のCPU/温度比較は未確認であり、#146/#184/#83の記録と重複しない。
 
 ### Integrity monitor Phase 1（2026-09-27）
 

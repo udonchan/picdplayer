@@ -489,7 +489,7 @@ stream_generationを照合して旧結果を捨てる。契約の正本は機能
 ## Player UI統合案の管理（#24）
 
 #24は現行APIと#98/#99の追加契約を利用する実装Issueとして正式化した。標準Playerの実装は
-`ui/default/`に実装しPR #108でPhase 1を完了した。通常Pi CDPで確認済みで、異常scenarioは#109〜#111、実機異常系は#146、長期/性能は#4/#83で追跡する。
+`ui/default/`に実装しPR #108でPhase 1を完了した。通常Pi CDPで確認済みで、異常scenarioは#109〜#111、実機異常系は#146、通常系の継続運転は#184、性能測定は#83で追跡する。
 #35/#36と追加検証#89/#90は完了。公開仕様の正本は[メッセージ契約](message-contract.md)。
 主表示を維持してcurrent/latest、stream警告、方針、buffer、drive能力を統合する。
 全ディスク円盤read mapを必須成果物とし、TOC/世代公開#98とdisc領域集計#99をHard dependencyとする。
