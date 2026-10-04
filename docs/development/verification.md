@@ -98,7 +98,10 @@ TV上のcover画像そのものと失敗系は別途確認対象とする。
 [1920×1080合成snapshot](reports/2026-10-04-metadata-reselect/README.md)で選択後の配置も確認した。
 2026-10-04、PiへPR #183のpackageを導入し、ユーザーがTVリモコンで『The Slip』の候補0を選択後、
 `Change album`からCDを取り出さず候補1へ変更した。Pi APIでも`selected_index=0→1`を確認し、
-CDPで選択番号の表示を確認した。`None of these`によるAudio CDへの復帰はこの時点では未検証。
+CDPで選択番号の表示を確認した。さらにPR #180のSettingsとPR #183を結合した検証用packageをPiへ導入し、
+CDPから通常Playerの候補を選択して`None of these`を押した。APIのselectionは`SELECTED`から`DECLINED`へ変わり、
+Playerは`Audio CD / Track 01`へ戻り、pickerが閉じた。`Change album`と`Settings`は表示を維持し、
+1920×1080でdocument overflowがないことをCDPで確認した。CECリモコンによる辞退操作と音声は未確認。
 HTTP 204は選択完了とみなさず、次のauthoritative snapshotでalbum/trackを更新する。
 同じcover URLで選択candidateが変わっても画像を再読込する。
 Debian Trixie/aarch64 DockerでbuildとCTest 46件を実行し、Node fixtureで候補表示、CEC操作、

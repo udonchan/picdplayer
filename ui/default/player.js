@@ -267,11 +267,11 @@ function renderControls(snapshot) {
   if (selection) {
     const selectedPosition = selection.candidates.findIndex((candidate) => candidate.index === selection.selected_index);
     set('metadata-match-status', selection.state === 'AMBIGUOUS'
-      ? `${selection.candidates.length} ALBUM MATCHES · CHOOSE ONE`
-      : selection.state === 'DECLINED' ? `${selection.candidates.length} ALBUM MATCHES · NONE SELECTED`
+      ? `${selection.candidates.length} MATCHES · CHOOSE`
+      : selection.state === 'DECLINED' ? `${selection.candidates.length} MATCHES · NONE`
       : selectedPosition >= 0
-        ? `${selection.candidates.length} ALBUM MATCHES · #${selectedPosition + 1} SELECTED`
-        : `${selection.candidates.length} ALBUM MATCHES · SELECTION UNKNOWN`);
+        ? `${selection.candidates.length} MATCHES · #${selectedPosition + 1}`
+        : `${selection.candidates.length} MATCHES · UNKNOWN`);
   }
   if (focusedControl >= 0 && !controlEnabled(controls[focusedControl]?.dataset.command, snapshot))
     focusedControl = -1;
