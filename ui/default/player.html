@@ -29,6 +29,7 @@
             <button type="button" data-command="next" disabled>Next</button>
             <span id="metadata-match-status" class="metadata-match-status" hidden></span>
             <button type="button" data-command="metadata" hidden disabled>Choose album</button>
+            <button type="button" data-command="settings">Settings</button>
           </nav>
         </div>
       </div>
@@ -107,6 +108,26 @@
           </dl>
           <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
         </article>
+      </div>
+    </section>
+    <section id="settings-panel" class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+      <div class="settings-surface">
+        <div class="settings-heading"><div><p class="eyebrow">PLAYER SETTINGS</p><h2 id="settings-title">Read policy</h2></div><button id="settings-close" type="button">Back</button></div>
+        <p class="settings-note">Choose how the next read is performed. A change during playback waits until playback stops.</p>
+        <div class="settings-choices" role="group" aria-label="Read verification mode">
+          <button id="policy-single" type="button" disabled>Single read</button>
+          <button id="policy-repeat" type="button" disabled>Repeat verification</button>
+        </div>
+        <p id="settings-policy-status" class="settings-status" role="status">Loading read policy…</p>
+        <p id="settings-persistence" class="settings-note">Checking whether changes are saved…</p>
+        <dl class="settings-details">
+          <dt>Region</dt><dd id="settings-region">—</dd>
+          <dt>Matches</dt><dd id="settings-matches">—</dd>
+          <dt>Attempts</dt><dd id="settings-attempts">—</dd>
+          <dt>Time budget</dt><dd id="settings-budget">—</dd>
+        </dl>
+        <p class="settings-note">Detailed values are shown for inspection; use the API to change them.</p>
+        <div class="settings-unavailable"><h3>Artist background</h3><p>Unavailable until image delivery and use conditions are ready. External photos remain off.</p></div>
       </div>
     </section>
   </main>

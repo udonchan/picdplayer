@@ -75,9 +75,18 @@ const setHidden = (element, value) => {
 // The View owns focus only; the daemon snapshot remains the playback authority.
 // View が保持するのは focus だけで、再生状態は daemon の snapshot を正とします。
 const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
+const policyButtons = [byId('policy-single'), byId('policy-repeat')];
+const settingsCloseButton = byId('settings-close');
+const settingsActions = [...policyButtons, settingsCloseButton];
 let focusedControl = -1;
 let pendingCommand = null;
 let feedbackTimer;
+let settingsOpen = false;
+let focusedPolicy = 0;
+let settingsFocusMoved = false;
+let settingsRequestId = 0;
+let policyState = null;
+let pendingPolicy = false;
 let pickerOpen = false;
 let pickerIndex = 0;
 let pickerKey = '';
@@ -138,6 +147,7 @@ function renderPicker(snapshot) {
     candidateButtons = [];
     if (!selection) return;
   }
+  if (settingsOpen) return;
   // Show each new ambiguity once. Back dismisses it without suppressing the
   // transport controls, while Choose album can reopen the same candidate set.
   // 新しい曖昧候補は一度だけ自動表示します。Back後は手動で開き直せます。
@@ -251,6 +261,7 @@ async function requestCandidate(index) {
   }
 }
 const controlEnabled = (command, snapshot) => {
+  if (command === 'settings') return true;
   if (snapshot?.disc?.state !== 'AUDIO_READY') return false;
   if (command === 'metadata') return Boolean(multipleCandidateSelection(snapshot));
   const state = snapshot?.player?.state;
@@ -310,9 +321,105 @@ function controlFeedback(message) {
     if (label.textContent === message) label.textContent = '';
   }, 1800);
 }
+function renderPolicySettings() {
+  const requested = policyState?.requested;
+  const effective = policyState?.effective;
+  const valid = requested && ['SINGLE', 'REPEAT'].includes(requested.mode) &&
+    ['region_frames', 'required_matches', 'maximum_attempts', 'time_budget_ms']
+      .every((key) => Number.isInteger(requested[key]) && requested[key] >= 0);
+  policyButtons.forEach((button, index) => {
+    button.disabled = !valid || pendingPolicy;
+    button.dataset.selected = String(valid && requested.mode === (index ? 'REPEAT' : 'SINGLE'));
+    button.dataset.focused = String(settingsOpen && focusedPolicy === index);
+  });
+  settingsCloseButton.dataset.focused = String(settingsOpen && focusedPolicy === 2);
+  set('settings-region', valid ? `${requested.region_frames} CD frames` : '—');
+  set('settings-matches', valid ? requested.required_matches : '—');
+  set('settings-attempts', valid ? requested.maximum_attempts : '—');
+  set('settings-budget', valid ? `${requested.time_budget_ms} ms` : '—');
+  set('settings-persistence', policyState?.persistence_configured === true
+    ? 'A successful change is saved for daemon restarts.'
+    : 'Changes apply to this daemon session only.');
+  if (!valid) set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
+  if (valid) set('settings-policy-status', policyState.pending
+    ? `Requested ${requested.mode}; effective ${effective?.mode || 'UNKNOWN'} until playback stops.`
+    : `Effective ${effective?.mode || requested.mode}.`);
+}
+async function loadPolicySettings() {
+  const requestId = settingsRequestId;
+  try {
+    const response = await fetch('/api/read-policy');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const loaded = await response.json();
+    if (!settingsOpen || requestId !== settingsRequestId) return;
+    policyState = loaded;
+    if (settingsOpen && !settingsFocusMoved &&
+        ['SINGLE', 'REPEAT'].includes(policyState?.requested?.mode)) {
+      focusPolicy(policyState.requested.mode === 'REPEAT' ? 1 : 0);
+    }
+    renderPolicySettings();
+  } catch {
+    if (!settingsOpen || requestId !== settingsRequestId) return;
+    policyState = null;
+    renderPolicySettings();
+    set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
+  }
+}
+function focusPolicy(index) {
+  focusedPolicy = index;
+  renderPolicySettings();
+  settingsActions[index]?.focus?.({ preventScroll: true });
+}
+function openSettings() {
+  settingsOpen = true;
+  settingsFocusMoved = false;
+  settingsRequestId += 1;
+  policyState = null;
+  setHidden(byId('settings-panel'), false);
+  focusPolicy(0);
+  set('settings-policy-status', 'Loading read policy…');
+  set('settings-persistence', 'Checking whether changes are saved…');
+  void loadPolicySettings();
+}
+function closeSettings() {
+  settingsOpen = false;
+  settingsRequestId += 1;
+  setHidden(byId('settings-panel'), true);
+  const index = controls.findIndex((button) => button.dataset.command === 'settings');
+  if (index >= 0) focusControl(index);
+  renderPicker(currentSnapshot);
+}
+async function selectPolicy(index) {
+  const requested = policyState?.requested;
+  if (!settingsOpen || pendingPolicy || policyButtons[index]?.disabled || !requested) return;
+  const requestId = settingsRequestId;
+  const mode = index ? 'repeat' : 'single';
+  pendingPolicy = true;
+  renderPolicySettings();
+  set('settings-policy-status', 'Saving policy…');
+  let failed = false;
+  try {
+    const response = await fetch('/api/read-policy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, region_frames: requested.region_frames,
+        required_matches: requested.required_matches, maximum_attempts: requested.maximum_attempts,
+        time_budget_ms: requested.time_budget_ms }),
+    });
+    if (response.status !== 204) throw new Error(`HTTP ${response.status}`);
+    if (settingsOpen && requestId === settingsRequestId) await loadPolicySettings();
+  } catch {
+    failed = true;
+  } finally {
+    pendingPolicy = false;
+    renderPolicySettings();
+    if (failed && settingsOpen && requestId === settingsRequestId)
+      set('settings-policy-status', 'Policy change failed. Current playback continues.');
+  }
+}
 async function activateControl(button) {
   if (!button || button.disabled || pendingCommand) return;
   const command = button.dataset.command;
+  if (command === 'settings') { openSettings(); return; }
   if (command === 'metadata') { openPicker(); return; }
   if (!['play', 'pause', 'stop', 'previous', 'next'].includes(command)) return;
   pendingCommand = command;
@@ -329,6 +436,19 @@ async function activateControl(button) {
   }
 }
 function handleNavigation(action) {
+  if (settingsOpen) {
+    if (action === 'back') closeSettings();
+    else if (action === 'left' || action === 'up' || action === 'right' || action === 'down') {
+      settingsFocusMoved = true;
+      const direction = action === 'left' || action === 'up' ? -1 : 1;
+      focusPolicy((focusedPolicy + direction + settingsActions.length) % settingsActions.length);
+    }
+    else if (action === 'select') {
+      if (focusedPolicy === 2) closeSettings();
+      else void selectPolicy(focusedPolicy);
+    }
+    return;
+  }
   if (pickerOpen) {
     if (action === 'back') closePicker();
     else if ((action === 'up' || action === 'left') && !pendingSelection) {
@@ -360,7 +480,7 @@ function handleNavigationInput(action, source) {
   handleNavigation(action);
 }
 controls.forEach((button, index) => button.addEventListener('click', (event) => {
-  if (pickerOpen) return;
+  if (pickerOpen || settingsOpen) return;
   focusControl(index);
   // Keyboard activation produces a click with detail=0; a CEC select can
   // arrive for the same remote press. Pointer clicks remain independent.
@@ -368,9 +488,25 @@ controls.forEach((button, index) => button.addEventListener('click', (event) => 
   if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
   else activateControl(button);
 }));
+policyButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
+  focusPolicy(index);
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else void selectPolicy(index);
+}));
+settingsCloseButton.addEventListener?.('click', closeSettings);
 document.addEventListener('keydown', (event) => {
+  if (settingsOpen && event.key === 'Tab') {
+    event.preventDefault();
+    settingsFocusMoved = true;
+    const targets = [...policyButtons.filter((button) => !button.disabled), settingsCloseButton];
+    const current = targets.indexOf(document.activeElement);
+    const next = current < 0 ? (event.shiftKey ? targets.length - 1 : 0)
+      : (current + (event.shiftKey ? targets.length - 1 : 1)) % targets.length;
+    targets[next].focus?.({ preventScroll: true });
+    return;
+  }
   const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
-  if (!actions[event.key] || (!controls.length && !pickerOpen)) return;
+  if (!actions[event.key] || (!controls.length && !settingsOpen && !pickerOpen)) return;
   event.preventDefault();
   handleNavigationInput(actions[event.key], 'keyboard');
 });

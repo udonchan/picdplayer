@@ -272,13 +272,22 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。technical stat
 keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
+標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
+部分実装する。CEC方向でSINGLE/REPEAT/Backを選択し、決定でpolicy変更または画面を閉じる。
+リモコンの戻るキーでもPlayerへ戻り、
+選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
+結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
+有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの
+`persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
+session限りと扱い、単なるPOST受理を保存済みと表示しない。
 曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
 操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
 `Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の
 選択POSTで行い、次のsnapshotで反映を確認する。`None of these`は候補を明示的に採用せずAudio CD表示へ戻す。
 同じdiscでは再選択可能で、この判断だけで再生を停止しない。CEC/keyboardの方向入力で候補を移動し、
 selectで実行、backで閉じる。候補がないときは
-入口を表示せず、read policy編集はこの列に含めない。title/artistがなければ
+入口を表示しない。Read policy編集はSettingsが担当する。Settings表示中に候補が届いた場合は、
+Settingsを閉じた後にpickerを表示する。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
 戻る。外部文字列はtechnical statusと同様にtextContentで表示する。HTTP responseはCSPで

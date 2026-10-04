@@ -10,10 +10,18 @@ async function main() {
   const nodes = new Map();
   const sockets = [];
   const posts = [];
+  const policyPosts = [];
+  const pendingPolicyGets = [];
+  let deferPolicyGet = false;
+  let policyPostStatus = 204;
+  const policy = { requested: { mode: 'SINGLE', region_frames: 75,
+    required_matches: 2, maximum_attempts: 3, time_budget_ms: 10000 },
+  effective: { mode: 'SINGLE' }, pending: false, persistence_configured: false };
   const postBodies = [];
   let postStatus = 204;
   let failPost = false;
   let now = 1000;
+  let activeElement = null;
   const keys = {};
   const timers = [];
   const snapshot = {
@@ -27,7 +35,7 @@ async function main() {
       textContent: '', style: {}, dataset: {}, hidden: false, disabled: true,
       classList: { contains: () => false, add() {}, remove() {} },
       removeAttribute() {}, addEventListener(type, fn) { this[`on${type}`] = fn; },
-      focus() { this.focused = true; }, blur() { this.focused = false; },
+      focus() { this.focused = true; activeElement = this; }, blur() { this.focused = false; },
       setAttribute(name, value) { this[name] = value; },
       append(...children) { this.children = [...(this.children || []), ...children]; },
       replaceChildren(...children) { this.children = children; },
@@ -39,7 +47,7 @@ async function main() {
     nodes.set(id, item);
     return item;
   }
-  const controls = ['previous', 'play', 'pause', 'stop', 'next', 'metadata'].map((command) => {
+  const controls = ['previous', 'play', 'pause', 'stop', 'next', 'metadata', 'settings'].map((command) => {
     const button = node(`button-${command}`);
     button.dataset.command = command;
     return button;
@@ -49,6 +57,7 @@ async function main() {
     performance: { now: () => 1 },
     document: {
       readyState: 'complete', getElementById: node,
+      get activeElement() { return activeElement; },
       createElement: element,
       querySelectorAll: () => controls,
       addEventListener(type, fn) { keys[type] = fn; },
@@ -56,6 +65,19 @@ async function main() {
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url, options) => {
       if (url === '/api/state') return { ok: true, json: async () => snapshot };
+      if (url === '/api/read-policy') {
+        if (options?.method === 'POST') {
+          const body = JSON.parse(options.body);
+          policyPosts.push(body);
+          if (policyPostStatus === 204) {
+            policy.requested = { ...body, mode: body.mode.toUpperCase() };
+            policy.pending = true;
+          }
+          return { ok: policyPostStatus === 204, status: policyPostStatus };
+        }
+        if (deferPolicyGet) return new Promise((resolve) => pendingPolicyGets.push(resolve));
+        return { ok: true, json: async () => policy };
+      }
       if (options?.method === 'POST' && url !== '/api/ui-boot') {
         posts.push(url);
         postBodies.push(options.body);
@@ -74,6 +96,32 @@ async function main() {
   assert.equal(controls[1].disabled, false); // play
   assert.equal(controls[2].disabled, true); // pause
   const navigation = (action) => sockets[1].onmessage({ data: JSON.stringify({ action }) });
+  assert.equal(controls[6].disabled, false);
+  controls[6].onclick({ detail: 1 });
+  assert.equal(controls[6].disabled, false);
+  await new Promise(setImmediate);
+  assert.equal(node('policy-single').dataset.selected, 'true');
+  assert.match(node('settings-persistence').textContent, /session only/);
+  navigation('right');
+  assert.equal(node('policy-repeat').dataset.focused, 'true');
+  navigation('select');
+  await new Promise(setImmediate);
+  assert.equal(policyPosts.length, 1);
+  assert.equal(policyPosts[0].mode, 'repeat');
+  assert.match(node('settings-policy-status').textContent, /until playback stops/);
+  navigation('back');
+  assert.equal(node('settings-panel').hidden, true);
+  controls[6].onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.equal(node('policy-repeat').dataset.focused, 'true'); // Reopening follows requested mode.
+  policyPostStatus = 409;
+  node('policy-single').onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.equal(node('settings-policy-status').textContent,
+    'Policy change failed. Current playback continues.');
+  assert.equal(policy.requested.mode, 'REPEAT');
+  navigation('back');
+  navigation('back');
   navigation('right');
   keys.keydown({ key: 'ArrowRight', preventDefault() {} });
   assert.equal(controls[0].dataset.focused, 'true'); // one TV press, two input paths
@@ -127,12 +175,14 @@ async function main() {
   navigation('select');
   assert.deepEqual(posts, ['/api/play', '/api/pause', '/api/stop', '/api/next']);
   keys.keydown({ key: 'ArrowRight', preventDefault() {} });
-  assert(controls.every((button) => button.disabled));
+  assert(controls.slice(0, 5).every((button) => button.disabled));
+  assert.equal(controls[6].disabled, false);
   snapshot.revision = 4;
   snapshot.disc.state = 'AUDIO_READY';
   snapshot.player.state = 'UNKNOWN';
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
-  assert(controls.every((button) => button.disabled));
+  assert(controls.slice(0, 5).every((button) => button.disabled));
+  assert.equal(controls[6].disabled, false);
   snapshot.revision = 5;
   snapshot.player.state = 'STOPPED';
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
@@ -144,6 +194,42 @@ async function main() {
   assert.equal(controls[0].dataset.focused, 'true');
   sockets[1].onmessage({ data: JSON.stringify({ action: 'right' }) });
   assert.equal(controls[0].dataset.focused, 'true'); // stale socket is ignored
+  deferPolicyGet = true;
+  controls[6].onclick({ detail: 1 });
+  assert.equal(node('policy-single').disabled, true); // No stale value before GET completes.
+  assert.equal(node('settings-policy-status').textContent, 'Loading read policy…');
+  now += 300;
+  keys.keydown({ key: 'ArrowRight', preventDefault() {} });
+  pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
+    requested: { ...policy.requested, mode: 'SINGLE' } }) });
+  await new Promise(setImmediate);
+  assert.equal(node('policy-repeat').dataset.focused, 'true'); // Preserve deliberate focus.
+  keys.keydown({ key: 'Escape', preventDefault() {} });
+  controls[6].onclick({ detail: 1 });
+  keys.keydown({ key: 'Escape', preventDefault() {} });
+  controls[6].onclick({ detail: 1 });
+  pendingPolicyGets.pop()({ ok: true, json: async () => ({ ...policy,
+    requested: { ...policy.requested, mode: 'REPEAT' } }) });
+  await new Promise(setImmediate);
+  pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
+    requested: { ...policy.requested, mode: 'SINGLE' } }) });
+  await new Promise(setImmediate);
+  assert.equal(node('policy-repeat').dataset.selected, 'true'); // Old GET cannot replace it.
+  now += 300;
+  sockets[2].onmessage({ data: JSON.stringify({ action: 'right' }) });
+  assert.equal(node('settings-close').dataset.focused, 'true');
+  sockets[2].onmessage({ data: JSON.stringify({ action: 'select' }) });
+  assert.equal(node('settings-panel').hidden, true); // CEC can reach and activate Back.
+  deferPolicyGet = false;
+  controls[6].onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  keys.keydown({ key: 'Tab', preventDefault() {} });
+  assert.equal(activeElement, node('settings-close'));
+  keys.keydown({ key: 'Tab', preventDefault() {} });
+  assert.equal(activeElement, node('policy-single')); // Focus stays inside the dialog.
+  keys.keydown({ key: 'Tab', shiftKey: true, preventDefault() {} });
+  assert.equal(activeElement, node('settings-close'));
+  keys.keydown({ key: 'Escape', preventDefault() {} });
   failPost = false;
   postStatus = 204;
   snapshot.revision = 6;
@@ -161,12 +247,14 @@ async function main() {
   assert.equal(node('metadata-match-status').textContent, '2 MATCHES · CHOOSE');
   assert.equal(node('metadata-picker').hidden, false); // New ambiguity opens automatically.
   const pickerNavigation = (action) => sockets[2].onmessage({ data: JSON.stringify({ action }) });
+  now += 300;
   pickerNavigation('back');
   assert.equal(node('metadata-picker').hidden, true);
   snapshot.revision += 1;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(node('metadata-picker').hidden, true); // Back sticks for the same candidate set.
-  pickerNavigation('left'); // From no focus, CEC reaches the last enabled control.
+  pickerNavigation('left'); // Settings follows the metadata control.
+  pickerNavigation('left');
   assert.equal(controls[5].dataset.focused, 'true');
   pickerNavigation('select');
   assert.equal(node('metadata-picker').hidden, false);
@@ -198,6 +286,7 @@ async function main() {
   assert.equal(node('metadata-match-status').textContent, '2 MATCHES · #2');
   assert.equal(node('metadata-picker').hidden, true); // Selected state does not auto-open.
   pickerNavigation('left');
+  pickerNavigation('left');
   assert.equal(controls[5].dataset.focused, 'true');
   pickerNavigation('select');
   assert.equal(node('metadata-picker').hidden, false);
@@ -223,6 +312,7 @@ async function main() {
   assert.equal(node('metadata-match-status').textContent, '2 MATCHES · #1');
   assert.notEqual(node('cover').dataset.identity, firstCoverIdentity);
   snapshot.revision = 11;
+  pickerNavigation('left');
   pickerNavigation('left');
   pickerNavigation('select');
   pickerNavigation('up'); // Wrap from candidate 0 to None of these.
