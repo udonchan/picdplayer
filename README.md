@@ -55,7 +55,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | 読み取り状態・根拠の観測、反復一致 | 従来の反復一致と起動中の設定切替は通常CDで実機確認済み。追加した先行overlapとcache独立性の根拠表示はDocker検証済み、追加後のPi再生は未確認 |
 | Player Integrity monitor・disc read map | Phase 1を実装済み。通常CDのPi CDP・1080p表示を確認。異常scenario・実機異常系・長期評価は継続課題 |
 | 読み取り専用technical status画面 | Phase 1bとして実装、通常再生・再読み込み・再接続をブラウザで実機確認済み |
-| CD-DA先読みbuffer設定・drive access直列化 | Phase 2の基礎を実装。通常CDで容量・開始閾値と操作応答を実機比較済み。任意の1x速度要求と短時間API再生を実機確認済み。効果・長時間再生・比較は確認待ち |
+| CD-DA先読みbuffer設定・drive access直列化 | Phase 2の基礎を実装。通常CDで容量・開始閾値と操作応答を実機比較済み。任意の1x速度要求と短時間API再生を実機確認済み。継続運転・聴感は#184、定量比較は#83、非対応driveでの失敗確認は#146に残る |
 | 複数metadata候補の選択 | 未実装 |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 

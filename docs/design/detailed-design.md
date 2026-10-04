@@ -206,7 +206,7 @@ STOPPEDまたはPAUSED中だけMediaWorkerへ`set_drive_speed`を一回要求す
 DriveAccessCoordinator内で`CDROM_SELECT_SPEED`を呼ぶため、PCM reader、media/TOC、ejectと同時に
 device ioctlを行わない。Nは1〜255倍速に限定し、ioctl成功を`requested_speed_x`へ記録する。これは要求受理であって
 適用速度・回転・throughputの測定ではない。失敗は`speed_request_error`とwarning logに残し、再生可能化の
-条件にはしない。capabilityがNOまたはUNKNOWNならioctlを発行せず、既定設定を維持した理由を同じfieldへ記録する。current speedの標準queryや効果の実機検証は#8の残作業である。
+条件にはしない。capabilityがNOまたはUNKNOWNならioctlを発行せず、既定設定を維持した理由を同じfieldへ記録する。current speedは現行APIで未観測であり、効果の実機検証は#184/#83、非対応・失敗時の確認は#146で扱う。
 
 [route_api_request](../../src/api_server.cpp)はmethod/path/bodyを検証してhandlerへ渡す純粋な入口。
 実接続のloopback判定はApiServer callbackから呼ぶ共通routeで行い、純粋なroute単体は認証境界ではない。
