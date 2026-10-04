@@ -397,32 +397,28 @@ if(BUILD_TESTING)
         endforeach()
         add_test(NAME paranoia_reader COMMAND paranoia_reader_test)
     endif()
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-    if(Python3_Interpreter_FOUND)
-        if(ENABLE_METADATA)
-            add_test(NAME http_client COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/http_client_https.py $<TARGET_FILE:http_client_test>)
-            set_tests_properties(http_client PROPERTIES TIMEOUT 15)
-        endif()
-        add_test(NAME summarize_kiosk COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
-        add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
-        add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
-            ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
-        if(ENABLE_API)
-            add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
-            set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
-            add_test(NAME read_policy_persistence COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_policy_persistence.py $<TARGET_FILE:cdplayerd>)
-            set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
-        endif()
-        add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
-        add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
-        set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
-    elseif(ENABLE_METADATA)
-        add_test(NAME http_client COMMAND http_client_test)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(ENABLE_METADATA)
+        add_test(NAME http_client COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/http_client_https.py $<TARGET_FILE:http_client_test>)
+        set_tests_properties(http_client PROPERTIES TIMEOUT 15)
     endif()
+    add_test(NAME summarize_kiosk COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
+    add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
+    add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
+        ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
+    if(ENABLE_API)
+        add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
+        set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
+        add_test(NAME read_policy_persistence COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_policy_persistence.py $<TARGET_FILE:cdplayerd>)
+        set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
+    endif()
+    add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
+    add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
+    set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
 endif()
