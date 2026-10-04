@@ -1,9 +1,11 @@
-# ユーザー設定基盤の拡張案と部分実装
+# ユーザー設定基盤の拡張案と標準画面の部分実装
 
 第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。
 PR #179で`--settings-file`を明示した場合のRead Policy保存・復元を実装し、masterへ統合済み。
-Settings UIの第一段階はDraft PR #180で進行中。一般設定API、Artist BackgroundのON/OFF、
-hot reloadはまだ存在しない。採用済みの保存・優先順位・適用契約は
+Draft PR #180では標準PlayerにRead PolicyのSINGLE/REPEATを選ぶSettings画面を部分実装している。
+Settings画面を通じたPi実serviceの再起動後復元は未検証である。一般設定API、Artist Backgroundの
+ON/OFF、hot reloadはない。#177はArtist Backgroundの明示ON/OFFと実service上の保存検証が残りOpenである。
+採用済みの保存・優先順位・適用契約は
 [機能設計](../design/functional-design.md#設定の所有保存適用境界)を正とする。
 
 ## 現行の設定項目と画面候補（2026-10-01）
