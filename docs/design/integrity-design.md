@@ -374,7 +374,7 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 CMakeはモデル/集計テストを基本buildへ、JSON/API試験をENABLE_APIへ分ける。
 ENABLE_METADATA=OFF / ENABLE_API=OFFでも観測coreと再生は利用可能にする。
 追加runtime optionはそのphaseで機能が成立したものだけ公開し、未実装指定を成功扱いしない。
-実機確認可能になるまではPhase 2の速度設定を有効化せず、Phase 3のhardware非依存な比較・provenanceモデルを先行できる。
+Phase 2の速度要求は明示opt-inとして実装し、通常CDでioctl受理と短時間API再生まで確認した。既定では要求しない。速度の実測と効果は未確認であり、通常運転#184、定量比較#83、非対応driveでの失敗#146に分けて評価する。
 
 ## 13. 試験計画
 

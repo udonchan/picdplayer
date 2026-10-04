@@ -284,8 +284,8 @@ main loop stall、eject errorを検出しなかった。外部album artworkを�
 [drive speed request実機記録](reports/2026-09-27-drive-speed-request/README.md)に保存した。
 
 この結果はioctl受理と短時間のAPI再生を示すだけである。音質・騒音の主観比較、CEC操作、temperature・
-undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認であり、既定速度との同条件比較を含めて
-#8の完了条件として残る。
+undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認である。#8の実装済み範囲はCloseし、
+通常CDの継続運転・聴感を#184、既定要求なしとの同条件定量比較を#83、非対応drive/ioctl失敗を#146へ移管した。
 
 ## Repeat overlap and cache evidence（#9、Docker/Pi通常CD確認）
 
@@ -912,7 +912,7 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。
   API snapshot処理の遅延に伴うunderrunと自動復旧は上記で一度観測した。
   傷disc・USB障害・長時間read stallによる復旧経路の実機確認は未完了。
-- direct/paranoiaの同条件比較は未実施。ライセンス・再配布条件の確認が必要なためparanoiaの公式採用を見送り、比較Issue #6は終了した。標準運用はdirectを維持し、現行構成の性能と速度要求は#83/#8で評価する。
+- direct/paranoiaの同条件比較は未実施。ライセンス・再配布条件の確認が必要なためparanoiaの公式採用を見送り、比較Issue #6は終了した。標準運用はdirectを維持し、現行構成の性能・速度要求の定量比較は#83、継続運転は#184で評価する。
 - pause再開の待ち時間とbuffering表示、傷disc/長いread stall時の復旧方針を検討する。同一streamの
   ALSA underrun復帰上限は3回としてDocker自動試験済みだが、実機異常系は#146で未確認である。
 - mediaとPCMのdevice access直列化は実装済み。挿抜を含む実機回帰確認を継続する。
