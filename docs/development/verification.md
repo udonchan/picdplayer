@@ -220,6 +220,17 @@ Piの通常系では2026-10-01〜03に『The Slip』のMusicBrainz候補、選�
 その画像が当該時点の新規CAA通信かcache由来かは区別していない。Piでのnetwork切断、fresh CAA lookup、
 実機再生中のtimeout影響は未確認である。
 
+2026-10-04のPi実機では、稼働中daemonと既存cacheを変更せず、APIのTOCから既存libdiscidで
+『The Slip』のDisc IDを計算した。一時cacheを使う別の`--lookup-disc` processでMusicBrainzの
+新規HTTPS lookupを行い、`cache=miss`でUS/JPの2候補を取得した。標準PlayerからJP候補を選択すると
+APIは`SELECTED`/`AVAILABLE`となり、再生位置は進行した。TVで曲名と音声を確認したがcoverは表示されなかった。
+PiからCAAへ直接照会するとJP releaseはHTTP 404、US releaseはarchive.orgへの307 redirectだった。
+JPで画像がないことはCAA応答と整合するが、daemonのfresh CAA取得経路を確認したことにはならない。
+別の診断processだけに到達不能なHTTPS proxyを指定すると、MusicBrainz lookupは
+`HTTP request failed: Could not connect to server`となり、稼働中daemonはAPI上`PLAYING`を維持した。
+ユーザーはこの間のTV音声に途切れがないことを確認した。この隔離試験はdaemon自身のnetwork断や
+timeout中の音声継続を証明しない。
+
 ## Optional paranoia license warning（#66、Docker自動試験）
 
 `PICDPLAYER_ENABLE_PARANOIA=ON ./scripts/build-container.sh`で、対応containerのDebian
