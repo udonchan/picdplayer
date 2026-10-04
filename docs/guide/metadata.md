@@ -27,6 +27,8 @@ metadata世代、候補indexを送る。daemonは現行discとの一致を確認
 選択は現在のdisc世代のメモリ内に限り、取り出し・再挿入時には再選択が必要となる。
 選択操作が受理されても、次のsnapshotで表示反映を確認する。標準UIは複数候補があるときだけ
 `Choose album`を表示し、CECの方向/決定/戻るまたはkeyboardで任意にpickerを操作できる。
+選択後も複数候補であることと現在の選択番号を示し、`Change album`から取り出さずに選び直せる。
+別候補の適用も現行disc世代の選択APIで行い、表示は次のsnapshotを正とする。
 候補には取得できたtitle/artist、date、country、medium情報を表示し、欠損値を推測しない。
 
 Artist Background向けのArtist MBIDは、選択済みreleaseのartist-creditに含まれるartist IDから

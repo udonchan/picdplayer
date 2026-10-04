@@ -273,8 +273,10 @@ keyboardでfocusを移してloopback POSTで要求する。方向入力は現在
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
 曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
-操作列末尾の`Choose album`から開き直せる。CEC/keyboardの方向入力で候補を移動し、selectで選択POST、
-backで閉じる。候補がないときは
+操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
+`Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の
+選択POSTで行い、次のsnapshotで反映を確認する。CEC/keyboardの方向入力で候補を移動し、
+selectで実行、backで閉じる。候補がないときは
 入口を表示せず、read policy編集はこの列に含めない。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ

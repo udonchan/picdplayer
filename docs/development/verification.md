@@ -93,6 +93,10 @@ TV上のcover画像そのものと失敗系は別途確認対象とする。
 #15の公開契約と#55のsemantic CEC navigationを使う標準UIを作業branchで実装した。
 曖昧候補の初回検出時にpickerを自動表示し、backで閉じた同じ候補群は自動再表示しない。
 `Choose album`で開き直せる。方向入力で候補移動、selectで選択POST、backで閉じる。
+選択後にも複数候補の表示と`Change album`を残す変更はNode fixtureで再選択POST、選択済み候補の表示、
+選択前の自動表示と選択後の非自動表示を確認した。Mac Chromeの
+[1920×1080合成snapshot](reports/2026-10-04-metadata-reselect/README.md)で選択後の配置も確認した。
+Piでの選び直しは未確認。
 HTTP 204は選択完了とみなさず、次のauthoritative snapshotでalbum/trackを更新する。
 同じcover URLで選択candidateが変わっても画像を再読込する。
 Debian Trixie/aarch64 DockerでbuildとCTest 46件を実行し、Node fixtureで候補表示、CEC操作、

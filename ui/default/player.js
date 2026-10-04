@@ -85,9 +85,9 @@ let autoOpenedPickerKey = '';
 let pendingSelection = null;
 let candidateButtons = [];
 let lastPickerFocused = null;
-const ambiguousSelection = (snapshot) => {
+const multipleCandidateSelection = (snapshot) => {
   const selection = snapshot?.enrichment?.selection;
-  return snapshot?.disc?.state === 'AUDIO_READY' && selection?.state === 'AMBIGUOUS'
+  return snapshot?.disc?.state === 'AUDIO_READY' && ['AMBIGUOUS', 'SELECTED'].includes(selection?.state)
     && Array.isArray(selection.candidates) && selection.candidates.length > 1 ? selection : null;
 };
 const selectionKey = (selection) => selection
@@ -105,11 +105,18 @@ function closePicker() {
   focusControl(-1);
 }
 function renderPickerFocus() {
+  const selection = multipleCandidateSelection(currentSnapshot);
+  const selectedIndex = selection?.selected_index;
   candidateButtons.forEach((button, index) => {
     const focused = String(pickerOpen && index === pickerIndex);
     if (button.dataset.focused !== focused) {
       button.dataset.focused = focused;
-      button.setAttribute('aria-selected', focused);
+    }
+    button.setAttribute('aria-selected', String(button.dataset.candidateIndex === String(selectedIndex)));
+    const candidate = selection?.candidates[index];
+    if (candidate && button.children?.[1]) {
+      const details = `${candidate.index === selectedIndex ? 'CURRENT SELECTION · ' : ''}${candidateDescription(candidate) || 'Additional details not available'}`;
+      if (button.children[1].textContent !== details) button.children[1].textContent = details;
     }
     const disabled = Boolean(pendingSelection);
     if (button.disabled !== disabled) button.disabled = disabled;
@@ -122,7 +129,7 @@ function renderPickerFocus() {
   lastPickerFocused = active;
 }
 function renderPicker(snapshot) {
-  const selection = ambiguousSelection(snapshot);
+  const selection = multipleCandidateSelection(snapshot);
   const nextKey = selectionKey(selection);
   if (!selection || (pickerOpen && pickerKey && pickerKey !== nextKey)) {
     if (pickerOpen) closePicker();
@@ -133,27 +140,37 @@ function renderPicker(snapshot) {
   // Show each new ambiguity once. Back dismisses it without suppressing the
   // transport controls, while Choose album can reopen the same candidate set.
   // 新しい曖昧候補は一度だけ自動表示します。Back後は手動で開き直せます。
-  if (autoOpenedPickerKey !== nextKey) {
+  if (selection.state === 'AMBIGUOUS' && autoOpenedPickerKey !== nextKey) {
     autoOpenedPickerKey = nextKey;
     openPicker();
+    return;
+  }
+  if (pendingSelection && selection.state === 'SELECTED' &&
+      selection.selected_index === selection.candidates[pendingSelection.index]?.index) {
+    closePicker();
     return;
   }
   if (!pickerOpen) return;
   if (pickerKey !== nextKey) {
     pickerKey = nextKey;
-    pickerIndex = 0;
+    const selectedPosition = selection.candidates.findIndex((candidate) => candidate.index === selection.selected_index);
+    pickerIndex = selectedPosition >= 0 ? selectedPosition : 0;
     lastPickerFocused = null;
+    set('metadata-picker-note', selection.state === 'SELECTED'
+      ? 'Choose different album information. The current choice does not prove which physical release is inserted.'
+      : 'Playback continues as Audio CD until a candidate is selected. A match here does not prove which physical release is inserted.');
     const list = byId('metadata-candidates');
     candidateButtons = selection.candidates.map((candidate, index) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.setAttribute('role', 'option');
+      button.dataset.candidateIndex = String(candidate.index);
       const title = document.createElement('span');
       title.className = 'candidate-title';
       title.textContent = candidate.title || `Candidate ${index + 1}`;
       const details = document.createElement('span');
       details.className = 'candidate-details';
-      details.textContent = candidateDescription(candidate) || 'Additional details not available';
+      details.textContent = `${candidate.index === selection.selected_index ? 'CURRENT SELECTION · ' : ''}${candidateDescription(candidate) || 'Additional details not available'}`;
       button.append(title, details);
       button.addEventListener('click', (event) => {
         pickerIndex = index;
@@ -167,7 +184,7 @@ function renderPicker(snapshot) {
   renderPickerFocus();
 }
 function openPicker() {
-  const selection = ambiguousSelection(currentSnapshot);
+  const selection = multipleCandidateSelection(currentSnapshot);
   if (!selection) return;
   pickerOpen = true;
   pickerKey = '';
@@ -176,8 +193,12 @@ function openPicker() {
   renderPicker(currentSnapshot);
 }
 async function requestCandidate(index) {
-  const selection = ambiguousSelection(currentSnapshot);
+  const selection = multipleCandidateSelection(currentSnapshot);
   if (!pickerOpen || !selection || pendingSelection || !selection.candidates[index]) return;
+  if (selection.state === 'SELECTED' && selection.selected_index === selection.candidates[index].index) {
+    closePicker();
+    return;
+  }
   const key = selectionKey(selection);
   pendingSelection = { key, index };
   renderPickerFocus();
@@ -190,13 +211,13 @@ async function requestCandidate(index) {
         disc_generation: selection.disc_generation, metadata_generation: selection.metadata_generation,
         candidate_index: selection.candidates[index].index }),
     });
-    if (!pickerOpen || selectionKey(ambiguousSelection(currentSnapshot)) !== key) return;
+    if (!pickerOpen || selectionKey(multipleCandidateSelection(currentSnapshot)) !== key) return;
     accepted = response.status === 204;
     set('metadata-feedback', response.status === 204 ? 'WAITING FOR ALBUM UPDATE'
       : `SELECTION REJECTED · ${response.status}`);
     if (response.status === 409) load();
   } catch {
-    if (pickerOpen && selectionKey(ambiguousSelection(currentSnapshot)) === key)
+    if (pickerOpen && selectionKey(multipleCandidateSelection(currentSnapshot)) === key)
       set('metadata-feedback', 'CONNECTION ERROR');
   } finally {
     if (!accepted) pendingSelection = null;
@@ -205,7 +226,7 @@ async function requestCandidate(index) {
 }
 const controlEnabled = (command, snapshot) => {
   if (snapshot?.disc?.state !== 'AUDIO_READY') return false;
-  if (command === 'metadata') return Boolean(ambiguousSelection(snapshot));
+  if (command === 'metadata') return Boolean(multipleCandidateSelection(snapshot));
   const state = snapshot?.player?.state;
   if (!['STOPPED', 'PLAYING', 'PAUSED'].includes(state)) return false;
   if (command === 'play') return state === 'STOPPED' || state === 'PAUSED';
@@ -214,10 +235,24 @@ const controlEnabled = (command, snapshot) => {
   return Array.isArray(snapshot?.tracks) && snapshot.tracks.length > 1;
 };
 function renderControls(snapshot) {
+  const selection = multipleCandidateSelection(snapshot);
+  const matchStatus = byId('metadata-match-status');
+  setHidden(matchStatus, !selection);
+  if (selection) {
+    const selectedPosition = selection.candidates.findIndex((candidate) => candidate.index === selection.selected_index);
+    set('metadata-match-status', selection.state === 'AMBIGUOUS'
+      ? `MULTIPLE ALBUM MATCHES · ${selection.candidates.length} OPTIONS`
+      : selectedPosition >= 0
+        ? `MULTIPLE ALBUM MATCHES · ${selectedPosition + 1} OF ${selection.candidates.length} SELECTED`
+        : 'MULTIPLE ALBUM MATCHES · SELECTION UNKNOWN');
+  }
   if (focusedControl >= 0 && !controlEnabled(controls[focusedControl]?.dataset.command, snapshot))
     focusedControl = -1;
   controls.forEach((button, index) => {
-    if (button.dataset.command === 'metadata') setHidden(button, !ambiguousSelection(snapshot));
+    if (button.dataset.command === 'metadata') {
+      setHidden(button, !selection);
+      button.textContent = selection?.state === 'SELECTED' ? 'Change album' : 'Choose album';
+    }
     const stateAvailable = controlEnabled(button.dataset.command, snapshot);
     const available = stateAvailable && pendingCommand !== button.dataset.command;
     if (button.disabled === available) button.disabled = !available;
