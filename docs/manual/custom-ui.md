@@ -58,6 +58,8 @@ Custom HTML内の参照は`/player.css`、`/player.js`、`/player/assets/...`の
 enrichment status・same-origin artwork referenceを基本表示契約とし、MusicBrainz ID、CAA URL、
 cache pathには依存してはならない。候補選択を実装するUIは`enrichment.selection`の0起点indexと
 session/disc/metadata世代を`POST /api/metadata-selection`へ渡せる。候補のprovider IDは公開されない。
+`candidate_index:null`は現行discで全候補を採用せずAudio CD表示へ戻す。snapshotのselection stateは
+`DECLINED`となるが候補は残り、後から選び直せる。選択解除と再選択は再生を止めない。
 選択UIは任意であり、実装しないCustom UIでも曖昧時のAudio CD fallbackで再生できる。
 CEC navigationへの対応も必須ではない。coverがある場合の`artwork.cover.url`は
 `/api/presentation/artwork/cover`である。metadataが先に届き、artworkが後のsnapshotで更新される。

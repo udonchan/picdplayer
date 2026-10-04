@@ -12,6 +12,7 @@ public:
     void invalidate();
     bool apply(MetadataWorkerResult result);
     bool select_candidate(std::uint64_t generation, std::size_t index);
+    bool decline_candidates(std::uint64_t generation);
     bool apply_artwork(std::uint64_t generation, const std::string& release_id, ArtworkInfo artwork);
     std::uint64_t generation() const { return generation_; }
     const MetadataResult& snapshot() const { return snapshot_; }

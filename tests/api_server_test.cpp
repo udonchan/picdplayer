@@ -12,7 +12,7 @@
 #include <utility>
 #include <unistd.h>
 
-namespace { void check(bool value) { if (!value) throw std::runtime_error("API route test failed"); } }
+#define check(value) do { if (!(value)) throw std::runtime_error("API route test failed at line " + std::to_string(__LINE__)); } while (0)
 int main() {
     try {
         int calls = 0;
@@ -101,6 +101,11 @@ int main() {
         check(response.status == 204 && received_command.type == ApiCommandType::select_metadata_candidate &&
               received_command.session_id == "session-1" && received_command.disc_generation == 2 &&
               received_command.metadata_generation == 3 && received_command.candidate_index == 1);
+        response = route_api_request("POST", "/api/metadata-selection", provider, commands,
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":null})");
+        check(response.status == 204 && received_command.type == ApiCommandType::decline_metadata_candidates &&
+              received_command.session_id == "session-1" && received_command.disc_generation == 2 &&
+              received_command.metadata_generation == 3);
         check(route_api_request("POST", "/api/metadata-selection", provider).status == 403);
         check(route_api_request("GET", "/api/metadata-selection", provider, commands).status == 405);
         check(route_api_request("POST", "/api/metadata-selection", provider, rejecting, selection_body).status == 409);
@@ -109,6 +114,7 @@ int main() {
             R"({"session_id":"session-1","disc_generation":0,"metadata_generation":3,"candidate_index":1})",
             R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":100})",
             R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":-1})",
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":"none"})",
             R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":1,"extra":1})"
         }) check(route_api_request("POST", "/api/metadata-selection", provider, commands, invalid).status == 400);
         check(route_api_request("POST", "/api/metadata-selection", provider, commands,
@@ -285,7 +291,7 @@ int main() {
         }
         post_client.join();
         check(received.find("HTTP/1.1 204") != std::string::npos);
-        check(command_calls == 11 && received_command.type == ApiCommandType::select_track &&
+        check(command_calls == 12 && received_command.type == ApiCommandType::select_track &&
               received_command.value == 4);
 
         std::atomic<bool> got_initial_event = false;

@@ -239,7 +239,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | POST /api/play, /pause, /stop, /next, /previous | bodyなし、受理204 |
 | POST /api/seek | `{"offset_seconds":10}`、±86400秒、受理204 |
 | POST /api/track | `{"track":2}`、1〜99かつ実disc内、受理204 |
-| POST /api/metadata-selection | snapshotのsession/disc/metadata世代と0起点候補indexを指定。現行discに一致すると受理204 |
+| POST /api/metadata-selection | snapshotのsession/disc/metadata世代と0起点候補index、または全候補を採用しないnullを指定。現行discに一致すると受理204 |
 | POST /api/eject | bodyなし、受理202。物理完了は状態で確認 |
 
 seek/trackはfieldを1個だけ持つJSON object。操作body上限4 KiB、state上限1 MiB。
@@ -281,8 +281,12 @@ selectで実行、backでfocusを解除する。POST受理は状態確定では�
 `persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
 session限りと扱い、単なるPOST受理を保存済みと表示しない。
 曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
-操作列の`Choose album`から開き直せる。CEC/keyboardの方向入力で候補を移動し、selectで選択POST、
-backで閉じる。候補がないときは入口を表示しない。Settings表示中に候補が届いた場合は、
+操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
+`Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の
+選択POSTで行い、次のsnapshotで反映を確認する。`None of these`は候補を明示的に採用せずAudio CD表示へ戻す。
+同じdiscでは再選択可能で、この判断だけで再生を停止しない。CEC/keyboardの方向入力で候補を移動し、
+selectで実行、backで閉じる。候補がないときは
+入口を表示しない。Read policy編集はSettingsが担当する。Settings表示中に候補が届いた場合は、
 Settingsを閉じた後にpickerを表示する。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ

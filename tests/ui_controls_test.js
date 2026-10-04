@@ -244,6 +244,7 @@ async function main() {
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(controls[5].hidden, false);
   assert.equal(node('media-message').textContent, 'ALBUM SELECTION AVAILABLE');
+  assert.equal(node('metadata-match-status').textContent, '2 MATCHES · CHOOSE');
   assert.equal(node('metadata-picker').hidden, false); // New ambiguity opens automatically.
   const pickerNavigation = (action) => sockets[2].onmessage({ data: JSON.stringify({ action }) });
   now += 300;
@@ -252,9 +253,12 @@ async function main() {
   snapshot.revision += 1;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(node('metadata-picker').hidden, true); // Back sticks for the same candidate set.
-  controls[5].onclick({ detail: 1 });
+  pickerNavigation('left'); // Settings follows the metadata control.
+  pickerNavigation('left');
+  assert.equal(controls[5].dataset.focused, 'true');
+  pickerNavigation('select');
   assert.equal(node('metadata-picker').hidden, false);
-  assert.equal(node('metadata-candidates').children.length, 2);
+  assert.equal(node('metadata-candidates').children.length, 3); // Includes None of these.
   const postsBeforeDuplicateOpen = posts.length;
   controls[5].onclick({ detail: 0 }); // Delayed browser click from the same CEC press.
   assert.equal(posts.length, postsBeforeDuplicateOpen);
@@ -277,7 +281,26 @@ async function main() {
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(node('metadata-picker').hidden, true);
   assert.equal(node('album').textContent, 'The Slip');
-  assert.equal(controls[5].hidden, true);
+  assert.equal(controls[5].hidden, false);
+  assert.equal(controls[5].textContent, 'Change album');
+  assert.equal(node('metadata-match-status').textContent, '2 MATCHES · #2');
+  assert.equal(node('metadata-picker').hidden, true); // Selected state does not auto-open.
+  pickerNavigation('left');
+  pickerNavigation('left');
+  assert.equal(controls[5].dataset.focused, 'true');
+  pickerNavigation('select');
+  assert.equal(node('metadata-picker').hidden, false);
+  assert.equal(node('metadata-candidates').children[1].dataset.focused, 'true');
+  assert.equal(node('metadata-candidates').children[1]['aria-selected'], 'true');
+  assert.match(node('metadata-candidates').children[1].children[1].textContent, /CURRENT SELECTION/);
+  pickerNavigation('select'); // Selecting the current choice is a local close, not another POST.
+  assert.equal(node('metadata-picker').hidden, true);
+  controls[5].onclick({ detail: 1 });
+  pickerNavigation('up');
+  pickerNavigation('select');
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  assert.equal(JSON.parse(postBodies.at(-1)).candidate_index, 0);
+  assert.equal(node('metadata-picker').hidden, false); // Wait for authoritative snapshot.
   snapshot.revision = 9;
   snapshot.artwork.cover = { url: '/api/presentation/artwork/cover' };
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
@@ -285,8 +308,37 @@ async function main() {
   snapshot.revision = 10;
   snapshot.enrichment.selection.selected_index = 0;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(node('metadata-picker').hidden, true);
+  assert.equal(node('metadata-match-status').textContent, '2 MATCHES · #1');
   assert.notEqual(node('cover').dataset.identity, firstCoverIdentity);
   snapshot.revision = 11;
+  pickerNavigation('left');
+  pickerNavigation('left');
+  pickerNavigation('select');
+  pickerNavigation('up'); // Wrap from candidate 0 to None of these.
+  assert.equal(node('metadata-candidates').children[2].dataset.focused, 'true');
+  pickerNavigation('select');
+  for (let i = 0; i < 4; i++) await Promise.resolve();
+  assert.equal(JSON.parse(postBodies.at(-1)).candidate_index, null);
+  assert.equal(node('metadata-picker').hidden, false);
+  snapshot.enrichment.selection.state = 'DECLINED';
+  snapshot.enrichment.selection.selected_index = null;
+  snapshot.enrichment.status = 'UNAVAILABLE';
+  snapshot.disc.title = null;
+  snapshot.artwork.cover = null;
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(node('metadata-picker').hidden, true);
+  assert.equal(node('album').textContent, 'Audio CD');
+  assert.equal(node('media-message').textContent, 'NO ALBUM MATCH SELECTED');
+  assert.equal(node('metadata-match-status').textContent, '2 MATCHES · NONE');
+  snapshot.revision = 12;
+  sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+  assert.equal(node('metadata-picker').hidden, true); // Explicit decline stays dismissed.
+  controls[5].onclick({ detail: 1 });
+  assert.equal(node('metadata-candidates').children[2].dataset.focused, 'true');
+  assert.equal(node('metadata-candidates').children[2]['aria-selected'], 'true');
+  pickerNavigation('back');
+  snapshot.revision = 13;
   snapshot.enrichment.status = 'UNAVAILABLE';
   snapshot.enrichment.selection.state = 'AMBIGUOUS';
   snapshot.enrichment.selection.selected_index = null;
@@ -299,11 +351,12 @@ async function main() {
   assert.equal(node('metadata-feedback').textContent, 'SELECTION REJECTED · 409');
   pickerNavigation('back');
   assert.equal(node('metadata-picker').hidden, true);
-  snapshot.revision = 12;
+  snapshot.revision = 14;
   snapshot.disc.state = 'NO_DISC';
   snapshot.enrichment.selection = null;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(controls[5].hidden, true);
+  assert.equal(node('metadata-match-status').hidden, true);
   console.log('PASS: CEC/keyboard focus, command POST, authoritative state and No Disc');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -216,6 +216,8 @@ main {
 .player-footer .state { margin: 0 auto 0 0; }
 .control-feedback { margin: 0; min-width: 8ch; color: var(--warning); font-size: 11px; }
 .player-controls { display: flex; flex-wrap: wrap; gap: 4px; }
+.metadata-match-status { align-self: center; margin-right: 4px; color: var(--muted); font-size: 11px; letter-spacing: .04em; }
+.metadata-match-status[hidden] { display: none; }
 .player-controls button {
   min-height: 38px;
   padding: 4px 11px;
