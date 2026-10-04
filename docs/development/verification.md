@@ -217,19 +217,29 @@ CAAのprivate/link-local peerを拒否する。壊れたJSONがworkerのERRORに
 hardware非依存の再生commandが進むこと、古いdisc世代のERRORを現在のsessionが採用しないことも確認した。
 Debian Trixie/aarch64の全ビルドとCTest 48件が通過した。これらはPiでのnetwork異常や音声継続の証明ではない。
 Piの通常系では2026-10-01〜03に『The Slip』のMusicBrainz候補、選択後のcover endpointとTV画像を確認済み。
-その画像が当該時点の新規CAA通信かcache由来かは区別していない。Piでのnetwork切断、fresh CAA lookup、
-実機再生中のtimeout影響は未確認である。
+その画像が当該時点の新規CAA通信かcache由来かは区別していない。2026-10-03時点ではPiでの
+network切断、fresh CAA lookup、実機再生中のtimeout影響は未確認だった。
 
 2026-10-04のPi実機では、稼働中daemonと既存cacheを変更せず、APIのTOCから既存libdiscidで
 『The Slip』のDisc IDを計算した。一時cacheを使う別の`--lookup-disc` processでMusicBrainzの
 新規HTTPS lookupを行い、`cache=miss`でUS/JPの2候補を取得した。標準PlayerからJP候補を選択すると
 APIは`SELECTED`/`AVAILABLE`となり、再生位置は進行した。TVで曲名と音声を確認したがcoverは表示されなかった。
 PiからCAAへ直接照会するとJP releaseはHTTP 404、US releaseはarchive.orgへの307 redirectだった。
-JPで画像がないことはCAA応答と整合するが、daemonのfresh CAA取得経路を確認したことにはならない。
+JPで画像がないことはCAA応答と整合するが、この段階ではdaemonのfresh CAA取得経路を確認していない。
 別の診断processだけに到達不能なHTTPS proxyを指定すると、MusicBrainz lookupは
 `HTTP request failed: Could not connect to server`となり、稼働中daemonはAPI上`PLAYING`を維持した。
 ユーザーはこの間のTV音声に途切れがないことを確認した。この隔離試験はdaemon自身のnetwork断や
 timeout中の音声継続を証明しない。
+
+同日、一時的にsystemd daemonだけを停止し、既存cacheを共有しない隔離daemonを同じPi上で起動した。
+空のcacheからMusicBrainzの2候補を取得後、試験用にUS候補を選択すると、CAA経由のcoverが
+same-originの`/api/presentation/artwork/cover`として公開された。元のJP候補の選択は最後に復元した。
+別の空cacheを使う隔離daemonへ到達不能なHTTPS proxyを設定すると、enrichmentは`ERROR`になったが、
+`POST /api/play`は204を返し、`PLAYING`の再生位置は101→482 frameへ進んだ。つまり、Pi上の
+daemon自身がmetadata HTTP失敗を受けても再生制御・PCM進行は止まらなかった。これは意図的なproxy
+接続失敗の試験であり、実network切断や15秒timeout、音声の無欠落を証明しない。
+試験後は隔離daemonと一時cacheを削除し、元のsystemd daemon/kioskをactiveへ戻した。
+JP候補を再選択して再生を再開し、試験前の4曲目・約125秒へAPIで位置を戻した。
 
 ## Optional paranoia license warning（#66、Docker自動試験）
 
