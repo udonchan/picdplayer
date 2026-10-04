@@ -184,9 +184,10 @@ MetadataWorkerがERROR結果へ変換するため、CD再生を待たせない�
 `metadata_parser` testを実行し、既存の正常/不正入力に加え、33段のnestingと4097 byte文字列の拒否を確認した。
 
 429/503ではlibcurlが解釈したRetry-After秒数を最大15秒まで待ち、値がない場合は1.1秒待つ。
-retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。実際のHTTPS response headerを使う
+retry policy unit testで値なし、0、4秒、上限超過、負値を確認した。
 `http_security_policy` testではCAA初期URLとredirect host、相対redirect、IPv4/IPv6のpublic/private/link-local
-判定を確認した。実際のHTTPS redirect headerを使う統合試験、network切断、実機のmetadata lookup挙動は未確認である。
+判定を確認した。実際のHTTPS response headerとredirectは下記#135のfixture試験で確認した。
+Piでのnetwork切断時の挙動は未確認である。
 
 ## Metadata cache lifecycle（#37、Docker自動試験）
 
@@ -209,7 +210,39 @@ error文字列に変換されること、古いgenerationのERROR結果を`Metad
 `http_client` testは空けたloopback TCP portへ実際にHTTPS接続し、libcurlのconnection failureが
 `HTTP request failed:`例外として返ることも確認する。この試験は外部networkへ接続しない。
 
-実HTTPS responseを使うtimeout・redirect header、Pi上の通常metadata/CAA lookupは未確認である。
+2026-10-04の追加試験では、test専用の自己署名証明書とloopback TLS serverを用い、libcurlの実HTTPS応答で
+200 JSON、429の`Retry-After: 4`、CAAの許可/拒否redirect、本文上限、timeout、private peer拒否を確認した。
+test専用buildだけがfixture用CA・DNS override・loopback許可を指定でき、製品binaryは従来どおり
+CAAのprivate/link-local peerを拒否する。壊れたJSONがworkerのERRORになること、HTTP lookupを待つ間も
+hardware非依存の再生commandが進むこと、古いdisc世代のERRORを現在のsessionが採用しないことも確認した。
+Debian Trixie/aarch64の全ビルドとCTest 48件が通過した。これらはPiでのnetwork異常や音声継続の証明ではない。
+Piの通常系では2026-10-01〜03に『The Slip』のMusicBrainz候補、選択後のcover endpointとTV画像を確認済み。
+その画像が当該時点の新規CAA通信かcache由来かは区別していない。2026-10-03時点ではPiでの
+network切断、fresh CAA lookup、実機再生中のtimeout影響は未確認だった。
+
+2026-10-04のPi実機では、稼働中daemonと既存cacheを変更せず、APIのTOCから既存libdiscidで
+『The Slip』のDisc IDを計算した。一時cacheを使う別の`--lookup-disc` processでMusicBrainzの
+新規HTTPS lookupを行い、`cache=miss`でUS/JPの2候補を取得した。標準PlayerからJP候補を選択すると
+APIは`SELECTED`/`AVAILABLE`となり、再生位置は進行した。TVで曲名と音声を確認したがcoverは表示されなかった。
+PiからCAAへ直接照会するとJP releaseはHTTP 404、US releaseはarchive.orgへの307 redirectだった。
+JPで画像がないことはCAA応答と整合するが、この段階ではdaemonのfresh CAA取得経路を確認していない。
+別の診断processだけに到達不能なHTTPS proxyを指定すると、MusicBrainz lookupは
+`HTTP request failed: Could not connect to server`となり、稼働中daemonはAPI上`PLAYING`を維持した。
+ユーザーはこの間のTV音声に途切れがないことを確認した。この隔離試験はdaemon自身のnetwork断や
+timeout中の音声継続を証明しない。
+
+同日、一時的にsystemd daemonだけを停止し、既存cacheを共有しない隔離daemonを同じPi上で起動した。
+空のcacheからMusicBrainzの2候補を取得後、試験用にUS候補を選択すると、CAA経由のcoverが
+same-originの`/api/presentation/artwork/cover`として公開された。元のJP候補の選択は最後に復元した。
+別の空cacheを使う隔離daemonへ到達不能なHTTPS proxyを設定すると、enrichmentは`ERROR`になったが、
+`POST /api/play`は204を返し、`PLAYING`の再生位置は101→482 frameへ進んだ。つまり、Pi上の
+daemon自身がmetadata HTTP失敗を受けても再生制御・PCM進行は止まらなかった。これは意図的なproxy
+接続失敗の試験であり、実network切断や15秒timeout、音声の無欠落を証明しない。
+試験後は隔離daemonと一時cacheを削除し、元のsystemd daemon/kioskをactiveへ戻した。
+JP候補を再選択して再生を再開し、試験前の4曲目・約125秒へAPIで位置を戻した。
+長期安定運転は[#4](https://github.com/udonchan/picdplayer/issues/4)、傷disc・別driveの
+物理異常試験は[#146](https://github.com/udonchan/picdplayer/issues/146)で保留する。
+これらは#135のHTTP失敗経路の自動試験・限定的なPi確認を完了する条件には含めない。
 
 ## Optional paranoia license warning（#66、Docker自動試験）
 
@@ -891,10 +924,11 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 - 現在の独自AsyncLoggerは要件を満たしている。spdlog等との比較、Buildroot package化、binary size、
   非同期queueの満杯時挙動、runtime level変更、追加sink、rotation、ライセンスを調査し、必要性が確認できた
   段階で置換を検討する。現時点では再生経路へ影響する変更を行わない。
-- metadata lookup中交換、network切断、複数候補、CAA失敗時の扱いを実機確認する。
-- stale cacheのoffline fallbackと破損JSON再取得の統合試験、書込み不能、候補選択、非1始まりtrack対応、
-  実HTTPS response headerを使うRetry-After/redirect統合試験、
-  network切断とPi上metadata lookupの確認は未完了または継続確認とする。
+- metadata lookup中交換、network切断、CAA失敗時の扱いを実機確認する。複数候補の通常選択は
+  Piの『The Slip』で確認済みだが、lookup中交換やnetwork異常と重なるケースは未確認。
+- stale cacheのoffline fallbackと破損JSON再取得の統合試験、書込み不能、非1始まりtrack対応、
+  network切断とPi上のfresh CAA lookupは未完了または継続確認とする。実HTTPS response headerを使う
+  Retry-After/redirect統合試験は#135のloopback TLS fixtureで確認済み。
 - CEC device消失後の再open、claim timeout、専有制御を検討する。
 - Now Playingはdaemonが配信するsame-origin artworkを表示する。Chromium/Cage kioskのcold boot後TV表示は確認済み。
   長期継続運転と起動時間短縮を継続確認する。quiet boot・read-only root・Buildroot imageは未実装。

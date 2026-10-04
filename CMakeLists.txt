@@ -360,9 +360,9 @@ if(BUILD_TESTING)
         add_executable(http_client_test tests/http_client_test.cpp src/http_client.cpp src/http_security_policy.cpp)
         target_include_directories(http_client_test PRIVATE include)
         target_compile_features(http_client_test PRIVATE cxx_std_20)
+        target_compile_definitions(http_client_test PRIVATE PICDPLAYER_HTTP_TEST_HOOKS=1)
         target_compile_options(http_client_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(http_client_test PRIVATE CURL::libcurl)
-        add_test(NAME http_client COMMAND http_client_test)
         add_executable(metadata_lookup_test tests/metadata_lookup_test.cpp src/metadata_lookup.cpp
             src/metadata_parser.cpp src/metadata_retry_policy.cpp src/metadata_cache.cpp src/http_client.cpp
             src/http_security_policy.cpp src/musicbrainz_disc_id.cpp src/cd_device.cpp src/disc_toc.cpp
@@ -372,7 +372,8 @@ if(BUILD_TESTING)
         target_compile_options(metadata_lookup_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(metadata_lookup_test PRIVATE PkgConfig::DISCID CURL::libcurl nlohmann_json::nlohmann_json)
         add_test(NAME metadata_lookup COMMAND metadata_lookup_test)
-        add_executable(metadata_worker_test tests/metadata_worker_test.cpp src/metadata_worker.cpp src/disc_toc.cpp)
+        add_executable(metadata_worker_test tests/metadata_worker_test.cpp src/metadata_worker.cpp
+            src/metadata_session.cpp src/player_controller.cpp src/disc_toc.cpp)
         target_include_directories(metadata_worker_test PRIVATE include)
         target_compile_features(metadata_worker_test PRIVATE cxx_std_20)
         target_compile_options(metadata_worker_test PRIVATE -Wall -Wextra -Wpedantic)
@@ -396,25 +397,28 @@ if(BUILD_TESTING)
         endforeach()
         add_test(NAME paranoia_reader COMMAND paranoia_reader_test)
     endif()
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-    if(Python3_Interpreter_FOUND)
-        add_test(NAME summarize_kiosk COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
-        add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
-        add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
-            ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
-        if(ENABLE_API)
-            add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
-            set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
-            add_test(NAME read_policy_persistence COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_policy_persistence.py $<TARGET_FILE:cdplayerd>)
-            set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
-        endif()
-        add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
-        add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
-        set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(ENABLE_METADATA)
+        add_test(NAME http_client COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/http_client_https.py $<TARGET_FILE:http_client_test>)
+        set_tests_properties(http_client PROPERTIES TIMEOUT 15)
     endif()
+    add_test(NAME summarize_kiosk COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
+    add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
+    add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
+        ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
+    if(ENABLE_API)
+        add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
+        set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
+        add_test(NAME read_policy_persistence COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_policy_persistence.py $<TARGET_FILE:cdplayerd>)
+        set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
+    endif()
+    add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
+    add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
+    set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
 endif()
