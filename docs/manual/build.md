@@ -40,7 +40,7 @@ serviceを未導入なら停止操作は不要。終了はCtrl-C/SIGTERM。
 
 | CMake option（既定OFF） | Raspberry Pi OSの追加開発パッケージ | 用途 |
 |---|---|---|
-| `ENABLE_PARANOIA` | `pkg-config libcdio-paranoia-dev` | 比較用CD-DA reader |
+| `ENABLE_PARANOIA` | `pkg-config libcdio-paranoia-dev` | 実験・検証用CD-DA reader（公式配布には採用しない） |
 | `ENABLE_METADATA` | `pkg-config libdiscid-dev libcurl4-openssl-dev nlohmann-json3-dev` | MusicBrainz・Cover Art参照 |
 | `ENABLE_API` | `pkg-config libwebsockets-dev nlohmann-json3-dev` | HTTP操作・WebSocket状態配信 |
 | `INSTALL_SYSTEMD_UNIT` | systemd運用環境 | daemon service unitのインストール |
@@ -68,7 +68,7 @@ Python 3があるとCLI・daemon試験（API有効時はUI起動試験も）を�
 全試験の実行にはNode.jsとPython 3の両方を用意する。
 ユーザー編集版の指定と復旧方法は[Custom UI](custom-ui.md)を参照する。
 paranoiaを使用する場合は `ENABLE_PARANOIA=ON` でconfigureし、`--cdda-reader paranoia` を指定する。
-この設定は比較・検証用で、通常のreleaseはOFFである。対応containerのDebian
+この設定は実験・検証用で、現時点の公式releaseには採用しない。対応containerのDebian
 `libcdio-paranoia` packageはGPL-3-or-laterとして配布されているため、有効化したbinaryを
 再配布する前に対象package版の条件、ライセンス互換性、source提供要件を確認する。configure時にも
 同じ警告を表示する。プロジェクト本体と依存の正式なライセンス方針は[#66](https://github.com/udonchan/picdplayer/issues/66)で監査中である。

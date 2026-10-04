@@ -132,7 +132,7 @@ loopback socket通信を許可した環境が必要です。実機の試聴・CE
 
 ### 任意のparanoia build
 
-direct/paranoia比較のためにlibcdio-paranoia readerを含める場合は、同じbuild scriptへ
+実験・検証のためにlibcdio-paranoia readerを含める場合は、同じbuild scriptへ
 `PICDPLAYER_ENABLE_PARANOIA=ON`を指定する。
 
 ```sh
@@ -143,7 +143,7 @@ docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
 ```
 
 標準のCIと通常の`.deb`はparanoia無効のままである。paranoia有効の生成物を再配布する場合の
-ライセンス条件は[#66](https://github.com/udonchan/picdplayer/issues/66)で整理中であり、比較・検証用途と
+ライセンス条件は[#66](https://github.com/udonchan/picdplayer/issues/66)で整理中であり、実験・検証用途と
 正式releaseを混同しない。Pi上でコンパイルせず、このDocker buildで生成したpackageをdeployする。
 
 ### Raspberry Piへdeployする
