@@ -158,7 +158,7 @@ async function main() {
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(controls[5].hidden, false);
   assert.equal(node('media-message').textContent, 'ALBUM SELECTION AVAILABLE');
-  assert.equal(node('metadata-match-status').textContent, 'MULTIPLE ALBUM MATCHES · 2 OPTIONS');
+  assert.equal(node('metadata-match-status').textContent, '2 ALBUM MATCHES · CHOOSE ONE');
   assert.equal(node('metadata-picker').hidden, false); // New ambiguity opens automatically.
   const pickerNavigation = (action) => sockets[2].onmessage({ data: JSON.stringify({ action }) });
   pickerNavigation('back');
@@ -195,7 +195,7 @@ async function main() {
   assert.equal(node('album').textContent, 'The Slip');
   assert.equal(controls[5].hidden, false);
   assert.equal(controls[5].textContent, 'Change album');
-  assert.equal(node('metadata-match-status').textContent, 'MULTIPLE ALBUM MATCHES · 2 OF 2 SELECTED');
+  assert.equal(node('metadata-match-status').textContent, '2 ALBUM MATCHES · #2 SELECTED');
   assert.equal(node('metadata-picker').hidden, true); // Selected state does not auto-open.
   pickerNavigation('left');
   assert.equal(controls[5].dataset.focused, 'true');
@@ -220,7 +220,7 @@ async function main() {
   snapshot.enrichment.selection.selected_index = 0;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(node('metadata-picker').hidden, true);
-  assert.equal(node('metadata-match-status').textContent, 'MULTIPLE ALBUM MATCHES · 1 OF 2 SELECTED');
+  assert.equal(node('metadata-match-status').textContent, '2 ALBUM MATCHES · #1 SELECTED');
   assert.notEqual(node('cover').dataset.identity, firstCoverIdentity);
   snapshot.revision = 11;
   pickerNavigation('left');
@@ -240,7 +240,7 @@ async function main() {
   assert.equal(node('metadata-picker').hidden, true);
   assert.equal(node('album').textContent, 'Audio CD');
   assert.equal(node('media-message').textContent, 'NO ALBUM MATCH SELECTED');
-  assert.equal(node('metadata-match-status').textContent, 'MULTIPLE ALBUM MATCHES · NONE SELECTED');
+  assert.equal(node('metadata-match-status').textContent, '2 ALBUM MATCHES · NONE SELECTED');
   snapshot.revision = 12;
   sockets[0].onmessage({ data: JSON.stringify(snapshot) });
   assert.equal(node('metadata-picker').hidden, true); // Explicit decline stays dismissed.

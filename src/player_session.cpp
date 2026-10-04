@@ -404,6 +404,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.synchronize(); print_state(controller); return true;
                 case ApiCommandType::set_read_policy: return false; // handled above
                 case ApiCommandType::select_metadata_candidate: return false; // handled above
+                case ApiCommandType::decline_metadata_candidates: return false; // handled above
                 case ApiCommandType::eject: break;
                 }
                 if (apply_cec_command(controller, player_command)) {
