@@ -61,12 +61,36 @@ WPE packageは変更していない。Piの`/var/tmp/picdplayer-wpe-platform-poc
 9. `SIGKILL`でlauncherの突然の終了を模擬すると、一時unitは`Result=signal`で
    failedになり、PoC processは残らなかった。通常kioskを再起動するとCage/Chromium
    が戻った。PoC unitに自動復旧設定はなく、正式移行時には別途必要である。
+10. 別port `18080`で無効drive・null音声・CECなしの試験daemonを起動し、
+    [`custom-ui-fixture`](../../../../poc/wpe-platform/custom-ui-fixture/manifest.json)を
+    `--custom-ui`で配信した。通常daemonは変更していない。WPE inspectorのDOMでは
+    `Custom UI on WPE`、`Player: NO_DISC`、`Events: connected`を確認した。
+    `Network.webSocketCreated`で同originの`/api/events`も確認した。これは代表的な
+    HTML/CSS/JS/fetch/WebSocketの確認であり、任意のCustom UI互換保証ではない。
+
+## 軽い資源測定
+
+同じPiで『The Slip』挿入済みの`STOPPED`画面を表示し、
+[`measure-unit.py`](../../../../poc/wpe-platform/measure-unit.py)で各runtimeの
+MainPID配下process treeを10秒サンプルした。PAMによりCage/Chromium processが
+service cgroupからuser sessionへ移るため、cgroupのprocess数だけでは測らない。
+
+| runtime | process数 | PSS開始→終了 | CPU（1 core = 100%） |
+|---|---:|---:|---:|
+| Cage + Chromium | 12→12 | 487745→487821 KiB | 0.78% / 10.276秒 |
+| WPEPlatform DRM（隔離sid rootfs） | 5→5 | 241410→241096 KiB | 0.30% / 10.145秒 |
+
+両方とも短時間・逐次の1回測定で、browser profile、cache、rootfs、描画状態、起動からの
+経過時間が揃っていない。これを製品版の性能優位や安定時消費量の保証とはしない。
+測定中のPi温度は概ね61〜64°C、`get_throttled=0x70000`で、現在のthrottle bitは0、
+過去のthrottle履歴bitは立っていた。
 
 PoCには`Could not create cursor theme for 'default'`とaccessibility busへの接続警告、
 WebProcessのremote inspector内部接続警告が残る。inspectorの各protocol domainは
 応答したが、開発PCのGUI frontend上で各panelの使い勝手は未確認である。
 WebSocket生成と画面の`DAEMON · CONNECTED`表示は確認したが、WebSocketの継続・切断復旧、artwork、
-background、Integrity、Custom UI、CSS animation、CECの各操作はTVでの
+background、Integrity詳細、Custom UIのTV目視、CSS animation、CECの各操作は
+TVでの
 個別確認がまだ不足する。cursorは今回**消えていない**。Piのdaemon APIやWebKit page loadだけでこれらを成功と
 みなさない。実際の内部crashとdaemon service自体を停止した状態は未試験。
 
@@ -74,6 +98,6 @@ background、Integrity、Custom UI、CSS animation、CECの各操作はTVでの
 
 **B: 直接DRM構成と既存UIの読み込みは成立したが、追加PoCが必要。**
 Chrome/CDPを使う既存測定・debug workflowをremote inspectorへどう移すか、
-CEC/input/cursor、主要UIの実画面、安定性を確認してから正式移行を判断する。
+cursor制御、主要UIの実画面、安定性を確認してから正式移行を判断する。
 WPE 2.54を得るための隔離sid rootfsは実験手段であり、製品配布方式ではない。
-Buildroot等でのWPE 2.54供給可能性も未決定。性能の比較値は取得していない。
+Buildroot等でのWPE 2.54供給可能性も未決定。上記の短時間測定だけで採否を決めない。

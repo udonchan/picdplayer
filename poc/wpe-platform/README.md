@@ -57,5 +57,13 @@ WebView生成時のD-Bus初期化で待ち、`/proc`を読み取り専用にす�
 標準kioskを停止した後だけ起動し、試験後はPoC processを終了させて標準kioskを起動する。
 この条件は実験結果であり、製品用systemd unitの推奨構成ではない。
 
+`custom-ui-fixture/`はmanifest version 1の代表的なCustom UIで、別portの
+`cdplayerd --player /nonexistent --audio-device null --no-cec --api-port 18080
+--custom-ui PATH`から配信して試す。標準daemonのport 8080や物理driveを使わない。
+JavaScriptの`fetch('/api/state')`と`WS /api/events`、CSS animationを含む。
+`measure-unit.py UNIT 10`はsystemd MainPID配下のprocessを列挙し、10秒間のCPUと
+PSSを読み取るだけの補助scriptである。PiのPAM sessionではkiosk processがservice
+cgroup外へ移るため、このscriptはMainPIDからの親子関係を使う。
+
 参照： [WPEPlatform browser tutorial](https://wpewebkit.org/reference/2.54.0/wpe-platform-2.0/tutorial-browser.html)、
 [build modules](https://wpewebkit.org/reference/2.54.0/wpe-platform-2.0/compiling.html)。
