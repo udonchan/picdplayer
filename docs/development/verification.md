@@ -11,7 +11,9 @@ protocol応答と、CEC方向入力による選択枠の移動を確認した。
 CEC選択枠の移動を確認した。現行Chromium kioskのcursor問題は未解決。
 標準kioskとdaemonは試験後に復旧した。HTTP接続拒否、正常停止、SIGKILL後の手動復旧を確認した。
 別daemonが配信する代表Custom UIのDOM/JS/API/WSを確認した。STOPPED画面の10秒間の
-CPU/PSS参考値は条件が揃わず採否判断に使わない。各画面状態、daemon実停止、継続安定性は
+CPU/PSS参考値は条件が揃わず採否判断に使わない。TVで『The Slip』の再生音、
+CECによる候補一覧とSettingsの操作を確認したが、Settings表示は体感で数秒かかり原因未特定。
+各画面状態、daemon実停止、継続安定性は
 未確認であり、標準runtimeの移行は決定していない。
 [環境・手順・限界の記録](reports/2026-10-05-wpeplatform-drm-poc/README.md)を参照。
 

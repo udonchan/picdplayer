@@ -67,6 +67,15 @@ WPE packageは変更していない。Piの`/var/tmp/picdplayer-wpe-platform-poc
     `Custom UI on WPE`、`Player: NO_DISC`、`Events: connected`を確認した。
     `Network.webSocketCreated`で同originの`/api/events`も確認した。これは代表的な
     HTML/CSS/JS/fetch/WebSocketの確認であり、任意のCustom UI互換保証ではない。
+11. cursor themeを読み取り専用でbindしたWPE表示中、ユーザーは通常CD『The Slip』の
+    TV表示、実際の音声再生、CECからの`Change album`候補一覧とSettings画面の操作を
+    確認した。同時にAPIは`PLAYING`と『The Slip』を返し、daemonは稼働を維持した。
+    Settingsモーダルの表示にはユーザーの体感で数秒かかった。操作入力時刻や
+    renderer frame timingは採取しておらず、遅延箇所は未特定。後から同daemonの
+    `GET /api/read-policy`を5回測ると15〜64msだったが、操作時の計測ではなく、
+    モーダル遅延の否定材料にはならない。自動復旧timer後、
+    通常Cage/Chromium kioskとdaemonがactive、WPE processが終了したことを確認した。
+    これは短時間の主要操作確認であり、全画面・長期運転の合格ではない。
 
 ## 軽い資源測定
 
@@ -89,8 +98,7 @@ PoCには`Could not create cursor theme for 'default'`とaccessibility busへの
 WebProcessのremote inspector内部接続警告が残る。inspectorの各protocol domainは
 応答したが、開発PCのGUI frontend上で各panelの使い勝手は未確認である。
 WebSocket生成と画面の`DAEMON · CONNECTED`表示は確認したが、WebSocketの継続・切断復旧、artwork、
-background、Integrity詳細、Custom UIのTV目視、CSS animation、CECの各操作は
-TVでの
+background、Integrity詳細、Custom UIのTV目視、CSS animation、CEC全キーの操作は
 個別確認がまだ不足する。初回のthemeなし試験ではcursorは**消えていない**。Piのdaemon APIやWebKit page loadだけでこれらを成功と
 みなさない。実際の内部crashとdaemon service自体を停止した状態は未試験。
 
