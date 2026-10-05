@@ -19,7 +19,10 @@ CECによる候補一覧とSettingsの操作を確認したが、Settings表示�
 
 #193の開発用一時切替scriptはPiで20秒間起動し、WPEの`/player`読み込みログ、
 終了後のdaemon・Cage/Chromiumの稼働とWPE processの不在を確認した。
-この試験ではTVを目視しておらず、異常終了・SSH切断時の自動復旧も未試験。
+SSH clientを途中で切った試験ではPi側scriptが期限まで動き、通常kioskへ復旧した。
+別試験でscript processを`SIGKILL`すると、独立した復旧timerが発火して通常kioskを
+起動した。通常kioskを先に停止した試験ではscriptが何も切り替えずexit 1となった。
+これらの短時間試験ではTVを目視しておらず、製品用serviceや長期運転は未検証。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
