@@ -1,6 +1,15 @@
 # 検証状況と残課題
 
-更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-05。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## WPEPlatform直接DRM実験（#191、採用未決定）
+
+Pi 3で隔離したWPE WebKit 2.54 rootfsからCage/Chromiumを停止して既存Playerを
+1920×1080のDRM/KMSへ直接表示した。WebKit inspectorのDOM/CSS/Console/Network
+protocol応答と、CEC方向入力による選択枠の移動を確認した。cursorは残った。
+標準kioskとdaemonは試験後に復旧した。Custom UI、各画面状態、異常系、安定性、
+同条件の負荷比較は未確認であり、標準runtimeの移行は決定していない。
+[環境・手順・限界の記録](reports/2026-10-05-wpeplatform-drm-poc/README.md)を参照。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
