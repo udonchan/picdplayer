@@ -136,6 +136,8 @@ README、Guide、Design、Manual、Developmentと、History/旧パスの案内�
 [#77 現行runtime要件](https://github.com/udonchan/picdplayer/issues/77)を並行調査し、
 [#78](https://github.com/udonchan/picdplayer/issues/78)で適合性評価と必要な後続Issue作成を行う。
 Buildroot採用と最終imageへの.deb利用は未決定である。
+[#75の公式資料調査](reports/2026-10-05-buildroot-official/README.md)では、
+`BR2_EXTERNAL`・custom package・Pi 3 arm64の`sdcard.img`生成経路と未決定点を記録した。
 
 ## 監査で確認した不整合・回帰
 
