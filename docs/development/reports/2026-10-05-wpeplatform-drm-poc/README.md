@@ -58,6 +58,9 @@ WPE packageは変更していない。Piの`/var/tmp/picdplayer-wpe-platform-poc
    通常kioskへ復旧した。これはdaemon停止そのものの試験ではなく、UIのHTTP接続が
    できない状態の代用である。最初のlauncherは失敗後の`LOAD_FINISHED`を`loaded`と
    誤解しうるログにしたため、失敗の有無を明示するログへ修正した。
+9. `SIGKILL`でlauncherの突然の終了を模擬すると、一時unitは`Result=signal`で
+   failedになり、PoC processは残らなかった。通常kioskを再起動するとCage/Chromium
+   が戻った。PoC unitに自動復旧設定はなく、正式移行時には別途必要である。
 
 PoCには`Could not create cursor theme for 'default'`とaccessibility busへの接続警告、
 WebProcessのremote inspector内部接続警告が残る。inspectorの各protocol domainは
@@ -65,7 +68,7 @@ WebProcessのremote inspector内部接続警告が残る。inspectorの各protoc
 WebSocket生成と画面の`DAEMON · CONNECTED`表示は確認したが、WebSocketの継続・切断復旧、artwork、
 background、Integrity、Custom UI、CSS animation、CECの各操作はTVでの
 個別確認がまだ不足する。cursorは今回**消えていない**。Piのdaemon APIやWebKit page loadだけでこれらを成功と
-みなさない。launcher crashとdaemon service自体を停止した状態は未試験。
+みなさない。実際の内部crashとdaemon service自体を停止した状態は未試験。
 
 ## 暫定判断
 
