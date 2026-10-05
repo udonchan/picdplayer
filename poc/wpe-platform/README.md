@@ -78,6 +78,9 @@ SSH port forwardで接続し、LANへ直接公開しない。WebKit固有の`ins
 `WEBKIT_INSPECTOR_HTTP_SERVER`を使う。
 これは[WPEのHTTP inspector提供](https://wpewebkit.org/release/wpewebkit-2.38.0.html)に
 沿う開発用の設定で、製品serviceの公開portではない。
+HTTP target一覧の取得はPiで確認したが、既存のChromium CDP測定clientは
+WebKitのWebSocketで`Runtime.evaluate`を実行できない。Settings表示時間などの
+計測へ流用する際は、WebKit inspectorのprotocol接続方法を別途確認する。
 scriptは開発用で、通常の`.deb`には含まれない。sid rootfsやlauncherを作成・更新せず、
 製品用のWPE供給方法も決めない。正常終了後は
 `systemctl is-active picdplayer.service picdplayer-kiosk.service`で復旧を確認する。

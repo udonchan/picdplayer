@@ -25,6 +25,10 @@ SSH clientを途中で切った試験ではPi側scriptが期限まで動き、�
 これらの短時間試験ではTVを目視しておらず、製品用serviceや長期運転は未検証。
 開発用scriptで`WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`を指定し、WPE表示中に
 PiのloopbackからHTTP remote inspectorの一覧HTMLが返ることを確認した。
+追加の120秒試験で`/player` targetのWebSocketへ接続できたが、
+既存のCDP測定clientが送る`Runtime.evaluate`等は`domain was not found`となった。
+HTTP inspector経由の評価protocolを確立できておらず、Settingsの入力から表示までの
+時間は未計測。試験後はdaemonと通常kioskがactive、WPE processは不在だった。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
