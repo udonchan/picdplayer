@@ -23,6 +23,8 @@ SSH clientを途中で切った試験ではPi側scriptが期限まで動き、�
 別試験でscript processを`SIGKILL`すると、独立した復旧timerが発火して通常kioskを
 起動した。通常kioskを先に停止した試験ではscriptが何も切り替えずexit 1となった。
 これらの短時間試験ではTVを目視しておらず、製品用serviceや長期運転は未検証。
+開発用scriptで`WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`を指定し、WPE表示中に
+PiのloopbackからHTTP remote inspectorの一覧HTMLが返ることを確認した。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）
 

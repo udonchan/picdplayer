@@ -72,6 +72,12 @@ ssh -t picdplayer-pi 'sudo -v && /tmp/picdplayer-wpe-run-pi.sh 120'
 ```
 
 引数は20〜300秒。途中終了はCtrl+C。`sudo -v`は同じPiのSSH sessionで実行する。
+開発用HTTP remote inspectorはPiのloopback `127.0.0.1:9223`で起動する。開発PCからは
+SSH port forwardで接続し、LANへ直接公開しない。WebKit固有の`inspector://`用
+`WEBKIT_INSPECTOR_SERVER`とは異なり、HTTP確認には
+`WEBKIT_INSPECTOR_HTTP_SERVER`を使う。
+これは[WPEのHTTP inspector提供](https://wpewebkit.org/release/wpewebkit-2.38.0.html)に
+沿う開発用の設定で、製品serviceの公開portではない。
 scriptは開発用で、通常の`.deb`には含まれない。sid rootfsやlauncherを作成・更新せず、
 製品用のWPE供給方法も決めない。正常終了後は
 `systemctl is-active picdplayer.service picdplayer-kiosk.service`で復旧を確認する。

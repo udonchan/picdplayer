@@ -68,6 +68,7 @@ if ! sudo -n systemd-run --quiet --unit="$unit" \
     --property="RuntimeMaxSec=${duration}s" --property=TimeoutStopSec=5s \
     -E HOME=/tmp -E XDG_RUNTIME_DIR=/run/picdplayer-wpe-platform-poc \
     -E XDG_CACHE_HOME=/tmp/wpe-cache -E GSETTINGS_BACKEND=memory \
+    -E WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223 \
     /tmp/picdplayer-wpe-poc "$url"; then
   echo 'run-pi.sh: WPE could not start; restoring the normal kiosk' >&2
   exit 1
