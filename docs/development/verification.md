@@ -29,6 +29,11 @@ PiのloopbackからHTTP remote inspectorの一覧HTMLが返ることを確認し
 既存のCDP測定clientが送る`Runtime.evaluate`等は`domain was not found`となった。
 HTTP inspector経由の評価protocolを確立できておらず、Settingsの入力から表示までの
 時間は未計測。試験後はdaemonと通常kioskがactive、WPE processは不在だった。
+別の180秒試験では、TVを見たユーザーがSettingsの開閉、CEC選択枠、音声を正常と確認した。
+通常操作でSettingsの遅延は再現せず、再生開始待ちに重なった操作では遅延を感じたが、
+ユーザーはこの条件の待ち時間を問題としない方針。入力・描画の時刻は未取得であり、
+WPE固有の遅延が解消したとは判定しない。SSH clientの終了だけではPi側trialが継続したため、
+試験unitを明示的に停止して通常kioskを起動し、復旧timerを解除した。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）
 

@@ -71,7 +71,11 @@ scp poc/wpe-platform/run-pi.sh picdplayer-pi:/tmp/picdplayer-wpe-run-pi.sh
 ssh -t picdplayer-pi 'sudo -v && /tmp/picdplayer-wpe-run-pi.sh 120'
 ```
 
-引数は20〜300秒。途中終了はCtrl+C。`sudo -v`は同じPiのSSH sessionで実行する。
+引数は20〜300秒。`sudo -v`は同じPiのSSH sessionで実行する。
+SSH clientを途中終了してもPi側trialが継続する場合がある。通常kioskは独立timerで
+復旧するが、即時終了する場合は出力されたtrial unitを`systemctl stop`で停止し、
+通常kioskを`systemctl start picdplayer-kiosk.service`で起動してから復旧timerを解除する。
+復旧後は両serviceのactiveとWPE processの不在を確認する。
 開発用HTTP remote inspectorはPiのloopback `127.0.0.1:9223`で起動する。開発PCからは
 SSH port forwardで接続し、LANへ直接公開しない。WebKit固有の`inspector://`用
 `WEBKIT_INSPECTOR_SERVER`とは異なり、HTTP確認には
