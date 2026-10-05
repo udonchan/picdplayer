@@ -37,7 +37,11 @@ armed=false
 cleanup() {
   if [[ $armed != true ]]; then return; fi
   # Keep the rescue timer armed until the normal kiosk is running again.
-  sudo -n systemctl stop "$unit.service" >/dev/null 2>&1 || true
+  if ! sudo -n systemctl stop "$unit.service" >/dev/null 2>&1 &&
+      systemctl is-active --quiet "$unit.service"; then
+    echo "run-pi.sh: WPE is still active; $restore.timer remains armed" >&2
+    return
+  fi
   if sudo -n systemctl start "$kiosk"; then
     sudo -n systemctl stop "$restore.timer" >/dev/null 2>&1 || true
   else
