@@ -94,6 +94,22 @@ TVでの
 個別確認がまだ不足する。cursorは今回**消えていない**。Piのdaemon APIやWebKit page loadだけでこれらを成功と
 みなさない。実際の内部crashとdaemon service自体を停止した状態は未試験。
 
+### Cursorの追加切り分け
+
+通常kioskとWPE直接DRMを短時間ずつ表示し、`/sys/kernel/debug/dri/0/state`を
+比較した。どちらも表示中のframebufferは`plane-3`の1枚だけで、他のplaneの
+`fb=0`だった。したがって、見えたcursorを**独立したDRM cursor planeの残像**と
+断定する根拠はない。framebuffer内の合成や他の表示経路はこの測定だけでは区別できない。
+試験後は通常kioskへ戻し、両serviceがactiveであることを確認した。
+
+`/proc/bus/input/devices`では`vc4-hdmi`の`event0`がキーと相対ポインターの双方を
+提供する。udevは同じdeviceへ`ID_INPUT_KEY=1`と`ID_INPUT_POINTINGSTICK=1`を
+付けている。WPEのDRM backendもlibinputのkeyboard/pointer capabilityをそれぞれ
+受け取る。そのためdevice全体を無効化する案はCEC入力との関係を検証せずに採用しない。
+実験用rootfsにはcursor themeのファイルがなく、上記のtheme警告と整合するが、
+この不足が画面上のcursorの直接原因かは未確認である。cursorの見た目・移動・
+WebKitの`cursor: none`との関係は別途TV目視で切り分ける。
+
 ## 暫定判断
 
 **B: 直接DRM構成と既存UIの読み込みは成立したが、追加PoCが必要。**
