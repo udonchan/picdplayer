@@ -17,6 +17,24 @@ CECによる候補一覧とSettingsの操作を確認したが、Settings表示�
 未確認であり、標準runtimeの移行は決定していない。
 [環境・手順・限界の記録](reports/2026-10-05-wpeplatform-drm-poc/README.md)を参照。
 
+#193の開発用一時切替scriptはPiで20秒間起動し、WPEの`/player`読み込みログ、
+終了後のdaemon・Cage/Chromiumの稼働とWPE processの不在を確認した。
+SSH clientを途中で切った試験ではPi側scriptが期限まで動き、通常kioskへ復旧した。
+別試験でscript processを`SIGKILL`すると、独立した復旧timerが発火して通常kioskを
+起動した。通常kioskを先に停止した試験ではscriptが何も切り替えずexit 1となった。
+これらの短時間試験ではTVを目視しておらず、製品用serviceや長期運転は未検証。
+開発用scriptで`WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`を指定し、WPE表示中に
+PiのloopbackからHTTP remote inspectorの一覧HTMLが返ることを確認した。
+追加の120秒試験で`/player` targetのWebSocketへ接続できたが、
+既存のCDP測定clientが送る`Runtime.evaluate`等は`domain was not found`となった。
+HTTP inspector経由の評価protocolを確立できておらず、Settingsの入力から表示までの
+時間は未計測。試験後はdaemonと通常kioskがactive、WPE processは不在だった。
+別の180秒試験では、TVを見たユーザーがSettingsの開閉、CEC選択枠、音声を正常と確認した。
+通常操作でSettingsの遅延は再現せず、再生開始待ちに重なった操作では遅延を感じたが、
+ユーザーはこの条件の待ち時間を問題としない方針。入力・描画の時刻は未取得であり、
+WPE固有の遅延が解消したとは判定しない。SSH clientの終了だけではPi側trialが継続したため、
+試験unitを明示的に停止して通常kioskを起動し、復旧timerを解除した。
+
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
 標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
