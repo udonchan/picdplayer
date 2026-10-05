@@ -91,7 +91,7 @@ WebProcessのremote inspector内部接続警告が残る。inspectorの各protoc
 WebSocket生成と画面の`DAEMON · CONNECTED`表示は確認したが、WebSocketの継続・切断復旧、artwork、
 background、Integrity詳細、Custom UIのTV目視、CSS animation、CECの各操作は
 TVでの
-個別確認がまだ不足する。cursorは今回**消えていない**。Piのdaemon APIやWebKit page loadだけでこれらを成功と
+個別確認がまだ不足する。初回のthemeなし試験ではcursorは**消えていない**。Piのdaemon APIやWebKit page loadだけでこれらを成功と
 みなさない。実際の内部crashとdaemon service自体を停止した状態は未試験。
 
 ### Cursorの追加切り分け
@@ -108,7 +108,20 @@ TVでの
 受け取る。そのためdevice全体を無効化する案はCEC入力との関係を検証せずに採用しない。
 実験用rootfsにはcursor themeのファイルがなく、上記のtheme警告と整合するが、
 この不足が画面上のcursorの直接原因かは未確認である。cursorの見た目・移動・
-WebKitの`cursor: none`との関係は別途TV目視で切り分ける。
+WebKitの`cursor: none`との関係は追加試験で確認した。
+標準Playerの[`player.css`](../../../../ui/default/player.css)は既に`body { cursor: none; }`を
+指定している。[WPE 2.54のDRM cursor実装](https://github.com/WebKit/WebKit/blob/webkitglib/2.54/Source/WebKit/WPEPlatform/wpe/drm/WPEDRMCursor.cpp)では、
+themeが作成できないと`setFromName()`が`"none"`の判定より前に戻る。
+したがって実験用rootfsにthemeを与えずに同APIだけを追加しても、cursor非表示の
+検証にはならない。
+
+追加試験では復旧timerを先に設置し、通常kioskだけ停止して、hostの`/usr/share/icons`を
+隔離rootfsへ`BindReadOnlyPaths`で一時的に見せた。同じlauncher、同じPlayer CSSで
+WPEのcursor theme警告が消え、ユーザーはTV上で**cursorが見えず、CEC方向キーでは
+選択枠が動く**ことを確認した。DRM stateは引き続き`plane-3`のframebufferのみだった。
+試験後にPoCを正常停止し、daemonと通常Cage/Chromium kioskの稼働を確認した。
+これはWPE PoCの一条件での成功であり、host OSのcursor設定変更でも、現行Chromium
+kioskの#28解決でもない。themeの有無以外の変動要因を統制した反復試験は未実施。
 
 ## 暫定判断
 
