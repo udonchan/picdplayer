@@ -57,6 +57,25 @@ WebView生成時のD-Bus初期化で待ち、`/proc`を読み取り専用にす�
 標準kioskを停止した後だけ起動し、試験後はPoC processを終了させて標準kioskを起動する。
 この条件は実験結果であり、製品用systemd unitの推奨構成ではない。
 
+## 現行Piでの短時間試験（#193）
+
+隔離rootfsと`/tmp/picdplayer-wpe-poc`を既に用意したPiでは、
+[`run-pi.sh`](run-pi.sh)で既存Chromium kioskから一時的に切り替えられる。
+scriptは通常kioskが**既にactiveのときだけ**動作する。先に独立したsystemd復旧timerを
+設置し、daemonは止めず、WPE終了後に通常kioskを起動する。SSHが切れてもtimerが残る。
+cursor themeはhostの`/usr/share/icons`を隔離rootfsへ読み取り専用でbindする。
+通常kioskを意図的に停止している場合やrootfsがない場合は、何も切り替えず失敗する。
+
+```sh
+scp poc/wpe-platform/run-pi.sh picdplayer-pi:/tmp/picdplayer-wpe-run-pi.sh
+ssh -t picdplayer-pi 'sudo -v && /tmp/picdplayer-wpe-run-pi.sh 120'
+```
+
+引数は20〜300秒。途中終了はCtrl+C。`sudo -v`は同じPiのSSH sessionで実行する。
+scriptは開発用で、通常の`.deb`には含まれない。sid rootfsやlauncherを作成・更新せず、
+製品用のWPE供給方法も決めない。正常終了後は
+`systemctl is-active picdplayer.service picdplayer-kiosk.service`で復旧を確認する。
+
 `custom-ui-fixture/`はmanifest version 1の代表的なCustom UIで、別portの
 `cdplayerd --player /nonexistent --audio-device null --no-cec --api-port 18080
 --custom-ui PATH`から配信して試す。標準daemonのport 8080や物理driveを使わない。

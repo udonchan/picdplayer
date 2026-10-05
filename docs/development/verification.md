@@ -17,6 +17,10 @@ CECによる候補一覧とSettingsの操作を確認したが、Settings表示�
 未確認であり、標準runtimeの移行は決定していない。
 [環境・手順・限界の記録](reports/2026-10-05-wpeplatform-drm-poc/README.md)を参照。
 
+#193の開発用一時切替scriptはPiで20秒間起動し、WPEの`/player`読み込みログ、
+終了後のdaemon・Cage/Chromiumの稼働とWPE processの不在を確認した。
+この試験ではTVを目視しておらず、異常終了・SSH切断時の自動復旧も未試験。
+
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
 標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
