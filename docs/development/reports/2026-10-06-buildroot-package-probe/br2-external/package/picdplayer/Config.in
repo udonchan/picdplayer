@@ -1,0 +1,10 @@
+config BR2_PACKAGE_PICDPLAYER
+	bool "picdplayer (feasibility probe)"
+	depends on BR2_INSTALL_LIBSTDCPP
+	depends on BR2_PACKAGE_ALSA_LIB
+	depends on BR2_PACKAGE_LIBCURL_OPENSSL
+	depends on BR2_PACKAGE_LIBDISCID
+	depends on BR2_PACKAGE_LIBWEBSOCKETS
+	depends on BR2_PACKAGE_JSON_FOR_MODERN_CPP
+	help
+	  PiCDPlayer Buildroot package feasibility probe.
