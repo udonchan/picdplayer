@@ -1,0 +1,2 @@
+source "$BR2_EXTERNAL_PICDPLAYER_PROBE_PATH/package/libdiscid/Config.in"
+source "$BR2_EXTERNAL_PICDPLAYER_PROBE_PATH/package/picdplayer/Config.in"

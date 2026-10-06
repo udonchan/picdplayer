@@ -1,0 +1,7 @@
+config BR2_PACKAGE_LIBDISCID
+	bool "libdiscid"
+	depends on !BR2_STATIC_LIBS
+	help
+	  MusicBrainz Disc ID library for audio CDs.
+
+	  https://github.com/metabrainz/libdiscid
