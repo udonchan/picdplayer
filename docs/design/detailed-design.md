@@ -51,6 +51,27 @@ defaultのfallback通知には固定文言のみを用い、filesystem由来の�
 同一originのCustom JSに権限sandboxはない。設定/APIの将来案は
 [ユーザー設定基盤](../development/user-configuration.md)へ分離する。
 
+## 設定ファイルの読み込みと更新
+
+現行の`--settings-file`はAPI有効Playerでだけ使用できる絶対ファイルパスで、systemdの
+`StateDirectory=picdplayer`内を推奨する。再生成可能なmetadata/image cache、Custom UI root、
+secretとは分け、service userのみが書ける領域に置く。read-only root採用時も状態領域を
+別途書き込み可能にする。`PICDPLAYER_EXTRA_ARGS`は運用者の起動引数を渡す経路であり、
+設定ファイルそのものではない。
+
+現行version 1ファイルは`schema_version`とRead Policyの5項目を厳密に検証する。
+ファイルがない場合は起動値を使う。symlink、非regular file、4 KiB超、未知version/field、
+破損JSON、範囲外の値は採用せず警告して起動値へ戻す。起動を失敗させず、壊れた内容を
+上書きもしない。再生中のpolicy POSTでは、入力検証と保存が成功してからrequestedを更新し、
+STOPPED/NO_DISCになるまでeffectiveを保持する。保存先がない場合は同じ適用境界でsession値だけを変える。
+
+保存は同じdirectoryの一時ファイルを0600で作り、全量write・file sync・renameを経てから
+dir syncを試みる。rename前の失敗では一時ファイルを除去し、旧本体と現行policyを維持する。
+現行実装はrename後のdir sync失敗を警告するがPOSTを受理し、crash後の永続性までは保証しない。
+この曖昧さを一般設定へ広げず、#177では成功応答と耐障害性の意味を定義し、電源断・容量不足・
+権限不足・旧schema移行時の試験で確かめる。通常起動で前回値を復元できなければ、
+起動値と背景OFFへfallbackし、最後の正常設定が残るよう破損ファイルの自動上書きは避ける。
+
 ## media・TOC関数
 
 | 関数・型 | 契約 |
