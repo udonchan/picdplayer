@@ -35,6 +35,11 @@ Piの**systemd service userでの保存権限**・実service再起動後復元�
 設定画面の第一段階はPR #180で実装し、masterへ統合済み。実serviceでの保存・復元は未確認。
 同じ試験で`requested_source`/`effective_source`がstartup→saved→restoredとなり、
 破損時にstartupへ戻ることを確認した。保存先を指定しないAPI変更は`session`を返す。
+2026-10-06には実daemon試験へ、保存値が起動引数より優先する条件と、保存先directory欠落による
+POST 409後にrequested/effective/sourceが変わらない条件を追加し、Docker/aarch64の
+`read_policy_persistence`、`read_policy_store`、`api_server`を通した。Piではservice userが
+`/var/lib/picdplayer`を所有しdaemonはactiveだが、稼働中daemonに`--settings-file`は付いていない。
+実serviceでの保存・復元とCEC画面からの設定は引き続き未確認である。
 Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unitは
 `--settings-file`を自動指定しないため、現行Piへのdeployだけで永続化は有効にならない。
 
