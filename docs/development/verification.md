@@ -32,7 +32,7 @@ symlink・保存先directory欠落を確認した。`read_policy_persistence` te
 一時directoryへ転送し、`/nonexistent` drive・null ALSA・CEC無効・別loopback portの独立processで
 同じAPI試験を通した。稼働中serviceはactiveのままで再起動せず、試験用ファイルは削除した。
 Piの**systemd service userでの保存権限**・実service再起動後復元とCEC設定画面は未確認。
-設定画面の第一段階はDraft PR #180で別途実装中。
+設定画面の第一段階はPR #180で実装し、masterへ統合済み。実serviceでの保存・復元は未確認。
 同じ試験で`requested_source`/`effective_source`がstartup→saved→restoredとなり、
 破損時にstartupへ戻ることを確認した。保存先を指定しないAPI変更は`session`を返す。
 Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unitは

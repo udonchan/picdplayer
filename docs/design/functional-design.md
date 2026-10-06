@@ -168,6 +168,13 @@ Artist Backgroundの表示設定は未実装で、既定OFFのままとする。
 利用条件、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
 一般設定API、全CLI optionの永続化、hot reload、機器設定の稼働中変更はこの部分実装に含めない。
 
+設定拡張の契約では、現行の`schema_version=1`をRead Policyだけを持つ旧版として扱い、
+有効な旧版を読み込む場合でもArtist BackgroundはOFFとする。新schemaへの移行は旧値全体の
+検証後にだけ行い、失敗時は旧ファイルを保全する。未知の新versionやfield、破損・一部欠落を
+推測で補完して採用しない。電源断や書込失敗では最後に完全に検証できた値、または起動値と
+背景OFFへ戻れることを#177の実装・試験条件とする。user設定をresetする操作、機器設定の
+上書きや再起動後のrollback操作は、必要な項目ごとに別途契約を定める。
+
 single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
 既定はqueue上限750 frame（10秒、PCM約1.68 MiB）、
 開始閾値45 frame（0.6秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
