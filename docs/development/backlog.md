@@ -136,6 +136,9 @@ README、Guide、Design、Manual、Developmentと、History/旧パスの案内�
 [#77 現行runtime要件](https://github.com/udonchan/picdplayer/issues/77)を並行調査し、
 [#78](https://github.com/udonchan/picdplayer/issues/78)で適合性評価と必要な後続Issue作成を行う。
 Buildroot採用と最終imageへの.deb利用は未決定である。
+[#200のWPEPlatform 2.54供給検証](reports/2026-10-06-buildroot-wpe-probe/README.md)では、
+Pi 3向けVC4/GBM等の依存buildとWPE本体のconfigureを確認した。
+本体buildとBuildroot imageでのPi実機動作は未確認である。
 
 ## 監査で確認した不整合・回帰
 
