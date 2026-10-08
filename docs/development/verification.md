@@ -2,6 +2,14 @@
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## 版付き候補artifact（#45、Sol比較案）
+
+2026-10-08、Debian Trixie/aarch64 Dockerで正式build、CTest 49/49、使い捨てcontainerのpackage
+lifecycleを確認した。実際のCPack `.deb`をstageと照合してmanifest付き候補を生成した。
+artifact専用試験は実Debian archiveで版・tag・package・arch・Depends・payload・mode・symlink差異、
+過去候補の無効化と生成先symlinkの拒否を検査する。CI artifact uploadはDraft PRの実行で別途確認する。
+公開release、ライセンス監査、byte-identical再現性、Pi deploy・実機動作は未検証で、#45全体の完了ではない。
+
 ## Player設定画面の第一段階（#178、作業ブランチ）
 
 標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの

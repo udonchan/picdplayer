@@ -93,6 +93,10 @@
 現在は`stage/`と開発用`.deb`をCMake install規則から生成し、Piへdpkgで導入する。
 専用bootable imageと公開release workflowは未実装である。
 
+#45の限定実装として、既存CIのbuild・CTest・package lifecycle成功後に版・commit・checksum・stage一致を
+検査した候補を短期保存する経路を追加した。公開release・署名・ライセンス条件の完了ではなく、#45は未完了を維持する。
+手順と検査の限界は[Mac + Docker開発手順](../manual/mac-docker-development.md#版付き候補artifactの検査と保存)を参照する。
+
 | Issue | 段階と残る作業 |
 |---|---|
 | [#66 Establish project licensing and audit direct dependencies](https://github.com/udonchan/picdplayer/issues/66) | Phase 1。本体のApache-2.0案、直接依存、optionalなlibcdio-paranoiaの配布条件を監査する。対応containerでのlibcdio-paranoiaはGPL-3-or-laterと確認し、`ENABLE_PARANOIA=ON` configure時に再配布前の確認を促す警告を追加した。本体ライセンスと依存監査文書は未確定。 |
