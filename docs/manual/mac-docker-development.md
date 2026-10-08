@@ -321,4 +321,46 @@ Raspberry Piは実際のCDドライブ、HDMI audio、CEC、TV表示、systemd�
 `.github/workflows/ci.yml`はPull Requestと手動実行で`ubuntu-24.04-arm`を使い、
 上記と同じDocker image作成、`scripts/build-container.sh`によるビルド・stage、
 Docker内のCTest、使い捨てcontainer内の`dpkg` install/upgrade/reinstall/purge検証を実行します。実機のCD-ROM、CEC、ALSA/HDMI、TV表示やPiへのdeployは
-対象外です。releaseやRaspberry Pi OS imageの生成もこのworkflowでは行いません。
+対象外です。公開releaseやRaspberry Pi OS imageの生成もこのworkflowでは行いません。
+
+## 版付き候補artifactの検査と保存
+
+CIはbuild、全CTest、package lifecycleの成功後に、`bash scripts/prepare-release.sh`で
+候補を検査し、`.deb`と`manifest.json`をActions artifactへ7日間保存する。これは公開releaseでも
+配布許可でもなく、#45の限定実装である。本体ライセンス・依存監査は[#66](https://github.com/udonchan/picdplayer/issues/66)、
+配布metadataは[#67](https://github.com/udonchan/picdplayer/issues/67)で未完了。標準のparanoia OFFだけを受け付ける。
+
+版の正本はCMakeの`project(... VERSION ...)`であり、configure済みの版とDebian `Version`が一致する必要がある。
+refがtagの場合は`refs/tags/vX.Y.Z`だけを受け付け、CMakeの版との一致も検査する。
+tagのpushや公開処理は追加していない。PRではcheckoutされたmerge commitを識別するため、source commitは
+`git rev-parse HEAD`の完全な値を使い、PR headのSHAと混同しない。
+
+検査はpackageが一つのregular fileであること、`Package=picdplayer`、`Architecture=arm64`、
+非空のruntime `Depends`、stageとpayloadのfile一覧・内容・mode・symlink先の一致を要求する。
+install一覧はCMake、runtime依存はCPack/shlibdepsを正本とし、workflowに一覧を複製しない。
+manifestには版、commit、ref、dirty状態、package名、Depends、SHA256、payloadを記録する。
+`depends`はDebian fieldの原文、`runtime_depends`は同じ値から導出した依存groupの配列である。
+`a | b`の代替依存は一つのgroupとして保持し、独立した必須packageとして読み替えない。
+内容一致はstageとの比較であり、期待する製品仕様すべてや実機動作を証明するものではない。
+
+ローカルでは通常のbuildと検証後に同じコマンドを実行する。
+
+```sh
+./scripts/build-container.sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build \
+  ctest --test-dir build-container --output-on-failure
+./scripts/test-package-lifecycle.sh
+bash scripts/prepare-release.sh
+```
+
+検査成功時だけ`release-container/`に候補を作る。再実行開始時に前回の候補を破棄し、検査失敗時には
+新しい候補を残さない。finalizerはhostのUID/GIDでcontainerを動かして保存し、Linux hostでも再実行時に
+候補を削除できるようにする。Dockerを起動できない場合もwrapperが前回候補を先に破棄する。
+コマンドの成功を確認せず残存fileを採用しない。生成先がsymlinkの場合は削除せずエラーにする。
+開発中のdirty sourceはmanifestへ明示し、CIはclean sourceだけを保存する。手動検査はCTestやlifecycleの
+成功を自動で証明しないので、上記順序を省略しない。
+
+失敗時はログとmetadataを確認し、原因を修正して同じcommit・構成からbuildと検証を再実行する。
+以前の正常候補を復旧に使う場合も、manifestのSHA256・版・commitを確認し、Pi操作は既存deploy手順と
+復旧手順に従う。この手順は再生成可能な操作を提供するが、image/package版やtimestampを固定していないため
+byte-identicalな再現性・署名・正式配布条件・Piでの動作は保証しない。

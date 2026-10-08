@@ -23,3 +23,18 @@ jobs:
         run: docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
       - name: Test Debian package lifecycle
         run: ./scripts/test-package-lifecycle.sh
+      - name: Validate versioned candidate artifact
+        id: artifact
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain --untracked-files=normal)"
+          bash scripts/prepare-release.sh
+          name="$(python3 -c 'import json; m=json.load(open("release-container/manifest.json")); print("picdplayer-"+m["version"]+"-"+m["source_commit"])')"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Retain validated candidate (not a public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: release-container/
+          if-no-files-found: error
+          retention-days: 7

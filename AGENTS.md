@@ -178,3 +178,40 @@ When reporting completion, summarize:
 - what was validated
 - where it was validated
 - what remains unverified
+
+## 10. GitHub and commit language
+
+- Write Issue and Pull Request titles and commit subjects in English.
+- Write Issue and Pull Request bodies and commit bodies in Japanese.
+- Keep code identifiers, paths, commands, and quoted output in their original form.
+
+## 11. Delegating to local agents
+
+Sol owns documentation interpretation, architecture and specification decisions,
+task boundaries, acceptance criteria, final review, and authorized PR merges.
+Local agents handle bounded implementation, builds, tests, and routine failure
+repair within that contract. Delegation does not authorize scope or permission
+changes, commits, pushes, releases, or merges that were not explicitly assigned.
+
+- Prefer tasks with settled requirements and mechanically checkable outcomes.
+  Split cross-component work at explicit input/output boundaries; do not make
+  the local agent resolve missing product requirements.
+- Before delegation, specify the base commit, worktree, allowed files,
+  exclusions, positive/negative acceptance cases, validation commands, and
+  conditions requiring escalation. Never work directly on `master` or overwrite
+  existing changes. Use the repository's documented build environment.
+- Rebuild edited sources before running tests. Keep fixtures valid apart from
+  the condition under test, restore them before subsequent cases, and check that
+  existing tests still exercise their intended behavior.
+- Before returning results, inspect the complete diff and verify each acceptance
+  condition. Report actual commands, exit codes, test counts, failures repaired,
+  and unverified conditions. Do not substitute old CI results, skipped tests,
+  or intended assertions for observed validation.
+- Sol reviews code and relevant artifacts, not only the agent's explanation or
+  a green CI result. Return grouped findings to the local agent for bounded
+  repairs; do not continue indefinitely when correctness cannot be established.
+- Stop and report specification conflicts, required out-of-scope changes,
+  permission denials, or unavailable validation environments. Do not bypass them.
+  Hardware verification remains separate. Record thermal/environment delays
+  separately from quality findings, and do not claim credit savings without
+  measured usage.
