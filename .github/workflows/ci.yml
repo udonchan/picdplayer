@@ -23,3 +23,112 @@ jobs:
         run: docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
       - name: Test Debian package lifecycle
         run: ./scripts/test-package-lifecycle.sh
+      - name: Generate release artifact (validation + release-container)
+        run: |
+          PACKAGE_DIR="${PWD}/package-container"
+          RELEASE_DIR="${PWD}/release-container"
+          IMAGE="${PICDPLAYER_BUILD_IMAGE:-picdplayer-build}"
+          
+          DEB_COUNT=$(find "${PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' | wc -l)
+          if [[ "${DEB_COUNT}" != "1" ]]; then
+            echo "ERROR: expected exactly one .deb in ${PACKAGE_DIR}, found ${DEB_COUNT}" >&2
+            exit 1
+          fi
+          PACKAGE_FILE=$(find "${PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb')
+          
+          COMMIT=$(git rev-parse HEAD)
+          DEB_VERSION=$(docker run --rm -v "${PWD}:/src:ro" -w /src "${IMAGE}" dpkg-deb --showformat='${Version}' --show "/src/${PACKAGE_FILE#${PWD}/}")
+          DEB_ARCH=$(docker run --rm -v "${PWD}:/src:ro" -w /src "${IMAGE}" dpkg-deb --showformat='${Architecture}' --show "/src/${PACKAGE_FILE#${PWD}/}")
+          DEB_PACKAGE=$(docker run --rm -v "${PWD}:/src:ro" -w /src "${IMAGE}" dpkg-deb --showformat='${Package}' --show "/src/${PACKAGE_FILE#${PWD}/}")
+          DEB_DEPENDS=$(docker run --rm -v "${PWD}:/src:ro" -w /src "${IMAGE}" dpkg-deb --showformat='${Depends}' --show "/src/${PACKAGE_FILE#${PWD}/}")
+          
+          if [[ "${DEB_PACKAGE}" != "picdplayer" ]]; then
+            echo "ERROR: Package name must be 'picdplayer'" >&2
+            exit 1
+          fi
+          if [[ "${DEB_ARCH}" != "arm64" ]]; then
+            echo "ERROR: Architecture must be 'arm64'" >&2
+            exit 1
+          fi
+          if [[ -z "${DEB_DEPENDS}" ]]; then
+            echo "ERROR: Depends field is empty" >&2
+            exit 1
+          fi
+          
+          rm -rf "${RELEASE_DIR}"
+          mkdir -p "${RELEASE_DIR}"
+          
+          TEMP_DIR=$(mktemp -d)
+          trap 'rm -rf "${TEMP_DIR}"' EXIT
+          
+          DEPS_JSON="["
+          first_dep=true
+          IFS=',' read -ra DEP_ARRAY <<< "${DEB_DEPENDS}"
+          for d in "${DEP_ARRAY[@]}"; do
+            d=$(echo "$d" | xargs)
+            if [[ -n "${d}" ]]; then
+              if [[ "${first_dep}" == "true" ]]; then
+                first_dep=false
+              else
+                DEPS_JSON+=","
+              fi
+              DEPS_JSON+="\"${d}\""
+            fi
+          done
+          DEPS_JSON+="]"
+          
+          CI_ARTIFACT_NAME="picdplayer_${DEB_VERSION}_${DEB_ARCH}.deb"
+          SHA256=$(sha256sum "${PACKAGE_FILE}" | awk '{print $1}')
+          
+          echo '{' > "${TEMP_DIR}/manifest.json"
+          echo "  \"version\": \"${DEB_VERSION}\"," >> "${TEMP_DIR}/manifest.json"
+          echo "  \"architecture\": \"${DEB_ARCH}\"," >> "${TEMP_DIR}/manifest.json"
+          echo "  \"package\": \"${DEB_PACKAGE}\"," >> "${TEMP_DIR}/manifest.json"
+          echo "  \"runtime_depends\": ${DEPS_JSON}," >> "${TEMP_DIR}/manifest.json"
+          echo "  \"ref\": \"${COMMIT}\"," >> "${TEMP_DIR}/manifest.json"
+          echo "  \"full_source_commit\": \"${COMMIT}\"," >> "${TEMP_DIR}/manifest.json"
+          echo "  \"sha256\": \"${SHA256}\"," >> "${TEMP_DIR}/manifest.json"
+          echo "  \"ci_artifact_name\": \"${CI_ARTIFACT_NAME}\"," >> "${TEMP_DIR}/manifest.json"
+          echo '  "payload_files": [' >> "${TEMP_DIR}/manifest.json"
+          
+          FIRST_FILE=true
+          while IFS= read -r filepath; do
+            if [[ -n "${filepath}" ]]; then
+              if [[ "${FIRST_FILE}" == "true" ]]; then
+                FIRST_FILE=false
+              else
+                echo ',' >> "${TEMP_DIR}/manifest.json"
+              fi
+              echo "    \"${filepath}\"" >> "${TEMP_DIR}/manifest.json"
+            fi
+          done < <(docker run --rm -v "${PWD}:/src:ro" -w /src "${IMAGE}" sh -c "dpkg-deb --contents '/src/${PACKAGE_FILE#${PWD}/}' | awk '{print \$NF}'")
+          
+          echo '  ]' >> "${TEMP_DIR}/manifest.json"
+          echo '}' >> "${TEMP_DIR}/manifest.json"
+          
+          cp "${PACKAGE_FILE}" "${TEMP_DIR}/${CI_ARTIFACT_NAME}"
+          
+          mv "${TEMP_DIR}" "${RELEASE_DIR}"
+          trap - EXIT
+          
+          echo "Generated release-container:"
+          ls -la "${RELEASE_DIR}"
+      - name: Extract package version and commit
+        id: pkg-info
+        run: |
+          PACKAGE_FILE=$(find release-container -name '*.deb' -type f | head -1)
+          if [ -z "$PACKAGE_FILE" ]; then
+            echo "ERROR: No release artifact found in release-container" >&2
+            exit 1
+          fi
+          VERSION=$(dpkg-deb --showformat='${Version}' --show "$PACKAGE_FILE")
+          COMMIT=$(git rev-parse HEAD)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.pkg-info.outputs.version }}-${{ steps.pkg-info.outputs.commit }}
+          path: release-container/
+          retention-days: 7
+          if-no-files-found: error
