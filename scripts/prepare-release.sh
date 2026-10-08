@@ -14,5 +14,5 @@ set --
 if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
     set -- --dirty
 fi
-docker run --rm -v "$ROOT:/src" -w /src "${PICDPLAYER_BUILD_IMAGE:-picdplayer-build}" \
+docker run --rm --user "$(id -u):$(id -g)" -v "$ROOT:/src" -w /src "${PICDPLAYER_BUILD_IMAGE:-picdplayer-build}" \
     python3 scripts/release-artifact.py --commit "$commit" --ref "$ref" "$@"

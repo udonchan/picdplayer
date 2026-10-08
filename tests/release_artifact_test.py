@@ -166,16 +166,19 @@ class ReleaseArtifactTest(unittest.TestCase):
         for name, body in {
             'git': 'case "$1" in rev-parse) printf "%s\\n" ' + COMMIT + ';; '
                    'symbolic-ref) printf "refs/heads/test\\n";; status) :;; esac\n',
-            'docker': 'exit 7\n',
+            'docker': 'printf "%s\\n" "$@" > "$TEST_DOCKER_ARGS"\nexit 7\n',
         }.items():
             command = commands / name
             command.write_text('#!/bin/sh\n' + body)
             command.chmod(0o755)
+        arguments = self.root / 'docker-arguments'
         result = subprocess.run(['bash', str(scripts / source.name)],
-                                env={**os.environ, 'PATH': f'{commands}:{os.environ["PATH"]}'},
+                                env={**os.environ, 'PATH': f'{commands}:{os.environ["PATH"]}',
+                                     'TEST_DOCKER_ARGS': str(arguments)},
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 7, result.stderr)
         self.assertFalse(self.output.exists())
+        self.assertIn('--user\n' + f'{os.getuid()}:{os.getgid()}', arguments.read_text())
 
 
 if __name__ == '__main__':

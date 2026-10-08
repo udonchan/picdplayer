@@ -352,7 +352,8 @@ bash scripts/prepare-release.sh
 ```
 
 検査成功時だけ`release-container/`に候補を作る。再実行開始時に前回の候補を破棄し、検査失敗時には
-新しい候補を残さない。Dockerを起動できない場合もwrapperが前回候補を先に破棄する。
+新しい候補を残さない。finalizerはhostのUID/GIDでcontainerを動かして保存し、Linux hostでも再実行時に
+候補を削除できるようにする。Dockerを起動できない場合もwrapperが前回候補を先に破棄する。
 コマンドの成功を確認せず残存fileを採用しない。生成先がsymlinkの場合は削除せずエラーにする。
 開発中のdirty sourceはmanifestへ明示し、CIはclean sourceだけを保存する。手動検査はCTestやlifecycleの
 成功を自動で証明しないので、上記順序を省略しない。
