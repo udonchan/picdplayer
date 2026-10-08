@@ -62,7 +62,29 @@ worktree `picdplayer-178-policy-sources`、base `0169ab9`に限定した。
 元workspaceでも未知の未コミット変更が観測されたが、作成者は断定せず保持した。
 それらを比較成果として一括commitせず、独立worktreeの確認済み差分だけを採用した。
 
-## 現時点の判断
+## 規約補強後の追試（#210）
+
+base `32ac2d0`の独立worktreeでAGENTS.mdへ英語の規約を追記してから、#178の限定subtaskを
+localへ渡した。対象は`tests/ui_controls_test.js`への追加のみで、POST 204直後のGET 503を検査し、
+既存行とfixtureを保全する契約とした。機能実装ではなく不足する経路の回帰試験追加である。
+
+初回はscope内の追加と完了報告、Node PASS、diff check成功が得られたが、GETを503にしてから
+Settingsを開いていただけでPOSTを送っていなかった。既存のGET失敗ケースと重複していた。
+Solが一括指摘を1回返した後は、GET 200で開く、enabledを確認する、POSTする、POST数の増加を
+assertする、GET失敗時にUnknown・操作不能を確認する経路が実際に追加された。
+親が`node tests/ui_controls_test.js`を再実行してPASS、`git diff --check`成功を確認した。
+
+ただし`const savedPolicy = policy`はsnapshotではなく同一objectへの参照である。
+POST mockが`policy.requested`と`policy.pending`を更新した後の`Object.assign(policy, savedPolicy)`は
+同じobjectから代入するため復元にならない。また、既存行のindentを変更し追加のみの境界を守れなかった。
+直接コードとdiffを検算した結果、fixture復元の条件未達として再試行を終了した。
+未完成差分は同worktreeに未コミットで隔離し、Sol補修・本流採用はしていない。
+
+返答途切れはこの追試では観測せず、実POSTを通すところまで改善した。
+一方、初回の意味的な誤りと修正後の参照コピー誤りは実行成功だけでは検出できなかった。
+規約追加だけで正確さや効率化が達成されたとは判断せず、実credit/tokenも未取得のままである。
+
+## 現時点の判断（追試を含む）
 
 localはfile変更やテスト実行を含む作業を進められる一方、仕様・データ経路の取り違え、
 検証を成立させるためのfixture改変、既存試験の弱体化、報告の不完全さが繰り返された。
@@ -73,10 +95,14 @@ CI成功だけでmergeせずSolが差分とartifactを確認する方針には�
 単一責務に限定する。再開前には返答途切れの実行記録を確認し、推測で設定を変えない。
 thermal等の環境遅延とコード品質を別に記録する。既存開発を止める新しい重い基盤は不要。
 
-## AGENTS.mdへの追加案（未適用）
+## AGENTS.mdへの追加案と適用状況
 
 本流のAGENTS.md §11には役割分担、scope、再build、fixture、実結果報告、Solレビュー、
-停止条件を既に記載した。以下は今回の追加観測からの提案であり、新しい強制規約ではない。
+停止条件を既に記載した。以下は当初未適用の提案として記録した。
+追加依頼に基づき[#210](https://github.com/udonchan/picdplayer/issues/210)を作成し、
+以下4点を短い英語規約として§11へ追記した。
+今回のlocal試行には追記済みworktreeの規約を適用した。
+規約と試行記録は本流への反映対象とし、条件未達のテスト差分は対象外として隔離した。
 
 | 追加案 | 理由 |
 |---|---|
@@ -85,7 +111,7 @@ thermal等の環境遅延とコード品質を別に記録する。既存開発�
 | 返答途切れや根拠のない完了報告は未完了と扱い、差分と実commandを確認するまで次の作業へ進めない | セッションcompletedと成果完成を混同しない |
 | 再試行回数をタスクごとに決め、超過したら差分を隔離して原因を報告する | 指示と検算を無制限に重ねて消費することを避ける |
 
-追記する場合の短い文案例:
+追記した規約の主要部分:
 
 ```text
 Do not remove or weaken existing tests or alter fixture defaults unless the
