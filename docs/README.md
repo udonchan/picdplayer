@@ -28,3 +28,5 @@ Guideや履歴へ仕様表を複製しない。
 `development/verification.md`は検証状況と個別実験への入口とし、測定条件・生データ・限界を
 伴う詳しい結果は`development/reports/`に置く。現在のkiosk性能測定がこの形式を用いる。
 仕様値はDesignを正とし、測定値を現在の保証値として扱わない。
+
+エージェント委譲の実験記録は[付録: localエージェント委譲の試行](development/reports/2026-10-08-local-agent-trials.md)を参照する。

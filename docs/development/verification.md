@@ -2,6 +2,16 @@
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## SettingsのRead Policy出所表示（#177/#178）
+
+2026-10-08、`GET /api/read-policy`のrequested/effective sourceをSettingsで独立表示するよう補修した。
+local試行の未完成差分をSolが整理し、既存のPOST拒否・フォーカス検査を復元した。
+macOS NodeでUI boot/render/status/integrity/controlsの5 script、正式Debian Trixie/aarch64 Docker build、
+CTest 49/49を確認した。controls試験は4種類の出所、欠損・未知・非文字列、保存先指定からの非推測、
+POST受理/拒否、読込中、GET失敗、旧GET応答の破棄を確認する。
+Pi・CEC実操作、TV/狭いviewportの実表示、再起動後の復元は今回未検証で、#177/#178全体は未完了。
+試行の事実・限界と未適用の規約案は[付録](reports/2026-10-08-local-agent-trials.md)に記録した。
+
 ## 版付き候補artifact（#45、比較案の統合）
 
 2026-10-08、Debian Trixie/aarch64 Dockerで正式build、CTest 49/49、使い捨てcontainerのpackage

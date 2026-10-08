@@ -324,6 +324,10 @@ function controlFeedback(message) {
 function renderPolicySettings() {
   const requested = policyState?.requested;
   const effective = policyState?.effective;
+  const sourceLabels = { startup: 'Startup', restored: 'Restored', saved: 'Saved', session: 'Session only' };
+  const sourceLabel = (value) => typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(sourceLabels, value) ? sourceLabels[value] : 'Unknown';
+  set('settings-policy-source', `Source (requested/effective): ${sourceLabel(policyState?.requested_source)} / ${sourceLabel(policyState?.effective_source)}.`);
   const valid = requested && ['SINGLE', 'REPEAT'].includes(requested.mode) &&
     ['region_frames', 'required_matches', 'maximum_attempts', 'time_budget_ms']
       .every((key) => Number.isInteger(requested[key]) && requested[key] >= 0);
