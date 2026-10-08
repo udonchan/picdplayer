@@ -2,7 +2,7 @@
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
-## 版付き候補artifact（#45、Sol比較案）
+## 版付き候補artifact（#45、比較案の統合）
 
 2026-10-08、Debian Trixie/aarch64 Dockerで正式build、CTest 49/49、使い捨てcontainerのpackage
 lifecycleを確認した。実際のCPack `.deb`をstageと照合してmanifest付き候補を生成した。
@@ -10,7 +10,14 @@ artifact専用試験20件は実Debian archiveで版・tag・package・arch・Dep
 過去候補の無効化と生成先symlinkの拒否を検査する。Draft PRの初回CIではvalidatorまで成功したが、
 root所有の一時directoryのmode 0700が残り、runnerがmanifestを読めずupload前に失敗した。
 生成先を0755、保存fileを0644としてrunnerが読めるよう修正し、権限の回帰試験を追加した。
-修正後のCI artifact uploadはDraft PRの再実行で確認する。
+Sol比較案[PR #206](https://github.com/udonchan/picdplayer/pull/206)の最終CI run 37710332784は成功し、
+取得artifactのJSON・SHA256・manifest配置・merge commitの識別を確認した。
+local比較案[PR #207](https://github.com/udonchan/picdplayer/pull/207)もCIは成功したが、単独validator失敗、
+版/tag/stage比較・新テスト登録の欠落、temp directoryの入れ子が残ったため採用しない。
+統合案はSol案を土台に、local案の依存group配列という表現を原文保持付きで取り込み、
+代替依存の保持と成果物直下の配置を回帰試験で確認する。比較記録は両PRに残す。
+統合worktreeでも正式Docker build、CTest 49/49、artifact専用試験21件、package lifecycle、
+実packageの二回連続finalizeを確認した。GitHub上の統合版は統合PRのCIで別途確認する。
 公開release、ライセンス監査、byte-identical再現性、Pi deploy・実機動作は未検証で、#45全体の完了ではない。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）

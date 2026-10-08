@@ -107,6 +107,7 @@ def prepare(root, commit, ref, dirty=False):
             raise ValueError('package payload does not match CMake stage')
         metadata = {'schema_version': 1, 'version': version, 'architecture': fields['Architecture'],
                     'package': fields['Package'], 'depends': fields['Depends'], 'source_commit': commit,
+                    'runtime_depends': [group.strip() for group in fields['Depends'].split(',')],
                     'source_ref': ref, 'source_dirty': dirty, 'artifact': package.name,
                     'sha256': digest(package.read_bytes()), 'payload': payload,
                     'validation': ['package_metadata', 'stage_payload_and_modes'],

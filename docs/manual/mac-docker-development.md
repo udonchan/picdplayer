@@ -339,6 +339,8 @@ tagのpushや公開処理は追加していない。PRではcheckoutされたmer
 非空のruntime `Depends`、stageとpayloadのfile一覧・内容・mode・symlink先の一致を要求する。
 install一覧はCMake、runtime依存はCPack/shlibdepsを正本とし、workflowに一覧を複製しない。
 manifestには版、commit、ref、dirty状態、package名、Depends、SHA256、payloadを記録する。
+`depends`はDebian fieldの原文、`runtime_depends`は同じ値から導出した依存groupの配列である。
+`a | b`の代替依存は一つのgroupとして保持し、独立した必須packageとして読み替えない。
 内容一致はstageとの比較であり、期待する製品仕様すべてや実機動作を証明するものではない。
 
 ローカルでは通常のbuildと検証後に同じコマンドを実行する。

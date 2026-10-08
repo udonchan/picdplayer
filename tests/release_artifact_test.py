@@ -68,6 +68,8 @@ class ReleaseArtifactTest(unittest.TestCase):
         self.assertEqual(self.package.read_bytes(), (self.output / self.package.name).read_bytes())
         self.assertFalse((self.output / 'old.deb').exists())
         self.assertEqual(json.loads((self.output / 'manifest.json').read_text()), metadata)
+        self.assertEqual({file.name for file in self.output.iterdir()},
+                         {'manifest.json', self.package.name})
         self.assertEqual(self.output.stat().st_mode & 0o777, 0o755)
         for file in self.output.iterdir():
             self.assertEqual(file.stat().st_mode & 0o777, 0o644)
@@ -77,6 +79,14 @@ class ReleaseArtifactTest(unittest.TestCase):
 
     def test_tag_mismatch(self):
         self.reject(ref='refs/tags/v0.2.0')
+
+    def test_runtime_depends_preserves_alternative_groups(self):
+        depends = 'libc6 (>= 2.38) | musl, libgcc-s1 (>= 3.0)'
+        self.make_package(depends=depends)
+        metadata = release.prepare(self.root, COMMIT, 'refs/heads/test')
+        self.assertEqual(metadata['depends'], depends)
+        self.assertEqual(metadata['runtime_depends'],
+                         ['libc6 (>= 2.38) | musl', 'libgcc-s1 (>= 3.0)'])
 
     def test_invalid_tag(self):
         self.reject(ref='refs/tags/0.1.0')
