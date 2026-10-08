@@ -203,10 +203,16 @@ changes, commits, pushes, releases, or merges that were not explicitly assigned.
 - Rebuild edited sources before running tests. Keep fixtures valid apart from
   the condition under test, restore them before subsequent cases, and check that
   existing tests still exercise their intended behavior.
+- Do not remove or weaken existing tests or alter fixture defaults unless the
+  approved behavior change requires it. Specify the authoritative data path;
+  never invent unpublished fields in fixtures to make an implementation pass.
 - Before returning results, inspect the complete diff and verify each acceptance
   condition. Report actual commands, exit codes, test counts, failures repaired,
   and unverified conditions. Do not substitute old CI results, skipped tests,
   or intended assertions for observed validation.
+- Treat truncated or evidence-free completion reports as incomplete. Verify the
+  diff and actual commands before proceeding. Agree on a retry limit before
+  delegation; when it is reached, isolate unfinished changes and report the cause.
 - Sol reviews code and relevant artifacts, not only the agent's explanation or
   a green CI result. Return grouped findings to the local agent for bounded
   repairs; do not continue indefinitely when correctness cannot be established.
