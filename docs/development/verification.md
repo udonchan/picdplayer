@@ -6,8 +6,11 @@
 
 2026-10-08、Debian Trixie/aarch64 Dockerで正式build、CTest 49/49、使い捨てcontainerのpackage
 lifecycleを確認した。実際のCPack `.deb`をstageと照合してmanifest付き候補を生成した。
-artifact専用試験は実Debian archiveで版・tag・package・arch・Depends・payload・mode・symlink差異、
-過去候補の無効化と生成先symlinkの拒否を検査する。CI artifact uploadはDraft PRの実行で別途確認する。
+artifact専用試験20件は実Debian archiveで版・tag・package・arch・Depends・payload・mode・symlink差異、
+過去候補の無効化と生成先symlinkの拒否を検査する。Draft PRの初回CIではvalidatorまで成功したが、
+root所有の一時directoryのmode 0700が残り、runnerがmanifestを読めずupload前に失敗した。
+生成先を0755、保存fileを0644としてrunnerが読めるよう修正し、権限の回帰試験を追加した。
+修正後のCI artifact uploadはDraft PRの再実行で確認する。
 公開release、ライセンス監査、byte-identical再現性、Pi deploy・実機動作は未検証で、#45全体の完了ではない。
 
 ## Player設定画面の第一段階（#178、作業ブランチ）

@@ -115,6 +115,10 @@ def prepare(root, commit, ref, dirty=False):
             pending = Path(temporary)
             shutil.copyfile(package, pending / package.name)
             (pending / 'manifest.json').write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n')
+            # Docker owns the files; the CI runner must be able to upload them.
+            for file in pending.iterdir():
+                file.chmod(0o644)
+            pending.chmod(0o755)
             pending.rename(output)
         print(f'picdplayer-{version}-{commit}' + ('-dirty' if dirty else ''))
         return metadata

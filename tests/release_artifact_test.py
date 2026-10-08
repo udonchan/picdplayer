@@ -68,6 +68,9 @@ class ReleaseArtifactTest(unittest.TestCase):
         self.assertEqual(self.package.read_bytes(), (self.output / self.package.name).read_bytes())
         self.assertFalse((self.output / 'old.deb').exists())
         self.assertEqual(json.loads((self.output / 'manifest.json').read_text()), metadata)
+        self.assertEqual(self.output.stat().st_mode & 0o777, 0o755)
+        for file in self.output.iterdir():
+            self.assertEqual(file.stat().st_mode & 0o777, 0o644)
         second = release.prepare(self.root, 'b' * 40, 'refs/heads/test', dirty=True)
         self.assertNotEqual(second['source_commit'], metadata['source_commit'])
         self.assertTrue(second['source_dirty'])
