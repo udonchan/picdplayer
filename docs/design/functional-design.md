@@ -287,6 +287,9 @@ selectで実行、backでfocusを解除する。POST受理は状態確定では�
 有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの
 `persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
 session限りと扱い、単なるPOST受理を保存済みと表示しない。
+Settingsには`GET /api/read-policy`の`requested_source`と`effective_source`を別々に表示する。
+`startup/restored/saved/session`以外またはfield欠損はUnknownとし、保存先指定やPOST受理から出所を推測しない。
+読込中・取得失敗時は前回の出所を残さず、pending時は要求値と実効値の出所が異なり得る。
 曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
 操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
 `Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の

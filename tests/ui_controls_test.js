@@ -14,9 +14,11 @@ async function main() {
   const pendingPolicyGets = [];
   let deferPolicyGet = false;
   let policyPostStatus = 204;
+  let policyGetStatus = 200;
   const policy = { requested: { mode: 'SINGLE', region_frames: 75,
     required_matches: 2, maximum_attempts: 3, time_budget_ms: 10000 },
-  effective: { mode: 'SINGLE' }, pending: false, persistence_configured: false };
+  effective: { mode: 'SINGLE' }, pending: false, persistence_configured: false,
+  requested_source: 'startup', effective_source: 'startup' };
   const postBodies = [];
   let postStatus = 204;
   let failPost = false;
@@ -76,7 +78,7 @@ async function main() {
           return { ok: policyPostStatus === 204, status: policyPostStatus };
         }
         if (deferPolicyGet) return new Promise((resolve) => pendingPolicyGets.push(resolve));
-        return { ok: true, json: async () => policy };
+        return { ok: policyGetStatus === 200, status: policyGetStatus, json: async () => ({ ...policy }) };
       }
       if (options?.method === 'POST' && url !== '/api/ui-boot') {
         posts.push(url);
@@ -102,6 +104,29 @@ async function main() {
   await new Promise(setImmediate);
   assert.equal(node('policy-single').dataset.selected, 'true');
   assert.match(node('settings-persistence').textContent, /session only/);
+  assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Startup / Startup.');
+  for (const [requested, effective, expected] of [
+    ['startup', 'restored', 'Startup / Restored'],
+    ['saved', 'session', 'Saved / Session only'],
+    ['__proto__', 'future-value', 'Unknown / Unknown'],
+    [123, null, 'Unknown / Unknown'],
+    [undefined, undefined, 'Unknown / Unknown'],
+  ]) {
+    policy.requested_source = requested;
+    policy.effective_source = effective;
+    policy.persistence_configured = true;
+    navigation('back');
+    controls[6].onclick({ detail: 1 });
+    assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Unknown / Unknown.');
+    await new Promise(setImmediate);
+    assert.equal(node('settings-policy-source').textContent, `Source (requested/effective): ${expected}.`);
+  }
+  policy.requested_source = 'session';
+  policy.effective_source = 'restored';
+  policy.persistence_configured = false;
+  navigation('back');
+  controls[6].onclick({ detail: 1 });
+  await new Promise(setImmediate);
   navigation('right');
   assert.equal(node('policy-repeat').dataset.focused, 'true');
   navigation('select');
@@ -109,6 +134,7 @@ async function main() {
   assert.equal(policyPosts.length, 1);
   assert.equal(policyPosts[0].mode, 'repeat');
   assert.match(node('settings-policy-status').textContent, /until playback stops/);
+  assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Session only / Restored.');
   navigation('back');
   assert.equal(node('settings-panel').hidden, true);
   controls[6].onclick({ detail: 1 });
@@ -120,6 +146,7 @@ async function main() {
   assert.equal(node('settings-policy-status').textContent,
     'Policy change failed. Current playback continues.');
   assert.equal(policy.requested.mode, 'REPEAT');
+  assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Session only / Restored.');
   navigation('back');
   navigation('back');
   navigation('right');
@@ -198,6 +225,7 @@ async function main() {
   controls[6].onclick({ detail: 1 });
   assert.equal(node('policy-single').disabled, true); // No stale value before GET completes.
   assert.equal(node('settings-policy-status').textContent, 'Loading read policy…');
+  assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Unknown / Unknown.');
   now += 300;
   keys.keydown({ key: 'ArrowRight', preventDefault() {} });
   pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
@@ -209,12 +237,13 @@ async function main() {
   keys.keydown({ key: 'Escape', preventDefault() {} });
   controls[6].onclick({ detail: 1 });
   pendingPolicyGets.pop()({ ok: true, json: async () => ({ ...policy,
-    requested: { ...policy.requested, mode: 'REPEAT' } }) });
+    requested: { ...policy.requested, mode: 'REPEAT' }, requested_source: 'saved' }) });
   await new Promise(setImmediate);
   pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
-    requested: { ...policy.requested, mode: 'SINGLE' } }) });
+    requested: { ...policy.requested, mode: 'SINGLE' }, requested_source: 'startup' }) });
   await new Promise(setImmediate);
   assert.equal(node('policy-repeat').dataset.selected, 'true'); // Old GET cannot replace it.
+  assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Saved / Restored.');
   now += 300;
   sockets[2].onmessage({ data: JSON.stringify({ action: 'right' }) });
   assert.equal(node('settings-close').dataset.focused, 'true');
@@ -230,6 +259,13 @@ async function main() {
   keys.keydown({ key: 'Tab', shiftKey: true, preventDefault() {} });
   assert.equal(activeElement, node('settings-close'));
   keys.keydown({ key: 'Escape', preventDefault() {} });
+  policyGetStatus = 503;
+  controls[6].onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Unknown / Unknown.');
+  assert.equal(node('settings-policy-status').textContent, 'Read policy unavailable. Playback is unaffected.');
+  keys.keydown({ key: 'Escape', preventDefault() {} });
+  policyGetStatus = 200;
   failPost = false;
   postStatus = 204;
   snapshot.revision = 6;
