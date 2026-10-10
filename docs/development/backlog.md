@@ -105,7 +105,7 @@ AGENTS.md §11に英語の追加規約を記載し、限定試行は初回と修
 | Issue | 段階と残る作業 |
 |---|---|
 | [#66 Establish project licensing and audit direct dependencies](https://github.com/udonchan/picdplayer/issues/66) | Phase 1。本体のApache-2.0案、直接依存、optionalなlibcdio-paranoiaの配布条件を監査する。対応containerでのlibcdio-paranoiaはGPL-3-or-laterと確認し、`ENABLE_PARANOIA=ON` configure時に再配布前の確認を促す警告を追加した。本体ライセンスと依存監査文書は未確定。 |
-| [#67 Track Debian package contents and distribution metadata](https://github.com/udonchan/picdplayer/issues/67) | Phase 2。#66を入力に、`.deb`の内容・runtime依存・copyrightを追跡可能にする。 |
+| [#67 Track Debian package contents and distribution metadata](https://github.com/udonchan/picdplayer/issues/67) | Phase 2。#66を入力に、`.deb`の内容・runtime依存・copyrightを追跡可能にする。Qwen3.6の独立control inventoryは比較用の未採用候補で、固定受入試験が失敗し既存manifestにも未接続。Issueの完了とは扱わない。 |
 | [#68 Generate compliance artifacts from bootable release images](https://github.com/udonchan/picdplayer/issues/68) | Phase 3。#67と検査可能な#47のimageを入力に、最終image実体のinventory・SBOM・notice等を生成する。 |
 | [#69 Integrate compliance metadata with an embedded build system](https://github.com/udonchan/picdplayer/issues/69) | Phase 4。Buildroot/Yocto等への移行が決まった場合のみ着手する将来候補。 |
 

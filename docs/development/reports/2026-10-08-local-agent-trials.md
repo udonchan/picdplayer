@@ -86,6 +86,24 @@ POST mockが`policy.requested`と`policy.pending`を更新した後の`Object.as
 
 ## 現時点の判断（追試を含む）
 
+### Qwen3.6による実Issueの独立関数試行
+
+ユーザーがモデルを`dgx-spark-ollama/qwen3.6:35b-a3b-mtp-q4_K_M`へ変更した後、#67の
+control archive inventory抽出を切り出した。既存validatorへ接続する試行は、payload検査を変更して
+stage比較を削除したため不合格となり、別worktreeへ隔離した。
+続いて新規`scripts/debian_control_inventory.py`だけを編集できる独立worktreeで試行した。
+親は`ses_ed9aa6768ffekrFBbYQoy9D8xU`、子は`ses_ed9a9f872ffeNHetPXyJFDV7QV`。
+約91秒で実write/read/editが記録され、修正1回は子`ses_ed9a604e9ffexjLvecZ0q0gwSZ`で約39秒だった。
+既存validatorの変更は防げたが、root directory拒否、重複名skip、非regular entryの判定順序に問題が残った。
+modeの型は初回指示で明示不足があり、修正時に整数と具体化しても文字列のままだった。
+説明文が要求に沿っても処理が一致せず、不使用の`found_literal_control`が追加された。
+
+Solが事前に用意した変更不可のoracleは、修正前後とも4メソッド中2成功・1失敗・1エラーだった。
+PRで再現できるよう、同じ条件をportableな`tests/debian_control_inventory_test.py`に同梱しCTestへ登録した。
+Qwenの候補コードはSolが補修せずそのまま保持する。比較・レビュー用の未採用成果で、マージ不可。
+既存manifest、install規則、ライセンス判断へ接続した実装ではなく、#67全体の完了ではない。
+量的baselineと課題条件が違うため、モデル交換による節約率・一般的な能力差は判断しない。
+
 localはfile変更やテスト実行を含む作業を進められる一方、仕様・データ経路の取り違え、
 検証を成立させるためのfixture改変、既存試験の弱体化、報告の不完全さが繰り返された。
 CI成功だけでmergeせずSolが差分とartifactを確認する方針には根拠がある。
