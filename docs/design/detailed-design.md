@@ -280,7 +280,7 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | lookup_musicbrainz_disc | Disc ID計算と上記lookup後、各候補の曲数を実TOCと照合。一致時はTOC順でmedium positionを物理track番号へ対応付ける。不一致はmetadata ERROR |
 | [MetadataWorker::request/pop](../../src/metadata_worker.cpp) | pending最新1件、結果1件。worker内でlookup例外をERROR結果へ変換 |
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
-| [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | 任意のkey fileが有効な場合だけ作成。選択済みArtist MBIDとmetadata世代を要求に持ち、旧要求を取消す。mainは両方が現行値と一致する結果だけを内部に採用し、画像URLをViewへ出さない |
+| [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | main threadのArtistBackgroundPolicyをEnrichmentServiceへ参照で渡し、effectiveがfalseならworkerを生成・要求しない。現段階はON拒否なのでkey指定時も生成しない。既存部品の選択済みArtist MBID・metadata世代照合と取消は保持。OFF handlerはpolicy適用後に即時取消・内部候補消去し、再生停止を待たない |
 | [load_artist_background_image](../../src/artist_background_image.cpp) | 現段階ではruntime未接続。候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得する部品。JPEG/PNG/WebPの外形とContent-Typeを照合し、full decodeの保証はしない |
 
 MetadataWorker.cancel_pendingは未開始requestと保存結果を消す。実行中HTTPの中断はshutdownの

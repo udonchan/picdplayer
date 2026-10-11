@@ -1,4 +1,5 @@
 #include "player_session.hpp"
+#include "artist_background_policy.hpp"
 #ifdef ENABLE_METADATA
 #include "artist_background_key.hpp"
 #endif
@@ -181,6 +182,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (!result.error.empty()) throw std::runtime_error(result.error);
             }); },
         [device, drive_access] { drive_access->invoke([&] { request_cd_stop(device); }); });
+    ArtistBackgroundPolicy artist_background_policy;
 #ifdef ENABLE_METADATA
     std::string artist_background_key;
     if (!artist_background_key_file.empty()) {
@@ -189,7 +191,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             log_warning("artist_background") << "disabled invalid_key_file";
         }
     }
-    EnrichmentService enrichment(metadata_enabled, metadata_cache, std::move(artist_background_key));
+    EnrichmentService enrichment(metadata_enabled, metadata_cache, artist_background_policy,
+                                 std::move(artist_background_key));
 #endif
     PlaybackEngine engine(controller, worker, *audio, 0,
                           std::chrono::milliseconds(initial_read_policy.time_budget_ms));
@@ -327,6 +330,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                    ",\"persistence_configured\":" + (settings_file.empty() ? "false" : "true") + '}';
         };
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
+                if (command.type == ApiCommandType::set_artist_background) {
+                    if (!artist_background_policy.set_enabled(command.enabled)) return false;
+#ifdef ENABLE_METADATA
+                    enrichment.stop_background();
+#endif
+                    return true;
+                }
                 if (command.type == ApiCommandType::eject) {
                     if (media_state.state() == MediaLifecycleState::ejecting) {
                         log_info("media") << "eject=already_pending";
@@ -414,6 +424,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     if (!controller.select_track(command.value)) return false;
                     engine.synchronize(); print_state(controller); return true;
                 case ApiCommandType::set_read_policy: return false; // handled above
+                case ApiCommandType::set_artist_background: return false; // handled above
                 case ApiCommandType::select_metadata_candidate: return false; // handled above
                 case ApiCommandType::decline_metadata_candidates: return false; // handled above
                 case ApiCommandType::eject: break;
@@ -451,7 +462,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                                          {"disc_map", !toc_needs_refresh && loaded_toc &&
                                                              media_state.state() == MediaLifecycleState::audio_ready &&
                                                              result.contains("disc_map") ? result["disc_map"] : nlohmann::json(nullptr)}}.dump();
-                                                 });
+                                                  }, [&] { return artist_background_policy.json(); });
         auto line = log_info("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';

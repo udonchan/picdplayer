@@ -30,7 +30,16 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiReadPolicyProvider& read_policy_provider, const UiBundle* ui,
                               const ApiUiBootHandler& ui_boot_handler,
                               const ApiArtworkProvider& artwork_provider,
-                              const ApiStateProvider& read_history_provider) {
+                              const ApiStateProvider& read_history_provider,
+                              const ApiStateProvider& artist_background_provider) {
+    if (path == "/api/artist-background" && method == "GET") {
+        if (!artist_background_provider)
+            return {503, "application/json", R"({"error":"artist_background_unavailable"})"};
+        auto status = artist_background_provider();
+        if (status.size() > 4096)
+            return {500, "application/json", R"({"error":"status_too_large"})"};
+        return {200, "application/json", std::move(status)};
+    }
     if (path == "/api/read-history") {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (!read_history_provider) return {503, "application/json", R"({"error":"read_history_unavailable"})"};
@@ -139,6 +148,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         if (path == "/api/track") return ApiCommand{ApiCommandType::select_track};
         if (path == "/api/eject") return ApiCommand{ApiCommandType::eject};
         if (path == "/api/read-policy") return ApiCommand{ApiCommandType::set_read_policy};
+        if (path == "/api/artist-background") return ApiCommand{ApiCommandType::set_artist_background};
         if (path == "/api/metadata-selection") return ApiCommand{ApiCommandType::select_metadata_candidate};
         return std::nullopt;
     }();
@@ -149,15 +159,28 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
     if (!command_handler)
         return {HTTP_STATUS_FORBIDDEN, "application/json", R"({"error":"commands_disabled"})"};
     if (command->type == ApiCommandType::select_metadata_candidate ||
+        command->type == ApiCommandType::set_artist_background ||
         command->type == ApiCommandType::set_read_policy ||
         command->type == ApiCommandType::seek_relative || command->type == ApiCommandType::select_track) {
-        const std::size_t maximum_command_bytes = command->type == ApiCommandType::select_metadata_candidate
+        const std::size_t maximum_command_bytes = (command->type == ApiCommandType::select_metadata_candidate ||
+            command->type == ApiCommandType::set_artist_background)
             ? 512 : 4096;
         if (body.size() > maximum_command_bytes)
             return {HTTP_STATUS_REQ_ENTITY_TOO_LARGE, "application/json", R"({"error":"body_too_large"})"};
         try {
-            const auto json = nlohmann::json::parse(body);
-            if (command->type == ApiCommandType::select_metadata_candidate) {
+            unsigned enabled_fields = 0;
+            const auto json = nlohmann::json::parse(body,
+                [&](int depth, nlohmann::json::parse_event_t event, nlohmann::json& value) {
+                    if (command->type == ApiCommandType::set_artist_background && depth == 1 &&
+                        event == nlohmann::json::parse_event_t::key && value == "enabled") ++enabled_fields;
+                    return true;
+                });
+            if (command->type == ApiCommandType::set_artist_background) {
+                if (!json.is_object() || json.size() != 1 || enabled_fields != 1 || !json.contains("enabled") ||
+                    !json["enabled"].is_boolean())
+                    return {400, "application/json", R"({"error":"invalid_body"})"};
+                command->enabled = json["enabled"].get<bool>();
+            } else if (command->type == ApiCommandType::select_metadata_candidate) {
                 if (!json.is_object() || json.size() != 4 ||
                     !json.contains("session_id") || !json["session_id"].is_string() ||
                     !json.contains("disc_generation") || !json["disc_generation"].is_number_unsigned() ||
@@ -235,6 +258,7 @@ struct ApiServer::Implementation {
     int port;
     ApiStateProvider state_provider;
     ApiStateProvider read_history_provider;
+    ApiStateProvider artist_background_provider;
     ApiCommandHandler command_handler;
     ApiReadPolicyProvider read_policy_provider;
     ApiArtworkProvider artwork_provider;
@@ -278,7 +302,7 @@ struct ApiServer::Implementation {
         };
         return route_api_request(method, path, state_provider,
             local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry,
-            artwork_provider, read_history_provider);
+            artwork_provider, read_history_provider, artist_background_provider);
     }
 
     static int send_response(lws* wsi, const ApiResponse& response) {
@@ -363,7 +387,8 @@ struct ApiServer::Implementation {
             if (reason == LWS_CALLBACK_HTTP_BODY) {
                 auto found = self->pending_requests.find(wsi);
                 if (found == self->pending_requests.end()) return -1;
-                const std::size_t maximum_command_bytes = found->second.path == "/api/ui-boot" ? 512 : 4096;
+                const std::size_t maximum_command_bytes = (found->second.path == "/api/ui-boot" ||
+                    found->second.path == "/api/artist-background") ? 512 : 4096;
                 if (length > maximum_command_bytes - std::min(found->second.body.size(), maximum_command_bytes))
                     found->second.body.resize(maximum_command_bytes + 1);
                 else
@@ -413,11 +438,13 @@ struct ApiServer::Implementation {
 
     Implementation(std::string listen_address, int listen_port, ApiStateProvider provider,
                    ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle,
-                   ApiArtworkProvider artwork, ApiStateProvider history_provider)
+                   ApiArtworkProvider artwork, ApiStateProvider history_provider,
+                   ApiStateProvider background_provider)
         : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
           command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)),
           artwork_provider(std::move(artwork)) {
         read_history_provider = std::move(history_provider);
+        artist_background_provider = std::move(background_provider);
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
         websocket_state = state_provider();
         if (port < 0 || port > 65535) throw std::invalid_argument("API port is outside 0..65535");
@@ -443,10 +470,12 @@ struct ApiServer::Implementation {
 
 ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
                      ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui,
-                     ApiArtworkProvider artwork_provider, ApiStateProvider read_history_provider)
+                      ApiArtworkProvider artwork_provider, ApiStateProvider read_history_provider,
+                      ApiStateProvider artist_background_provider)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
                                                         std::move(handler), std::move(policy_provider), std::move(ui),
-                                                        std::move(artwork_provider), std::move(read_history_provider))) {}
+                                                        std::move(artwork_provider), std::move(read_history_provider),
+                                                        std::move(artist_background_provider))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

@@ -235,8 +235,22 @@ playerが起動・終了でき、key/pathをlogへ出さないことをhardware�
 写真本体の1件取得部品は、URL再検証、8 MiB上限、JPEG/PNG/WebPの外形・Content-Type、
 30日/64 MiB file cache、offline fallback、破損entry・明示的な403/404/410の破棄を
 合成fixtureで確認した。完全な画像decodeや実provider通信の確認ではない。
-選択済みArtist MBIDの候補取得は別workerからruntimeへ接続済み。ただし実provider通信、写真本体のruntime接続・配信、
+選択済みArtist MBIDの候補取得は別workerからruntimeへ接続したが、既定OFF gateの追加により
+key指定だけのworker生成・照会は停止した。実provider通信、写真本体のruntime接続・配信、
 権利表示の確認、実機表示は未実装・未検証である。APIが画像の権利者を返すと推定しない。
+
+### 既定OFF・利用不能gate（2026-10-11、作業branch）
+
+#176をbaseとする第一単位では、main ownerのpolicyを状態APIとEnrichmentServiceで共有する。
+有効なproject keyがあってもworkerを生成せず、候補JSON・写真取得を開始しない。
+Linux/aarch64の正式container build・Debian package生成、全CTest 56/56、package lifecycleを確認した。
+productionのEnrichmentServiceをlink-time fake lookupで試験し、key有無、候補選択・辞退・再選択、
+disc世代更新、OFF反復・ON拒否後の背景provider呼出0を確認した。通常metadataとcover処理は進む。
+初回の追加試験ではcover完了前の取消で完了回数のassertが競合したため、完了観測後に取消を試すよう修正した。
+実daemonのNo Disc APIでは4 fieldの利用不可状態、204/400/405/409/413、Read Policy不変、
+背景asset参照なし、keyのlog非公開をkey有無で確認した。socket API試験の外部peer POSTは403。
+gate・daemon試験は`--network none`のcontainerで各10回反復して成功した。
+背景のON、保存・復元、Settings UI、runtime画像配信は未実装。実provider通信・Pi・TV表示は未検証。
 
 ### fanart.tv画像の権利条件（2026-10-02再確認）
 
@@ -263,8 +277,8 @@ providerへOSSの専用端末でのAPI/CDN利用、cache保持・削除、出典
 
 [API認証仕様](https://api.fanart.tv/)はproject keyの`api-key`とpersonal keyの`client-key`を区別する。
 現行`--artist-background-key-file`は`api-key`ヘッダーだけを送る開発中の**project key用**経路であり、
-personal keyの入力経路ではない。key fileの指定は候補metadata照会を開始するが、写真本体の取得・
-配信・表示や利用者の写真表示ONを意味しない。将来の設定画面ではkey種別と写真表示ONを別に扱い、
+personal keyの入力経路ではない。現段階はkey fileを指定しても候補metadata照会を開始しない。
+写真本体の取得・配信・表示や利用者の写真表示ONも意味しない。将来の設定画面ではkey種別と写真表示ONを別に扱い、
 secretをAPIへ返さない。API文書にあるCC BY 3.0表記は写真本体のライセンスとして扱わない。
 
 ## Metadataとartworkの段階配信（#50、Docker自動試験）

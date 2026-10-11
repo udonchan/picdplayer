@@ -4,7 +4,8 @@
 PR #179で`--settings-file`を明示した場合のRead Policy保存・復元を実装し、masterへ統合済み。
 PR #180で標準PlayerにRead PolicyのSINGLE/REPEATを選ぶSettings画面を部分実装した。
 Settings画面を通じたPi実serviceの再起動後復元は未検証である。一般設定API、Artist Backgroundの
-ON/OFF、hot reloadはない。#177はArtist Backgroundの明示ON/OFFと実service上の保存検証が残りOpenである。
+ON受理・保存・画面操作、hot reloadはない。背景の利用不能状態APIと即時OFFのみ部分実装し、
+key指定だけの候補照会を停止した。#177はArtist BackgroundのONと保存・実service検証が残りOpenである。
 採用済みの保存・優先順位・適用契約は
 [機能設計](../design/functional-design.md#設定の所有保存適用境界)を正とする。
 
@@ -16,7 +17,7 @@ ON/OFF、hot reloadはない。#177はArtist Backgroundの明示ON/OFFと実serv
 | 項目 | 現行経路 | 設定画面での扱い | 適用・制約 |
 |---|---|---|---|
 | Read Policy（SINGLE/REPEAT、region、matches、attempts、budget） | `--read-verification`は起動時、5項目は`GET/POST /api/read-policy` | 最初の画面候補。基本modeと詳細値を分け、requested/effective/pendingを表示 | 再生中の変更は停止境界までpending。`--settings-file`を指定した場合だけ変更を保存し、保存済み値は次回起動時にCLIの初期値を上書きする |
-| Artist Backgroundの有効/無効 | 未実装。開発中のprovider key fileは起動オプション | 明示的な任意有効化候補。既定OFF、利用可能になるまで操作不能と理由を示す | #49/#51のruntime配信・表示と権利/利用条件確認が前提。選択だけで写真利用許諾が生じるわけではない |
+| Artist Backgroundの有効/無効 | `GET/POST /api/artist-background`は利用不能状態と即時OFFのみ。ONは409、保存なし | 画面は未実装。既定OFF、利用可能になるまで操作不能と理由を示す | #49/#51のruntime配信・表示と権利/利用条件確認が前提。key指定だけでは照会しない |
 | metadata照会 | `--metadata off\|musicbrainz` | 後続候補 | network利用と再起動境界を要設計。Artist Backgroundはartist MBIDがなければ利用不可 |
 | drive速度要求 | `--drive-speed-x 1..255` | 後続の詳細設定候補 | 停止/一時停止中に要求。受理は実測速度や騒音低下を保証しない |
 | direct C2 pointer要求 | `--direct-c2-pointers` | 後続の詳細設定候補 | direct backend限定。能力・downgradeを表示し、C2の有無を読取保証とみなさない |

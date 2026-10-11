@@ -12,7 +12,8 @@
 
 struct ApiResponse { int status; std::string content_type; std::string body; };
 enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track, eject,
-                            set_read_policy, select_metadata_candidate, decline_metadata_candidates };
+                            set_read_policy, select_metadata_candidate, decline_metadata_candidates,
+                            set_artist_background };
 struct ApiCommand {
     ApiCommandType type;
     int value = 0;
@@ -21,6 +22,7 @@ struct ApiCommand {
     std::uint64_t disc_generation = 0;
     std::uint64_t metadata_generation = 0;
     std::size_t candidate_index = 0;
+    bool enabled = false;
 };
 using ApiUiBootHandler = std::function<bool(std::string_view, std::string_view, double)>;
 using ApiStateProvider = std::function<std::string()>;
@@ -36,14 +38,15 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const UiBundle* ui = nullptr,
                               const ApiUiBootHandler& ui_boot_handler = {},
                               const ApiArtworkProvider& artwork_provider = {},
-                              const ApiStateProvider& read_history_provider = {});
+                              const ApiStateProvider& read_history_provider = {},
+                              const ApiStateProvider& artist_background_provider = {});
 
 class ApiServer {
 public:
     ApiServer(std::string listen_address, int port, ApiStateProvider state_provider,
               ApiCommandHandler command_handler = {}, ApiReadPolicyProvider read_policy_provider = {},
               UiBundle ui = {}, ApiArtworkProvider artwork_provider = {},
-              ApiStateProvider read_history_provider = {});
+              ApiStateProvider read_history_provider = {}, ApiStateProvider artist_background_provider = {});
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;
