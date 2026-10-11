@@ -136,6 +136,7 @@ if(BUILD_TESTING)
         add_test(NAME ui_status_javascript COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_status_test.js)
         add_test(NAME ui_render_javascript COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_render_test.js)
         add_test(NAME ui_integrity_javascript COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_integrity_test.js)
+        add_test(NAME ui_controls_javascript COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_controls_test.js)
         if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             add_test(NAME kiosk_boot_wrapper COMMAND ${NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/kiosk_boot_test.js)
             set_tests_properties(kiosk_boot_wrapper PROPERTIES TIMEOUT 10)
@@ -216,7 +217,7 @@ if(BUILD_TESTING)
         target_link_libraries(daemon_snapshot_json_test PRIVATE nlohmann_json::nlohmann_json)
         add_test(NAME daemon_snapshot_json COMMAND daemon_snapshot_json_test)
         add_executable(api_server_test tests/api_server_test.cpp src/api_server.cpp src/logger.cpp
-                       src/ui_bundle.cpp src/repeated_read_policy.cpp
+                       src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp
                        src/repeated_read_verifier.cpp)
         target_include_directories(api_server_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
         target_compile_features(api_server_test PRIVATE cxx_std_20)
@@ -226,7 +227,7 @@ if(BUILD_TESTING)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
         add_executable(diagnostic_isolation_test tests/diagnostic_isolation_test.cpp
-            src/api_server.cpp src/logger.cpp src/ui_bundle.cpp src/repeated_read_policy.cpp
+            src/api_server.cpp src/logger.cpp src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp
             src/repeated_read_verifier.cpp src/pcm_worker.cpp src/integrity_state.cpp
             src/playback_engine.cpp src/player_controller.cpp src/disc_toc.cpp
             src/daemon_snapshot_json.cpp src/drive_capabilities.cpp src/player_event.cpp)
@@ -243,7 +244,7 @@ if(BUILD_TESTING)
             set_tests_properties(ui_diagnostic_integration PROPERTIES TIMEOUT 15)
         endif()
         add_executable(ui_bundle_test tests/ui_bundle_test.cpp src/ui_bundle.cpp src/api_server.cpp src/logger.cpp
-            src/repeated_read_policy.cpp
+            src/cec_input.cpp src/repeated_read_policy.cpp
             src/repeated_read_verifier.cpp)
         target_include_directories(ui_bundle_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
         target_compile_features(ui_bundle_test PRIVATE cxx_std_20)
@@ -251,7 +252,7 @@ if(BUILD_TESTING)
         target_link_libraries(ui_bundle_test PRIVATE PkgConfig::WEBSOCKETS nlohmann_json::nlohmann_json Threads::Threads)
         add_test(NAME ui_bundle COMMAND ui_bundle_test)
         add_executable(integrity_scenario_harness tests/integrity_scenario_harness.cpp
-            src/api_server.cpp src/ui_bundle.cpp src/logger.cpp src/pcm_worker.cpp src/integrity_state.cpp
+            src/api_server.cpp src/ui_bundle.cpp src/logger.cpp src/cec_input.cpp src/pcm_worker.cpp src/integrity_state.cpp
             src/playback_engine.cpp src/player_controller.cpp src/disc_toc.cpp src/presentation_model.cpp
             src/presentation_json.cpp src/daemon_snapshot_json.cpp src/drive_capabilities.cpp src/player_event.cpp
             src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
@@ -394,9 +395,9 @@ if(BUILD_TESTING)
         add_executable(http_client_test tests/http_client_test.cpp src/http_client.cpp src/http_security_policy.cpp)
         target_include_directories(http_client_test PRIVATE include)
         target_compile_features(http_client_test PRIVATE cxx_std_20)
+        target_compile_definitions(http_client_test PRIVATE PICDPLAYER_HTTP_TEST_HOOKS=1)
         target_compile_options(http_client_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(http_client_test PRIVATE CURL::libcurl)
-        add_test(NAME http_client COMMAND http_client_test)
         add_executable(metadata_lookup_test tests/metadata_lookup_test.cpp src/metadata_lookup.cpp
             src/metadata_parser.cpp src/metadata_retry_policy.cpp src/metadata_cache.cpp src/http_client.cpp
             src/http_security_policy.cpp src/musicbrainz_disc_id.cpp src/cd_device.cpp src/disc_toc.cpp
@@ -406,7 +407,8 @@ if(BUILD_TESTING)
         target_compile_options(metadata_lookup_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(metadata_lookup_test PRIVATE PkgConfig::DISCID CURL::libcurl nlohmann_json::nlohmann_json)
         add_test(NAME metadata_lookup COMMAND metadata_lookup_test)
-        add_executable(metadata_worker_test tests/metadata_worker_test.cpp src/metadata_worker.cpp src/disc_toc.cpp)
+        add_executable(metadata_worker_test tests/metadata_worker_test.cpp src/metadata_worker.cpp
+            src/metadata_session.cpp src/player_controller.cpp src/disc_toc.cpp)
         target_include_directories(metadata_worker_test PRIVATE include)
         target_compile_features(metadata_worker_test PRIVATE cxx_std_20)
         target_compile_options(metadata_worker_test PRIVATE -Wall -Wextra -Wpedantic)
@@ -430,25 +432,34 @@ if(BUILD_TESTING)
         endforeach()
         add_test(NAME paranoia_reader COMMAND paranoia_reader_test)
     endif()
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-    if(Python3_Interpreter_FOUND)
-        add_test(NAME summarize_kiosk COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
-        add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
-        add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
-            ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
-        if(ENABLE_API)
-            add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
-            set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
-            add_test(NAME read_policy_persistence COMMAND ${Python3_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_policy_persistence.py $<TARGET_FILE:cdplayerd>)
-            set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
-        endif()
-        add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
-        add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
-        set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(ENABLE_METADATA)
+        add_test(NAME http_client COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/http_client_https.py $<TARGET_FILE:http_client_test>)
+        set_tests_properties(http_client PROPERTIES TIMEOUT 15)
     endif()
+    add_test(NAME summarize_kiosk COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
+    add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
+    add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
+        ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
+    add_test(NAME debian_control_inventory COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/debian_control_inventory_test.py)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_test(NAME release_artifact COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_artifact_test.py)
+    endif()
+    if(ENABLE_API)
+        add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
+        set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
+        add_test(NAME read_policy_persistence COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/read_policy_persistence.py $<TARGET_FILE:cdplayerd>)
+        set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
+    endif()
+    add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
+    add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
+    set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
 endif()

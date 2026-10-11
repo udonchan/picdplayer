@@ -134,7 +134,46 @@ fail-closedで再生を停止する。既定の`single`は従来どおり一回�
 API有効buildではread policyをruntimeで要求できる。daemonはrequested/effective/pendingを公開し、再生中の
 変更はSTOPPEDまたはNO_DISCで適用し、次回playでreaderを作り直す。PAUSED中も保留する。
 readerの設定をread途中で変えないため、現在再生中のPCMとその根拠は維持される。
-設定の永続保存、backendの稼働中切替、QUIET/BALANCED/SECUREへの対応は未実装。
+Read Policyの任意保存・復元は下記の範囲で実装済み。backendの稼働中切替、
+QUIET/BALANCED/SECUREへの対応は未実装。
+
+### 設定の所有・保存・適用境界
+
+daemonを設定値の検証、保存、適用、状態公開のownerとする。ViewやCustom UIは
+設定ファイルを直接編集しない。現行の利用者変更対象はRead Policyの5項目だけで、
+`GET/POST /api/read-policy`を使う。機器、ALSA、CEC、API bind/port、CDDA reader、
+Custom UI path、cache path、providerのsecretは起動引数またはsystemd設定を所有者とし、
+このAPIから変更できない。今後利用者変更対象を増やす場合は、項目ごとに型、優先順位、
+適用境界、失敗時の復旧、公開してよい情報を決めてからAPIとschemaを拡張する。
+
+Read Policyの初期値はbuilt-in値に起動引数を反映したものとする。`--settings-file`を
+指定したAPI有効Playerでは、検証に成功した保存済み5項目がその初期値を上書きする。
+保存先が未指定ならAPI変更はそのdaemon session限りであり、再起動後は初期値へ戻る。
+保存先を指定してもファイルがない場合は初期値を使う。破損、未対応schema、型・範囲・
+組合せの不正、読込失敗では警告して初期値へ戻し、再生を止めない。現行APIの
+`startup`はbuilt-in値と起動引数を区別しない。復元時は`restored`、保存を伴うAPI変更時は
+`saved`、保存先なしのAPI変更時は`session`をrequested/effectiveそれぞれの出所として返す。
+`persistence_configured`は保存先の指定だけを表し、最後の保存成否や耐クラッシュ性を表さない。
+
+POSTは5項目を一組として検証する。保存先がある場合は保存に失敗した要求を受理せず、
+requested/effectiveを変更しない。保存後は要求値を更新し、STOPPED/NO_DISCなら適用し、
+PLAYING/PAUSEDなら停止境界までpendingにする。204は要求の受理であり、再生中の即時適用や
+将来の電源断後の復元完了を保証しない。保存処理は一時ファイルのsync、同じdirectory内での
+rename、directory syncを試みる。現行実装ではrename後のdirectory sync失敗を警告として扱う。
+この場合、新値が現在見えていても電源断後の耐久性は確認できない。完全な耐久性を要件にする場合は
+この失敗時のAPI結果と復旧動作を#177で再検討する。
+
+Artist Backgroundの表示設定は未実装で、既定OFFのままとする。provider key fileの存在は
+利用者による表示許可ではない。ONを公開する前に、#49/#51の取得・配信・表示経路、
+利用条件、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
+一般設定API、全CLI optionの永続化、hot reload、機器設定の稼働中変更はこの部分実装に含めない。
+
+設定拡張の契約では、現行の`schema_version=1`をRead Policyだけを持つ旧版として扱い、
+有効な旧版を読み込む場合でもArtist BackgroundはOFFとする。新schemaへの移行は旧値全体の
+検証後にだけ行い、失敗時は旧ファイルを保全する。未知の新versionやfield、破損・一部欠落を
+推測で補完して採用しない。電源断や書込失敗では最後に完全に検証できた値、または起動値と
+背景OFFへ戻れることを#177の実装・試験条件とする。user設定をresetする操作、機器設定の
+上書きや再起動後のrollback操作は、必要な項目ごとに別途契約を定める。
 
 single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
 既定はqueue上限750 frame（10秒、PCM約1.68 MiB）、
@@ -165,6 +204,12 @@ Power StatusはON。自身宛のSET_STREAM_PATHでACTIVE_SOURCEを通知し、
 他機器のACTIVE_SOURCEで非activeになる。REQUEST_ACTIVE_SOURCEにはactive中だけ応答する。
 起動時に自動でTV入力を切り替えない。
 Play/Pause/Stop/Skip Forward/Skip Backward/Fast Forward/Rewindを再生操作へ変換する。
+方向・決定・戻るはtransport操作と分離し、`up/down/left/right/select/back`のsemantic navigationとして
+View向けの別WebSocketへ送る。対応するCEC UI codeは0x01/0x02/0x03/0x04/0x00/0x0d。
+方向の長押しは150 ms以上の間隔に抑え、決定・戻るの連続pressはreleaseまで一回だけ送る。
+releaseを送らない機器では500 ms以上pressが途切れた後を新しい押下とみなす。
+CEC transport専用キーは従来どおりdaemonが直接処理し、navigationと二重実行しない。
+Viewが未接続でも入力を保存せず、browser/API不在は再生を妨げない。
 登録後にREGZAとMarantzのARCが復帰する実機結果はあるが、全TVでの保証ではない。
 
 ## API
@@ -191,16 +236,17 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
+| WS /api/navigation | CECの短命なsemantic navigation入力。接続前の入力は再送しない。clientからのmessageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
 | GET /debug/status.css, /debug/status.js | diagnostic画面の埋め込みasset |
-| GET /player, /player/ | 選択中のUI。標準はalbum、track、位置、cover artを表示する読み取り専用Now Playing HTML |
+| GET /player, /player/ | 選択中のUI。標準はalbum、track、位置、cover artと基本transport操作を表示するPlayer HTML |
 | GET /player.css, /player.js | 選択中のNow Playing asset（Custom UI未採用時はbuilt-in） |
 | GET /builtin/player, /builtin/player.css, /builtin/player.js | 常にbuilt-inの復旧用画面・asset |
 | POST /api/ui-boot | 任意の標準UI起動telemetry、受理204。再生commandとは独立 |
 | POST /api/play, /pause, /stop, /next, /previous | bodyなし、受理204 |
 | POST /api/seek | `{"offset_seconds":10}`、±86400秒、受理204 |
 | POST /api/track | `{"track":2}`、1〜99かつ実disc内、受理204 |
-| POST /api/metadata-selection | snapshotのsession/disc/metadata世代と0起点候補indexを指定。現行discに一致すると受理204 |
+| POST /api/metadata-selection | snapshotのsession/disc/metadata世代と0起点候補index、または全候補を採用しないnullを指定。現行discに一致すると受理204 |
 | POST /api/eject | bodyなし、受理202。物理完了は状態で確認 |
 
 seek/trackはfieldを1個だけ持つJSON object。操作body上限4 KiB、state上限1 MiB。
@@ -226,9 +272,32 @@ single時の実read量はregion_framesによらず15 frame。repeat時にregion_
 technical statusはeffective strategyとReadPolicyを別々に表示し、未適用の要求は
 `effective → requested (pending)`として示す。初回にGET stateを読み、以後WebSocketで更新する。接続断ではstateを再取得してから
 再接続するため、eventを一件ずつ完全に受信したことを状態復元の前提にしない。metadata文字列は
-DOMのtextContentとして扱い、HTMLとして解釈しない。画面から操作POSTは送信しない。
+DOMのtextContentとして扱い、HTMLとして解釈しない。technical statusは読み取り専用である。
 
-`/player`も初回GETとWebSocketで同じPresentation Modelを消費する。title/artistがなければ
+`/player`も初回GETとWebSocketで同じPresentation Modelを消費する。標準Playerは
+`play/pause/stop/previous/next`を状態snapshotから有効化し、CEC semantic navigationまたは
+keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
+selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
+同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
+標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
+部分実装する。CEC方向でSINGLE/REPEAT/Backを選択し、決定でpolicy変更または画面を閉じる。
+リモコンの戻るキーでもPlayerへ戻り、
+選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
+結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
+有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの
+`persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
+session限りと扱い、単なるPOST受理を保存済みと表示しない。
+Settingsには`GET /api/read-policy`の`requested_source`と`effective_source`を別々に表示する。
+`startup/restored/saved/session`以外またはfield欠損はUnknownとし、保存先指定やPOST受理から出所を推測しない。
+読込中・取得失敗時は前回の出所を残さず、pending時は要求値と実効値の出所が異なり得る。
+曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
+操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
+`Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の
+選択POSTで行い、次のsnapshotで反映を確認する。`None of these`は候補を明示的に採用せずAudio CD表示へ戻す。
+同じdiscでは再選択可能で、この判断だけで再生を停止しない。CEC/keyboardの方向入力で候補を移動し、
+selectで実行、backで閉じる。候補がないときは
+入口を表示しない。Read policy編集はSettingsが担当する。Settings表示中に候補が届いた場合は、
+Settingsを閉じた後にpickerを表示する。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
 戻る。外部文字列はtechnical statusと同様にtextContentで表示する。HTTP responseはCSPで

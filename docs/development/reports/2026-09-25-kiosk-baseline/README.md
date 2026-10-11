@@ -38,7 +38,7 @@
 最新構成の負荷、修正版CDP、Cage単独、計測負荷分離と反復比較は
 [#83](https://github.com/udonchan/picdplayer/issues/83)で追跡する。Cage単独の省略は#52内の判断であり、残測定としては維持する。
 長期運転、TV肉眼表示・音声・異なるdiscの確認は
-[#4](https://github.com/udonchan/picdplayer/issues/4)のruntime検証に引き継ぐ。
+閉じた[#4](https://github.com/udonchan/picdplayer/issues/4)から引き継いだ[#184](https://github.com/udonchan/picdplayer/issues/184)の通常runtime検証で扱う。
 今後高負荷が再発した場合は[#27](https://github.com/udonchan/picdplayer/issues/27)の観点で
 修正版CDPと無接続CPUを比較する。今回の基線測定を無期限に延長しない。
 

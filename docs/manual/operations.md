@@ -72,7 +72,7 @@ MediaWorkerから実行する。
 成功は要求のioctl受理であり、実際の速度、物理的な回転、騒音低下、読み取りthroughputを測定または
 保証しない。`GET /api/state`の`drive.requested_speed_x`はその成功した要求、
 `drive.speed_request_error`はioctl失敗または能力非対応/不明により要求を適用しなかった理由、
-`drive.current_speed_x`は現行実装では常にnullである。失敗は再生開始を止めない。速度変更時の実機比較は#8の未完了範囲である。
+`drive.current_speed_x`は現行実装では常にnullである。失敗は再生開始を止めない。速度要求の実機評価は通常継続運転#184、定量比較#83、非対応drive/失敗時#146へ移管した。
 
 起動、seek、track変更後には次のログが出る。`wait_ms`はPCM先読みが再開条件に達するまでの時間で、
 HDMI、TV、ARC、アンプの出力遅延は含まない。
@@ -148,6 +148,10 @@ memory使用量が増える。開始閾値を増やすとplay・seek後の待ち
 player modeではAudio CDのTOC取得後、STOPPEDが5分連続した場合にLinux `CDROMSTOP`を一回だけ
 background要求する。PLAYING、disc未準備、LOADING、eject中には要求しない。成功時はINFO levelで次を記録する。
 
+サービス稼働中に明示的なdisc不在またはejectを経てAudio CDを挿入すると、TOC受理後に先頭trackから
+自動再生する。metadata候補が複数でも選択を待たない。daemon起動時に既に入っていたCDは自動再生せず、
+STOPPEDでPlay操作を待つ。STOP後のmedia pollやmetadata更新では再生を再開しない。
+
 ```text
 INFO drive: stop_command=accepted elapsed_ms=... rotation=UNVERIFIED
 ```
@@ -157,7 +161,7 @@ service restartを対象driveで確認する。
 
 probe-cddaは既定でPCMを捨て、再生しない。保存には`--pcm-output /tmp/track1.pcm`を追加する。
 保存形式はraw S16_LE・44.1 kHz・stereo。既存ファイルを上書きしない。framesは1〜750。
-paranoia比較時はENABLE_PARANOIA=ONのbuildで`--cdda-reader paranoia`を指定する。
+paranoiaの実験・検証時はENABLE_PARANOIA=ONのbuildで`--cdda-reader paranoia`を指定する。公式配布には採用しない。
 
 ```sh
 /usr/local/bin/cdplayerd --probe-disc-id /dev/sr0
@@ -198,11 +202,12 @@ APIを有効にしたplayerへブラウザから次のURLで接続する。
 http://PI_ADDRESS:8080/player
 ```
 
-`/player`は読み取り専用のNow Playing画面である。album/artist/track titleはselected metadataが
+`/player`は再生情報と基本transport操作を表示するPlayer画面である。album/artist/track titleはselected metadataが
 AVAILABLEの場合に表示する。metadataを有効にするには起動時に`--metadata musicbrainz`と必要なら
 `--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
 再生位置は表示できる。daemonが取得・cacheした画像をsame-originの`/api/presentation/artwork/cover`から読み、失敗時はCDの
-プレースホルダーを表示する。この画面は操作を送らない。任意のChromium/Cage kioskによる
+プレースホルダーを表示する。標準Playerはloopback APIで基本transport操作と曖昧metadata候補の選択を送れる。
+任意のChromium/Cage kioskによる
 tty1への自動表示は[systemd常駐運転](systemd.md#chromiumcage-kiosk)を参照する。
 
 `/debug/status`は以下のtechnical status画面であり、読み取り根拠やdrive能力を確認するために使う。

@@ -37,7 +37,8 @@ std::string serialize_presentation_model(const PresentationModel& model) {
                 {"artist", optional(item.artist)}, {"country", optional(item.country)},
                 {"date", optional(item.date)}, {"medium_position", optional(item.medium_position)},
                 {"medium_title", optional(item.medium_title)}, {"track_count", item.track_count}});
-        selection = {{"state", source.selected_index ? "SELECTED" : "AMBIGUOUS"},
+        selection = {{"state", source.selected_index ? "SELECTED" :
+                    (source.candidates_declined ? "DECLINED" : "AMBIGUOUS")},
             {"session_id", source.session_id}, {"disc_generation", source.disc_generation},
             {"metadata_generation", source.metadata_generation},
             {"selected_index", optional(source.selected_index)}, {"candidates", std::move(candidates)}};

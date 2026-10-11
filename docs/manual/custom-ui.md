@@ -58,11 +58,30 @@ Custom HTML内の参照は`/player.css`、`/player.js`、`/player/assets/...`の
 enrichment status・same-origin artwork referenceを基本表示契約とし、MusicBrainz ID、CAA URL、
 cache pathには依存してはならない。候補選択を実装するUIは`enrichment.selection`の0起点indexと
 session/disc/metadata世代を`POST /api/metadata-selection`へ渡せる。候補のprovider IDは公開されない。
+`candidate_index:null`は現行discで全候補を採用せずAudio CD表示へ戻す。snapshotのselection stateは
+`DECLINED`となるが候補は残り、後から選び直せる。選択解除と再選択は再生を止めない。
 選択UIは任意であり、実装しないCustom UIでも曖昧時のAudio CD fallbackで再生できる。
 CEC navigationへの対応も必須ではない。coverがある場合の`artwork.cover.url`は
 `/api/presentation/artwork/cover`である。metadataが先に届き、artworkが後のsnapshotで更新される。
 `artwork.cover`がまだない、または取得失敗でもmetadataと再生表示を維持する。CSPは外部script/style/image/provider接続を許可しない。
 将来、破壊的API変更時にはrequires_apiとの対応を更新する。
+
+CEC方向・決定・戻るを使うCustom UIは、任意で別の`WS /api/navigation`へ接続できる。
+messageは`{"action":"up"}`形式で、actionは`up/down/left/right/select/back`。
+短命な入力なので、接続前・切断中の入力は復元されず、未送信入力は各接続8件までで古いものから捨てる。
+このchannelを使わないCustom UIも従来どおり動き、再生専用CECキーはdaemonが直接処理する。
+標準PlayerのSettings表示は標準UI固有であり、Custom UIへ注入しない。標準画面では
+Read PolicyのSINGLE/REPEATをCECの方向/決定/Backで選択する初期画面を実装中で、
+`GET/POST /api/read-policy`を使用する。Artist Backgroundは利用条件とruntime配信が整うまで
+選択できず、Custom UIにも実装を要求しない。
+navigationは選択状態や再生結果のsnapshotではない。Viewが状態変更を求める場合はloopbackの
+操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
+標準Playerはこのchannelで基本transport buttonと任意のmetadata候補pickerのfocusを動かす参考実装である。
+Custom UIが同じfocus構造や操作UIを実装する義務はない。
+PiのCage/ChromiumではTVリモコンの同じ方向操作が、このchannelとbrowserの`keydown`の両方へ届くことを
+実機で確認した。決定キーもbrowserのbutton `click`とCEC `select`の両方に届く可能性がある。
+両方を扱うViewは同じ押下を二重に反映しないようにする。これはChromium固有の
+key eventをCustom UIの必須契約にするものではなく、再生専用CECキーは引き続きdaemonが処理する。
 
 ## 検証とfallback
 

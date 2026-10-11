@@ -18,7 +18,30 @@
         <p id="album-artist" class="album-artist">Insert an audio CD</p>
         <div class="track-row"><span id="track-number">—</span><div><h2 id="track-title">—</h2><p id="track-artist">—</p></div></div>
         <div class="timeline"><div class="progress"><span id="progress"></span></div><div><span id="position">0:00</span><span id="duration">0:00</span></div></div>
-        <p id="player-state" class="state">NO_DISC</p>
+        <div class="player-footer">
+          <p id="player-state" class="state">NO_DISC</p>
+          <p id="control-feedback" class="control-feedback" aria-live="polite"></p>
+          <nav class="player-controls" aria-label="Playback controls">
+            <button type="button" data-command="previous" disabled>Previous</button>
+            <button type="button" data-command="play" disabled>Play</button>
+            <button type="button" data-command="pause" disabled>Pause</button>
+            <button type="button" data-command="stop" disabled>Stop</button>
+            <button type="button" data-command="next" disabled>Next</button>
+            <span id="metadata-match-status" class="metadata-match-status" hidden></span>
+            <button type="button" data-command="metadata" hidden disabled>Choose album</button>
+            <button type="button" data-command="settings">Settings</button>
+          </nav>
+        </div>
+      </div>
+    </section>
+    <section id="metadata-picker" class="metadata-picker" aria-label="Album candidates" hidden>
+      <div class="metadata-picker-panel">
+        <p class="eyebrow">ALBUM CANDIDATES</p>
+        <h2>Select album information</h2>
+        <p id="metadata-picker-note" class="metadata-picker-note">Playback continues as Audio CD until a candidate is selected. A match here does not prove which physical release is inserted.</p>
+        <div id="metadata-candidates" class="metadata-candidates" role="listbox" aria-label="Available album candidates"></div>
+        <p id="metadata-feedback" class="metadata-feedback" aria-live="polite"></p>
+        <button id="metadata-close" type="button">Back to player</button>
       </div>
     </section>
     <section class="integrity" aria-labelledby="integrity-title">
@@ -85,6 +108,27 @@
           </dl>
           <p id="drive-note" class="integrity-note">Capability reports are not measurement results.</p>
         </article>
+      </div>
+    </section>
+    <section id="settings-panel" class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+      <div class="settings-surface">
+        <div class="settings-heading"><div><p class="eyebrow">PLAYER SETTINGS</p><h2 id="settings-title">Read policy</h2></div><button id="settings-close" type="button">Back</button></div>
+        <p class="settings-note">Choose how the next read is performed. A change during playback waits until playback stops.</p>
+        <div class="settings-choices" role="group" aria-label="Read verification mode">
+          <button id="policy-single" type="button" disabled>Single read</button>
+          <button id="policy-repeat" type="button" disabled>Repeat verification</button>
+        </div>
+        <p id="settings-policy-status" class="settings-status" role="status">Loading read policy…</p>
+        <p id="settings-persistence" class="settings-note">Checking whether changes are saved…</p>
+        <p id="settings-policy-source" class="settings-note">Source (requested/effective): Unknown / Unknown.</p>
+        <dl class="settings-details">
+          <dt>Region</dt><dd id="settings-region">—</dd>
+          <dt>Matches</dt><dd id="settings-matches">—</dd>
+          <dt>Attempts</dt><dd id="settings-attempts">—</dd>
+          <dt>Time budget</dt><dd id="settings-budget">—</dd>
+        </dl>
+        <p class="settings-note">Detailed values are shown for inspection; use the API to change them.</p>
+        <div class="settings-unavailable"><h3>Artist background</h3><p>Unavailable until image delivery and use conditions are ready. External photos remain off.</p></div>
       </div>
     </section>
   </main>

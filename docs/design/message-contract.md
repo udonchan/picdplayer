@@ -11,9 +11,10 @@
 |---|---|
 | GET /api/state | 最後に公開したPresentation Model全体 |
 | WS /api/events | 接続時と状態変更時の同じ全体snapshot。差分event protocolではない |
+| WS /api/navigation | CECの短命なView入力。snapshotとは独立し、接続前・切断中の入力は復元しない |
 | GET /api/read-history | 要求時のSTREAM履歴とDISC集計。stateとは独立した取得 |
 | GET /api/read-policy | requested/effective/pending、`requested_source`/`effective_source`（`startup`/`restored`/`saved`/`session`）、`persistence_configured`（boolean、保存先指定の有無）。出所は要求と実効値それぞれに対応し、pending中は異なり得る。保存先指定だけでは保存成功を保証しない。設定操作の契約は機能設計参照 |
-| POST /api/metadata-selection | loopback限定。現在の候補を明示選択し、受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
+| POST /api/metadata-selection | loopback限定。候補番号を選択、またはnullで全候補を明示的に採用しない。受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
 
 `PlayerSession` → `make_presentation_model` → `serialize_presentation_model`が公開経路。
 `diagnostic_fields`を共有してdrive/read/recent_eventsを投影する。
@@ -23,6 +24,9 @@
 状態はmain loopで250 msごとに変化を検査し、revision以外が変わった場合にrevisionを増加する。
 250 msは検査間隔であって配信期限の保証ではない。GETは更新待ちの状態を返し得る。
 WSは最新snapshotを保持し、各中間revisionや全readの受信を保証しない。受信messageによる再生操作は提供しない。
+`WS /api/navigation`は`{"action":"up"}`の形で`up/down/left/right/select/back`を配信する。
+各接続の未送信入力は最大8件で、超過時は古い入力を捨てる。接続時の初期messageや永続queueはない。
+このchannelは操作commandではない。Viewが入力を解釈し、状態変更が必要ならloopback POSTを使う。
 既定はlistenなし。有効時の既定listenは127.0.0.1。読み取りGET/WSは外部listen時にも利用可能で、
 操作POST/telemetryのloopback制限とは区別する。認証/TLSは実装されていない。
 stateサイズ上限は1 MiB。read-historyのprovider未提供は503。コマンドの204/202受理は音声/物理操作完了の通知ではない。
@@ -58,9 +62,9 @@ N/A等のUIラベルを新しいwire enumとみなさない。
 | tracks[].title, artist | string? | 曲番号で対応したmetadata |
 | enrichment.status | string enum | NOT_REQUESTED / LOADING / AVAILABLE / NOT_FOUND / UNAVAILABLE / ERROR。内部AMBIGUOUSはUNAVAILABLEへ投影 |
 | enrichment.selection | object? | 候補が取得済みで現行AUDIO_READYのときの明示選択情報。それ以外はnull |
-| enrichment.selection.state | string enum | AMBIGUOUS / SELECTED。enrichment.status=UNAVAILABLEでも曖昧候補を識別できる |
+| enrichment.selection.state | string enum | AMBIGUOUS / SELECTED / DECLINED。DECLINEDは現行discで全候補を明示的に採用しない状態。enrichment.status=UNAVAILABLEでも候補状態を識別できる |
 | enrichment.selection.session_id, disc_generation, metadata_generation | string, uint, uint | 現行daemon session、disc、metadata取得の世代。選択POSTへそのまま渡す |
-| enrichment.selection.selected_index | uint? | 選択前はnull。候補配列の0起点index |
+| enrichment.selection.selected_index | uint? | 未選択またはDECLINEDではnull。候補配列の0起点index |
 | enrichment.selection.candidates[] | array | 0〜100件の表示用候補。index、title、artist、country、date、medium_position、medium_title、track_count。欠損文字列はnull、provider IDは含まない |
 | artwork.cover | object? | 利用可能なlocal assetがなければnull |
 | artwork.cover.url | string | /api/presentation/artwork/cover。provider外部URLではない |
@@ -72,7 +76,8 @@ disc ID、provider固有ID、metadata内部エラー、media errorは現行公�
 候補表示文字列は最大256 bytesのUTF-8境界で切り詰める。候補の`title`/`artist`等はproviderから得た
 識別の手掛かりであり、物理盤との一致保証ではない。複数候補でも未選択ならAudio CD fallbackを維持する。
 選択POSTのJSONは`session_id`、`disc_generation`、`metadata_generation`、`candidate_index`の4項目のみ。
-本文上限512 bytes、型・範囲を検査する。選択は現在のdisc世代に限り、再挿入時に持ち越さない。
+`candidate_index:null`は全候補を明示的に採用せずAudio CD表示へ戻す。候補一覧は残り、後から再選択できる。
+本文上限512 bytes、型・範囲を検査する。選択とDECLINEDは現在のdisc世代に限り、再挿入時に持ち越さない。
 残り時間は曲長と位置の表示上の差から計算できるが、音声出力遅延の実測ではない。
 metadata/artworkの到着は再生開始とは独立し、再生状態だけから取得完了を推定しない。
 

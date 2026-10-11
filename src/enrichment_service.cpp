@@ -140,6 +140,11 @@ bool EnrichmentService::select_candidate(std::uint64_t generation, std::size_t i
     implementation_->sync_background_request();
     return true;
 }
+bool EnrichmentService::decline_candidates(std::uint64_t generation) {
+    if (!implementation_->worker || !implementation_->session.decline_candidates(generation)) return false;
+    implementation_->artwork_worker->cancel_pending();
+    return true;
+}
 
 namespace {
 bool safe_key(const std::string& value) {

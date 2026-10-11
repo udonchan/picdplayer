@@ -380,14 +380,18 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     }
                     return true;
                 }
-                if (command.type == ApiCommandType::select_metadata_candidate) {
+                if (command.type == ApiCommandType::select_metadata_candidate ||
+                    command.type == ApiCommandType::decline_metadata_candidates) {
 #ifdef ENABLE_METADATA
                     if (!metadata_enabled || command.session_id != diagnostic_session_id ||
                         command.disc_generation != disc_generation || toc_needs_refresh || !loaded_toc ||
                         media_state.state() != MediaLifecycleState::audio_ready ||
-                        !enrichment.select_candidate(command.metadata_generation, command.candidate_index))
+                        !(command.type == ApiCommandType::decline_metadata_candidates
+                            ? enrichment.decline_candidates(command.metadata_generation)
+                            : enrichment.select_candidate(command.metadata_generation, command.candidate_index)))
                         return false;
-                    log_info("metadata") << "selected candidate=" << command.candidate_index
+                    log_info("metadata") << (command.type == ApiCommandType::decline_metadata_candidates
+                        ? "declined candidates" : "selected candidate=" + std::to_string(command.candidate_index))
                                          << " disc_generation=" << disc_generation;
                     return true;
 #else
@@ -411,6 +415,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.synchronize(); print_state(controller); return true;
                 case ApiCommandType::set_read_policy: return false; // handled above
                 case ApiCommandType::select_metadata_candidate: return false; // handled above
+                case ApiCommandType::decline_metadata_candidates: return false; // handled above
                 case ApiCommandType::eject: break;
                 }
                 if (apply_cec_command(controller, player_command)) {
@@ -659,6 +664,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     loaded_toc = *media_result.toc;
                     log_info("media") << "audio_disc tracks=" << loaded_toc->tracks.size()
                                       << " leadout_lba=" << loaded_toc->leadout_lba;
+                    if (media_state.take_audio_insertion()) {
+                        controller.play();
+                        engine.synchronize();
+                        log_info("media") << "auto_play=inserted_audio_disc disc_generation=" << disc_generation;
+                    }
                     print_state(controller);
                 }
                 // A newly accepted TOC starts a fresh stopped-idle interval.
@@ -775,6 +785,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.synchronize();
                     print_state(controller);
                 }
+#ifdef ENABLE_API
+                if (received.navigation && api_server)
+                    api_server->publish_navigation(*received.navigation);
+#endif
             }
             report_slow_stage("cec_receive", receive_started);
         }

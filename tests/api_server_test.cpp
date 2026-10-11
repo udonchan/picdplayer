@@ -12,7 +12,7 @@
 #include <utility>
 #include <unistd.h>
 
-namespace { void check(bool value) { if (!value) throw std::runtime_error("API route test failed"); } }
+#define check(value) do { if (!(value)) throw std::runtime_error("API route test failed at line " + std::to_string(__LINE__)); } while (0)
 int main() {
     try {
         int calls = 0;
@@ -101,6 +101,11 @@ int main() {
         check(response.status == 204 && received_command.type == ApiCommandType::select_metadata_candidate &&
               received_command.session_id == "session-1" && received_command.disc_generation == 2 &&
               received_command.metadata_generation == 3 && received_command.candidate_index == 1);
+        response = route_api_request("POST", "/api/metadata-selection", provider, commands,
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":null})");
+        check(response.status == 204 && received_command.type == ApiCommandType::decline_metadata_candidates &&
+              received_command.session_id == "session-1" && received_command.disc_generation == 2 &&
+              received_command.metadata_generation == 3);
         check(route_api_request("POST", "/api/metadata-selection", provider).status == 403);
         check(route_api_request("GET", "/api/metadata-selection", provider, commands).status == 405);
         check(route_api_request("POST", "/api/metadata-selection", provider, rejecting, selection_body).status == 409);
@@ -109,6 +114,7 @@ int main() {
             R"({"session_id":"session-1","disc_generation":0,"metadata_generation":3,"candidate_index":1})",
             R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":100})",
             R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":-1})",
+            R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":"none"})",
             R"({"session_id":"session-1","disc_generation":2,"metadata_generation":3,"candidate_index":1,"extra":1})"
         }) check(route_api_request("POST", "/api/metadata-selection", provider, commands, invalid).status == 400);
         check(route_api_request("POST", "/api/metadata-selection", provider, commands,
@@ -285,7 +291,7 @@ int main() {
         }
         post_client.join();
         check(received.find("HTTP/1.1 204") != std::string::npos);
-        check(command_calls == 11 && received_command.type == ApiCommandType::select_track &&
+        check(command_calls == 12 && received_command.type == ApiCommandType::select_track &&
               received_command.value == 4);
 
         std::atomic<bool> got_initial_event = false;
@@ -351,6 +357,47 @@ int main() {
         check(websocket_received.find("101 Switching Protocols") != std::string::npos);
         check(websocket_received.find(R"({"revision":8})") != std::string::npos);
         check(occurrences(websocket_received, R"({"revision":8})") == 1);
+
+        std::atomic<bool> navigation_connected = false;
+        std::atomic<bool> navigation_done = false;
+        std::string navigation_received;
+        std::thread navigation_client([&] {
+            const int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+            if (fd < 0) { navigation_done = true; return; }
+            timeval timeout{2, 0};
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+            sockaddr_in address{}; address.sin_family = AF_INET;
+            address.sin_port = htons(static_cast<std::uint16_t>(server.port()));
+            address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            if (connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0) {
+                constexpr char request[] =
+                    "GET /api/navigation HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\n"
+                    "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                    "Sec-WebSocket-Version: 13\r\n\r\n";
+                (void)send(fd, request, std::strlen(request), 0);
+                char buffer[2048];
+                for (;;) {
+                    const auto count = recv(fd, buffer, sizeof(buffer), 0);
+                    if (count <= 0) break;
+                    navigation_received.append(buffer, static_cast<std::size_t>(count));
+                    if (navigation_received.find("101 Switching Protocols") != std::string::npos)
+                        navigation_connected = true;
+                    if (navigation_received.find(R"({"action":"up"})") != std::string::npos) break;
+                }
+            }
+            close(fd); navigation_done = true;
+        });
+        for (int i = 0; i < 1000 && !navigation_connected; ++i) {
+            server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        check(navigation_connected);
+        server.publish_navigation(CecNavigation::up);
+        for (int i = 0; i < 1000 && !navigation_done; ++i) {
+            server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        navigation_client.join();
+        check(navigation_received.find(R"({"action":"up"})") != std::string::npos);
+        check(navigation_received.find(R"({"revision":8})") == std::string::npos);
 
         const ApiReadPolicyProvider policy_provider = [] {
             return std::string(R"({"requested":{"mode":"REPEAT"},"effective":{"mode":"SINGLE"},"pending":true})");

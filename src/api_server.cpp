@@ -6,6 +6,7 @@
 #include <array>
 #include <algorithm>
 #include <cstring>
+#include <deque>
 #include <libwebsockets.h>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -161,17 +162,20 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                     !json.contains("session_id") || !json["session_id"].is_string() ||
                     !json.contains("disc_generation") || !json["disc_generation"].is_number_unsigned() ||
                     !json.contains("metadata_generation") || !json["metadata_generation"].is_number_unsigned() ||
-                    !json.contains("candidate_index") || !json["candidate_index"].is_number_unsigned())
+                    !json.contains("candidate_index") ||
+                    (!json["candidate_index"].is_number_unsigned() && !json["candidate_index"].is_null()))
                     return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
                 command->session_id = json["session_id"].get<std::string>();
                 command->disc_generation = json["disc_generation"].get<std::uint64_t>();
                 command->metadata_generation = json["metadata_generation"].get<std::uint64_t>();
-                command->candidate_index = json["candidate_index"].get<std::size_t>();
+                if (json["candidate_index"].is_null())
+                    command->type = ApiCommandType::decline_metadata_candidates;
+                else command->candidate_index = json["candidate_index"].get<std::size_t>();
                 if (command->session_id.empty() || command->session_id.size() > 64 ||
                     command->session_id.find_first_not_of(
                         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != std::string::npos ||
                     command->disc_generation == 0 || command->metadata_generation == 0 ||
-                    command->candidate_index >= 100)
+                    (command->type == ApiCommandType::select_metadata_candidate && command->candidate_index >= 100))
                     return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"invalid_body"})"};
             } else if (command->type == ApiCommandType::set_read_policy) {
                 if (!json.is_object() || json.size() != 5 || !json.contains("mode") ||
@@ -237,6 +241,7 @@ struct ApiServer::Implementation {
     std::string websocket_state;
     std::uint64_t websocket_generation = 0;
     std::unordered_map<lws*, std::uint64_t> websocket_clients;
+    std::unordered_map<lws*, std::deque<std::string>> navigation_clients;
     std::array<lws_protocols, 2> protocols{};
     lws_context* context = nullptr;
     struct PendingRequest { std::string method; std::string path; std::string body; };
@@ -307,15 +312,35 @@ struct ApiServer::Implementation {
             if (reason == LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION) {
                 std::array<char, 128> uri{};
                 const auto count = lws_hdr_copy(wsi, uri.data(), uri.size(), WSI_TOKEN_GET_URI);
-                return count > 0 && std::string_view(uri.data(), static_cast<std::size_t>(count)) == "/api/events"
-                    ? 0 : 1;
+                if (count <= 0) return 1;
+                const std::string_view path(uri.data(), static_cast<std::size_t>(count));
+                return path == "/api/events" || path == "/api/navigation" ? 0 : 1;
             }
             if (reason == LWS_CALLBACK_ESTABLISHED) {
-                self->websocket_clients.emplace(wsi, std::numeric_limits<std::uint64_t>::max());
-                lws_callback_on_writable(wsi);
+                std::array<char, 128> uri{};
+                const auto count = lws_hdr_copy(wsi, uri.data(), uri.size(), WSI_TOKEN_GET_URI);
+                if (count <= 0) return -1;
+                if (std::string_view(uri.data(), static_cast<std::size_t>(count)) == "/api/navigation") {
+                    self->navigation_clients.emplace(wsi, std::deque<std::string>{});
+                } else {
+                    self->websocket_clients.emplace(wsi, std::numeric_limits<std::uint64_t>::max());
+                    lws_callback_on_writable(wsi);
+                }
                 return 0;
             }
             if (reason == LWS_CALLBACK_SERVER_WRITEABLE) {
+                if (auto navigation = self->navigation_clients.find(wsi);
+                    navigation != self->navigation_clients.end()) {
+                    if (navigation->second.empty()) return 0;
+                    const auto& payload = navigation->second.front();
+                    std::vector<unsigned char> message(LWS_PRE + payload.size());
+                    std::memcpy(message.data() + LWS_PRE, payload.data(), payload.size());
+                    const auto written = lws_write(wsi, message.data() + LWS_PRE, payload.size(), LWS_WRITE_TEXT);
+                    if (written < 0 || static_cast<std::size_t>(written) != payload.size()) return -1;
+                    navigation->second.pop_front();
+                    if (!navigation->second.empty()) lws_callback_on_writable(wsi);
+                    return 0;
+                }
                 const auto client = self->websocket_clients.find(wsi);
                 if (client == self->websocket_clients.end()) return -1;
                 if (client->second == self->websocket_generation) return 0;
@@ -331,6 +356,7 @@ struct ApiServer::Implementation {
             }
             if (reason == LWS_CALLBACK_CLOSED) {
                 self->websocket_clients.erase(wsi);
+                self->navigation_clients.erase(wsi);
                 return 0;
             }
             if (reason == LWS_CALLBACK_RECEIVE) return -1;
@@ -428,6 +454,15 @@ void ApiServer::publish_state(std::string_view state_json) {
     ++implementation_->websocket_generation;
     lws_callback_on_writable_all_protocol(implementation_->context,
                                           &implementation_->protocols[0]);
+}
+void ApiServer::publish_navigation(CecNavigation navigation) {
+    const std::string payload = std::string("{\"action\":\"") + std::string(cec_navigation_name(navigation)) + "\"}";
+    for (auto& [client, pending] : implementation_->navigation_clients) {
+        constexpr std::size_t maximum_pending = 8;
+        if (pending.size() == maximum_pending) pending.pop_front();
+        pending.push_back(payload);
+        lws_callback_on_writable(client);
+    }
 }
 void ApiServer::service() {
     // Since lws 3.2 the timeout argument is ignored. Queue a wakeup so

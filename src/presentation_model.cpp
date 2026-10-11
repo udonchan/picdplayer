@@ -52,6 +52,7 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
         selection.disc_generation = *disc_generation;
         selection.metadata_generation = *metadata_generation;
         selection.selected_index = enrichment.selected;
+        selection.candidates_declined = enrichment.candidates_declined;
         selection.candidates.reserve(enrichment.candidates.size());
         for (std::size_t index = 0; index < enrichment.candidates.size(); ++index) {
             const auto& source = enrichment.candidates[index].metadata;

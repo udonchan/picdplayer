@@ -7,6 +7,7 @@
 struct CecReceiveResult {
     bool dequeued = false;
     std::optional<CecCommand> command;
+    std::optional<CecNavigation> navigation;
 };
 
 class CecDevice {
@@ -28,6 +29,7 @@ private:
     std::uint16_t physical_ = 0xffff;
     std::uint8_t logical_ = 0xff;
     bool active_source_ = false;
+    CecNavigationFilter navigation_filter_;
     void status(const std::string& message);
     void report_active_source(const char* reason);
     void set_active_source(bool active, const char* reason, std::uint16_t path);

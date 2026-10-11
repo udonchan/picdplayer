@@ -72,6 +72,449 @@ const setHidden = (element, value) => {
   if (element.hidden !== value) element.hidden = value;
 };
 
+// The View owns focus only; the daemon snapshot remains the playback authority.
+// View が保持するのは focus だけで、再生状態は daemon の snapshot を正とします。
+const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
+const policyButtons = [byId('policy-single'), byId('policy-repeat')];
+const settingsCloseButton = byId('settings-close');
+const settingsActions = [...policyButtons, settingsCloseButton];
+let focusedControl = -1;
+let pendingCommand = null;
+let feedbackTimer;
+let settingsOpen = false;
+let focusedPolicy = 0;
+let settingsFocusMoved = false;
+let settingsRequestId = 0;
+let policyState = null;
+let pendingPolicy = false;
+let pickerOpen = false;
+let pickerIndex = 0;
+let pickerKey = '';
+let autoOpenedPickerKey = '';
+let pendingSelection = null;
+let candidateButtons = [];
+let lastPickerFocused = null;
+const multipleCandidateSelection = (snapshot) => {
+  const selection = snapshot?.enrichment?.selection;
+  return snapshot?.disc?.state === 'AUDIO_READY' && ['AMBIGUOUS', 'SELECTED', 'DECLINED'].includes(selection?.state)
+    && Array.isArray(selection.candidates) && selection.candidates.length > 1 ? selection : null;
+};
+const selectionKey = (selection) => selection
+  ? JSON.stringify([selection.session_id, selection.disc_generation, selection.metadata_generation]) : '';
+const candidateDescription = (candidate) => [candidate.artist, candidate.date, candidate.country,
+  Number.isInteger(candidate.medium_position) ? `Disc ${candidate.medium_position}` : null,
+  candidate.medium_title, Number.isInteger(candidate.track_count) ? `${candidate.track_count} tracks` : null]
+  .filter(Boolean).join(' · ');
+function closePicker() {
+  pickerOpen = false;
+  lastPickerFocused = null;
+  pendingSelection = null;
+  setHidden(byId('metadata-picker'), true);
+  set('metadata-feedback', '');
+  focusControl(-1);
+}
+function renderPickerFocus() {
+  const selection = multipleCandidateSelection(currentSnapshot);
+  const selectedIndex = selection?.selected_index;
+  candidateButtons.forEach((button, index) => {
+    const focused = String(pickerOpen && index === pickerIndex);
+    if (button.dataset.focused !== focused) {
+      button.dataset.focused = focused;
+    }
+    button.setAttribute('aria-selected', String(button.dataset.candidateIndex === String(selectedIndex) ||
+      (button.dataset.candidateIndex === 'none' && selection?.state === 'DECLINED')));
+    const candidate = selection?.candidates[index];
+    if (candidate && button.children?.[1]) {
+      const details = `${candidate.index === selectedIndex ? 'CURRENT SELECTION · ' : ''}${candidateDescription(candidate) || 'Additional details not available'}`;
+      if (button.children[1].textContent !== details) button.children[1].textContent = details;
+    }
+    const disabled = Boolean(pendingSelection);
+    if (button.disabled !== disabled) button.disabled = disabled;
+  });
+  const active = pickerOpen ? candidateButtons[pickerIndex] : null;
+  if (active && active !== lastPickerFocused) {
+    active.focus?.({ preventScroll: true });
+    active.scrollIntoView?.({ block: 'nearest' });
+  }
+  lastPickerFocused = active;
+}
+function renderPicker(snapshot) {
+  const selection = multipleCandidateSelection(snapshot);
+  const nextKey = selectionKey(selection);
+  if (!selection || (pickerOpen && pickerKey && pickerKey !== nextKey)) {
+    if (pickerOpen) closePicker();
+    pickerKey = '';
+    candidateButtons = [];
+    if (!selection) return;
+  }
+  if (settingsOpen) return;
+  // Show each new ambiguity once. Back dismisses it without suppressing the
+  // transport controls, while Choose album can reopen the same candidate set.
+  // 新しい曖昧候補は一度だけ自動表示します。Back後は手動で開き直せます。
+  if (selection.state === 'AMBIGUOUS' && autoOpenedPickerKey !== nextKey) {
+    autoOpenedPickerKey = nextKey;
+    openPicker();
+    return;
+  }
+  if (pendingSelection && selection.state === 'SELECTED' &&
+      selection.selected_index === selection.candidates[pendingSelection.index]?.index) {
+    closePicker();
+    return;
+  }
+  if (pendingSelection && selection.state === 'DECLINED' &&
+      pendingSelection.index === selection.candidates.length) {
+    closePicker();
+    return;
+  }
+  if (!pickerOpen) return;
+  if (pickerKey !== nextKey) {
+    pickerKey = nextKey;
+    const selectedPosition = selection.candidates.findIndex((candidate) => candidate.index === selection.selected_index);
+    pickerIndex = selection.state === 'DECLINED' ? selection.candidates.length
+      : selectedPosition >= 0 ? selectedPosition : 0;
+    lastPickerFocused = null;
+    set('metadata-picker-note', selection.state === 'SELECTED'
+      ? 'Choose different album information. The current choice does not prove which physical release is inserted.'
+      : 'Playback continues as Audio CD until a candidate is selected. A match here does not prove which physical release is inserted.');
+    const list = byId('metadata-candidates');
+    candidateButtons = selection.candidates.map((candidate, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'option');
+      button.dataset.candidateIndex = String(candidate.index);
+      const title = document.createElement('span');
+      title.className = 'candidate-title';
+      title.textContent = candidate.title || `Candidate ${index + 1}`;
+      const details = document.createElement('span');
+      details.className = 'candidate-details';
+      details.textContent = `${candidate.index === selection.selected_index ? 'CURRENT SELECTION · ' : ''}${candidateDescription(candidate) || 'Additional details not available'}`;
+      button.append(title, details);
+      button.addEventListener('click', (event) => {
+        pickerIndex = index;
+        if (event.detail === 0) handleNavigationInput('select', 'keyboard');
+        else requestCandidate(index);
+      });
+      return button;
+    });
+    const none = document.createElement('button');
+    none.type = 'button';
+    none.dataset.candidateIndex = 'none';
+    none.setAttribute('role', 'option');
+    const noneTitle = document.createElement('span');
+    noneTitle.className = 'candidate-title';
+    noneTitle.textContent = 'None of these';
+    const noneDetails = document.createElement('span');
+    noneDetails.className = 'candidate-details';
+    noneDetails.textContent = 'Use Audio CD information for this disc';
+    none.append(noneTitle, noneDetails);
+    none.addEventListener('click', (event) => {
+      pickerIndex = selection.candidates.length;
+      if (event.detail === 0) handleNavigationInput('select', 'keyboard');
+      else requestCandidate(pickerIndex);
+    });
+    candidateButtons.push(none);
+    list.replaceChildren(...candidateButtons);
+  }
+  renderPickerFocus();
+}
+function openPicker() {
+  const selection = multipleCandidateSelection(currentSnapshot);
+  if (!selection) return;
+  pickerOpen = true;
+  pickerKey = '';
+  focusControl(-1);
+  setHidden(byId('metadata-picker'), false);
+  renderPicker(currentSnapshot);
+}
+async function requestCandidate(index) {
+  const selection = multipleCandidateSelection(currentSnapshot);
+  if (!pickerOpen || !selection || pendingSelection || index < 0 || index > selection.candidates.length) return;
+  const decline = index === selection.candidates.length;
+  if (decline && selection.state === 'DECLINED') { closePicker(); return; }
+  if (!decline && selection.state === 'SELECTED' && selection.selected_index === selection.candidates[index].index) {
+    closePicker();
+    return;
+  }
+  const key = selectionKey(selection);
+  pendingSelection = { key, index };
+  renderPickerFocus();
+  set('metadata-feedback', 'SENDING SELECTION');
+  let accepted = false;
+  try {
+    const response = await fetch('/api/metadata-selection', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: selection.session_id,
+        disc_generation: selection.disc_generation, metadata_generation: selection.metadata_generation,
+        candidate_index: decline ? null : selection.candidates[index].index }),
+    });
+    if (!pickerOpen || selectionKey(multipleCandidateSelection(currentSnapshot)) !== key) return;
+    accepted = response.status === 204;
+    set('metadata-feedback', response.status === 204 ? 'WAITING FOR ALBUM UPDATE'
+      : `SELECTION REJECTED · ${response.status}`);
+    if (response.status === 409) load();
+  } catch {
+    if (pickerOpen && selectionKey(multipleCandidateSelection(currentSnapshot)) === key)
+      set('metadata-feedback', 'CONNECTION ERROR');
+  } finally {
+    if (!accepted) pendingSelection = null;
+    renderPickerFocus();
+  }
+}
+const controlEnabled = (command, snapshot) => {
+  if (command === 'settings') return true;
+  if (snapshot?.disc?.state !== 'AUDIO_READY') return false;
+  if (command === 'metadata') return Boolean(multipleCandidateSelection(snapshot));
+  const state = snapshot?.player?.state;
+  if (!['STOPPED', 'PLAYING', 'PAUSED'].includes(state)) return false;
+  if (command === 'play') return state === 'STOPPED' || state === 'PAUSED';
+  if (command === 'pause') return state === 'PLAYING';
+  if (command === 'stop') return state === 'PLAYING' || state === 'PAUSED';
+  return Array.isArray(snapshot?.tracks) && snapshot.tracks.length > 1;
+};
+function renderControls(snapshot) {
+  const selection = multipleCandidateSelection(snapshot);
+  const matchStatus = byId('metadata-match-status');
+  setHidden(matchStatus, !selection);
+  if (selection) {
+    const selectedPosition = selection.candidates.findIndex((candidate) => candidate.index === selection.selected_index);
+    set('metadata-match-status', selection.state === 'AMBIGUOUS'
+      ? `${selection.candidates.length} MATCHES · CHOOSE`
+      : selection.state === 'DECLINED' ? `${selection.candidates.length} MATCHES · NONE`
+      : selectedPosition >= 0
+        ? `${selection.candidates.length} MATCHES · #${selectedPosition + 1}`
+        : `${selection.candidates.length} MATCHES · UNKNOWN`);
+  }
+  if (focusedControl >= 0 && !controlEnabled(controls[focusedControl]?.dataset.command, snapshot))
+    focusedControl = -1;
+  controls.forEach((button, index) => {
+    if (button.dataset.command === 'metadata') {
+      setHidden(button, !selection);
+      button.textContent = selection && selection.state !== 'AMBIGUOUS' ? 'Change album' : 'Choose album';
+    }
+    const stateAvailable = controlEnabled(button.dataset.command, snapshot);
+    const available = stateAvailable && pendingCommand !== button.dataset.command;
+    if (button.disabled === available) button.disabled = !available;
+    const focused = focusedControl === index && stateAvailable;
+    if (button.dataset.focused !== String(focused)) button.dataset.focused = String(focused);
+  });
+}
+function focusControl(index) {
+  if (index < 0 && focusedControl >= 0) controls[focusedControl]?.blur?.();
+  focusedControl = index;
+  renderControls(currentSnapshot);
+  if (index >= 0) controls[index]?.focus?.({ preventScroll: true });
+}
+function moveControl(direction) {
+  if (!controls.length) return;
+  const enabled = controls.map((button, index) => !button.disabled ? index : -1).filter((index) => index >= 0);
+  if (!enabled.length) return;
+  const position = enabled.indexOf(focusedControl);
+  const next = position < 0 ? (direction > 0 ? enabled[0] : enabled[enabled.length - 1])
+    : enabled[(position + direction + enabled.length) % enabled.length];
+  focusControl(next);
+}
+function controlFeedback(message) {
+  const label = byId('control-feedback');
+  if (label.textContent !== message) label.textContent = message;
+  clearTimeout(feedbackTimer);
+  if (message) feedbackTimer = setTimeout(() => {
+    if (label.textContent === message) label.textContent = '';
+  }, 1800);
+}
+function renderPolicySettings() {
+  const requested = policyState?.requested;
+  const effective = policyState?.effective;
+  const sourceLabels = { startup: 'Startup', restored: 'Restored', saved: 'Saved', session: 'Session only' };
+  const sourceLabel = (value) => typeof value === 'string' &&
+    Object.prototype.hasOwnProperty.call(sourceLabels, value) ? sourceLabels[value] : 'Unknown';
+  set('settings-policy-source', `Source (requested/effective): ${sourceLabel(policyState?.requested_source)} / ${sourceLabel(policyState?.effective_source)}.`);
+  const valid = requested && ['SINGLE', 'REPEAT'].includes(requested.mode) &&
+    ['region_frames', 'required_matches', 'maximum_attempts', 'time_budget_ms']
+      .every((key) => Number.isInteger(requested[key]) && requested[key] >= 0);
+  policyButtons.forEach((button, index) => {
+    button.disabled = !valid || pendingPolicy;
+    button.dataset.selected = String(valid && requested.mode === (index ? 'REPEAT' : 'SINGLE'));
+    button.dataset.focused = String(settingsOpen && focusedPolicy === index);
+  });
+  settingsCloseButton.dataset.focused = String(settingsOpen && focusedPolicy === 2);
+  set('settings-region', valid ? `${requested.region_frames} CD frames` : '—');
+  set('settings-matches', valid ? requested.required_matches : '—');
+  set('settings-attempts', valid ? requested.maximum_attempts : '—');
+  set('settings-budget', valid ? `${requested.time_budget_ms} ms` : '—');
+  set('settings-persistence', policyState?.persistence_configured === true
+    ? 'A successful change is saved for daemon restarts.'
+    : 'Changes apply to this daemon session only.');
+  if (!valid) set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
+  if (valid) set('settings-policy-status', policyState.pending
+    ? `Requested ${requested.mode}; effective ${effective?.mode || 'UNKNOWN'} until playback stops.`
+    : `Effective ${effective?.mode || requested.mode}.`);
+}
+async function loadPolicySettings() {
+  const requestId = settingsRequestId;
+  try {
+    const response = await fetch('/api/read-policy');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const loaded = await response.json();
+    if (!settingsOpen || requestId !== settingsRequestId) return;
+    policyState = loaded;
+    if (settingsOpen && !settingsFocusMoved &&
+        ['SINGLE', 'REPEAT'].includes(policyState?.requested?.mode)) {
+      focusPolicy(policyState.requested.mode === 'REPEAT' ? 1 : 0);
+    }
+    renderPolicySettings();
+  } catch {
+    if (!settingsOpen || requestId !== settingsRequestId) return;
+    policyState = null;
+    renderPolicySettings();
+    set('settings-policy-status', 'Read policy unavailable. Playback is unaffected.');
+  }
+}
+function focusPolicy(index) {
+  focusedPolicy = index;
+  renderPolicySettings();
+  settingsActions[index]?.focus?.({ preventScroll: true });
+}
+function openSettings() {
+  settingsOpen = true;
+  settingsFocusMoved = false;
+  settingsRequestId += 1;
+  policyState = null;
+  setHidden(byId('settings-panel'), false);
+  focusPolicy(0);
+  set('settings-policy-status', 'Loading read policy…');
+  set('settings-persistence', 'Checking whether changes are saved…');
+  void loadPolicySettings();
+}
+function closeSettings() {
+  settingsOpen = false;
+  settingsRequestId += 1;
+  setHidden(byId('settings-panel'), true);
+  const index = controls.findIndex((button) => button.dataset.command === 'settings');
+  if (index >= 0) focusControl(index);
+  renderPicker(currentSnapshot);
+}
+async function selectPolicy(index) {
+  const requested = policyState?.requested;
+  if (!settingsOpen || pendingPolicy || policyButtons[index]?.disabled || !requested) return;
+  const requestId = settingsRequestId;
+  const mode = index ? 'repeat' : 'single';
+  pendingPolicy = true;
+  renderPolicySettings();
+  set('settings-policy-status', 'Saving policy…');
+  let failed = false;
+  try {
+    const response = await fetch('/api/read-policy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, region_frames: requested.region_frames,
+        required_matches: requested.required_matches, maximum_attempts: requested.maximum_attempts,
+        time_budget_ms: requested.time_budget_ms }),
+    });
+    if (response.status !== 204) throw new Error(`HTTP ${response.status}`);
+    if (settingsOpen && requestId === settingsRequestId) await loadPolicySettings();
+  } catch {
+    failed = true;
+  } finally {
+    pendingPolicy = false;
+    renderPolicySettings();
+    if (failed && settingsOpen && requestId === settingsRequestId)
+      set('settings-policy-status', 'Policy change failed. Current playback continues.');
+  }
+}
+async function activateControl(button) {
+  if (!button || button.disabled || pendingCommand) return;
+  const command = button.dataset.command;
+  if (command === 'settings') { openSettings(); return; }
+  if (command === 'metadata') { openPicker(); return; }
+  if (!['play', 'pause', 'stop', 'previous', 'next'].includes(command)) return;
+  pendingCommand = command;
+  renderControls(currentSnapshot);
+  controlFeedback('SENDING');
+  try {
+    const response = await fetch(`/api/${command}`, { method: 'POST' });
+    controlFeedback(response.status === 204 ? 'REQUEST ACCEPTED' : `REJECTED · ${response.status}`);
+  } catch {
+    controlFeedback('CONNECTION ERROR');
+  } finally {
+    pendingCommand = null;
+    renderControls(currentSnapshot);
+  }
+}
+function handleNavigation(action) {
+  if (settingsOpen) {
+    if (action === 'back') closeSettings();
+    else if (action === 'left' || action === 'up' || action === 'right' || action === 'down') {
+      settingsFocusMoved = true;
+      const direction = action === 'left' || action === 'up' ? -1 : 1;
+      focusPolicy((focusedPolicy + direction + settingsActions.length) % settingsActions.length);
+    }
+    else if (action === 'select') {
+      if (focusedPolicy === 2) closeSettings();
+      else void selectPolicy(focusedPolicy);
+    }
+    return;
+  }
+  if (pickerOpen) {
+    if (action === 'back') closePicker();
+    else if ((action === 'up' || action === 'left') && !pendingSelection) {
+      pickerIndex = (pickerIndex + candidateButtons.length - 1) % candidateButtons.length;
+      renderPickerFocus();
+    } else if ((action === 'down' || action === 'right') && !pendingSelection) {
+      pickerIndex = (pickerIndex + 1) % candidateButtons.length;
+      renderPickerFocus();
+    } else if (action === 'select') requestCandidate(pickerIndex);
+    return;
+  }
+  if (action === 'left' || action === 'up') moveControl(-1);
+  else if (action === 'right' || action === 'down') moveControl(1);
+  else if (action === 'select') activateControl(controls[focusedControl]);
+  else if (action === 'back') focusControl(-1);
+}
+// Some TVs deliver one CEC direction both through the daemon and as a Chromium key.
+// 同じリモコン操作がCECとChromiumのキー入力の両方へ届く場合、後着の一方だけを抑えます。
+let lastNavigationInput = null;
+function handleNavigationInput(action, source) {
+  const now = Date.now();
+  const duplicate = lastNavigationInput?.action === action
+    && lastNavigationInput.source !== source && now - lastNavigationInput.time < 250;
+  if (duplicate) {
+    lastNavigationInput = null;
+    return;
+  }
+  lastNavigationInput = { action, source, time: now };
+  handleNavigation(action);
+}
+controls.forEach((button, index) => button.addEventListener('click', (event) => {
+  if (pickerOpen || settingsOpen) return;
+  focusControl(index);
+  // Keyboard activation produces a click with detail=0; a CEC select can
+  // arrive for the same remote press. Pointer clicks remain independent.
+  // キーボード由来のclickは同じリモコン操作のCEC selectと重複し得ます。
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else activateControl(button);
+}));
+policyButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
+  focusPolicy(index);
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else void selectPolicy(index);
+}));
+settingsCloseButton.addEventListener?.('click', closeSettings);
+document.addEventListener('keydown', (event) => {
+  if (settingsOpen && event.key === 'Tab') {
+    event.preventDefault();
+    settingsFocusMoved = true;
+    const targets = [...policyButtons.filter((button) => !button.disabled), settingsCloseButton];
+    const current = targets.indexOf(document.activeElement);
+    const next = current < 0 ? (event.shiftKey ? targets.length - 1 : 0)
+      : (current + (event.shiftKey ? targets.length - 1 : 1)) % targets.length;
+    targets[next].focus?.({ preventScroll: true });
+    return;
+  }
+  const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };
+  if (!actions[event.key] || (!controls.length && !settingsOpen && !pickerOpen)) return;
+  event.preventDefault();
+  handleNavigationInput(actions[event.key], 'keyboard');
+});
+
 // CD frame is 1/75 second. Keep this conversion in the UI presentation layer.
 // CD frame は 1/75 秒です。この変換は表示層だけで行います。
 const formatTime = (frames) => {
@@ -318,7 +761,7 @@ function renderDiscMap(snapshot) {
 
 // Cover art is optional enrichment. A failed image must not hide the album data.
 // ジャケットは任意の付加情報です。画像読込失敗でアルバム情報を消しません。
-function showArt(artwork, layout, session) {
+function showArt(artwork, layout, session, selection) {
   const container = byId('art');
   const image = byId('cover');
   const url = typeof artwork?.url === 'string'
@@ -326,7 +769,8 @@ function showArt(artwork, layout, session) {
     : '';
 
   const identity = url ? JSON.stringify([url, layout?.session_id || session || null,
-    layout?.disc_generation ?? null]) : '';
+    layout?.disc_generation ?? null, selection?.metadata_generation ?? null,
+    selection?.selected_index ?? null]) : '';
 
   // Compare image identity before touching attributes or event handlers.
   // 同じ画像なら属性・handler を書き換えず、失敗時も毎回再試行しません。
@@ -360,10 +804,12 @@ function showArt(artwork, layout, session) {
   if (image.complete && image.naturalWidth > 0) image.onload();
 }
 
-function mediaMessage(hasDisc, mediaState, enrichmentStatus) {
+function mediaMessage(hasDisc, mediaState, enrichmentStatus, selection) {
   if (!hasDisc) return mediaState === 'LOADING' ? 'READING DISC' : 'WAITING FOR DISC';
   if (enrichmentStatus === 'LOADING') return 'LOOKING UP ALBUM';
-  if (enrichmentStatus === 'UNAVAILABLE') return 'ALBUM SELECTION REQUIRED';
+  if (selection?.state === 'AMBIGUOUS') return 'ALBUM SELECTION AVAILABLE';
+  if (selection?.state === 'DECLINED') return 'NO ALBUM MATCH SELECTED';
+  if (enrichmentStatus === 'UNAVAILABLE') return 'METADATA UNAVAILABLE';
   if (enrichmentStatus === 'ERROR') return 'METADATA UNAVAILABLE';
   return 'NOW PLAYING';
 }
@@ -387,7 +833,7 @@ function render(snapshot) {
     ? `Track ${String(player.track_number).padStart(2, '0')}`
     : '—';
 
-  set('media-message', mediaMessage(hasDisc, disc.state, enrichment.status));
+  set('media-message', mediaMessage(hasDisc, disc.state, enrichment.status, enrichment.selection));
   set('album', hasDisc ? (disc.title || 'Audio CD') : 'No disc');
   set('album-artist', hasDisc
     ? (disc.artist || (enrichment.status === 'LOADING'
@@ -413,7 +859,10 @@ function render(snapshot) {
     progressScale = scale;
   }
   set('player-state', player.state || 'NO_DISC');
-  showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id);
+  renderControls(snapshot);
+  renderPicker(snapshot);
+  showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id,
+    enrichment.selection);
   set('read-activity', read.activity || 'UNKNOWN');
   set('read-strategy', read.effective_strategy || 'UNKNOWN');
   const requestedPolicy = read.policy?.requested?.mode;
@@ -517,5 +966,28 @@ function connect() {
 }
 
 byId('refresh-read-map').addEventListener?.('click', () => requestDiscMap(currentSnapshot, true));
+byId('metadata-close').addEventListener?.('click', closePicker);
 
-load().finally(connect);
+let navigationSocket;
+let navigationRetry;
+function connectNavigation() {
+  clearTimeout(navigationRetry);
+  const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+  const socket = new WebSocket(`${scheme}://${location.host}/api/navigation`);
+  navigationSocket = socket;
+  socket.onmessage = (event) => {
+    if (navigationSocket !== socket) return;
+    try {
+      const message = JSON.parse(event.data);
+      if (typeof message?.action === 'string') handleNavigationInput(message.action, 'cec');
+    } catch { /* A malformed input is ignored; playback continues. */ }
+  };
+  socket.onerror = () => { if (navigationSocket === socket) socket.close(); };
+  socket.onclose = () => {
+    if (navigationSocket !== socket) return;
+    navigationSocket = null;
+    navigationRetry = setTimeout(connectNavigation, 1500);
+  };
+}
+
+load().finally(() => { connect(); if (controls.length) connectNavigation(); });

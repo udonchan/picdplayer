@@ -21,8 +21,12 @@ public:
     MediaLifecycleState observe(MediaObservation observation) noexcept;
     void begin_eject() noexcept;
     void eject_failed(std::string error);
+    // True once after an accepted audio disc follows an observed empty tray.
+    // The initial no_disc state alone is not insertion evidence.
+    bool take_audio_insertion() noexcept;
 
 private:
     MediaLifecycleState state_ = MediaLifecycleState::no_disc;
     std::string error_;
+    bool observed_empty_ = false;
 };

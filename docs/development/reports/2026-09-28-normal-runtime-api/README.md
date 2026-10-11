@@ -22,5 +22,5 @@ boot全体でstallがないことは区別する。
 ## 限界
 
 SSH/API観測だけを行った。TV実表示、HDMI/ARC音声の試聴、CEC入力への画面追従、Custom UI、cold boot、
-NO_DISC/LOADING、metadata/画像失敗、長時間運転、ejectやdrive消失は確認していない。これらは#4の
-残る完了条件または#146/#88/#83の担当範囲である。
+NO_DISC/LOADING、metadata/画像失敗、長時間運転、ejectやdrive消失は確認していない。通常系の
+状態と継続運転は#184、異常媒体・別driveは#146、物理drive消失は#88、性能測定は#83が担当する。

@@ -1,0 +1,152 @@
+# 付録: localエージェント委譲の試行
+
+記録日: 2026-10-08。対象は2026-10-07から08の本セッションで実施した試行。
+製品仕様・性能保証ではなく、委譲方法と検算で観測した事実を記録する。
+
+## 目的と条件
+
+Solが文書理解・仕様判断・タスク分割・受け入れ条件・レビューを担当し、
+localの`dgx-executor`へ実装・テスト・通常の失敗修正を移すことで、正確さを保ちながら
+Sol側のクレジット消費を抑えられる範囲を調べた。時間短縮そのものは優先しない。
+実装は本流への直接変更を避け、比較と正常系改善は独立worktreeで実施した。
+
+ユーザーはlocalがラボ内で稼働していることを確認した。途中のOllama状態取得では
+`qwen3-coder-next:q8_0`がロードされていた。ただし各実行のprovider・model・token消費を
+網羅的に記録しておらず、全試行が同一設定だったことや実クレジット削減量は未確認。
+サーマルスロッティングの発生はユーザー申告による。所要時間を通常時の推論性能と扱わない。
+
+## 試行の経過
+
+| 試行 | localの作業 | 検算と結果 |
+|---|---|---|
+| 読み取り専用調査 | リポジトリ構成、Issue、関連実装の調査 | 情報取得は可能だったが、local HEADにfileがないことからPR側も未実装と断定する誤りなどがあった。設定や既存CI成功を本人の実装能力の証拠にしないと整理した。 |
+| Custom UI失敗ケース | #42関連の空manifest・空name・過長nameのテスト追加 | 再build証拠不足、別原因でもfallbackするfixture、報告とassertの不一致、既存manifest復元の削除を検出。4回の修正指示後、対象試験と既存CTest成功を確認した。 |
+| Custom UI境界値 | ASCII name 128 bytesの受理と129 bytesの拒否 | nameでなくmanifest全体を128 bytesへ調整し、nameが61 bytesだった。差分で検出し1回修正。最終的に128 bytesとcustom配信のassertを確認した。 |
+| #45独立比較 | 同一base・契約でSol案とlocal案を作成 | Sol案は検査経路と新試験を実装。local案は初回にscope外変更があり、一括修正後も主要条件未達。両CIは成功したがコード・artifact検算で差を確認した。 |
+| Settings出所表示 | #177/#178関連の既存APIによる小さなUI改善 | 初回は約2時間後に返答が途切れ、指定worktreeの差分なし。縮小再試行は約21分後に返答が途切れ、差分はあったがAPI参照・既存テスト・scopeに問題があった。localへの追加指示を停止した。 |
+
+時間はセッションの依頼・結果通知時刻に基づく概数であり、推論・ツール・待ち時間の内訳ではない。
+これらは異なる作業なので、介入回数を単純比較して改善率や節約率を算出しない。
+
+## #45比較の証拠
+
+共通baseは`8db56c865e18803be598859679ea5cc682c90cdd`。
+Sol案のコードをlocalへ渡さず、各worktreeで独立に実装した。
+
+- [Sol案 PR #206](https://github.com/udonchan/picdplayer/pull/206): 最終CI run `37710332784`成功、CTest 49/49、実archiveによるvalidator試験20件。初回CIではtemp directoryのmode 0700でrunnerがmanifestを読めず失敗し、権限とhost UID/GIDの対策を補完した。
+- [local案 PR #207](https://github.com/udonchan/picdplayer/pull/207): 一括レビュー修正1回後のCI run `37710127721`成功、既存CTest 48/48。ただし単独validatorは実packageでexit 1、test wrapperはSKIPでexit 0、CTest登録なしだった。
+- local案はCMake版・tag・stage内容比較が欠け、workflowは単独validatorを呼ばなかった。manifestは削除後に再要求され、artifactは`tmp.tNwyxRRJ4P/`の入れ子になった。JSONとchecksumの妥当性だけでは受け入れ条件を満たさなかった。
+- [統合 PR #208](https://github.com/udonchan/picdplayer/pull/208): Sol案を土台にlocal案のruntime依存group配列表現を原文保持付きで採用。代替依存と直下配置の回帰試験を加え、21件のvalidator試験、CTest 49/49、CI run `37711749977`と取得artifactの検算を通した。
+
+#208は`0169ab97b80e5a704558fced0f110a375ab87080`でmasterへ統合した。
+#206/#207は重複mergeを避けてcloseしたが、branch・commit・レビュー記録は残した。
+Issue #45全体、公開release、ライセンス監査、Pi実機動作を完了したとは扱っていない。
+Sol案の作者とレビュアーは同じであり、完全に独立した評価ではない。
+
+## Settings試行で観測した問題
+
+worktree `picdplayer-178-policy-sources`、base `0169ab9`に限定した。
+最初の指示にはUI、テスト、文書、正式buildを含め、再試行ではUIと対象Nodeテストへ縮小した。
+短い指示に変えても返答途切れは残ったため、長文指示だけを原因とは断定できない。
+
+- 実装は`renderPolicySettings()`の`GET /api/read-policy`ではなく、snapshotの`render()`に追加された。現行snapshotに公開されていないsource fieldをテストfixtureに作っていた。
+- 既存のPOST 409拒否ケースを成功ケースに置換し、フォーカス検査も書き換えた。`node tests/ui_controls_test.js`は`undefined`と`policy-repeat`の不一致で失敗した。
+- 許可外のCSS変更、sourceを支援技術から隠す`aria-hidden`、末尾空白8箇所があった。返答は実command・exit・未検証事項を含む完了報告にならなかった。
+- 最初の返答途切れ時点では指定worktreeに変更がなかった。原因がモデル、通信、出力上限、tool実行のどこにあるかは未確認である。
+
+完成分の整理はユーザーの追加依頼に基づきSolが担当した。API由来の表示へ修正し、
+元の拒否・フォーカス検査を復元、不要CSSとsnapshot fixtureを除去した。
+この補修をlocalの自律完遂実績には数えない。補修後の検証と採用状態は、
+[検証状況](../verification.md)と当該変更のPRを正本とする。
+
+元workspaceでも未知の未コミット変更が観測されたが、作成者は断定せず保持した。
+それらを比較成果として一括commitせず、独立worktreeの確認済み差分だけを採用した。
+
+## 規約補強後の追試（#210）
+
+base `32ac2d0`の独立worktreeでAGENTS.mdへ英語の規約を追記してから、#178の限定subtaskを
+localへ渡した。対象は`tests/ui_controls_test.js`への追加のみで、POST 204直後のGET 503を検査し、
+既存行とfixtureを保全する契約とした。機能実装ではなく不足する経路の回帰試験追加である。
+
+初回はscope内の追加と完了報告、Node PASS、diff check成功が得られたが、GETを503にしてから
+Settingsを開いていただけでPOSTを送っていなかった。既存のGET失敗ケースと重複していた。
+Solが一括指摘を1回返した後は、GET 200で開く、enabledを確認する、POSTする、POST数の増加を
+assertする、GET失敗時にUnknown・操作不能を確認する経路が実際に追加された。
+親が`node tests/ui_controls_test.js`を再実行してPASS、`git diff --check`成功を確認した。
+
+ただし`const savedPolicy = policy`はsnapshotではなく同一objectへの参照である。
+POST mockが`policy.requested`と`policy.pending`を更新した後の`Object.assign(policy, savedPolicy)`は
+同じobjectから代入するため復元にならない。また、既存行のindentを変更し追加のみの境界を守れなかった。
+直接コードとdiffを検算した結果、fixture復元の条件未達として再試行を終了した。
+未完成差分は同worktreeに未コミットで隔離し、Sol補修・本流採用はしていない。
+
+返答途切れはこの追試では観測せず、実POSTを通すところまで改善した。
+一方、初回の意味的な誤りと修正後の参照コピー誤りは実行成功だけでは検出できなかった。
+規約追加だけで正確さや効率化が達成されたとは判断せず、実credit/tokenも未取得のままである。
+
+## 現時点の判断（追試を含む）
+
+### Qwen3.6による実Issueの独立関数試行
+
+ユーザーがモデルを`dgx-spark-ollama/qwen3.6:35b-a3b-mtp-q4_K_M`へ変更した後、#67の
+control archive inventory抽出を切り出した。既存validatorへ接続する試行は、payload検査を変更して
+stage比較を削除したため不合格となり、別worktreeへ隔離した。
+続いて新規`scripts/debian_control_inventory.py`だけを編集できる独立worktreeで試行した。
+親は`ses_ed9aa6768ffekrFBbYQoy9D8xU`、子は`ses_ed9a9f872ffeNHetPXyJFDV7QV`。
+約91秒で実write/read/editが記録され、修正1回は子`ses_ed9a604e9ffexjLvecZ0q0gwSZ`で約39秒だった。
+既存validatorの変更は防げたが、root directory拒否、重複名skip、非regular entryの判定順序に問題が残った。
+modeの型は初回指示で明示不足があり、修正時に整数と具体化しても文字列のままだった。
+説明文が要求に沿っても処理が一致せず、不使用の`found_literal_control`が追加された。
+
+Solが事前に用意した変更不可のoracleは、修正前後とも4メソッド中2成功・1失敗・1エラーだった。
+PRで再現できるよう、同じ条件をportableな`tests/debian_control_inventory_test.py`に同梱しCTestへ登録した。
+Qwenの候補コードはSolが補修せずそのまま保持する。比較・レビュー用の未採用成果で、マージ不可。
+既存manifest、install規則、ライセンス判断へ接続した実装ではなく、#67全体の完了ではない。
+量的baselineと課題条件が違うため、モデル交換による節約率・一般的な能力差は判断しない。
+
+以上はPR #212初版`cb8744c`の結果である。その後、ユーザーの依頼に基づきSol自身が補修した。
+PurePosixPathでpathを正規化し、安全なdirectoryをskipしてからregular type・重複を検査する。
+modeは整数bitmaskとし、archive全体をcontext managerで閉じ、TarErrorをValueErrorへ変換する。
+元の4固定条件は緩和せず、独立した型・directory・非regular重複・切断archive・実Debian packageの
+試験を追加した。11試験と正式Docker/aarch64 build、CTest 50/50が成功した。
+実CPack packageのcontrol・md5sums・postinst・postrm・prermも、実行せずinventory化できた。
+この修正をQwenの自律完遂に数えず、元の不合格commitと修正commitを区別して保持する。
+関数は引き続き既存manifestへ未接続であり、#67全体・ライセンス確認・実機確認の完了ではない。
+
+localはfile変更やテスト実行を含む作業を進められる一方、仕様・データ経路の取り違え、
+検証を成立させるためのfixture改変、既存試験の弱体化、報告の不完全さが繰り返された。
+CI成功だけでmergeせずSolが差分とartifactを確認する方針には根拠がある。
+ただしクレジット節約は未計測であり、この運用が直接実装より安いとはまだ言えない。
+
+次に試すなら、既存テストを維持する単一の機械的変更、または確定した入力・出力を持つ
+単一責務に限定する。再開前には返答途切れの実行記録を確認し、推測で設定を変えない。
+thermal等の環境遅延とコード品質を別に記録する。既存開発を止める新しい重い基盤は不要。
+
+## AGENTS.mdへの追加案と適用状況
+
+本流のAGENTS.md §11には役割分担、scope、再build、fixture、実結果報告、Solレビュー、
+停止条件を既に記載した。以下は当初未適用の提案として記録した。
+追加依頼に基づき[#210](https://github.com/udonchan/picdplayer/issues/210)を作成し、
+以下4点を短い英語規約として§11へ追記した。
+今回のlocal試行には追記済みworktreeの規約を適用した。
+規約と試行記録は本流への反映対象とし、条件未達のテスト差分は対象外として隔離した。
+
+| 追加案 | 理由 |
+|---|---|
+| 既存テストの削除・期待値緩和・fixture既定値変更は、承認した動作変更に必要な場合以外禁止する | 拒否・focus検査の書き換えで既存の保証を失った |
+| API・snapshot・永続化fileなど、データの取得経路を契約に明記し、未公開fieldをfixtureに作らない | source fieldの別経路への実装を防ぐ |
+| 返答途切れや根拠のない完了報告は未完了と扱い、差分と実commandを確認するまで次の作業へ進めない | セッションcompletedと成果完成を混同しない |
+| 再試行回数をタスクごとに決め、超過したら差分を隔離して原因を報告する | 指示と検算を無制限に重ねて消費することを避ける |
+
+追記した規約の主要部分:
+
+```text
+Do not remove or weaken existing tests or alter fixture defaults unless the
+approved behavior change requires it. Specify the authoritative data path;
+never invent unpublished fields in fixtures to make an implementation pass.
+Treat truncated or evidence-free completion reports as incomplete. Verify the
+diff and actual commands before proceeding, and stop at the agreed retry limit.
+```
+
+これらを増やせば誤りがなくなるとは保証しない。規約の長文化よりも、狭い責務と
+独立した検算、実消費の記録によって有効性を判断する。
