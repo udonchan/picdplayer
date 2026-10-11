@@ -12,7 +12,7 @@
 
 struct ApiResponse { int status; std::string content_type; std::string body; };
 enum class ApiCommandType { play, pause, stop, next, previous, seek_relative, select_track, eject,
-                            set_read_policy, select_metadata_candidate };
+                            set_read_policy, select_metadata_candidate, decline_metadata_candidates };
 struct ApiCommand {
     ApiCommandType type;
     int value = 0;

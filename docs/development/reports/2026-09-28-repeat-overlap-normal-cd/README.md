@@ -28,4 +28,4 @@ verification failure、underrunはこのrunで観測しなかった。
 
 この確認は通常CDでのAPI・daemon観測に限る。TV実表示、試聴、傷disc、drive cacheの無効化、物理的に独立した
 再読、cache軽減効果、性能や長時間安定性は確認していない。`CACHE_POSSIBLE`をcache非依存性や原盤PCMとの一致へ
-読み替えない。傷disc/read stallの実機評価は#146、長期runtimeは#4、性能測定は#83が担当する。
+読み替えない。傷disc/read stallの実機評価は#146、通常系の継続運転は#184、性能測定は#83が担当する。

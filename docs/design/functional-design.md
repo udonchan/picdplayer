@@ -168,6 +168,13 @@ Artist Backgroundの表示設定は未実装で、既定OFFのままとする。
 利用条件、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
 一般設定API、全CLI optionの永続化、hot reload、機器設定の稼働中変更はこの部分実装に含めない。
 
+設定拡張の契約では、現行の`schema_version=1`をRead Policyだけを持つ旧版として扱い、
+有効な旧版を読み込む場合でもArtist BackgroundはOFFとする。新schemaへの移行は旧値全体の
+検証後にだけ行い、失敗時は旧ファイルを保全する。未知の新versionやfield、破損・一部欠落を
+推測で補完して採用しない。電源断や書込失敗では最後に完全に検証できた値、または起動値と
+背景OFFへ戻れることを#177の実装・試験条件とする。user設定をresetする操作、機器設定の
+上書きや再起動後のrollback操作は、必要な項目ごとに別途契約を定める。
+
 single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
 既定はqueue上限750 frame（10秒、PCM約1.68 MiB）、
 開始閾値45 frame（0.6秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
@@ -239,7 +246,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | POST /api/play, /pause, /stop, /next, /previous | bodyなし、受理204 |
 | POST /api/seek | `{"offset_seconds":10}`、±86400秒、受理204 |
 | POST /api/track | `{"track":2}`、1〜99かつ実disc内、受理204 |
-| POST /api/metadata-selection | snapshotのsession/disc/metadata世代と0起点候補indexを指定。現行discに一致すると受理204 |
+| POST /api/metadata-selection | snapshotのsession/disc/metadata世代と0起点候補index、または全候補を採用しないnullを指定。現行discに一致すると受理204 |
 | POST /api/eject | bodyなし、受理202。物理完了は状態で確認 |
 
 seek/trackはfieldを1個だけ持つJSON object。操作body上限4 KiB、state上限1 MiB。
@@ -272,10 +279,25 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。technical stat
 keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
+標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
+部分実装する。CEC方向でSINGLE/REPEAT/Backを選択し、決定でpolicy変更または画面を閉じる。
+リモコンの戻るキーでもPlayerへ戻り、
+選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
+結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
+有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの
+`persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
+session限りと扱い、単なるPOST受理を保存済みと表示しない。
+Settingsには`GET /api/read-policy`の`requested_source`と`effective_source`を別々に表示する。
+`startup/restored/saved/session`以外またはfield欠損はUnknownとし、保存先指定やPOST受理から出所を推測しない。
+読込中・取得失敗時は前回の出所を残さず、pending時は要求値と実効値の出所が異なり得る。
 曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
-操作列末尾の`Choose album`から開き直せる。CEC/keyboardの方向入力で候補を移動し、selectで選択POST、
-backで閉じる。候補がないときは
-入口を表示せず、read policy編集はこの列に含めない。title/artistがなければ
+操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
+`Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の
+選択POSTで行い、次のsnapshotで反映を確認する。`None of these`は候補を明示的に採用せずAudio CD表示へ戻す。
+同じdiscでは再選択可能で、この判断だけで再生を停止しない。CEC/keyboardの方向入力で候補を移動し、
+selectで実行、backで閉じる。候補がないときは
+入口を表示しない。Read policy編集はSettingsが担当する。Settings表示中に候補が届いた場合は、
+Settingsを閉じた後にpickerを表示する。title/artistがなければ
 `Audio CD` とtrack番号を表示するため、metadata無効・lookup失敗・候補曖昧でも再生画面は使える。
 coverはdaemonが取得・形式確認したsame-origin resourceだけを返す。画像の失敗時はプレースホルダーへ
 戻る。外部文字列はtechnical statusと同様にtextContentで表示する。HTTP responseはCSPで

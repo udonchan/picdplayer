@@ -40,6 +40,14 @@ int main() {
         check(selected_artist_identity(session.snapshot()).mbid ==
               "0383dadf-2a4e-4d10-a46a-e9e041da8eb3");
         check(!session.apply_artwork(request_b.generation, "release-b", cover));
+        check(!session.decline_candidates(request_a.generation));
+        check(session.decline_candidates(request_b.generation));
+        check(session.snapshot().status == MetadataStatus::ambiguous &&
+              !session.snapshot().selected && session.snapshot().candidates_declined &&
+              session.snapshot().artwork.status == ArtworkStatus::not_requested);
+        check(!session.apply_artwork(request_b.generation, "release-a", cover));
+        check(session.select_candidate(request_b.generation, 1));
+        check(session.snapshot().selected == 1 && !session.snapshot().candidates_declined);
         MetadataResult failed; failed.status = MetadataStatus::error; failed.error = "simulated metadata timeout";
         const auto request_failure = session.begin(a);
         check(!session.apply({request_b.generation, b, failed}));

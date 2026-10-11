@@ -35,7 +35,18 @@ bool MetadataSession::select_candidate(std::uint64_t generation, std::size_t ind
         (snapshot_.status != MetadataStatus::ambiguous && snapshot_.status != MetadataStatus::available))
         return false;
     snapshot_.selected = index;
+    snapshot_.candidates_declined = false;
     snapshot_.status = MetadataStatus::available;
+    snapshot_.artwork = {};
+    return true;
+}
+bool MetadataSession::decline_candidates(std::uint64_t generation) {
+    if (generation != generation_ || !toc_ || snapshot_.candidates.size() < 2 ||
+        (snapshot_.status != MetadataStatus::ambiguous && snapshot_.status != MetadataStatus::available))
+        return false;
+    snapshot_.selected.reset();
+    snapshot_.candidates_declined = true;
+    snapshot_.status = MetadataStatus::ambiguous;
     snapshot_.artwork = {};
     return true;
 }

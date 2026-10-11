@@ -1,6 +1,71 @@
 # 検証状況と残課題
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## metadata HTTP試験のmaster同期（PR #182）
+
+2026-10-11、PR #212反映後のmaster `42729cd`を独立worktreeで取り込み、CMake・README・backlogの
+競合を解消した。新しいcontrol inventory、release artifact、Read Policy試験を維持し、Python必須化と
+loopback HTTPS fixtureを保持した。Debian Trixie/aarch64の正式build、CTest 50/50、使い捨てcontainerの
+package lifecycleが成功した。HTTPS fixtureはnetwork noneでも10回連続で通過した。
+testing ONでPythonを無効化したconfigureは期待どおり拒否され、testing OFFでは成功した。
+生成flagsでもHTTP test hookは`http_client_test`だけにあり、製品daemonにはないことを確認した。
+今回Piへのdeploy・再試聴・TV確認は行っていない。以下の既存実機記録は当時の条件のまま保持する。
+
+## Debian control inventory（#67、PR #212）
+
+2026-10-11、Solが未採用の独立関数を補修した。元oracleの期待値を変更せず、整数mode、
+directory処理順序、重複・非regular拒否、TarError、実package・script非実行の11試験を確認した。
+正式Debian Trixie/aarch64 Docker buildとCTest 50/50が成功し、実CPack artifactのcontrol archiveも
+inventory化できた。Qwen初版の失敗とSol補修は[付録](reports/2026-10-08-local-agent-trials.md)で区別する。
+既存manifestへの接続・copyright情報・Pi実機検証は今回の対象外で、#67は未完了。
+
+## SettingsのRead Policy出所表示（#177/#178）
+
+2026-10-08、`GET /api/read-policy`のrequested/effective sourceをSettingsで独立表示するよう補修した。
+local試行の未完成差分をSolが整理し、既存のPOST拒否・フォーカス検査を復元した。
+macOS NodeでUI boot/render/status/integrity/controlsの5 script、正式Debian Trixie/aarch64 Docker build、
+CTest 49/49を確認した。controls試験は4種類の出所、欠損・未知・非文字列、保存先指定からの非推測、
+POST受理/拒否、読込中、GET失敗、旧GET応答の破棄を確認する。
+Pi・CEC実操作、TV/狭いviewportの実表示、再起動後の復元は今回未検証で、#177/#178全体は未完了。
+試行の事実・限界と未適用の規約案は[付録](reports/2026-10-08-local-agent-trials.md)に記録した。
+
+## 版付き候補artifact（#45、比較案の統合）
+
+2026-10-08、Debian Trixie/aarch64 Dockerで正式build、CTest 49/49、使い捨てcontainerのpackage
+lifecycleを確認した。実際のCPack `.deb`をstageと照合してmanifest付き候補を生成した。
+artifact専用試験20件は実Debian archiveで版・tag・package・arch・Depends・payload・mode・symlink差異、
+過去候補の無効化と生成先symlinkの拒否を検査する。Draft PRの初回CIではvalidatorまで成功したが、
+root所有の一時directoryのmode 0700が残り、runnerがmanifestを読めずupload前に失敗した。
+生成先を0755、保存fileを0644としてrunnerが読めるよう修正し、権限の回帰試験を追加した。
+Sol比較案[PR #206](https://github.com/udonchan/picdplayer/pull/206)の最終CI run 37710332784は成功し、
+取得artifactのJSON・SHA256・manifest配置・merge commitの識別を確認した。
+local比較案[PR #207](https://github.com/udonchan/picdplayer/pull/207)もCIは成功したが、単独validator失敗、
+版/tag/stage比較・新テスト登録の欠落、temp directoryの入れ子が残ったため採用しない。
+統合案はSol案を土台に、local案の依存group配列という表現を原文保持付きで取り込み、
+代替依存の保持と成果物直下の配置を回帰試験で確認する。比較記録は両PRに残す。
+統合worktreeでも正式Docker build、CTest 49/49、artifact専用試験21件、package lifecycle、
+実packageの二回連続finalizeを確認した。GitHub上の統合版は統合PRのCIで別途確認する。
+公開release、ライセンス監査、byte-identical再現性、Pi deploy・実機動作は未検証で、#45全体の完了ではない。
+
+## Player設定画面の第一段階（#178、作業ブランチ）
+
+標準PlayerにCEC/keyboard/pointerで開けるSettings領域を追加し、既存Read Policy APIの
+SINGLE/REPEATを選択できるようにした。`requested/effective/pending`と詳細4値を表示し、
+取得・変更失敗でも再生は継続する。Artist Backgroundは利用不能と明示してON操作を提供しない。
+Debian Trixie/aarch64 DockerのビルドとCTest 48件を確認した。PiのChromium上でCDPから
+1920×1080のSettings画面、overflowなし、Read PolicyのREPEAT→SINGLE反映を確認した。
+TVではSettingsを表示し、リモコンの物理「戻る」キーでPlayerへ戻れることを確認した。
+修正版BackのCEC方向・決定操作と、実serviceでの保存後の再起動復元は未確認。
+Mac headless Chromeのmock APIでは
+[1920×1080と720×720の表示記録](reports/2026-10-02-player-settings/README.md)を保存し、
+Settings surfaceがviewportへ収まり、内部scrollを必要としないことを確認した。
+PiでのCDP結果も[同じ表示記録](reports/2026-10-02-player-settings/README.md)に追記した。
+TVでの確認ではSettingsのBackボタンへCEC方向キーで移動できないことが判明した。
+リモコンの物理「戻る」キーではPlayerへ戻れることをユーザーが確認した。
+Backを3番目の選択対象に追加し、CECの方向・決定で閉じる回帰試験を追加した。
+修正版はPiへ再デプロイ済み。BackのCEC実操作は未確認である。
+
 日付付きの測定は当該条件だけの結果である。
 
 ## 利用者設定の保存（#177、部分実装）
@@ -13,9 +78,14 @@ symlink・保存先directory欠落を確認した。`read_policy_persistence` te
 一時directoryへ転送し、`/nonexistent` drive・null ALSA・CEC無効・別loopback portの独立processで
 同じAPI試験を通した。稼働中serviceはactiveのままで再起動せず、試験用ファイルは削除した。
 Piの**systemd service userでの保存権限**・実service再起動後復元とCEC設定画面は未確認。
-設定画面の第一段階はDraft PR #180で別途実装中。
+設定画面の第一段階はPR #180で実装し、masterへ統合済み。実serviceでの保存・復元は未確認。
 同じ試験で`requested_source`/`effective_source`がstartup→saved→restoredとなり、
 破損時にstartupへ戻ることを確認した。保存先を指定しないAPI変更は`session`を返す。
+2026-10-06には実daemon試験へ、保存値が起動引数より優先する条件と、保存先directory欠落による
+POST 409後にrequested/effective/sourceが変わらない条件を追加し、Docker/aarch64の
+`read_policy_persistence`、`read_policy_store`、`api_server`を通した。Piではservice userが
+`/var/lib/picdplayer`を所有しdaemonはactiveだが、稼働中daemonに`--settings-file`は付いていない。
+実serviceでの保存・復元とCEC画面からの設定は引き続き未確認である。
 Artist Backgroundの任意ON/OFFは#49/#51のruntime経路を待つ。標準unitは
 `--settings-file`を自動指定しないため、現行Piへのdeployだけで永続化は有効にならない。
 
@@ -93,6 +163,15 @@ TV上のcover画像そのものと失敗系は別途確認対象とする。
 #15の公開契約と#55のsemantic CEC navigationを使う標準UIを作業branchで実装した。
 曖昧候補の初回検出時にpickerを自動表示し、backで閉じた同じ候補群は自動再表示しない。
 `Choose album`で開き直せる。方向入力で候補移動、selectで選択POST、backで閉じる。
+選択後にも複数候補の表示と`Change album`を残す変更はNode fixtureで再選択POST、選択済み候補の表示、
+選択前の自動表示と選択後の非自動表示を確認した。Mac Chromeの
+[1920×1080合成snapshot](reports/2026-10-04-metadata-reselect/README.md)で選択後の配置も確認した。
+2026-10-04、PiへPR #183のpackageを導入し、ユーザーがTVリモコンで『The Slip』の候補0を選択後、
+`Change album`からCDを取り出さず候補1へ変更した。Pi APIでも`selected_index=0→1`を確認し、
+CDPで選択番号の表示を確認した。さらにPR #180のSettingsとPR #183を結合した検証用packageをPiへ導入し、
+CDPから通常Playerの候補を選択して`None of these`を押した。APIのselectionは`SELECTED`から`DECLINED`へ変わり、
+Playerは`Audio CD / Track 01`へ戻り、pickerが閉じた。`Change album`と`Settings`は表示を維持し、
+1920×1080でdocument overflowがないことをCDPで確認した。CECリモコンによる辞退操作と音声は未確認。
 HTTP 204は選択完了とみなさず、次のauthoritative snapshotでalbum/trackを更新する。
 同じcover URLで選択candidateが変わっても画像を再読込する。
 Debian Trixie/aarch64 DockerでbuildとCTest 46件を実行し、Node fixtureで候補表示、CEC操作、
@@ -168,8 +247,9 @@ play、seek、pauseなど意図したstream切替は回数をリセットする�
 Integrityの`RECOVERED`とは別の出力経路である。
 
 Docker Debian Trixie/aarch64で`playback_engine_test`を含むCTest 44件を実行し、3回の復帰、
-4回目の停止、既存の終端underrun停止を確認した。Piで意図的にXRUNを起こす確認、傷disc/長いread stall、
-read error後の復旧方針、buffering UIは未実施であり、#146および#34の残作業として扱う。
+4回目の停止、既存の終端underrun停止を確認した。Piで意図的にXRUNを起こす確認は未実施。
+傷discや長いread stallの実機評価は#146、未解決PCMの追加fallback方針は#156で扱う。
+buffering UIはこの試験で検証しておらず、#34の未完了条件とは扱わない。
 
 同packageをPiへdeployして通常再生を開始したが、約3.45秒後に`usb 1-1-port2: over-current change`、
 ASUS USB driveのdisconnect/reset、`CDDA read failed ... errno=5`を同時に観測した。これはALSA underrun
@@ -288,8 +368,8 @@ main loop stall、eject errorを検出しなかった。外部album artworkを�
 [drive speed request実機記録](reports/2026-09-27-drive-speed-request/README.md)に保存した。
 
 この結果はioctl受理と短時間のAPI再生を示すだけである。音質・騒音の主観比較、CEC操作、temperature・
-undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認であり、既定速度との同条件比較を含めて
-#8の完了条件として残る。
+undervoltage、長時間再生、throughput、失敗時のdrive状態は未確認である。#8の実装済み範囲はCloseし、
+通常CDの継続運転・聴感を#184、既定要求なしとの同条件定量比較を#83、非対応drive/ioctl失敗を#146へ移管した。
 
 ## Repeat overlap and cache evidence（#9、Docker/Pi通常CD確認）
 
@@ -347,7 +427,7 @@ queueが0へ戻った。`picdplayer.service` restart後にはdaemon/kioskともa
 [通常runtime API実機記録](reports/2026-09-28-normal-runtime-api/README.md)に保存した。
 
 これはSSH/API経路の確認であり、TV実表示・試聴・CEC・Custom UI・cold boot・長時間運転・eject/drive消失は
-確認していない。#4をこれだけで完了扱いにしない。
+確認していない。この短時間確認を通常系の継続運転を扱う#184の完了とはしない。
 
 ## C2 capability probe（#7、Docker確認）
 
@@ -438,7 +518,7 @@ python3 scripts/measure-kiosk-cdp.py --seconds 15 --trace-seconds 10 \
 
 #52のクローズに向け、[完了判定と制約](reports/2026-09-25-kiosk-baseline/README.md#完了判定の整理2026-09-26追記)を追記した。
 既存rawを再集計し、新規測定は行っていない。Cage単独は改善対象の特定に不要として省略し、
-過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、長期運転・実表示・音声は#4で別途確認する。
+過去のtrace件数を定量的な削減率の根拠から外した。現行masterの負荷・残測定は#83、通常系の継続運転・実表示・音声は#184で別途確認する。
 
 2026-09-28には、Issue #122の修正候補を導入したPiで、通常14 track Audio CDのCDP未接続PLAYINGを
 30秒warm-up後に300秒測定した。system CPU平均は13.27%、最高温度は66.6°C、現在のthrottlingは0だった。
@@ -916,7 +996,7 @@ CLI検証と常駐player試験を通過した。警告修正後のloaderを含�
 - 傷disc・USB reset・4秒超read stallでunderrun復旧、音の欠落/重複、操作遅延を評価する。
   API snapshot処理の遅延に伴うunderrunと自動復旧は上記で一度観測した。
   傷disc・USB障害・長時間read stallによる復旧経路の実機確認は未完了。
-- direct/paranoiaの採用、性能、CPU負荷、startup/seek latencyは実測後に判断する。
+- direct/paranoiaの同条件比較は未実施。ライセンス・再配布条件の確認が必要なためparanoiaの公式採用を見送り、比較Issue #6は終了した。標準運用はdirectを維持し、現行構成の性能・速度要求の定量比較は#83、継続運転は#184で評価する。
 - pause再開の待ち時間とbuffering表示、傷disc/長いread stall時の復旧方針を検討する。同一streamの
   ALSA underrun復帰上限は3回としてDocker自動試験済みだが、実機異常系は#146で未確認である。
 - mediaとPCMのdevice access直列化は実装済み。挿抜を含む実機回帰確認を継続する。
@@ -1023,7 +1103,7 @@ Docker/aarch64標準build/package生成とCTest36/36成功。以下を追加し�
   同一世代の受理、異なるsession/stream、欠損、included=false、未知schemaの拒否を検証する。
   要求時ではなく応答到着時の最新snapshotに照合し、世代変更で保持済み表示も破棄する契約を明記する。
 
-今回の成功は実機音声の保証ではない。実機音声・長時間運転は#4、長期負荷は#83の検証と区別する。
+今回の成功は実機音声の保証ではない。実機音声・通常系の継続運転は#184、性能測定は#83の検証と区別する。
 #24は当時Draftとして維持し、実際のPlayer側の履歴consumerを追加する場合は同じ条件の統合試験を必要とした。
 Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に対する再現可能な回帰検証であり、
 任意接続数への防御、無期限sink停止時のshutdown完了、real-time性能を新たに保証するものではない。
@@ -1031,7 +1111,7 @@ Piへのdeploy・再測定は行っていない。#90の本PRは現行契約に�
 ### 実機異常系の担当と記録の共有
 
 [物理媒体・USB drive実機評価 #146](https://github.com/udonchan/picdplayer/issues/146)で、観測できたread異常と
-音声/操作影響、API/警告/再接続の整合を同じrun記録で確認する。backend比較は#6、特殊TOCのmetadata対応・
+音声/操作影響、API/警告/再接続の整合を同じrun記録で確認する。paranoiaのbackend比較は#6で採用見送りとして終了し、特殊TOCのmetadata対応・
 同一TOC識別は#39/#40、物理hotplugは#88が引き続き担当する。
 試験手順・結果はreports配下の同じrunを参照し、本Issueのために媒体試験を重複実施しない。
 本書の過去の未確認記述は当時の記録として保持し、実施後に確認範囲と参照先を更新する。
@@ -1126,7 +1206,7 @@ PCM/read markerを確認した。API stop後はSTOPPED、queue 0、current/lates
 underrun、recovery、failure context、ERRORはなかった。CDP接続中の2秒測定でLayout/RecalcStyleは各8件。
 
 これは通常disc・短時間・CDP接続中の確認である。TV目視・試聴、傷disc、物理交換、終端drain、
-長期運転、CDP未接続のCPU/温度比較は未確認であり、#146/#4/#83の記録と重複しない。
+通常系の継続運転、CDP未接続のCPU/温度比較は未確認であり、#146/#184/#83の記録と重複しない。
 
 ### Integrity monitor Phase 1（2026-09-27）
 

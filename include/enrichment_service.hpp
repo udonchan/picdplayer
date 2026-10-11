@@ -27,6 +27,7 @@ public:
     const MetadataResult& snapshot() const;
     std::uint64_t generation() const;
     bool select_candidate(std::uint64_t generation, std::size_t index);
+    bool decline_candidates(std::uint64_t generation);
     bool has_cover_asset() const;
     std::optional<EnrichmentArtworkAsset> cover_asset() const;
 

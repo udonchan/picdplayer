@@ -72,7 +72,7 @@ MediaWorkerから実行する。
 成功は要求のioctl受理であり、実際の速度、物理的な回転、騒音低下、読み取りthroughputを測定または
 保証しない。`GET /api/state`の`drive.requested_speed_x`はその成功した要求、
 `drive.speed_request_error`はioctl失敗または能力非対応/不明により要求を適用しなかった理由、
-`drive.current_speed_x`は現行実装では常にnullである。失敗は再生開始を止めない。速度変更時の実機比較は#8の未完了範囲である。
+`drive.current_speed_x`は現行実装では常にnullである。失敗は再生開始を止めない。速度要求の実機評価は通常継続運転#184、定量比較#83、非対応drive/失敗時#146へ移管した。
 
 起動、seek、track変更後には次のログが出る。`wait_ms`はPCM先読みが再開条件に達するまでの時間で、
 HDMI、TV、ARC、アンプの出力遅延は含まない。
@@ -161,7 +161,7 @@ service restartを対象driveで確認する。
 
 probe-cddaは既定でPCMを捨て、再生しない。保存には`--pcm-output /tmp/track1.pcm`を追加する。
 保存形式はraw S16_LE・44.1 kHz・stereo。既存ファイルを上書きしない。framesは1〜750。
-paranoia比較時はENABLE_PARANOIA=ONのbuildで`--cdda-reader paranoia`を指定する。
+paranoiaの実験・検証時はENABLE_PARANOIA=ONのbuildで`--cdda-reader paranoia`を指定する。公式配布には採用しない。
 
 ```sh
 /usr/local/bin/cdplayerd --probe-disc-id /dev/sr0

@@ -58,7 +58,9 @@ unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspbe
 unitはRead Policyの任意保存先として`StateDirectory=picdplayer`を作成する。保存を試す場合だけ
 `PICDPLAYER_EXTRA_ARGS`へ`--settings-file /var/lib/picdplayer/settings.json`を追加する。
 `--settings-file`には絶対ファイルパスを指定する。空文字・相対パス・末尾が`/`のパスは起動時に拒否する。
-通常のunitはこの引数を自動付与しない。設定画面やArtist Backgroundの有効化はまだない。
+通常のunitはこの引数を自動付与しない。標準PlayerのSettings画面ではRead Policyの
+SINGLE/REPEATを選べるが、保存は`--settings-file`指定時だけ有効になる。
+Artist Backgroundの有効化はまだない。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
 scriptはCMake install規則から生成したDebian packageをinstallする。package postinstはdaemon-reload後に
@@ -82,7 +84,7 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 認識した停止中または一時停止中に`CDROM_SELECT_SPEED`へN倍速を一度だけ要求する。既定では
 速度を変更しない。成功はioctlが要求を受理したことだけを示し、実際に適用された速度・回転音の
 低下・読み取りthroughputを保証しない。能力がNO/UNKNOWNの場合はioctlを発行せず現在の設定を維持する。ioctl失敗後のdrive状態は推測せず、
-いずれの場合も再生は続行する。`/api/state`の`drive.speed_request_error`とjournalに理由を残す。速度変更と通常再生の実機評価は#8で継続する。
+いずれの場合も再生は続行する。`/api/state`の`drive.speed_request_error`とjournalに理由を残す。通常再生の継続評価は#184、定量比較は#83、非対応driveでの失敗確認は#146で扱う。
 これはshell scriptではないため、変数展開やcommand substitutionは利用しない。
 `--interactive`は指定しない。serviceのstdinは`null`なので、指定するとEOFで正常終了する。
 設定変更は`sudo systemctl restart picdplayer.service`で反映する。

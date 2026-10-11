@@ -410,6 +410,12 @@ if(BUILD_TESTING)
     add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
         ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
+    add_test(NAME debian_control_inventory COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/debian_control_inventory_test.py)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_test(NAME release_artifact COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_artifact_test.py)
+    endif()
     if(ENABLE_API)
         add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
