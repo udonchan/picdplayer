@@ -47,8 +47,8 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | Audio CDの自動認識・TOC取得・HDMI連続再生 | 実装済み、通常動作を実機確認済み |
 | TVリモコンのCEC再生・一時停止・停止・曲移動・シーク | 実装済み、実機確認済み |
 | HTTP操作・eject・WebSocket状態配信 | 実装済み、状態照会とejectを実機確認済み |
-| MusicBrainz metadata・JSON cache | 任意機能として実装済み、単一候補CDで実機確認済み |
-| 読み取り専用Now Playing画面 | 実装済み。Presentation Modelの曲情報とsame-origin cover artをブラウザに表示。Chromium/Cage kiosk unitを実装、cold boot後のTV表示を確認済み。長期継続運転は確認待ち |
+| MusicBrainz metadata・JSON cache | 任意機能として実装済み。単一候補CDと『The Slip』の複数候補を実機確認済み。Piの隔離daemonで到達不能proxy時のERRORと再生位置進行を確認。実network断・timeout中の音声無欠落は未確認 |
+| Player画面 | 実装済み。Presentation Modelの曲情報とsame-origin cover artを表示し、CECから再生操作・metadata候補選択が可能。Chromium/Cage kiosk unitを実装、cold boot後のTV表示を確認済み。長期継続運転は確認待ち |
 | ジャケット画像 | daemonの画像binary cacheとsame-origin配信を実装。破損画像・offline等の実機確認は継続課題 |
 | systemd常駐・自動起動 | 実装・基本構成で実機確認済み |
 | ALSA underrun自動復旧 | 実装・自動試験済み。実機の異常系評価は未完了 |
@@ -56,7 +56,7 @@ REGZA TV → HDMI ARC → Marantz NR1200です。動作確認の範囲は
 | Player Integrity monitor・disc read map | Phase 1を実装済み。通常CDのPi CDP・1080p表示を確認。異常scenario・実機異常系・長期評価は継続課題 |
 | 読み取り専用technical status画面 | Phase 1bとして実装、通常再生・再読み込み・再接続をブラウザで実機確認済み |
 | CD-DA先読みbuffer設定・drive access直列化 | Phase 2の基礎を実装。通常CDで容量・開始閾値と操作応答を実機比較済み。任意の1x速度要求と短時間API再生を実機確認済み。継続運転・聴感は#184、定量比較は#83、非対応driveでの失敗確認は#146に残る |
-| 複数metadata候補の選択 | 未実装 |
+| 複数metadata候補の選択 | daemonの候補公開・選択APIと標準PlayerのCEC候補pickerを実装済み。『The Slip』で実候補の選択とTV表示を確認済み。再選択・辞退の確認範囲は検証状況を参照 |
 | quiet boot・read-only root・Buildroot image | 未実装 |
 
 対象は音声のみのCDです。傷ディスクの評価は今後の課題です。標準のCD-DA readerはdirectで、libcdio-paranoiaはライセンス・再配布条件の確認が必要なため公式配布への採用とbackend比較を見送っています（[#6](https://github.com/udonchan/picdplayer/issues/6)、[#66](https://github.com/udonchan/picdplayer/issues/66)）。
@@ -93,7 +93,7 @@ CIはPull Requestと手動起動を対象に、arm64 runner上でDocker build、
 ## ドキュメント
 
 画面の編集は[Custom UI](docs/manual/custom-ui.md)を参照してください。起動時の静的検証と
-built-in画面へのfallbackを実装しています。設定画面・hot reloadは今後の対象です。
+built-in画面へのfallbackを実装しています。標準SettingsでRead Policyを操作でき、hot reloadは今後の対象です。
 
 [Guide](docs/guide/README.md)で仕組みと設計意図を順に読めます。
 [ドキュメントの案内](docs/README.md)から、設計書、運用手順、検証状況を参照できます。

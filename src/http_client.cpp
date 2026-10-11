@@ -8,6 +8,7 @@
 #include <mutex>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace {
 std::once_flag curl_once;
@@ -55,14 +56,20 @@ size_t receive_header(char* data, size_t size, size_t count, void* opaque) noexc
         return bytes;
     } catch (...) { return 0; }
 }
-curl_socket_t open_public_socket(void*, curlsocktype, curl_sockaddr* address) noexcept {
-    if (!address || !is_public_http_peer(&address->addr)) return CURL_SOCKET_BAD;
+curl_socket_t open_public_socket(void* opaque, curlsocktype, curl_sockaddr* address) noexcept {
+    const bool allow_private_peer = opaque && *static_cast<const bool*>(opaque);
+    if (!address || (!allow_private_peer && !is_public_http_peer(&address->addr))) return CURL_SOCKET_BAD;
     return ::socket(address->family, address->socktype, address->protocol);
 }
 }
 HttpClient::HttpClient() {
     initialize_curl();
 }
+#ifdef PICDPLAYER_HTTP_TEST_HOOKS
+HttpClient::HttpClient(TestTransport transport) : test_transport_(std::move(transport)) {
+    initialize_curl();
+}
+#endif
 HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
                              const std::function<bool()>& cancelled,
                              RedirectPolicy redirects) const {
@@ -77,7 +84,23 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
     curl_easy_setopt(curl.get(), CURLOPT_URL, owned_url.c_str());
     curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, "PiCDPlayer/0.1.0 (https://github.com/udonchan/picdplayer)");
     curl_easy_setopt(curl.get(), CURLOPT_CONNECTTIMEOUT_MS, 5000L);
-    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, 15000L);
+    long timeout_ms = 15000L;
+    bool allow_private_peer = false;
+#ifdef PICDPLAYER_HTTP_TEST_HOOKS
+    timeout_ms = test_transport_.timeout_ms;
+    allow_private_peer = test_transport_.allow_private_peer;
+    if (!test_transport_.ca_file.empty())
+        curl_easy_setopt(curl.get(), CURLOPT_CAINFO, test_transport_.ca_file.c_str());
+    std::unique_ptr<curl_slist, decltype(&curl_slist_free_all)> resolved(nullptr, curl_slist_free_all);
+    for (const auto& entry : test_transport_.resolve) {
+        auto* appended = curl_slist_append(resolved.get(), entry.c_str());
+        if (!appended) throw std::runtime_error("test DNS override allocation failed");
+        resolved.release();
+        resolved.reset(appended);
+    }
+    if (resolved) curl_easy_setopt(curl.get(), CURLOPT_RESOLVE, resolved.get());
+#endif
+    curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT_MS, timeout_ms);
     curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, follow_cover_art ? 1L : 0L);
     curl_easy_setopt(curl.get(), CURLOPT_MAXREDIRS, 3L);
     curl_easy_setopt(curl.get(), CURLOPT_PROTOCOLS_STR, "https");
@@ -91,6 +114,7 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
         curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, receive_header);
         curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, &redirect_target);
         curl_easy_setopt(curl.get(), CURLOPT_OPENSOCKETFUNCTION, open_public_socket);
+        curl_easy_setopt(curl.get(), CURLOPT_OPENSOCKETDATA, &allow_private_peer);
     }
     if (cancelled) {
         curl_easy_setopt(curl.get(), CURLOPT_NOPROGRESS, 0L);

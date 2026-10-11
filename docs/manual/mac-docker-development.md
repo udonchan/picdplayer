@@ -50,7 +50,8 @@ docker build -t picdplayer-build .
 
 `picdplayer-build` imageには、CMake、C++ compiler、ALSAやmetadata/API機能、任意の
 libcdio-paranoia readerに必要なdevelopment packageが含まれています。`BUILD_TESTING=ON`（既定）の自動試験用に
-Node.jsとPython 3も含みます。どちらもPiのdaemon/kiosk実行時には不要で、
+Node.jsとPython 3も含みます。`BUILD_TESTING=ON`ではPython 3が必須で、見つからない場合は
+CMake configure時に失敗します。どちらもPiのdaemon/kiosk実行時には不要で、
 ハードウェアを使わないJavaScript・Python試験のために使用します。
 
 Dockerfileを変更した場合は、build imageを再作成してください。

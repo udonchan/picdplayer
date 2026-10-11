@@ -1,4 +1,6 @@
 #include "metadata_worker.hpp"
+#include "metadata_session.hpp"
+#include "player_controller.hpp"
 #include <atomic>
 #include <chrono>
 #include <iostream>
@@ -52,6 +54,58 @@ int main() {
         for (int i = 0; i < 100 && !failing.pop(result); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(5));
         check(result.generation == 4 && result.metadata.status == MetadataStatus::error &&
               result.metadata.error == "bounded metadata input rejected");
+
+        MetadataSession session;
+        const auto old_request = session.begin(toc_a);
+        std::atomic<bool> old_started = false;
+        std::atomic<bool> release_old = false;
+        std::atomic<bool> new_started = false;
+        std::atomic<bool> release_new = false;
+        MetadataWorker delayed([&](const DiscToc& toc, const MetadataWorker::Cancelled&) {
+            MetadataResult result;
+            if (toc.tracks.size() == 1) {
+                old_started = true;
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+                while (!release_old && std::chrono::steady_clock::now() < deadline)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                result.status = MetadataStatus::error;
+                result.error = "old disc network timeout";
+            } else {
+                new_started = true;
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+                while (!release_new && std::chrono::steady_clock::now() < deadline)
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                result.status = MetadataStatus::not_found;
+            }
+            return result;
+        });
+        delayed.request(old_request);
+        for (int i = 0; i < 500 && !old_started; ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        check(old_started);
+        PlayerController playback;
+        playback.load_disc(toc_a);
+        playback.play();
+        check(playback.state().playback == PlaybackState::playing);
+        playback.pause();
+        check(playback.state().playback == PlaybackState::paused);
+        playback.stop();
+        check(playback.state().playback == PlaybackState::stopped);
+        const auto new_request = session.begin(toc_b);
+        delayed.request(new_request);
+        release_old = true;
+        for (int i = 0; i < 500 && !new_started; ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        check(new_started);
+        MetadataWorkerResult stale{};
+        check(delayed.pop(stale) && stale.generation == old_request.generation);
+        check(!session.apply(std::move(stale)) && session.snapshot().status == MetadataStatus::loading);
+        release_new = true;
+        MetadataWorkerResult fresh{};
+        for (int i = 0; i < 500 && !delayed.pop(fresh); ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        check(fresh.generation == new_request.generation && session.apply(std::move(fresh)) &&
+              session.snapshot().status == MetadataStatus::not_found);
         ArtworkWorker artwork([](const std::string& release, const MetadataWorker::Cancelled&) {
             ArtworkInfo info;
             info.status = ArtworkStatus::available;
