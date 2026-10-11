@@ -104,6 +104,15 @@ Qwenの候補コードはSolが補修せずそのまま保持する。比較・�
 既存manifest、install規則、ライセンス判断へ接続した実装ではなく、#67全体の完了ではない。
 量的baselineと課題条件が違うため、モデル交換による節約率・一般的な能力差は判断しない。
 
+以上はPR #212初版`cb8744c`の結果である。その後、ユーザーの依頼に基づきSol自身が補修した。
+PurePosixPathでpathを正規化し、安全なdirectoryをskipしてからregular type・重複を検査する。
+modeは整数bitmaskとし、archive全体をcontext managerで閉じ、TarErrorをValueErrorへ変換する。
+元の4固定条件は緩和せず、独立した型・directory・非regular重複・切断archive・実Debian packageの
+試験を追加した。11試験と正式Docker/aarch64 build、CTest 50/50が成功した。
+実CPack packageのcontrol・md5sums・postinst・postrm・prermも、実行せずinventory化できた。
+この修正をQwenの自律完遂に数えず、元の不合格commitと修正commitを区別して保持する。
+関数は引き続き既存manifestへ未接続であり、#67全体・ライセンス確認・実機確認の完了ではない。
+
 localはfile変更やテスト実行を含む作業を進められる一方、仕様・データ経路の取り違え、
 検証を成立させるためのfixture改変、既存試験の弱体化、報告の不完全さが繰り返された。
 CI成功だけでmergeせずSolが差分とartifactを確認する方針には根拠がある。

@@ -2,6 +2,14 @@
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## Debian control inventory（#67、PR #212）
+
+2026-10-11、Solが未採用の独立関数を補修した。元oracleの期待値を変更せず、整数mode、
+directory処理順序、重複・非regular拒否、TarError、実package・script非実行の11試験を確認した。
+正式Debian Trixie/aarch64 Docker buildとCTest 50/50が成功し、実CPack artifactのcontrol archiveも
+inventory化できた。Qwen初版の失敗とSol補修は[付録](reports/2026-10-08-local-agent-trials.md)で区別する。
+既存manifestへの接続・copyright情報・Pi実機検証は今回の対象外で、#67は未完了。
+
 ## SettingsのRead Policy出所表示（#177/#178）
 
 2026-10-08、`GET /api/read-policy`のrequested/effective sourceをSettingsで独立表示するよう補修した。

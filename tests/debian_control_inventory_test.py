@@ -3,7 +3,10 @@ import hashlib
 import importlib.util
 import io
 from pathlib import Path
+import shutil
+import subprocess
 import tarfile
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -44,6 +47,58 @@ class Contract(unittest.TestCase):
 
     def test_control_only(self):
         self.assertEqual(set(self.invoke(archive([('control', tarfile.REGTYPE, b'x')]))), {'control'})
+
+    def test_integer_mode_without_directories(self):
+        entry = self.invoke(archive([('control', tarfile.REGTYPE, b'x')]))['control']
+        self.assertIs(type(entry['mode']), int)
+        self.assertEqual(entry['mode'], 0o644)
+
+    def test_duplicate_nonregular_entries_are_not_skipped(self):
+        for kind in (tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                self.invoke(archive([('control', tarfile.REGTYPE, b'x'), ('./control', kind, b'')]))
+
+    def test_safe_directories_are_ignored(self):
+        entries = [('.', tarfile.DIRTYPE, b''), ('nested/', tarfile.DIRTYPE, b''),
+                   ('./control', tarfile.REGTYPE, b'x')]
+        self.assertEqual(set(self.invoke(archive(entries))), {'control'})
+
+    def test_unsafe_directories_are_rejected(self):
+        for path in ('../', '/outside/'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                self.invoke(archive([(path, tarfile.DIRTYPE, b''), ('control', tarfile.REGTYPE, b'x')]))
+
+    def test_regular_root_path_is_rejected(self):
+        with self.assertRaises(ValueError):
+            self.invoke(archive([('.', tarfile.REGTYPE, b'x'), ('control', tarfile.REGTYPE, b'y')]))
+
+    def test_truncated_member_is_invalid_archive(self):
+        data = archive([('control', tarfile.REGTYPE, b'x' * 2048)])
+        with self.assertRaises(ValueError):
+            self.invoke(data[:600])
+
+    @unittest.skipUnless(shutil.which('dpkg-deb'), 'real Debian archive requires dpkg-deb')
+    def test_real_debian_archive_does_not_execute_maintainer(self):
+        with tempfile.TemporaryDirectory(prefix='control-inventory-') as temporary:
+            root = Path(temporary)
+            control_dir = root / 'package/DEBIAN'
+            control_dir.mkdir(parents=True)
+            control = (b'Package: inventory-fixture\nVersion: 1.0\nArchitecture: all\n'
+                       b'Maintainer: Test <test@example.invalid>\nDescription: fixture\n')
+            (control_dir / 'control').write_bytes(control)
+            marker = root / 'must-not-exist'
+            script = f'#!/bin/sh\nprintf executed > "{marker}"\n'.encode()
+            (control_dir / 'postinst').write_bytes(script)
+            (control_dir / 'postinst').chmod(0o755)
+            package = root / 'fixture with spaces.deb'
+            subprocess.run(['dpkg-deb', '--build', str(root / 'package'), str(package)],
+                           check=True, stdout=subprocess.DEVNULL)
+            inventory = candidate.control_inventory(package)
+            self.assertEqual(inventory['control']['sha256'], hashlib.sha256(control).hexdigest())
+            self.assertEqual(inventory['postinst'], {
+                'sha256': hashlib.sha256(script).hexdigest(), 'mode': 0o755, 'size': len(script),
+            })
+            self.assertFalse(marker.exists())
 
     def test_rejections(self):
         valid = ('control', tarfile.REGTYPE, b'x')
