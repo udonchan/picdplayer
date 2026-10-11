@@ -16,7 +16,7 @@
 | GET /api/read-policy | requested/effective/pending、`requested_source`/`effective_source`（`startup`/`restored`/`saved`/`session`）、`persistence_configured`（boolean、保存先指定の有無）。出所は要求と実効値それぞれに対応し、pending中は異なり得る。保存先指定だけでは保存成功を保証しない。設定操作の契約は機能設計参照 |
 | POST /api/metadata-selection | loopback限定。候補番号を選択、またはnullで全候補を明示的に採用しない。受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
 | GET /api/artist-background | main ownerの背景利用状態。現段階は`{"requested":false,"effective":false,"available":false,"unavailable_reason":"runtime_unavailable"}`のみ。provider未提供の場合は503 |
-| POST /api/artist-background | loopback限定。512 bytes以下の`{"enabled":bool}`のみ。falseは即時OFF・冪等204、trueはruntime未接続・利用条件未確定のため409。型違い・未知field・不正JSONは400、上限超過413、他method405、外部mutation403 |
+| POST /api/artist-background | loopback限定。512 bytes以下の`{"enabled":bool}`のみ。falseは即時OFF・冪等204、trueはruntime未接続のため409。型違い・未知field・不正JSONは400、上限超過413、他method405、外部mutation403 |
 
 背景状態にはkey、内部path、provider URL、Artist MBIDを含めない。背景設定の保存・復元は未実装で、
 Read Policyのpending/source/保存情報を流用しない。key指定だけでは候補JSONも写真も取得しない。

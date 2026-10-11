@@ -166,7 +166,11 @@ rename、directory syncを試みる。現行実装ではrename後のdirectory sy
 Artist Backgroundは既定OFFで、`GET/POST /api/artist-background`で利用不能状態の取得とOFFだけを
 部分実装する。ONは常に409で拒否し、保存・復元・Settings UIは未実装。provider key fileの存在は
 利用者による表示許可ではなく、候補JSONの取得も開始しない。ONを受理する前に、#49/#51の取得・配信・表示経路、
-利用条件、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
+API認証・アクセス制約、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
+ダウンロード画像の利用に必要な権利・許諾・表示条件の確認と利用判断は利用者に委ねる。
+製品は画像の権利を保証せず、明示ON自体が権利者の許諾を生むわけではないことを説明する。
+全画像の包括的許諾を製品側で確認することはruntime実装の前提にしない。外部写真は配布物へ同梱しない。
+ディスクキャッシュの採否・容量・保持期間・削除は独立した設計事項とし、この権利方針では決定しない。
 一般設定API、全CLI optionの永続化、hot reload、機器設定の稼働中変更はこの部分実装に含めない。
 
 設定拡張の契約では、現行の`schema_version=1`をRead Policyだけを持つ旧版として扱い、
@@ -350,8 +354,8 @@ album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契�
 現段階では利用gateがOFFのためworkerを生成せず、key指定時も候補JSON・写真の取得は行わない。
 候補JSONの上限付きfile cacheと画像取得部品はruntimeから利用しない。CD再生と通常metadataは維持する。
 現行key fileはproject keyを`api-key`ヘッダーで送る開発用設定であり、personal keyの`client-key`には
-対応しない。候補取得と利用者の写真表示ONは別の状態とし、公開版での自動取得・表示は
-利用条件を満たせる経路が確定するまで有効にしない。
+対応しない。候補取得と利用者の写真表示ONは別の状態とし、既定OFF・利用者の明示ONを維持する。
+現段階のON拒否はruntime未接続によるもので、個々の画像の許諾を製品側で確認できないことを理由にしない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。

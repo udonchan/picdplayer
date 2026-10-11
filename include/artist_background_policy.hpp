@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-// Main-thread owner. Runtime delivery and usage terms are not ready for ON.
+// Main-thread owner. Runtime delivery is not ready for ON.
 class ArtistBackgroundPolicy {
 public:
     bool set_enabled(bool enabled) {

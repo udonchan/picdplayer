@@ -101,8 +101,9 @@ symlinkやgroup/world writableを許可しない。最大256文字の空白を�
 metadata取得とCD再生は続ける。`GET /api/artist-background`は`runtime_unavailable`を返す。
 loopback POSTのOFFは冪等204、ONは409で拒否する。背景設定の保存、写真のdownload、
 API配信、Playerへの表示は未実装である。
-key file指定は将来の写真表示設定をONにしたことを意味せず、公開版の写真表示は
-権利条件とcache/表示条件の確認が済むまで無効のままとする。
+key file指定は将来の写真表示設定をONにしたことを意味しない。現在のON拒否はruntime未接続による。
+画像利用に必要な権利・許諾の確認は利用者に委ね、製品が許諾を保証しないことを説明して明示ONを求める。
+ディスクキャッシュを行うかどうかは、この権利方針とは別に設計する。
 
 手動のplayerやCD読み取り診断を実行する前には`sudo systemctl stop picdplayer.service`で
 serviceを停止する。同じdrive・ALSA・CECを複数のplayerから同時操作しない。

@@ -10,7 +10,8 @@ CAAのpublic peer制限、test専用CA/DNS/private peer指定を両立させた�
 Debian Trixie/aarch64の正式build、CTest 55/55、使い捨てpackage lifecycleが成功した。
 統合したHTTPS fixtureはnetwork noneで10回連続成功した。既存の非背景機能・新しい試験登録は維持した。
 key未指定なら背景workerは作らない。今回は実provider通信・Pi deploy・TV表示を行っておらず、
-画像のruntime取得・API配信・Player表示・背景ON/OFF・写真の利用条件は残課題として保留する。
+この同期時点では画像のruntime取得・API配信・Player表示・背景ON/OFFが残課題だった。
+後続のOFF gateと、画像の権利判断を利用者に委ねる方針確認は下記に記録する。
 Draftを維持し、この同期を#49/#25の完了とは扱わない。
 
 ## metadata HTTP試験のmaster同期（PR #182）
@@ -265,15 +266,15 @@ gate・daemon試験は`--network none`のcontainerで各10回反復して成功�
 API仕様に表示されるCreative Commons Attribution 3.0を、写真本体のライセンスと読み替えない。
 端末内へのdownload/cache、同一端末のUIへの配信・表示、公開配布版での既定有効化について、
 全画像へ一律に適用できる権利条件は確認できていない。写真をrepo・`.deb`・bootable imageへ同梱しない
-方針でも、この未確認事項は解消しない。#49ではruntimeでの写真表示を有効化する前に、providerの
-正式な利用条件と個々の写真の権利・必要な表示方法を確認し、記録する。確認不能なら、権利条件が
-明確な画像ソースへ切り替えるかArtist Backgroundを無効のままにする。候補取得・画像取得部品の
-Docker試験は、公開版での写真利用許可を意味しない。
+方針でも、この未確認事項は解消しない。候補取得・画像取得部品のDocker試験は、写真利用の許諾を
+意味しない。この調査結果を、全画像の包括的許諾を製品側で確認する実装gateとはしない。
 
-判断: 画像を同梱しない・利用者の明示ONを求める設計の準備と、合成/利用許諾済み画像での試験は進める。
-fanart.tv画像の自動取得・端末内cache・公開版での表示を完成機能として有効化する判断は保留する。
-providerへOSSの専用端末でのAPI/CDN利用、cache保持・削除、出典/権利者表示の条件を確認し、
-画像ごとの条件を満たせる経路が必要。確認できない場合は権利条件が明確な利用者指定画像等へ限定する。
+方針確認（2026-10-11）: ダウンロード画像に必要な権利・許諾・表示条件の確認と利用判断は利用者に委ねる。
+製品は権利を保証せず、明示ON自体が権利者の許諾を生まないことを説明する。外部写真は同梱せず、
+既定OFFを維持する。以前の「製品側で画像ごとの条件を確認できるまで表示実装を保留」という判断は
+この方針で置き換える。API認証・アクセス制約は守り、合成/利用許諾済みfixtureによる開発試験は継続する。
+ディスクキャッシュの採否・容量・保持期間・削除は独立した議論とする。既存cache部品の試験済みという
+記録は、runtimeでのディスク保存採用を意味しない。現段階のON拒否はruntime未接続による。
 
 [API認証仕様](https://api.fanart.tv/)はproject keyの`api-key`とpersonal keyの`client-key`を区別する。
 現行`--artist-background-key-file`は`api-key`ヘッダーだけを送る開発中の**project key用**経路であり、

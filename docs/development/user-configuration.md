@@ -17,7 +17,7 @@ key指定だけの候補照会を停止した。#177はArtist BackgroundのONと
 | 項目 | 現行経路 | 設定画面での扱い | 適用・制約 |
 |---|---|---|---|
 | Read Policy（SINGLE/REPEAT、region、matches、attempts、budget） | `--read-verification`は起動時、5項目は`GET/POST /api/read-policy` | 最初の画面候補。基本modeと詳細値を分け、requested/effective/pendingを表示 | 再生中の変更は停止境界までpending。`--settings-file`を指定した場合だけ変更を保存し、保存済み値は次回起動時にCLIの初期値を上書きする |
-| Artist Backgroundの有効/無効 | `GET/POST /api/artist-background`は利用不能状態と即時OFFのみ。ONは409、保存なし | 画面は未実装。既定OFF、利用可能になるまで操作不能と理由を示す | #49/#51のruntime配信・表示と権利/利用条件確認が前提。key指定だけでは照会しない |
+| Artist Backgroundの有効/無効 | `GET/POST /api/artist-background`は利用不能状態と即時OFFのみ。ONは409、保存なし | 画面は未実装。既定OFF、技術的に利用可能になるまで操作不能と理由を示す | #49/#51のruntime配信・表示が前提。画像の権利・許諾判断は利用者に委ねる。key指定だけでは照会しない |
 | metadata照会 | `--metadata off\|musicbrainz` | 後続候補 | network利用と再起動境界を要設計。Artist Backgroundはartist MBIDがなければ利用不可 |
 | drive速度要求 | `--drive-speed-x 1..255` | 後続の詳細設定候補 | 停止/一時停止中に要求。受理は実測速度や騒音低下を保証しない |
 | direct C2 pointer要求 | `--direct-c2-pointers` | 後続の詳細設定候補 | direct backend限定。能力・downgradeを表示し、C2の有無を読取保証とみなさない |
@@ -31,12 +31,13 @@ key指定だけの候補照会を停止した。#177はArtist BackgroundのONと
 Artist Backgroundの明示的なON/OFFである。画面はdaemonが返す状態だけを表示し、
 保存・検証・適用の唯一のownerはdaemonとする。背景がOFFのときは外部写真の取得・配信・
 表示を行わず、Album Artworkまたは既定背景へのfallbackを維持する。外部写真を配布物へ同梱しない。
-家庭内での利用を想定しても、providerのAPI条件や画像ごとの権利・表示条件は別に確認する。
+providerのAPI認証・アクセス制約と、利用者が判断する画像ごとの権利・許諾・表示条件を分ける。
 公式の[API認証仕様](https://api.fanart.tv/)と[キー取得案内](https://fanart.tv/get-an-api-key/)は
 project keyとpersonal keyを区別する。設定画面で利用者のpersonal keyを扱う場合は`client-key`経路を
-別途実装・検証する。写真を同梱しないことや利用者の明示ONだけでは、個々の写真の許諾や端末内cacheの
-条件を確定できない。#49の権利・利用条件が未確認の間はONを操作不能とし、合成/利用許諾済み画像で
-UIとfallbackの試験だけを進める。
+別途実装・検証する。利用者が必要な権利・許諾を確認した上で明示ONする方針とし、製品は画像の権利を
+保証しない。ON自体が許諾を生むわけではない。包括的許諾を製品側で確認することを実装の前提にしない。
+現段階の操作不能はruntime未接続による。開発試験には合成/利用許諾済みfixtureを使う。
+ディスクキャッシュの採否・保持期間・容量・削除は、この権利方針とは別に決める。
 
 Read Policyの部分実装ではbuilt-in値→起動引数→保存済みuser値の順に採用する。
 `GET /api/read-policy`では要求値・適用済み値ごとに`startup`/`restored`/`saved`/`session`の
@@ -61,7 +62,7 @@ Read Policyについて確定できる契約は機能・詳細設計へ移した
   異常停止後の復元可能性と、失敗時の安全な既定値を試験する。
 - Read Policyは現行のrequested/effective/pendingと停止境界を維持する。Artist Backgroundの
   ON/OFFは画像取得を始める前に反映する。起動時にprovider keyがあっても利用者の明示ONがなければOFF。
-- 表示不能・取得不能・未確認の権利条件ではONを成功として返さない。metadataやproviderの失敗が
+- 技術的な表示不能・取得不能ではONを成功として返さない。個々の画像の権利判断は利用者に委ねる。metadataやproviderの失敗が
   再生を止めないこと、Custom UIが設定機能を実装しなくても動くことを確認する。
 
 ### 他の設定へ拡張する際の検討表
@@ -79,9 +80,9 @@ Read Policyの保存・復元だけ`--settings-file`指定時に実装済みで�
 | 適用 | Read Policyは停止境界のrequested/effective/pendingを維持。背景OFFは即時に新規取得/表示を止める。背景ONはproviderと表示条件が利用可能な時だけ受理 | 再生中のpolicy変更、offline、keyなし、provider拒否 |
 | 公開 | 値、出所、保存成否、適用状態、利用不能理由を返し、秘密鍵や内部pathは返さない | network越しPOST、Custom UI未対応、API接続断 |
 
-権利に関しては、写真をpackageへ含めないことと、家庭内利用を目的に明示ONを求めることを
-製品側の境界とする。ただし、それだけでproviderの条件や画像の権利をすべて利用者へ移転できると
-断定しない。確認できた利用条件と必要な表示を実装し、満たせない経路はOFFのままにする。
+画像の権利・許諾・表示条件の確認と利用判断は利用者に委ねる。製品は画像の権利を保証せず、
+外部写真をpackageへ含めず、既定OFF・明示ONを求める。これは権利者の権利やproviderの条件を
+変更する宣言ではない。ディスクキャッシュの設計をこの判断から推定しない。
 
 設定の読み込み、型・範囲・組合せvalidation、適用を分離する。CEC/audio/CD device/networkは
 操作不能につながり得るので、起動時fallback、last-known-good保存、適用確認とrollbackを項目別に設計する。
