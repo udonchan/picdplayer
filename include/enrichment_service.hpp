@@ -16,7 +16,8 @@ struct EnrichmentArtworkAsset {
 class EnrichmentService {
 public:
     class Implementation;
-    EnrichmentService(bool enabled, std::string cache_directory);
+    EnrichmentService(bool enabled, std::string cache_directory,
+                      std::string artist_background_key = {});
     ~EnrichmentService();
     EnrichmentService(const EnrichmentService&) = delete;
     EnrichmentService& operator=(const EnrichmentService&) = delete;

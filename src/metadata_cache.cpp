@@ -15,7 +15,7 @@ struct CacheFile {
 
 std::vector<CacheFile> cache_files(const std::filesystem::path& root) {
     std::vector<CacheFile> files;
-    for (const auto* name : {"metadata", "cover-art"}) {
+    for (const auto* name : {"metadata", "cover-art", "artist-background"}) {
         std::error_code ec;
         std::filesystem::recursive_directory_iterator iterator(
             root / name, std::filesystem::directory_options::skip_permission_denied, ec);

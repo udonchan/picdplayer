@@ -29,6 +29,11 @@ int main() {
         check(!std::filesystem::exists(first));
         check(read_metadata_cache(second, 10, policy)->body == "123456");
 
+        const auto artist = root / "artist-background" / "artist.json";
+        write_metadata_cache(root, artist, "123456", policy);
+        check(!std::filesystem::exists(second));
+        check(read_metadata_cache(artist, 10, policy)->body == "123456");
+
         const auto temporary = root / "cover-art" / "interrupted.tmp";
         write_metadata_cache(root, temporary, "old", MetadataCachePolicy{.maximum_total_bytes = 20});
         write_metadata_cache(root, root / "metadata" / "third.json", "new", MetadataCachePolicy{.maximum_total_bytes = 20});

@@ -40,7 +40,8 @@ int main(int argc, char** argv) {
     std::string disc_id_device;
     std::string metadata_device, lookup_disc, metadata_mode = "off";
     std::string metadata_cache = "/var/cache/picdplayer";
-    bool metadata_option = false, metadata_cache_option = false;
+    std::string artist_background_key_file;
+    bool metadata_option = false, metadata_cache_option = false, artist_background_key_file_option = false;
     int api_port = 0;
     std::string custom_ui;
     std::string settings_file;
@@ -65,6 +66,10 @@ int main(int argc, char** argv) {
         else if (arg == "--lookup-disc" && i + 1 < argc) lookup_disc = argv[++i];
         else if (arg == "--metadata" && i + 1 < argc) { metadata_mode = argv[++i]; metadata_option = true; }
         else if (arg == "--metadata-cache" && i + 1 < argc) { metadata_cache = argv[++i]; metadata_cache_option = true; }
+        else if (arg == "--artist-background-key-file" && i + 1 < argc) {
+            artist_background_key_file = argv[++i];
+            artist_background_key_file_option = true;
+        }
         else if (arg == "--custom-ui" && i + 1 < argc) { custom_ui = argv[++i]; custom_ui_option = true; }
         else if (arg == "--settings-file" && i + 1 < argc) {
             settings_file = argv[++i];
@@ -171,7 +176,7 @@ int main(int argc, char** argv) {
         else if (arg == "--interactive") interactive = true;
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
-            std::cerr << "Usage: cdplayerd [--probe-drive-start PATH | --probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--api-listen IP --api-port 1..65535] [--custom-ui PATH] | other modes]\n";
+            std::cerr << "Usage: cdplayerd [--probe-drive-start PATH | --probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--artist-background-key-file PATH] [--api-listen IP --api-port 1..65535] [--custom-ui PATH] | other modes]\n";
             return arg == "--help" ? 0 : 2;
         }
     }
@@ -210,6 +215,11 @@ int main(int argc, char** argv) {
     }
     if (metadata_cache_option && player_device.empty() && metadata_device.empty() && lookup_disc.empty()) {
         std::cerr << "--metadata-cache requires a metadata diagnostic or --player\n"; return 2;
+    }
+    if (artist_background_key_file_option &&
+        (artist_background_key_file.empty() || player_device.empty() || metadata_mode != "musicbrainz")) {
+        std::cerr << "--artist-background-key-file requires --player and --metadata musicbrainz\n";
+        return 2;
     }
     if (custom_ui_option && (!api_port || custom_ui.empty())) {
         std::cerr << "--custom-ui requires a nonempty path and --api-port\n"; return 2;
@@ -286,7 +296,7 @@ int main(int argc, char** argv) {
             run_player_session(player_device, backend, audio_device, audio_latency_ms,
                                cec_enabled, device,
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
-                               metadata_cache, api_listen, api_port, buffer_config,
+                               metadata_cache, artist_background_key_file, api_listen, api_port, buffer_config,
                                read_policy, custom_ui, drive_speed_x, direct_c2_pointers,
                                settings_file);
             return 0;
