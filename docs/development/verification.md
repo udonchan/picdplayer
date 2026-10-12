@@ -387,8 +387,21 @@ UI decode/fallbackを確認した。transport driverの短いsocket timeout後�
 Pi実験は上記の整理前artifactによる記録で、今回のcommit整理ではPi配備や再試験を行わない。
 driver修正後の最終構成で正式build・全CTest 59/59・package lifecycle、network-noneのtransport 100回反復が成功した。
 runtime `b8d4741`と検証 `6daa2d4`を[Draft PR #217](https://github.com/udonchan/picdplayer/pull/217)へ整理した。
-baseは#213の`feature/25-background-off-gate`。#176/#213/#217はDraftで未統合、関連IssueはOpenを維持する。
+PR作成時点のbaseは#213の`feature/25-background-off-gate`で、#176/#213/#217はDraftで未統合だった。
+関連IssueはOpenを維持する。
 上記の試験節にある「未commit」は実験時点の状態であり、現在のPR状態とは区別する。
+
+### provider・既定OFF gateのmaster統合（2026-10-12）
+
+利用者の承認によりReadyの#176と#213を通常mergeした。#176のmerge commitは
+`3620cbd417e399cb6c5f90fe3911204125cf26bc`で、treeは検証済みhead `809d1e3`と一致した。
+#213はmasterへ自動retarget後、workflow_dispatchのCI `38211431273`を同一head `2824704`で再実行して成功。
+#213のmerge commitは`eb43d295dbdf25b17493f3d3368462aa49c3ac49`で、treeは同headと一致した。
+masterは部品と既定OFF gateまでで、背景ONは`runtime_unavailable`として拒否する。
+runtime/UIの#217はmasterへretargetしDraftで残した。retarget直後の差分は元の3 commitで、
+親branchの追加commitを取り込まず、統合状態の文書追補だけを追加する。
+repository設定による2本のremote branch自動削除を確認したが、local branch/worktreeと元workspaceは保全した。
+この統合作業でPiへ配備・再試験せず、関連Issueをcloseしていない。
 
 ### fanart.tv画像の権利条件（2026-10-02再確認）
 
