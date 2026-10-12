@@ -2,6 +2,18 @@
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## Buildroot研究成果の保全（2026-10-12）
+
+採用は時期尚早として保留し、#195/#196/#197/#201の調査文書と#202/#203の検証結果のREADMEを
+現在のmaster上の文書専用変更へ集約した。参照は[保全索引](backlog.md#buildrootの検討成果保全と採用保留)と
+親[#74](https://github.com/udonchan/picdplayer/issues/74)。元PR/remote branch/headを保持し、
+試作Dockerfile・BR2_EXTERNAL・WPE recipeはmasterへ採用しない。元コードへの相対リンクは固定SHAのURLへ変更した。
+各文書は実施日とrevisionに対応する過去の事実で、当時の「build継続中」は現在のprocess存在を意味しない。
+今回Buildroot/image/WPEのbuild、生成image/volumeの再確認、Pi起動・配備・音声/CEC/DRM試験は行っていない。
+過去のimage生成/package build/configure成功を、実機・正式供給・Buildroot採用の成功とは扱わない。
+local/remote research headは一致し、別package branch `173e088`は#202のhead `4129757`の祖先である。
+元workspace・旧worktree登録・#217・WPE #192/#194を変更せず、必要な文書だけを独立worktreeで整理する。
+
 ## artist background providerのmaster同期（Draft PR #176）
 
 2026-10-11、PR #182反映後のmaster `9745739`を独立worktreeへ取り込み、HTTP socket callback、

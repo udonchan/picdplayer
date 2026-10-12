@@ -138,14 +138,34 @@ README、Guide、Design、Manual、Developmentと、History/旧パスの案内�
 
 この整理で新たな実機試験を行ったことにはしない。未確認事項は各Issueの完了条件として残す。
 
-## Buildrootの適合性調査
+## Buildrootの検討成果保全と採用保留
 
-[#74](https://github.com/udonchan/picdplayer/issues/74)を親として、
-[#75 公式資料](https://github.com/udonchan/picdplayer/issues/75)、
-[#76 OSS事例比較](https://github.com/udonchan/picdplayer/issues/76)、
-[#77 現行runtime要件](https://github.com/udonchan/picdplayer/issues/77)を並行調査し、
-[#78](https://github.com/udonchan/picdplayer/issues/78)で適合性評価と必要な後続Issue作成を行う。
-Buildroot採用と最終imageへの.deb利用は未決定である。
+2026-10-12、利用者の判断によりBuildroot採用・追加実装を保留した。成果は破棄せず、
+文書をmasterへ統合し、試作コードは元PR/remote branchの固定headに保持する。
+現行Debian/container/.deb開発経路は変更しない。親[#74](https://github.com/udonchan/picdplayer/issues/74)は
+Openで保留し、再開時の索引とする。#75〜#78は調査結果の保全として扱い、方式採用とは区別する。
+
+| 成果 | 元PRと保存head | 現在の境界 |
+|---|---|---|
+| [公式構成・Pi image経路](reports/2026-10-05-buildroot-official/README.md) | #195、`483b81c`、`docs/75-buildroot-official` | 文書のみ。image/実機未検証 |
+| [OSS事例比較](reports/2026-10-05-buildroot-examples/README.md) | #196、`0c8ce59`、`docs/76-buildroot-examples` | 文書のみ。Batocera/OpenMikoを採用したことにはしない |
+| [runtime要件](reports/2026-10-05-buildroot-runtime/README.md) | #197、`14700cf`、`docs/77-buildroot-runtime` | 当時のコード要件。再開時に現行実装と再照合 |
+| [適合性・作業分解](reports/2026-10-05-buildroot-roadmap/README.md) | #201、`97d834b`、`docs/78-buildroot-roadmap` | #198〜#200を作成済み。採用判断は保留 |
+| [Pi 3 image生成](reports/2026-10-06-buildroot-pi3-probe/README.md) | #202、`4129757`、`research/198-buildroot-pi3` | image生成は過去に確認、実機boot/CD-ROM/ALSA/CEC/DRM未検証。#198はOpen保留 |
+| [package build/install](reports/2026-10-06-buildroot-package-probe/README.md) | #202、`4129757`。別branch `research/199-buildroot-package`の`173e088`も同headに含む | local source/UNKNOWN license/BusyBoxとunitの不一致が残る。#199は製品供給完了とせずOpen保留 |
+| [WPE供給probe](reports/2026-10-06-buildroot-wpe-probe/README.md) | #203、`a2c6699`、`research/200-buildroot-wpe` | 依存build/configureまで。最終build/実機未確認、#200はOpen保留 |
+
+試作Dockerfileは隔離hostに有用だがapt版が固定されていない。package recipeは`/src`のlocal checkoutと
+`LICENSE=UNKNOWN`を使い、最小BusyBox imageではsystemd unitが起動しない。WPE recipeはupstreamの大きな
+試作更新で、最終build・sandbox・font/cursor・service統合が未確認である。いずれも現在の正式build/CI/runtimeへ
+採用する根拠が不足するためmasterには取り込まず、READMEから固定SHAの元コードへリンクする。
+生成image/volumeの存在を今回確認しておらず、missing/prunableな旧worktree登録だけを成果保管とは扱わない。
+remote headとlocal commitを照合し、元branchにない未push commitは確認されなかった。local worktree/branchは削除しない。
+
+再開条件は、#46でimageの対象・filesystem・更新/rollback・永続領域とbrowser runtime要件が具体化し、
+現行方式との比較が必要になった時点である。Buildrootの版・source固定・ライセンス・再現環境を再評価し、
+#198〜#200の未検証部分から再開する。#47の製品image、#66〜#69のcomplianceをこの調査で完了扱いにしない。
+WPE runtimeの#192/#194は別の検討で、今回の保留・PR整理の対象には含めない。
 
 ## 監査で確認した不整合・回帰
 
