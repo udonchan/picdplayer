@@ -253,6 +253,140 @@ disc世代更新、OFF反復・ON拒否後の背景provider呼出0を確認し�
 gate・daemon試験は`--network none`のcontainerで各10回反復して成功した。
 背景のON、保存・復元、Settings UI、runtime画像配信は未実装。実provider通信・Pi・TV表示は未検証。
 
+### 単一画像worker（2026-10-11、未commitの作業branch）
+
+以下はruntime接続前の独立部品検証の記録である。現行の接続状況は次のruntime節を参照する。
+
+PR #213 head `2824704`をbaseとする`feature/25-background-image-worker`で、独立した画像workerを追加した。
+実行中1件、最新pending 1件、結果1件を保持し、serialで置換・取消・shutdownを扱う。
+世代・Artist MBID・候補ID/URLを結果に保持するが、main ownerの適用前照合はruntime接続時に必要である。
+既存helperを空のcache path・合成HTTP応答で呼び、繰り返し取得、host拒否、旧世代結果破棄、
+同一世代のartist変更、99件のpending置換、取消・shutdown、例外/null、空/不正MIME、8 MiB境界を確認した。
+これはdisk cacheを採用しない製品判断ではなく、独立部品の試験経路である。
+初回の反復試験は12回目にtimeoutした。threadが同期オブジェクトより先に構築される競合を修正し、
+再build後、network-noneで100回反復成功した。最終Linux/aarch64正式build・Debian package生成、
+全CTest 57/57、package lifecycleも成功した。結果保持上限はcallback内部やdecode memoryの上限ではない。
+Enrichment、公開API、UIには未接続で、ONは引き続き`runtime_unavailable`として拒否する。
+full decode・実provider通信・Pi・TV表示は未検証。commit/push/新PR作成はこの単位では行っていない。
+
+GitHub #49/#51本文には以前の製品側許諾確認をgateとする記述が残っている（2026-10-11確認）。
+今回確認した利用者による権利判断とディスクキャッシュの分離は機能設計を正とし、Issue本文との不一致を
+明記する。Issueの自動編集・closeは行っていない。
+
+### 背景runtime・同一origin配信・標準Player（2026-10-11、未commit）
+
+同じ作業branchでpolicy・Enrichment・画像API・Presentation Model・標準Playerを接続した。
+有効なproject keyとmetadata機能があれば、画像到着前・No Discでもsession限りのONを受理する。
+既定OFFとOFF時の候補/画像request 0を維持し、即時取消・参照消去を行う。ON再送だけでは画像を消さない。
+候補JSON・画像とも空cache pathで一時取得する。ディスク保存の採否は未決定で、既存cache helperの
+保持契約をruntimeへ採用したことにはしない。権利確認は利用者判断で、技術的可否へ混ぜない。
+link-time fakeでproduction Enrichmentからsnapshotと画像routeを検証し、次候補fallback、artist変更・
+辞退・disc世代変更・OFF後404、遅延画像取消、offline時の通常metadata継続を確認した。
+実daemonのNo Disc APIではmetadata無効・key不在・有効keyの利用可否、ON/OFF、入力制約、Read Policy不変を確認。
+API試験で画像200/404/405と背景参照のWebSocket送信、Presentation試験で到着前null・到着時の参照追加・
+LOADING/No Disc除去を確認した。Node試験はartist decode失敗→cover、cover失敗→既定背景、旧callback無視、
+OFF除去、外部URL拒否、同一snapshotのDOM更新なしを確認した。browserの実decode/paintを保証する試験ではない。
+Linux/aarch64正式build・Debian package生成と全CTest 57/57が成功した。
+network-noneで候補worker・画像worker・runtime gateを各100回反復して成功した。
+最終変更後に全57件を再実行し、API・実daemon・Presentation・Node描画もnetwork-noneで各10回成功した。
+正式package lifecycle成功。metadata OFF/API ONとmetadata ON/API OFFのproduction buildも成功した。
+OFF操作時は通常の250 ms周期を待たず、参照除去のsnapshot変更を同じmain ownerから通知する。
+実provider・Pi daemon統合・TV、full decode memory上限は未検証。Pi browserの合成画像確認は次節を参照する。
+slideshow・背景Settings・保存/復元は未実装。
+
+### Pi Chromiumの合成背景CDP試験（2026-10-11、UTC）
+
+[#214](https://github.com/udonchan/picdplayer/issues/214)として、作業branchの新UIをMacのloopback fixture serverから
+SSH reverse forwardingでPiへ供給した。配備toolを使わない理由は、daemon/packageを置換せず未commitのUIだけを
+隔離browserで試すためである。service・設定・live Player targetの操作は行わず、CD/音声/provider通信を試していない。
+[test-background-cdp.py](../../scripts/test-background-cdp.py)は既存のCDP WebSocket transportを再利用し、
+incognito contextと非表示targetを作り、終了時にcontextを破棄して元pageのID/URL一致を確認する。
+snapshotは公開契約のroot tracksとdisc.layoutを使い、read測定値は捏造しない。WebSocketはfixture内でstubにし、
+この結果をdaemon snapshot/WSの統合検証として扱わない。
+
+Piはaarch64、Chromium `153.0.8010.47`。PNGは標準libraryで生成した320×180の色pixel、coverは128×128。
+JPEG/WebPは隔離pageのcanvasから生成してfixture serverのmemoryへ渡した。外部写真・実keyは使っていない。
+live Chromiumの非表示targetで3.300秒、別profileのheadless Chromiumで10.883秒の最終試験を確認した。
+両方でPNG/JPEG/WebPのnaturalWidth 320、artist decode失敗→cover（128）、coverなし→既定背景、
+OFFのsrc除去、世代更新、旧callback無視、同じ表示内容の新revisionでDOM mutation 0、JS例外0を確認した。
+1920×1080は横/縦overflowなし。640×720は横overflowなし、縦scrollHeight 1959で通常の縦scrollを伴う。
+狭幅の縦scrollをkioskの意図しないscrollbar問題#124と同一視しない。
+
+非表示targetはrequestAnimationFrameとscreenshot surfaceが進まず、初回試験はtimeoutした。
+frame待ちを有界にし、非表示targetではdecode/DOMだけを確認する方式へ修正した。
+screenshotは別headless processで取得した。headlessは60秒の自動終了上限と一時profileを使い、最終runは
+Browser.closeで終了した。初回headlessにはChromium背景GCMのerrorが出たため、後続ではloopback proxyと
+host resolver rule（127.0.0.1/localhostを除外）で外部宛先を制限した。OS-levelのnetwork隔離ではない。
+headlessのGPU process初期化errorも観測したため、screenshot成功をkioskのGPU/KMS描画検証とは扱わない。
+hidden/headlessのLayoutCount deltaは7/12、TaskDurationは約0.341/6.153秒だが、別workloadであり性能A/B比較ではない。
+
+同じsnapshot内容でmetadata controlが毎回書き換えられる不具合を[#215](https://github.com/udonchan/picdplayer/issues/215)
+へ記録した。textContentを値比較して更新する最小修正を行い、Choose album/Change albumのNode回帰試験と
+PiのMutationObserver（修正前childList 1件、修正後0件）を確認した。
+
+証拠はMacの一時directory `/var/folders/np/xlf6yym55bx3_tsbgtl5znhw0000gn/T/kilo/issue214-cdp-20261011/`に保存した。
+`hidden/background-cdp.json`、`headless/background-cdp.json`、`headless/background-desktop.png`、
+`headless/background-narrow.png`が最終runで、JSONにUI source SHA256を含む。最終player.jsは
+`76d6309cc2d83115592ab9d72a963852aac94906ffe4c977d3fe40245a8ecef8`。screenshotを開いて確認したがTV目視ではない。
+試験前/終了時の温度sampleは55.8/60.1°C、`get_throttled=0x70000`は履歴flagを含み、現在の下位flagは0。
+連続した温度・CPU・音声安定性を測ったものではない。server/tunnel/browserを停止し、一時profileと18081/19223の
+listener消去、元Player page ID/URL、daemon/kioskのactiveを確認した。
+最終sourceを正式Linux/aarch64 build・package生成して全CTest 58/58、package lifecycleを確認した。
+追加したfixture単体試験はMacでも4件成功し、生成PNGのCRC/寸法、HTTP route/本文上限/origin、
+通常browserをheadlessとして操作・終了しないguardと、既定のhidden試験がsurface captureを試みないことを確認した。
+実provider・新daemon配備・音声/CEC・TV目視は未検証。Settings・slideshow・保存/復元とディスクcache方針は別途扱う。
+
+### 実HTTP/WebSocketのcomponent統合（#216、2026-10-12 UTC）
+
+未installの`enrichment_background_gate_test --serve-fixture <port> <synthetic.png>`を追加した。
+Enrichment・candidate/image worker・ApiServer・Presentation serializer・純粋なPlayerControllerをリンクし、
+lookupだけをlink-time fakeにする。disc/provider遅延・失敗のtest controlはstdinに限定し、production route/flagを増やさない。
+PNGは自作pixelの入力fixtureであり、背景disk cacheの採用ではない。Read Policy viewは固定fixture dataで、
+PlayerSessionや保存controllerの統合を検証したとは扱わない。通常の引数なしunit modeも維持する。
+network-noneのcontainerで、実HTTP/WSのmetadata→画像到着、OFF request0、画像200/失効404、遅延取消、
+artist変更・辞退/再選択・disc解除/再挿入・No Disc ON・provider失敗後のmetadata継続を100回反復して成功した。
+初回harnessは既存WebSocket helperのdict戻り値、通常ログとの区別、ejectの空本文/202を誤って扱ったため修正した。
+fixture recordは小さな1行をatomic writeし、普通のログと区別して読む。
+
+Piへの試験artifact転送では`deploy.sh`を使わない。同scriptはpackage installとactive serviceのrestartを行うため、
+今回の未install/hardware-free fixtureに適合しない。新規user-owned一時directoryへ正確なtest binaryと自作PNGだけを
+非破壊のrsyncで転送し、hash・library依存を確認する。install・既存file上書き・service操作は行わず、終了後に
+所有する試験fileだけを除去する。依存不足ならlibraryを追加せずcontainer runtimeとPi browserの境界を明記する。
+Piへの転送hashはtest binary `6071168b50ec7b6a6024dd970aa9d25cbf3026b40c54e722f410f7cbe0b5067c`、
+PNG `62dfec1ac825367138cbe711960b53682803447c3bd365ba09b56ad6af93df1a`でMacと一致した。
+`ldd`で依存を満たし、追加installなしにuser-owned `/tmp/picdplayer-component-216-kUIW6h/`で実行した。
+library依存にALSA/CURLはなく、lookup/画像loadはfakeである。実provider HTTPや実画像helperのdownloadは
+このtest artifactでは検証していない。helper単体の安全性試験とは分ける。
+初期のPi stdoutはmetadata 1、cover 1、背景candidate 0、image 0で、key指定だけで取得しないことを観測した。
+
+`test-background-cdp.py transport`でPiの標準UIを実HTTP/WSへ接続し、接続1.8秒で成功した。
+snapshotを直接renderせず、WebSocketをstubせず、CDP Networkで実`/api/events` frame 8件（revision 2〜9）を観測した。
+metadata AVAILABLE/背景null→画像参照→OFF null→再ON画像→artist変更null/新画像→辞退→NO_DISCの更新を確認。
+PNG naturalWidth 320、画像200、OFFとartist変更の旧画像404、辞退、No DiscでのON204、JS例外0、
+1920×1080の横/縦overflowなしを確認した。試験終了時のcounterはmetadata 1、cover 2、candidate 3、image 6だった。
+このPi trialでは再挿入・遅延・offlineは行わず、それらはcontainerの実socket回帰試験で検証した。
+証拠はMacの `/var/folders/np/xlf6yym55bx3_tsbgtl5znhw0000gn/T/kilo/issue216-transport-20261012/`に
+`synthetic.png`と`background-transport-cdp.json`を保存した。source/worktreeは未commitの同じbranchである。
+
+fixture PID 98612は実command lineと照合してTERMを送り、正常終了を確認した。tunnelを停止し、
+18181 listener消去、転送した2ファイルの限定削除と空directoryのrmdirを確認した。
+元Player ID `299512BAC3A2406B61CC65A5C800682B`/URL `http://127.0.0.1:8080/player`とdaemon/kiosk activeを維持した。
+試験前はSTOPPED、温度58.5°C、終了時も58.5°C。`throttled=0x70000`は履歴flagで現在の下位flagは0だった。
+これは連続音声・性能・thermal安定性の測定ではない。
+正式Linux/aarch64 build/package生成、全CTest 59/59、package lifecycle、Macのfixture guard 4件を確認した。
+通常の`cdplayerd`/PlayerSession/CLI/drive/audio/CEC、実provider、TV目視、GPU/KMS性能は未検証である。
+slideshow・背景Settings・保存/復元・disk cache採否はこの単位では変更していない。
+
+### Draft整理とlocal review（2026-10-12）
+
+runtime/API/UI・単体試験・未installのfixture supportをcommit `b8d4741`へ分け、正式buildと全CTest 57/57を確認した。
+PythonのCDP/transport driverと追加2試験・検証記録は次のcommitへまとめる。各commit境界でbuild可能な構成とする。
+local reviewでmain owner、OFF取消/参照失効、世代・artist・候補照合、thread構築順、上限と秘密情報非公開、
+UI decode/fallbackを確認した。transport driverの短いsocket timeout後の再受信は途中frameを失う可能性があるため、
+5秒のread期限でtimeoutを失敗として扱い、継続しないよう修正した。API/画像の仕様値は変えていない。
+Pi実験は上記の整理前artifactによる記録で、今回のcommit整理ではPi配備や再試験を行わない。
+driver修正後の最終構成で正式build・全CTest 59/59・package lifecycle、network-noneのtransport 100回反復が成功した。
+
 ### fanart.tv画像の権利条件（2026-10-02再確認）
 
 [公式のMusic Fanart説明](https://fanart.tv/music-fanart/)はArtist Backgroundをメディアセンターでの背景・
@@ -274,7 +408,7 @@ API仕様に表示されるCreative Commons Attribution 3.0を、写真本体の
 既定OFFを維持する。以前の「製品側で画像ごとの条件を確認できるまで表示実装を保留」という判断は
 この方針で置き換える。API認証・アクセス制約は守り、合成/利用許諾済みfixtureによる開発試験は継続する。
 ディスクキャッシュの採否・容量・保持期間・削除は独立した議論とする。既存cache部品の試験済みという
-記録は、runtimeでのディスク保存採用を意味しない。現段階のON拒否はruntime未接続による。
+記録は、runtimeでのディスク保存採用を意味しない。後続runtime接続では技術的に利用可能ならONを受理する。
 
 [API認証仕様](https://api.fanart.tv/)はproject keyの`api-key`とpersonal keyの`client-key`を区別する。
 現行`--artist-background-key-file`は`api-key`ヘッダーだけを送る開発中の**project key用**経路であり、

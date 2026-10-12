@@ -462,6 +462,11 @@ if(BUILD_TESTING)
         add_test(NAME paranoia_reader COMMAND paranoia_reader_test)
     endif()
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(ENABLE_METADATA AND ENABLE_API)
+        add_test(NAME background_runtime_transport COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/background_runtime_transport.py $<TARGET_FILE:enrichment_background_gate_test>)
+        set_tests_properties(background_runtime_transport PROPERTIES TIMEOUT 20)
+    endif()
     if(ENABLE_METADATA)
         add_test(NAME http_client COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/http_client_https.py $<TARGET_FILE:http_client_test>)
@@ -471,6 +476,9 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
     add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
+    add_test(NAME background_cdp_fixture COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/background_cdp_fixture_test.py)
+    set_tests_properties(background_cdp_fixture PROPERTIES TIMEOUT 10)
     add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
         ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
