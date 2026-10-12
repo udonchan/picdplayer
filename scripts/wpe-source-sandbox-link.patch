@@ -1,0 +1,8 @@
+--- a/Source/WebKit/CMakeLists.txt
++++ b/Source/WebKit/CMakeLists.txt
+@@ -1452,2 +1452,5 @@
+ WEBKIT_FRAMEWORK(WebKit)
++if (PORT STREQUAL "WPE" AND ENABLE_BUBBLEWRAP_SANDBOX)
++    target_link_libraries(WebKit PRIVATE Libseccomp::Libseccomp)
++endif ()
+ if (USE_APPLE_INTERNAL_SDK)

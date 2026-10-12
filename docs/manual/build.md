@@ -20,6 +20,43 @@ Pi単体で試す場合はメモリ・CPU負荷を抑えるため `-j1` とす�
 Dockerの標準scriptはcontainerのCPU数に応じて並列ビルドする。
 `build/`・`build-*/` はGit管理対象外。
 
+## TrixieでのWPE source build成立性調査（#221）
+
+これは[#220](https://github.com/udonchan/picdplayer/issues/220)の供給方式を判断するための
+[#221](https://github.com/udonchan/picdplayer/issues/221)の試験で、標準buildや製品runtimeではない。
+WPE WebKit 2.54.0の公式sourceをSHA256固定で取得し、Trixie/arm64の依存でビルドする。
+sid repository、ホストのglibc更新、Pi deploy、Buildrootは使用しない。
+
+```sh
+docker build --platform linux/arm64 -f scripts/wpe-source-probe.Dockerfile \
+  -t picdplayer-wpe-source-probe:2.54.0-trixie .
+docker volume create picdplayer-wpe221-build
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work picdplayer-wpe-source-probe:2.54.0-trixie configure
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work picdplayer-wpe-source-probe:2.54.0-trixie build
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work picdplayer-wpe-source-probe:2.54.0-trixie stage
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work -v "$PWD:/src:ro" \
+  picdplayer-wpe-source-probe:2.54.0-trixie verify
+```
+
+volume内の`/work/logs/`にpackage版・toolchain・configure/build/install logを保持する。
+stageはvolume内の`/work/stage/opt/picdplayer-wpe/2.54.0/`で、ホストの`/usr`へinstallしない。
+並列数は2。失敗後もvolumeを保持し、configure成功・build成功・runtime成功を分けて記録する。
+DRMとbubblewrap sandboxを有効化し、legacy API・Wayland/headless・動画・Web Audio・WebCodecs・GStreamer・音声合成・
+spellcheck・hyphenation・documentation/introspection・WebDriver・libbacktraceを無効化する。
+この省略構成はCustom UI全般の互換性を保証しない。base tagとapt package版は現時点では
+取得時点依存であり、package一覧とimage IDを記録して評価する。製品供給の完全固定は後続課題。
+2.54.0はVIDEO=OFFでmedia bindingの条件guard不足によるcompile failureを観測したため、
+`scripts/wpe-source-video-disabled.patch`をfuzz 0で適用する。公式source hashとこの追加patchを
+区別して追跡し、無改変upstreamのbuild成功とは扱わない。
+加えてsandbox用libseccompが最終linkから欠落したため、
+`scripts/wpe-source-sandbox-link.patch`でWPE/sandbox有効時のtargetへ明示linkする。
+sandboxをOFFにして回避しない。`verify`は専用prefixを使って既存launcherをcompile/linkし、
+`--version`とlauncher/Web/Network/GPU processの`ldd -r`を検査する。DRMには接続しない。
+
 ## 実行権限と基本起動
 
 daemonはrootで動かさず、実行ユーザーがCEC・CD・ALSA deviceへアクセスできるようにする。

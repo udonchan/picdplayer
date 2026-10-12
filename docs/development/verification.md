@@ -2,6 +2,88 @@
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## Trixie WPE source build成立性調査（#221、2026-10-12）
+
+[#221](https://github.com/udonchan/picdplayer/issues/221)を作成し、公式WPE WebKit 2.54.0 sourceを
+SHA256 `efa9bcc3cb891c2d88f50eec710d9ccee71cbdf1040420361eb98c17355eb452`で固定した。
+専用Dockerfile/scriptと[再実行手順](../manual/build.md#trixieでのwpe-source-build成立性調査221)を
+追加し、Trixie/arm64 containerのnetwork none、6 GiB、2 CPUでconfigureが成功した。
+DRM・bubblewrap sandboxはON、動画/Web Audio/WebCodecs/GStreamer等はOFFの試験構成である。
+初回のLibXslt不足はTrixieの`libxslt1-dev`追加で解消し、GStreamer要求は省略方針に合わせて
+明示OFFとした。初回configure時点ではsid依存の追加、glibc置換、upstream source patchは行っていない。
+
+baseは`debian:trixie`、解決digestは
+`sha256:9cc080028c43b27d2074d63a5f9caf7166d731494965616c1a6d2827a004585c`。
+configure成功時のprobe image IDは
+`sha256:6e050b80b9732c15f5e85ef306112f9816d72e0fb11e7d16c8c60a09d461ecc0`。
+GCC 14.2.0/CMake 3.31.6、GLib 2.84.4、ICU 76.1、libinput 1.28.1、libdrm 2.4.124、
+GBM 25.0.7をconfigureで検出した。base/apt snapshotの完全固定は未実装で、依存一覧は
+`picdplayer-wpe221-build` volumeの`/work/logs/packages.tsv`へ取得時点の版を保存する。
+
+本体buildはcontainer `picdplayer-wpe221-compile`で開始し、初期のC/C++ compileまで進んだ。
+初回build開始時点ではbuild完走、staging install、launcher compile/link、Pi実機は未検証だった。
+出力とlogは専用volumeに保持し、既存Buildroot volume、標準build image、Pi serviceは変更しない。
+
+初回buildは14:34:35Zから15:06:17Zまで約32分実行し、exit 1、containerのOOMKilled=falseだった。
+WebCoreの`UnifiedSource-JSBindings-27.cpp.o`で`JSHTMLMediaElement`未宣言により失敗した。
+2.54.0の`JSHTMLMediaElementCustom.cpp`には`ENABLE(VIDEO)`のguardがなく、VIDEO=OFFで
+生成されないclassを参照していた。初回logはworktreeのGit除外directory
+`build-wpe221-logs/`へコピーして保持した。
+`scripts/wpe-source-video-disabled.patch`で該当コードにVIDEO guardを追加し、fuzz 0で適用した
+試験image `sha256:12ba7820e1ab16ebcec1d83b2ac7470006f18e12cd8abe49c2d88ec530d3e04f`を生成した。
+container `picdplayer-wpe221-compile-p1`で同じvolumeから再開した。この再試行はupstream無改変の
+成立証明ではなく、明示した小patch付きの成立性調査である。依存/OS/sandbox設定は変更していない。
+
+再試行はWebCore compileを通過したが、WPEWebKit shared libraryのlinkで`seccomp_*`未解決に
+なった。libseccomp検出とsandbox ONをcacheで確認した一方、実link responseにはseccompがなかった。
+同じ設定の明示再configureでも再現したため、`scripts/wpe-source-sandbox-link.patch`で
+WPE/sandbox有効時に最終WebKit targetへLibseccompを明示linkした。依存解決を隠すために
+sandboxを無効化せず、追加patchをfuzz 0で適用した。
+
+2つのpatch付きimage `sha256:be055972c5626d66c351669d74e6b79f24557a202577387b1b7f74565f803554`
+で増分buildがexit 0となり、WPEWebKit、Web/Network/GPU process、InjectedBundleのlinkが成功した。
+staging installも成功し、既存`src/wpe_kiosk.c`を`-std=c11 -Wall -Wextra -Wpedantic -Werror`で
+compile/linkできた。2つのpkg-config moduleとlauncher `--version`はすべて2.54.0を返した。
+再実行用`verify` actionを追加した最終image IDは
+`sha256:b6c4a721567dc825255e33a713e25acbe218b5a19a84c37d10c8367f42b1bb4d`。
+同actionでlauncherとWeb/Network/GPU processの`ldd -r`を機械検査し、Trixie container内で
+`not found`/`undefined symbol`がないことを確認した。stage/log/binaryは専用volumeに保持する。
+
+結論は「現行Trixieの依存だけで、明示した2つの小patch付き省略構成をソース供給できる」である。
+今回の根拠ではOS移行やsid由来のglibcは不要。無改変2.54.0の成功、最終recipeのclean rebuild、
+bit-identical再現性、Pi側の依存版照合、DRM実表示、sandbox実動作、音声/CEC、性能、正式package、
+security/license運用は未確認であり、#220/#219の完了ではない。
+
+続いてsudoなしでPiとbuild imageの主要依存36packageを照合し、全件導入済み、30件の版一致を
+確認した。差異はPi固有版のlibc6/libdrm2/libgbm1/libinput10と、Pi側のrevisionが一つ古い
+libpng16-16t64/xdg-dbus-proxyの6件。symbol/ABI互換性の保証とは扱わないが、現時点で明確な
+導入不足は見つからなかった。Piのpackage更新・service変更は行っていない。
+
+利用者の方針として、開発は今回のWPE 2.54.0・2patch・設定と成果物を基準とする。
+追加の依存/ABI精査、最終recipeのclean rebuild、供給環境の完全固定・再現性・正式配布の検討は
+v1.0確定段階まで保留し、開発や初回実機試験の前提にはしない。具体的不具合が出た場合だけ
+必要な範囲を調査する。Buildroot検討再開時に最終固定を評価するが、採用を確定したことにはしない。
+成果物の識別と安全な実機試験/復旧は維持し、#219の実表示・操作確認を次の段階とする。
+
+## WPE主runtime移行候補の再開（2026-10-12）
+
+`feature/wpe-primary-runtime`の未コミット実装を引き継ぎ、前回未完了だったInspector診断を検証した。
+WebSocket transportに任意の総deadlineを追加し、WPE診断では接続開始から25秒を適用する。
+handshakeの断片受信、外側ackを待つ間の連続event、frameの断片受信でもdeadlineを更新せず、
+JavaScript評価例外を観測成功として出力しない。従来のChromium測定はdeadline未指定の動作を維持する。
+手順と制約は[操作・診断](../manual/operations.md#wpe候補のinspector診断)に記載した。
+
+macOSでInspector 8件とtransport 10件、標準Debian Trixie/Linux/aarch64 containerでbuild・CPack、
+全CTest 58/58、使い捨てcontainerのinstall/upgrade/reinstall/purgeを確認した。
+標準buildの`ENABLE_WPE_KIOSK`はOFFで、生成packageにWPE launcherは含まれない。
+この成功はWPE有効build、実WebKitとのInspector接続、systemdの復旧動作、DRM/表示/音声/CECの
+実機検証を意味しない。protocol試験はmockであり、実WebKitのwire互換性は未確認である。
+
+今回のsudoなしSSH確認ではdaemon/kioskともactive/running、kioskのMainPID 86772はCageで、
+子processはChromiumだった。WPEへの本番切り替え・deploy・sudo操作は行っていない。
+再現可能なWPE供給は[#220](https://github.com/udonchan/picdplayer/issues/220)、本番serviceと復旧は
+[#219](https://github.com/udonchan/picdplayer/issues/219)で追跡し、移行の完了とは扱わない。
+
 ## Buildroot研究成果の保全（2026-10-12）
 
 採用は時期尚早として保留し、#195/#196/#197/#201の調査文書と#202/#203の検証結果のREADMEを

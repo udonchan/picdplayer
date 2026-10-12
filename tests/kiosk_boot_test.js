@@ -8,6 +8,7 @@ const run = (port) => new Promise((resolve, reject) => {
   const child = spawn('/bin/bash', [wrapper], {
     env: { ...process.env, XDG_RUNTIME_DIR: '/tmp', XDG_STATE_HOME: '/tmp',
       PICDPLAYER_CAGE: '/bin/echo', PICDPLAYER_CHROMIUM: '/bin/true',
+      PICDPLAYER_KIOSK_RUNTIME: 'chromium',
       PICDPLAYER_API_WAIT_HOST: '127.0.0.1', PICDPLAYER_API_WAIT_PORT: String(port),
       PICDPLAYER_API_WAIT_TIMEOUT_SECONDS: '1' },
   });
@@ -24,7 +25,7 @@ const run = (port) => new Promise((resolve, reject) => {
   let success;
   try { success = await run(port); }
   finally { await new Promise((resolve) => server.close(resolve)); }
-  assert.equal(success.code, 0);
+  assert.equal(success.code, 0, success.output);
   const markers = [...success.output.matchAll(/event=(\w+) wrapper_elapsed_ms=(\d+)/g)];
   assert.deepEqual(markers.map((m) => m[1]), [
     'kiosk_wrapper_start', 'api_wait_start', 'api_ready', 'cage_exec',

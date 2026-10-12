@@ -164,6 +164,25 @@ restartとdaemon-reloadを行う。
 
 ## Chromium/Cage kiosk
 
+### WPE移行候補の境界
+
+このbranchのwrapperはWPEを優先し、`PICDPLAYER_KIOSK_RUNTIME=chromium`で従来経路を
+明示選択できる。WPE launcherは`ENABLE_WPE_KIOSK=ON`でのみbuild/installし、標準Docker
+buildはOFFのため供給しない。launcher欠損・version不適合・前回WPE失敗では、既定の
+`PICDPLAYER_KIOSK_FALLBACK=chromium`に従ってChromiumへ戻る。`none`なら失敗する。
+実行runtimeと理由は`kiosk_runtime: requested=... effective=... reason=...`で観測し、fallbackを
+WPE稼働の証拠にはしない。`PICDPLAYER_WPE`でlauncher pathを指定できる。
+WPEはCageを介さず直接DRMへ接続する。`ExecStopPost`のfailure markerと次回restartで
+復旧する候補を実装し、cgroup停止と10秒のstop timeoutを設定しているが、実systemd/DRMの
+終了・復旧は未検証である。意図した正常停止ではfailure markerを解除する。
+
+Piの本番runtimeは現時点でCage/Chromiumのまま。以下はその従来運用手順であり、
+新候補の本番切り替え手順ではない。source buildの記録は[検証状況](../development/verification.md)、
+試験構成は[ビルド手順](build.md)を参照する。開発基準はWPE 2.54.0と2patchとし、
+追加の依存精査・完全固定はv1.0段階まで保留する。実機のsudo操作は利用者が行う。
+
+### 従来runtimeの運用
+
 `picdplayer-kiosk.service`はtty1で[Cage](https://github.com/cage-kiosk/cage)を起動し、その中で
 Wayland版Chromiumを`http://127.0.0.1:8080/player`へ固定して表示する任意の表示serviceである。
 daemonとは別serviceで、kioskが停止・再起動しても再生状態はdaemon側に残る。Cageは一つの

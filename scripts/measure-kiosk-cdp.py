@@ -17,21 +17,24 @@ from urllib.request import urlopen
 
 
 class WebSocket:
-    def __init__(self, url):
+    def __init__(self, url, deadline=None):
         # CDP's page target is only accessed through localhost SSH forwarding.
         assert url.startswith("ws://127.0.0.1:")
         host_path = url[5:]
         address, path = host_path.split("/", 1)
         host, port = address.split(":", 1)
-        self.socket = socket.create_connection((host, int(port)), timeout=15)
+        self.deadline = deadline
+        self.socket = socket.create_connection((host, int(port)), timeout=self.timeout(15))
         try:
-            self.socket.settimeout(20)
+            self.socket.settimeout(self.timeout(5 if self.deadline is not None else 20))
             key = base64.b64encode(os.urandom(16)).decode()
             request = (f"GET /{path} HTTP/1.1\r\nHost: {address}\r\nUpgrade: websocket\r\n"
                        f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
             self.socket.sendall(request.encode())
             reply = b""
             while b"\r\n\r\n" not in reply:
+                if self.deadline is not None:
+                    self.socket.settimeout(self.timeout(5))
                 data = self.socket.recv(4096)
                 if not data:
                     raise RuntimeError("CDP socket closed during handshake")
@@ -50,8 +53,20 @@ class WebSocket:
         self.events = {}
         self.event_payload_bytes = {}
 
+    def timeout(self, maximum):
+        if self.deadline is None:
+            return maximum
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("WebSocket connection deadline expired")
+        return min(maximum, remaining)
+
     def read_exact(self, size):
+        if self.deadline is not None:
+            self.socket.settimeout(self.timeout(5))
         while len(self.pending) < size:
+            if self.deadline is not None:
+                self.socket.settimeout(self.timeout(5))
             data = self.socket.recv(max(4096, size - len(self.pending)))
             if not data:
                 raise RuntimeError("CDP socket closed")
@@ -84,6 +99,8 @@ class WebSocket:
         masked = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
         size = len(payload)
         header = b"\x81" + (bytes([0x80 | size]) if size < 126 else b"\xfe" + struct.pack("!H", size))
+        if self.deadline is not None:
+            self.socket.settimeout(self.timeout(5))
         self.socket.sendall(header + mask + masked)
         while True:
             message = self.receive()
