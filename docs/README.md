@@ -14,6 +14,7 @@ PiCDPlayerのドキュメントは日本語を正文とする。目的に合わ�
 | 読み取り信頼性の要求と実装境界を確認したい | [読み取り信頼性の仕様](design/integrity-design.md) |
 | 次に取り組む作業を選びたい | [残課題とIssue一覧](development/backlog.md) |
 | 将来の設計候補を調べたい | [デジタル出力の拡張案](development/digital-audio-output.md)、[設定基盤の拡張案](development/user-configuration.md) |
+| Buildrootの保留中の検討成果を参照したい | [成果の保全・再開条件](development/backlog.md#buildrootの検討成果保全と採用保留) |
 | 設計が成立した過程を知りたい | [History：開発の流れ](history/README.md) |
 
 Guideは概念と設計意図、Designは現行仕様と明示的に区別した未実装の要求、Manualは手順、
