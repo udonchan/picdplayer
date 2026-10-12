@@ -31,7 +31,8 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
                                            const MetadataResult& enrichment, DriveCapabilities drive,
                                            ReadDiagnostics read, std::vector<PlayerEvent> recent_events,
                                            bool has_cover_asset, std::optional<std::uint64_t> disc_generation,
-                                           std::optional<std::uint64_t> metadata_generation) {
+                                            std::optional<std::uint64_t> metadata_generation,
+                                            std::optional<std::string> background_url) {
     PresentationModel result;
     result.revision = revision;
     result.player = player;
@@ -39,6 +40,8 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
     result.enrichment.status = enrichment.status;
     result.artwork.status = enrichment.artwork.status;
     if (has_cover_asset) result.artwork.cover_url = "/api/presentation/artwork/cover";
+    if (media == MediaLifecycleState::audio_ready && disc)
+        result.artwork.background_url = std::move(background_url);
     result.drive = std::move(drive);
     result.read = std::move(read);
     result.recent_events = std::move(recent_events);

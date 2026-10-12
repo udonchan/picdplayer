@@ -280,8 +280,9 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | lookup_musicbrainz_disc | Disc ID計算と上記lookup後、各候補の曲数を実TOCと照合。一致時はTOC順でmedium positionを物理track番号へ対応付ける。不一致はmetadata ERROR |
 | [MetadataWorker::request/pop](../../src/metadata_worker.cpp) | pending最新1件、結果1件。worker内でlookup例外をERROR結果へ変換 |
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
-| [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | main threadのArtistBackgroundPolicyをEnrichmentServiceへ参照で渡し、effectiveがfalseならworkerを生成・要求しない。現段階はON拒否なのでkey指定時も生成しない。既存部品の選択済みArtist MBID・metadata世代照合と取消は保持。OFF handlerはpolicy適用後に即時取消・内部候補消去し、再生停止を待たない |
-| [load_artist_background_image](../../src/artist_background_image.cpp) | 現段階ではruntime未接続。候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得する部品。JPEG/PNG/WebPの外形とContent-Typeを照合し、full decodeの保証はしない |
+| [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | main threadのArtistBackgroundPolicyをEnrichmentServiceへ参照で渡す。既定OFFではworkerを生成・要求しない。ONかつ単一Artist MBIDがある時にlazy生成し、空cache pathで候補を取得する。世代とartist一致時だけ採用。OFF handlerは即時取消・画像と参照消去し、再生停止を待たない |
+| [load_artist_background_image](../../src/artist_background_image.cpp) | 候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得。runtimeは空cache pathを渡す。JPEG/PNG/WebPの外形とContent-Typeを照合し、full decodeの保証はしない |
+| [ArtistBackgroundImageWorker](../../src/artist_background_image_worker.cpp) | 実行中1件・最新pending 1件・結果1件。serialで置換・取消・shutdownを協調通知し、失効結果を格納しない。mainはeffective・世代・Artist MBID・候補ID/URLを再照合して取得済み1画像を保持。失敗なら次候補を試す。空・8 MiB超過・非画像MIMEは不採用。内部IDを含まないnonce+sequenceの参照をsnapshotへ公開 |
 
 MetadataWorker.cancel_pendingは未開始requestと保存結果を消す。実行中HTTPの中断はshutdownの
 closingフラグだけに連動する。交換時の安全性は中断ではなくMetadataSession.applyで保証する。
@@ -297,14 +298,25 @@ freshとして用い、期限切れentryはnetwork取得失敗時だけoffline f
 不正は無効化し、metadataまたはCAA JSONがcache hitでparse不能なら無効化してnetworkから一度再取得する。
 MusicBrainzの404は空releasesとして扱う。書込み不能やcache処理失敗は取得済み結果を無効にしない。
 HTTP本文上限はあるが、全JSON fieldへの厳密な型検証は保証しない。
-Artist候補は`artist-background/{artist-mbid}.json`を同じ64 MiB総量のcacheに含める。
+候補取得部品へ非空cache pathを渡した場合だけ、`artist-background/{artist-mbid}.json`を
+同じ64 MiB総量のcacheに含める。現行runtimeはこの保存経路を使わない。
 検証済みJSONは7日、404の空markerは1日を期限とし、期限切れJSONはprovider失敗時だけ利用する。
 key fileの読込みと失敗警告は`Signals`がsignal maskを設定した後に行い、logger threadを先に
 起動しない。keyの値・path・provider URLはsnapshotとlogへ出さない。
 写真本体を取得する部品のfile cacheは同じ64 MiB総量を使い、URL変更時には別entryとなる。
 新しい取得は30日経過時に試み、network失敗時だけ有効な期限切れentryを使う。
-403/404/410で削除された画像や不正な200応答は古いentryを破棄する。部品はまだworker・API・UIから
-呼んでいないため、実機で外部画像を取得・表示したことを意味しない。
+403/404/410で削除された画像や不正な200応答は古いentryを破棄する。このfile cacheは既存部品の契約であり、
+runtimeでのディスク保存採否を決めるものではない。画像worker試験は空のcache pathで合成応答を取得する。
+runtimeも候補JSON・画像とも空cache pathを使う。これは将来のディスク保存採否を決めるものではない。
+同一originの画像APIは現行参照だけを配信し、OFF・辞退・世代/artist変更は旧参照を404にする。
+standard Playerはartist→ぼかしたcover→既定背景へfallbackし、image errorは再生情報を消さない。
+画像到着・参照消去は通常のsnapshot revisionとWebSocket配信で伝える。通常daemon/TVでの実表示は未検証。
+Piの合成browser/component試験は[検証記録](../development/verification.md)と分けて扱う。
+画像workerの要求文字列は候補parserに合わせてMBID 36 bytes、候補ID 64 bytes、URL 4096 bytesを上限とする。
+8 MiBはworkerが保持する画像結果の上限で、任意のlookup callback内の一時allocationや画像decode memoryの
+上限保証ではない。実HTTPの受信上限は既存helperが適用する。shutdownは取消通知後にthreadをjoinし、
+協調しないcallbackを強制中断しない。候補workerも同期オブジェクト初期化後にthreadを起動する。
+ディスク保存設計・full decode上限・複数画像slideshow・Settings/保存は後続で扱う。
 
 ## drive spindle control
 

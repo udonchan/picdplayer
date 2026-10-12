@@ -52,6 +52,7 @@ struct PresentationArtwork {
     ArtworkStatus status = ArtworkStatus::not_requested;
     // Empty means that no same-origin local artwork resource is available.
     std::optional<std::string> cover_url;
+    std::optional<std::string> background_url;
 };
 
 // This is the UI contract. Provider IDs, URLs and cache implementation detail
@@ -76,4 +77,5 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
                                            ReadDiagnostics read, std::vector<PlayerEvent> recent_events,
                                            bool has_cover_asset = false,
                                            std::optional<std::uint64_t> disc_generation = std::nullopt,
-                                           std::optional<std::uint64_t> metadata_generation = std::nullopt);
+                                            std::optional<std::uint64_t> metadata_generation = std::nullopt,
+                                            std::optional<std::string> background_url = std::nullopt);

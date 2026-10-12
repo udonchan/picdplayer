@@ -191,6 +191,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             log_warning("artist_background") << "disabled invalid_key_file";
         }
     }
+    artist_background_policy = ArtistBackgroundPolicy(metadata_enabled && !artist_background_key.empty(),
+                                                      metadata_enabled ? "key_missing" : "metadata_disabled");
     EnrichmentService enrichment(metadata_enabled, metadata_cache, artist_background_policy,
                                  std::move(artist_background_key));
 #endif
@@ -295,14 +297,16 @@ void run_player_session(const std::string& device, CddaBackend backend,
         read.strategy_downgrade = applied_strategy.downgrade;
         read.strategy_pending = applied_strategy.pending;
         bool has_cover_asset = false;
+        std::optional<std::string> background_url;
 #ifdef ENABLE_METADATA
         if (metadata_enabled) has_cover_asset = enrichment.has_cover_asset();
+        if (metadata_enabled) background_url = enrichment.background_url();
 #endif
         auto candidate = serialize_presentation_model(make_presentation_model(
             api_revision + 1, state, media_state.state(), loaded_toc, metadata,
             drive_capabilities, read, recent_events, has_cover_asset,
             toc_needs_refresh ? std::nullopt : std::optional<std::uint64_t>(disc_generation),
-            metadata_generation));
+            metadata_generation, std::move(background_url)));
         if (!api_state_json.empty() &&
             presentation_json_equal_ignoring_revision(candidate, api_state_json)) return false;
         ++api_revision;
@@ -333,8 +337,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (command.type == ApiCommandType::set_artist_background) {
                     if (!artist_background_policy.set_enabled(command.enabled)) return false;
 #ifdef ENABLE_METADATA
-                    enrichment.stop_background();
+                    if (!command.enabled) enrichment.stop_background();
 #endif
+                    if (publish_api_snapshot() && api_server) api_server->publish_state(api_state_json);
                     return true;
                 }
                 if (command.type == ApiCommandType::eject) {
@@ -439,8 +444,14 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (!ui.error().empty()) log_warning("ui") << "custom_disabled reason=" << ui.error();
         else log_info("ui") << "source=" << (ui.custom() ? "custom" : "built-in");
         ApiArtworkProvider artwork_provider;
+        ApiBackgroundArtworkProvider background_artwork_provider;
 #ifdef ENABLE_METADATA
         if (metadata_enabled) {
+            background_artwork_provider = [&](std::string_view reference) -> std::optional<ApiResponse> {
+                const auto asset = enrichment.background_asset(reference);
+                if (!asset) return std::nullopt;
+                return ApiResponse{200, asset->mime_type, asset->bytes};
+            };
             artwork_provider = [&]() -> std::optional<ApiResponse> {
                 const auto asset = enrichment.cover_asset();
                 if (!asset) return std::nullopt;
@@ -462,7 +473,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                                          {"disc_map", !toc_needs_refresh && loaded_toc &&
                                                              media_state.state() == MediaLifecycleState::audio_ready &&
                                                              result.contains("disc_map") ? result["disc_map"] : nlohmann::json(nullptr)}}.dump();
-                                                  }, [&] { return artist_background_policy.json(); });
+                                                  }, [&] { return artist_background_policy.json(); },
+                                                  std::move(background_artwork_provider));
         auto line = log_info("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';

@@ -72,8 +72,9 @@ messageは`{"action":"up"}`形式で、actionは`up/down/left/right/select/back`
 このchannelを使わないCustom UIも従来どおり動き、再生専用CECキーはdaemonが直接処理する。
 標準PlayerのSettings表示は標準UI固有であり、Custom UIへ注入しない。標準画面では
 Read PolicyのSINGLE/REPEATをCECの方向/決定/Backで選択する初期画面を実装中で、
-`GET/POST /api/read-policy`を使用する。Artist Backgroundはruntime配信・表示が未接続のため現在は
-選択できず、Custom UIにも実装を要求しない。
+`GET/POST /api/read-policy`を使用する。Artist Backgroundは別の`GET/POST /api/artist-background`で
+session限りのON/OFFを扱うが、Settings画面への操作追加は後続Issueで扱う。key設定だけではONにしない。
+背景のsnapshot参照は同一originであり、Custom UIへ標準Playerの描画処理を自動注入しない。
 navigationは選択状態や再生結果のsnapshotではない。Viewが状態変更を求める場合はloopbackの
 操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
 標準Playerはこのchannelで基本transport buttonと任意のmetadata候補pickerのfocusを動かす参考実装である。

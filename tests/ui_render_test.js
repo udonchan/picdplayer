@@ -50,9 +50,13 @@ async function main() {
     nodes.set(id, value);
     return value;
   }
+  const metadataControl = node('metadata-control');
+  metadataControl.dataset.command = 'metadata';
+  metadataControl.addEventListener = () => {};
   vm.runInNewContext(source, {
     performance: { now: () => 1 },
-    document: { readyState: 'complete', getElementById: node, addEventListener() {} },
+    document: { readyState: 'complete', getElementById: node, addEventListener() {},
+      querySelectorAll: (selector) => selector === '.player-controls button[data-command]' ? [metadataControl] : [] },
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url) => ({ ok: true, json: async () => snapshot }),
     WebSocket: class { constructor() { sockets.push(this); } },
@@ -138,13 +142,69 @@ async function main() {
   receive(snapshot);
   assert(!node('art').classList.contains('has-cover'));
   assert.deepEqual(receive(snapshot), []);
+  snapshot.disc.state = 'AUDIO_READY';
+  snapshot.artwork.cover = { url: '/api/presentation/artwork/cover' };
+  snapshot.artwork.background = { url: '/api/presentation/artwork/background/opaque-1' };
+  snapshot.revision++;
+  receive(snapshot);
+  const layer = node('player-background');
+  const background = node('background-artist');
+  const blurredCover = node('background-cover');
+  const staleBackgroundLoad = background.onload;
+  blurredCover.complete = true; blurredCover.naturalWidth = 100;
+  blurredCover.onload();
+  assert(layer.classList.contains('has-cover'));
+  background.complete = true; background.naturalWidth = 100;
+  background.onload();
+  assert(layer.classList.contains('has-artist'));
+  assert.deepEqual(receive(snapshot), []);
+  background.onerror();
+  assert(!layer.classList.contains('has-artist'));
+  assert(layer.classList.contains('has-cover'));
+  assert.deepEqual(receive(snapshot), []); // No decode-failure retry storm.
+  snapshot.artwork.background.url = '/api/presentation/artwork/background/opaque-2';
+  background.complete = false;
+  snapshot.revision++;
+  receive(snapshot);
+  staleBackgroundLoad();
+  assert(!layer.classList.contains('has-artist'));
+  background.complete = true; background.naturalWidth = 100;
+  background.onload();
+  assert(layer.classList.contains('has-artist'));
+  const retiredBackgroundLoad = background.onload;
+  snapshot.artwork.background = null; // OFF removes the image reference.
+  snapshot.revision++;
+  receive(snapshot);
+  assert(!layer.classList.contains('has-artist'));
+  assert.equal(background.src, undefined);
+  retiredBackgroundLoad();
+  assert(!layer.classList.contains('has-artist'));
+  snapshot.artwork.background = { url: 'https://provider.invalid/private.jpg' };
+  snapshot.revision++;
+  receive(snapshot);
+  assert.equal(background.src, undefined);
+  blurredCover.onerror();
+  assert(!layer.classList.contains('has-cover'));
   snapshot.player = { state: 'NO_DISC' };
   snapshot.disc = { state: 'NO_DISC' };
-  snapshot.revision = 8;
+  snapshot.revision++;
   receive(snapshot);
   assert.equal(node('album').textContent, 'No disc');
   assert.equal(node('position').textContent, '0:00');
   assert.equal(node('progress').style.transform, 'scaleX(0)');
+  assert.equal(metadataControl.textContent, 'Choose album');
+  snapshot.disc.state = 'AUDIO_READY';
+  snapshot.enrichment.selection = { state: 'SELECTED', selected_index: 0, metadata_generation: 3,
+    disc_generation: 3, session_id: 'session-a', candidates: [{ index: 0, title: 'First' }, { index: 1, title: 'Second' }] };
+  snapshot.revision++;
+  receive(snapshot);
+  assert.equal(metadataControl.textContent, 'Change album');
+  assert.deepEqual(receive(snapshot), []);
+  snapshot.enrichment.selection = null;
+  snapshot.revision++;
+  receive(snapshot);
+  assert.equal(metadataControl.textContent, 'Choose album');
+  assert.deepEqual(receive(snapshot), []);
   console.log('PASS: identical values, position, metadata, artwork lifecycle and disc removal');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

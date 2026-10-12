@@ -89,8 +89,8 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 `--interactive`は指定しない。serviceのstdinは`null`なので、指定するとEOFで正常終了する。
 設定変更は`sudo systemctl restart picdplayer.service`で反映する。
 
-`--artist-background-key-file /etc/picdplayer/fanart-api-key`の起動オプションは保持するが、
-現段階では背景が既定OFF・利用不可のため、有効なkeyを指定しても候補JSONや写真を取得しない。
+`--metadata musicbrainz --artist-background-key-file /etc/picdplayer/fanart-api-key`で背景providerを設定できる。
+背景は既定OFFなので、有効なkeyを指定するだけでは候補JSONや写真を取得しない。
 従来のkey指定だけで候補を照会する開発経路は停止した。
 保持するprovider部品はfanart.tvの**project key**を`api-key`ヘッダーで送る。personal key用の
 `client-key`経路は未実装なので、利用者のpersonal keyをこのfileに設定しない。
@@ -98,10 +98,14 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 symlinkやgroup/world writableを許可しない。最大256文字の空白を含まないASCII keyを置き、末尾の
 改行1文字だけは許可する。例としてroot所有・group `picdplayer`・mode `0640`を使える。
 ファイルが存在しない、または無効な場合はkey/pathをlogへ出さず、Artist候補取得だけを無効化する。
-metadata取得とCD再生は続ける。`GET /api/artist-background`は`runtime_unavailable`を返す。
-loopback POSTのOFFは冪等204、ONは409で拒否する。背景設定の保存、写真のdownload、
-API配信、Playerへの表示は未実装である。
-key file指定は将来の写真表示設定をONにしたことを意味しない。現在のON拒否はruntime未接続による。
+metadata取得とCD再生は続ける。API listenを有効にしてloopbackから`GET /api/artist-background`で状態を確認する。
+`POST /api/artist-background`へ`{"enabled":true}`を送ると技術的に利用可能なら204、利用不能なら409となる。
+key不在は`key_missing`、metadata無効は`metadata_disabled`、非対応buildは`runtime_unavailable`で示す。
+`{"enabled":false}`は冪等204で取消・画像参照失効を行う。ONは画像到着・No Disc・通信成功を条件としない。
+取得済み画像は同一originから標準Playerへ表示する。背景のSettings操作と設定保存・復元は未実装で、
+daemon再起動後はOFFに戻る。候補JSON・画像のディスクcacheはruntimeで使わず、採否は別途設計する。
+全候補失敗・候補照会失敗ではfallbackを維持し、同じ要求の自動再試行は行わない。
+再取得はOFF→ON、artist変更、disc世代変更で行う。
 画像利用に必要な権利・許諾の確認は利用者に委ね、製品が許諾を保証しないことを説明して明示ONを求める。
 ディスクキャッシュを行うかどうかは、この権利方針とは別に設計する。
 

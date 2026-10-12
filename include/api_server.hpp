@@ -29,6 +29,7 @@ using ApiStateProvider = std::function<std::string()>;
 using ApiReadPolicyProvider = std::function<std::string()>;
 using ApiCommandHandler = std::function<bool(const ApiCommand&)>;
 using ApiArtworkProvider = std::function<std::optional<ApiResponse>()>;
+using ApiBackgroundArtworkProvider = std::function<std::optional<ApiResponse>(std::string_view)>;
 
 ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& state_provider,
@@ -39,14 +40,16 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiUiBootHandler& ui_boot_handler = {},
                               const ApiArtworkProvider& artwork_provider = {},
                               const ApiStateProvider& read_history_provider = {},
-                              const ApiStateProvider& artist_background_provider = {});
+                              const ApiStateProvider& artist_background_provider = {},
+                              const ApiBackgroundArtworkProvider& background_artwork_provider = {});
 
 class ApiServer {
 public:
     ApiServer(std::string listen_address, int port, ApiStateProvider state_provider,
               ApiCommandHandler command_handler = {}, ApiReadPolicyProvider read_policy_provider = {},
               UiBundle ui = {}, ApiArtworkProvider artwork_provider = {},
-              ApiStateProvider read_history_provider = {}, ApiStateProvider artist_background_provider = {});
+              ApiStateProvider read_history_provider = {}, ApiStateProvider artist_background_provider = {},
+              ApiBackgroundArtworkProvider background_artwork_provider = {});
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;

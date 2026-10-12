@@ -199,6 +199,33 @@ int main() {
         }
         check(background_commands == 4 && !background_policy.effective());
 
+        ArtistBackgroundPolicy capable(true);
+        const ApiStateProvider capable_status = [&] { return capable.json(); };
+        const ApiCommandHandler capable_commands = [&](const ApiCommand& command) {
+            return command.type == ApiCommandType::set_artist_background && capable.set_enabled(command.enabled);
+        };
+        const std::string asset_reference = "/api/presentation/artwork/background/opaque-123";
+        const ApiBackgroundArtworkProvider background_asset = [&](std::string_view path) -> std::optional<ApiResponse> {
+            if (!capable.effective() || path != asset_reference) return std::nullopt;
+            return ApiResponse{200, "image/jpeg", "synthetic-image"};
+        };
+        const auto capable_route = [&](std::string_view method, std::string_view path, std::string_view body = {}) {
+            return route_api_request(method, path, provider, capable_commands, body, {}, nullptr,
+                                     {}, {}, {}, capable_status, background_asset);
+        };
+        check(capable_route("GET", "/api/artist-background").body ==
+            R"({"requested":false,"effective":false,"available":true,"unavailable_reason":null})");
+        check(capable_route("GET", asset_reference).status == 404);
+        check(capable_route("POST", "/api/artist-background", R"({"enabled":true})").status == 204);
+        check(capable_route("GET", "/api/artist-background").body ==
+            R"({"requested":true,"effective":true,"available":true,"unavailable_reason":null})");
+        check(capable_route("GET", asset_reference).status == 200 &&
+              capable_route("GET", asset_reference).content_type == "image/jpeg");
+        check(capable_route("GET", asset_reference + "-stale").status == 404);
+        check(capable_route("PUT", asset_reference).status == 405);
+        check(capable_route("POST", "/api/artist-background", R"({"enabled":false})").status == 204);
+        check(capable_route("GET", asset_reference).status == 404);
+
         // A wildcard listener must still allow commands from a loopback peer.
         ApiServer server("0.0.0.0", 0, provider, owner_commands, {}, {}, {}, {}, background);
         const auto post = [&](std::string_view path, const std::string& body, in_addr destination) {
@@ -362,7 +389,7 @@ int main() {
                         websocket_received.append(buffer, static_cast<std::size_t>(count));
                         if (websocket_received.find(R"({"revision":7})") != std::string::npos)
                             got_initial_event = true;
-                        received_update = websocket_received.find(R"({"revision":8})") != std::string::npos;
+                        received_update = websocket_received.find(R"("revision":8)") != std::string::npos;
                     }
                     if (received_update) break;
                 }
@@ -389,14 +416,15 @@ int main() {
             std::lock_guard lock(websocket_mutex);
             check(occurrences(websocket_received, R"({"revision":7})") == 1);
         }
-        server.publish_state(R"({"revision":8})");
+        server.publish_state(R"({"revision":8,"artwork":{"background":{"url":"/api/presentation/artwork/background/opaque-123"}}})");
         for (int i = 0; i < 1000 && !websocket_done; ++i) {
             server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         websocket_client.join();
         check(websocket_received.find("101 Switching Protocols") != std::string::npos);
-        check(websocket_received.find(R"({"revision":8})") != std::string::npos);
-        check(occurrences(websocket_received, R"({"revision":8})") == 1);
+        check(websocket_received.find(R"("revision":8)") != std::string::npos);
+        check(occurrences(websocket_received, R"("revision":8)") == 1);
+        check(websocket_received.find(asset_reference) != std::string::npos);
 
         std::atomic<bool> navigation_connected = false;
         std::atomic<bool> navigation_done = false;

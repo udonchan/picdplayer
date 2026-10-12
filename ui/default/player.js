@@ -289,7 +289,8 @@ function renderControls(snapshot) {
   controls.forEach((button, index) => {
     if (button.dataset.command === 'metadata') {
       setHidden(button, !selection);
-      button.textContent = selection && selection.state !== 'AMBIGUOUS' ? 'Change album' : 'Choose album';
+      const label = selection && selection.state !== 'AMBIGUOUS' ? 'Change album' : 'Choose album';
+      if (button.textContent !== label) button.textContent = label;
     }
     const stateAvailable = controlEnabled(button.dataset.command, snapshot);
     const available = stateAvailable && pendingCommand !== button.dataset.command;
@@ -804,6 +805,45 @@ function showArt(artwork, layout, session, selection) {
   if (image.complete && image.naturalWidth > 0) image.onload();
 }
 
+function showBackground(snapshot, hasDisc) {
+  const layer = byId('player-background');
+  if (!layer) return;
+  const artwork = snapshot.artwork || {};
+  const selection = snapshot.enrichment?.selection;
+  const layout = snapshot.disc?.layout;
+  for (const kind of ['cover', 'artist']) {
+    const image = byId(`background-${kind}`);
+    if (!image) continue;
+    const candidate = kind === 'artist' ? artwork.background?.url : artwork.cover?.url;
+    const allowed = typeof candidate === 'string' && (kind === 'artist'
+      ? /^\/api\/presentation\/artwork\/background\/[a-zA-Z0-9-]+$/.test(candidate)
+      : candidate === '/api/presentation/artwork/cover');
+    const url = hasDisc && allowed ? candidate : '';
+    const identity = url ? JSON.stringify([url, layout?.session_id || snapshot.read?.session_id || null,
+      layout?.disc_generation ?? null, selection?.metadata_generation ?? null,
+      selection?.selected_index ?? null]) : '';
+    if ((image.dataset.identity || '') === identity) continue;
+    if (url && image.dataset.url === url) image.removeAttribute('src');
+    image.dataset.identity = identity;
+    image.dataset.url = url;
+    const className = `has-${kind}`;
+    if (layer.classList.contains(className)) layer.classList.remove(className);
+    image.onload = null;
+    image.onerror = null;
+    if (!url) { image.removeAttribute('src'); continue; }
+    image.onload = () => {
+      if (image.dataset.identity === identity && image.complete && image.naturalWidth > 0 &&
+          !layer.classList.contains(className)) layer.classList.add(className);
+    };
+    image.onerror = () => {
+      if (image.dataset.identity === identity && layer.classList.contains(className))
+        layer.classList.remove(className);
+    };
+    image.src = url;
+    if (image.complete && image.naturalWidth > 0) image.onload();
+  }
+}
+
 function mediaMessage(hasDisc, mediaState, enrichmentStatus, selection) {
   if (!hasDisc) return mediaState === 'LOADING' ? 'READING DISC' : 'WAITING FOR DISC';
   if (enrichmentStatus === 'LOADING') return 'LOOKING UP ALBUM';
@@ -863,6 +903,7 @@ function render(snapshot) {
   renderPicker(snapshot);
   showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id,
     enrichment.selection);
+  showBackground(snapshot, hasDisc);
   set('read-activity', read.activity || 'UNKNOWN');
   set('read-strategy', read.effective_strategy || 'UNKNOWN');
   const requestedPolicy = read.policy?.requested?.mode;
