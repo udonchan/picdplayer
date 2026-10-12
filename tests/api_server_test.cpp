@@ -1,4 +1,5 @@
 #include "api_server.hpp"
+#include "artist_background_policy.hpp"
 #include <iostream>
 #include <atomic>
 #include <chrono>
@@ -164,8 +165,42 @@ int main() {
         check(route_api_request("POST", "/api/ui-boot", provider, {}, boot_body, {}, nullptr,
             [](std::string_view, std::string_view, double) { return false; }).status == 429);
 
+        ArtistBackgroundPolicy background_policy;
+        const ApiStateProvider background = [&] { return background_policy.json(); };
+        int background_commands = 0;
+        const ApiCommandHandler owner_commands = [&](const ApiCommand& command) {
+            if (command.type != ApiCommandType::set_artist_background) return commands(command);
+            ++background_commands;
+            return background_policy.set_enabled(command.enabled);
+        };
+        const auto background_route = [&](std::string_view method, std::string_view body = {}) {
+            return route_api_request(method, "/api/artist-background", provider, owner_commands,
+                                     body, {}, nullptr, {}, {}, {}, background);
+        };
+        const std::string off_status = R"({"requested":false,"effective":false,"available":false,"unavailable_reason":"runtime_unavailable"})";
+        check(background_route("GET").status == 200 && background_route("GET").body == off_status);
+        check(route_api_request("GET", "/api/artist-background", provider).status == 503);
+        for (const auto* method : {"PUT", "DELETE", "PATCH", "OTHER"})
+            check(background_route(method).status == 405);
+        for (const auto* invalid : {"", "{}", "null", "[]", "false", "{",
+             R"({"enabled":0})", R"({"enabled":"false"})", R"({"enabled":null})",
+             R"({"enabled":false,"extra":1})", R"({"enable":false})",
+             R"({"enabled":true,"enabled":false})", R"({"enabled":false} {})"})
+            check(background_route("POST", invalid).status == 400);
+        check(background_route("POST", std::string(513, 'x')).status == 413);
+        check(background_commands == 0);
+        check(route_api_request("POST", "/api/artist-background", provider, {},
+                                R"({"enabled":false})").status == 403);
+        check(background_route("POST", R"({"enabled":true})").status == 409);
+        for (int i = 0; i < 3; ++i) {
+            const auto off = background_route("POST", R"({"enabled":false})");
+            check(off.status == 204 && off.body.empty());
+            check(background_route("GET").body == off_status);
+        }
+        check(background_commands == 4 && !background_policy.effective());
+
         // A wildcard listener must still allow commands from a loopback peer.
-        ApiServer server("0.0.0.0", 0, provider, commands);
+        ApiServer server("0.0.0.0", 0, provider, owner_commands, {}, {}, {}, {}, background);
         const auto post = [&](std::string_view path, const std::string& body, in_addr destination) {
             std::atomic<bool> finished = false;
             std::string reply;
@@ -201,6 +236,11 @@ int main() {
             return reply;
         };
         const in_addr loopback{htonl(INADDR_LOOPBACK)};
+        check(post("/api/artist-background", R"({"enabled":true})", loopback).find("HTTP/1.1 409") != std::string::npos);
+        check(post("/api/artist-background", R"({"enabled":false})", loopback).find("HTTP/1.1 204") != std::string::npos);
+        check(post("/api/artist-background", "{}", loopback).find("HTTP/1.1 400") != std::string::npos);
+        check(post("/api/artist-background", std::string(513, 'x'), loopback).find("HTTP/1.1 413") != std::string::npos);
+        check(background_policy.json() == off_status);
         check(post("/api/metadata-selection", selection_body, loopback).find("HTTP/1.1 204") != std::string::npos);
         check(post("/api/metadata-selection", "", loopback).find("HTTP/1.1 400") != std::string::npos);
         check(post("/api/ui-boot", boot_body, loopback).find("HTTP/1.1 204") != std::string::npos);
@@ -227,7 +267,7 @@ int main() {
         freeifaddrs(interfaces);
         // A loopback-only test namespace has no address for an external-peer probe.
         if (external.s_addr != 0) {
-            for (const auto* path : {"/api/ui-boot", "/api/play", "/api/metadata-selection"}) {
+            for (const auto* path : {"/api/ui-boot", "/api/play", "/api/metadata-selection", "/api/artist-background"}) {
                 check(post(path, "", external).find("HTTP/1.1 403") != std::string::npos);
                 check(post(path, boot_body, external).find("HTTP/1.1 403") != std::string::npos);
             }

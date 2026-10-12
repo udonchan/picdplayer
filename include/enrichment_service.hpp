@@ -2,6 +2,7 @@
 
 #include "metadata_model.hpp"
 #include "disc_toc.hpp"
+#include "artist_background_policy.hpp"
 #include <memory>
 #include <optional>
 #include <string>
@@ -17,6 +18,7 @@ class EnrichmentService {
 public:
     class Implementation;
     EnrichmentService(bool enabled, std::string cache_directory,
+                      const ArtistBackgroundPolicy& background_policy,
                       std::string artist_background_key = {});
     ~EnrichmentService();
     EnrichmentService(const EnrichmentService&) = delete;
@@ -24,6 +26,7 @@ public:
 
     void begin_if_needed(const DiscToc& toc);
     void invalidate();
+    void stop_background();
     void poll();
     const MetadataResult& snapshot() const;
     std::uint64_t generation() const;

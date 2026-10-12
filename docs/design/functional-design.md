@@ -163,9 +163,14 @@ rename、directory syncを試みる。現行実装ではrename後のdirectory sy
 この場合、新値が現在見えていても電源断後の耐久性は確認できない。完全な耐久性を要件にする場合は
 この失敗時のAPI結果と復旧動作を#177で再検討する。
 
-Artist Backgroundの表示設定は未実装で、既定OFFのままとする。provider key fileの存在は
-利用者による表示許可ではない。ONを公開する前に、#49/#51の取得・配信・表示経路、
-利用条件、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
+Artist Backgroundは既定OFFで、`GET/POST /api/artist-background`で利用不能状態の取得とOFFだけを
+部分実装する。ONは常に409で拒否し、保存・復元・Settings UIは未実装。provider key fileの存在は
+利用者による表示許可ではなく、候補JSONの取得も開始しない。ONを受理する前に、#49/#51の取得・配信・表示経路、
+API認証・アクセス制約、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
+ダウンロード画像の利用に必要な権利・許諾・表示条件の確認と利用判断は利用者に委ねる。
+製品は画像の権利を保証せず、明示ON自体が権利者の許諾を生むわけではないことを説明する。
+全画像の包括的許諾を製品側で確認することはruntime実装の前提にしない。外部写真は配布物へ同梱しない。
+ディスクキャッシュの採否・容量・保持期間・削除は独立した設計事項とし、この権利方針では決定しない。
 一般設定API、全CLI optionの永続化、hot reload、機器設定の稼働中変更はこの部分実装に含めない。
 
 設定拡張の契約では、現行の`schema_version=1`をRead Policyだけを持つ旧版として扱い、
@@ -235,6 +240,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | GET /api/read-history | STREAM詳細履歴とDISC領域集計。通常snapshotとは別取得 |
 | GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
+| GET/POST /api/artist-background | 利用不能状態の取得と即時OFFのみ。ON拒否。本文・公開field・statusは[メッセージ契約](message-contract.md#公開経路と生成元)参照 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | WS /api/navigation | CECの短命なsemantic navigation入力。接続前の入力は再送しない。clientからのmessageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
@@ -344,12 +350,12 @@ loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で
 選択済みreleaseのartist-credit内のartist IDから、背景取得用の単一Artist MBIDも内部で判定する。
 異なるartist IDが複数ならAMBIGUOUS、ID欠損・不正形式・Various ArtistsならUNAVAILABLEとし、
 album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契約へ直接公開しない。
-任意のfanart.tv key fileが指定された場合だけ、単一の選択済みArtist MBIDについて背景画像候補の
-metadataを別workerで取得する。候補JSONは上限付きfile cacheへ保存するが、画像本体の取得やViewへの
-公開はまだ行わない。key不在・provider失敗はCD再生と通常metadataを妨げない。
+単一の選択済みArtist MBIDについて背景画像候補のmetadataを別workerで取得する部品は保持するが、
+現段階では利用gateがOFFのためworkerを生成せず、key指定時も候補JSON・写真の取得は行わない。
+候補JSONの上限付きfile cacheと画像取得部品はruntimeから利用しない。CD再生と通常metadataは維持する。
 現行key fileはproject keyを`api-key`ヘッダーで送る開発用設定であり、personal keyの`client-key`には
-対応しない。候補取得と利用者の写真表示ONは別の状態とし、公開版での自動取得・表示は
-利用条件を満たせる経路が確定するまで有効にしない。
+対応しない。候補取得と利用者の写真表示ONは別の状態とし、既定OFF・利用者の明示ONを維持する。
+現段階のON拒否はruntime未接続によるもので、個々の画像の許諾を製品側で確認できないことを理由にしない。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。

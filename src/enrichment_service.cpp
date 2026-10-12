@@ -12,8 +12,9 @@
 
 class EnrichmentService::Implementation {
 public:
-    explicit Implementation(bool enabled, std::string directory, std::string artist_key)
-        : cache_directory(std::move(directory)) {
+    explicit Implementation(bool enabled, std::string directory,
+                            const ArtistBackgroundPolicy& policy, std::string artist_key)
+        : cache_directory(std::move(directory)), background_policy(policy) {
         if (!enabled) return;
         // Keep this path for serving validated same-origin artwork after the
         // worker has finished. The worker receives its own copy.
@@ -32,7 +33,7 @@ public:
                 options.cancelled = cancelled;
                 return lookup_cover_art_release(release_id, options);
             });
-        if (!artist_key.empty()) {
+        if (background_policy.effective() && !artist_key.empty()) {
             background_worker = std::make_unique<ArtistBackgroundWorker>(
                 [key = std::move(artist_key), directory = cache_directory](
                     const std::string& mbid, const ArtistBackgroundWorker::Cancelled& cancelled) {
@@ -42,6 +43,12 @@ public:
     }
 
     void sync_background_request() {
+        if (!background_policy.effective()) {
+            if (background_worker) background_worker->cancel_pending();
+            background_request.reset();
+            background_lookup = {};
+            return;
+        }
         if (!background_worker) return;
         const auto artist = selected_artist_identity(session.snapshot());
         if (artist.status != ArtistIdentityStatus::available || artist.mbid.empty()) {
@@ -63,14 +70,16 @@ public:
     std::unique_ptr<ArtworkWorker> artwork_worker;
     std::unique_ptr<ArtistBackgroundWorker> background_worker;
     std::string cache_directory;
+    const ArtistBackgroundPolicy& background_policy;
     std::optional<ArtistBackgroundRequest> background_request;
     ArtistBackgroundLookup background_lookup;
 };
 
 EnrichmentService::EnrichmentService(bool enabled, std::string cache_directory,
+                                     const ArtistBackgroundPolicy& background_policy,
                                      std::string artist_background_key)
     : implementation_(std::make_unique<Implementation>(enabled, std::move(cache_directory),
-                                                       std::move(artist_background_key))) {}
+                                                        background_policy, std::move(artist_background_key))) {}
 EnrichmentService::~EnrichmentService() = default;
 
 void EnrichmentService::begin_if_needed(const DiscToc& toc) {
@@ -84,10 +93,14 @@ void EnrichmentService::begin_if_needed(const DiscToc& toc) {
 void EnrichmentService::invalidate() {
     if (implementation_->worker) implementation_->worker->cancel_pending();
     if (implementation_->artwork_worker) implementation_->artwork_worker->cancel_pending();
+    stop_background();
+    implementation_->session.invalidate();
+}
+
+void EnrichmentService::stop_background() {
     if (implementation_->background_worker) implementation_->background_worker->cancel_pending();
     implementation_->background_request.reset();
     implementation_->background_lookup = {};
-    implementation_->session.invalidate();
 }
 
 void EnrichmentService::poll() {
@@ -143,6 +156,7 @@ bool EnrichmentService::select_candidate(std::uint64_t generation, std::size_t i
 bool EnrichmentService::decline_candidates(std::uint64_t generation) {
     if (!implementation_->worker || !implementation_->session.decline_candidates(generation)) return false;
     implementation_->artwork_worker->cancel_pending();
+    stop_background();
     return true;
 }
 
