@@ -93,6 +93,7 @@ let backgroundStatus = '';
 let backgroundLoading = false;
 let backgroundRequestId = 0;
 let pendingBackground = false;
+let retiredBackgroundUrl = '';
 let pickerOpen = false;
 let pickerIndex = 0;
 let pickerKey = '';
@@ -295,7 +296,8 @@ function renderControls(snapshot) {
   controls.forEach((button, index) => {
     if (button.dataset.command === 'metadata') {
       setHidden(button, !selection);
-      button.textContent = selection && selection.state !== 'AMBIGUOUS' ? 'Change album' : 'Choose album';
+      const label = selection && selection.state !== 'AMBIGUOUS' ? 'Change album' : 'Choose album';
+      if (button.textContent !== label) button.textContent = label;
     }
     const stateAvailable = controlEnabled(button.dataset.command, snapshot);
     const available = stateAvailable && pendingCommand !== button.dataset.command;
@@ -416,6 +418,21 @@ async function selectBackground(index) {
       body: JSON.stringify({ enabled: Boolean(index) }),
     });
     if (response.status !== 204) failed = true;
+    else if (index === 0) {
+      // OFF expires the current asset even if its state-stream update is delayed.
+      const image = byId('background-artist');
+      if (image) {
+        if (image.dataset.url) retiredBackgroundUrl = image.dataset.url;
+        image.dataset.identity = '';
+        image.dataset.url = '';
+        image.onload = null;
+        image.onerror = null;
+        image.removeAttribute('src');
+      }
+      const layer = byId('player-background');
+      if (layer?.classList?.contains('has-artist')) layer.classList.remove('has-artist');
+      await load(true);
+    }
   } catch {
     failed = true;
   } finally {
@@ -899,6 +916,45 @@ function showArt(artwork, layout, session, selection) {
   if (image.complete && image.naturalWidth > 0) image.onload();
 }
 
+function showBackground(snapshot, hasDisc) {
+  const layer = byId('player-background');
+  if (!layer) return;
+  const artwork = snapshot.artwork || {};
+  const selection = snapshot.enrichment?.selection;
+  const layout = snapshot.disc?.layout;
+  for (const kind of ['cover', 'artist']) {
+    const image = byId(`background-${kind}`);
+    if (!image) continue;
+    const candidate = kind === 'artist' ? artwork.background?.url : artwork.cover?.url;
+    const allowed = typeof candidate === 'string' && (kind === 'artist'
+      ? /^\/api\/presentation\/artwork\/background\/[a-zA-Z0-9-]+$/.test(candidate)
+      : candidate === '/api/presentation/artwork/cover');
+    const url = hasDisc && allowed && (kind !== 'artist' || candidate !== retiredBackgroundUrl) ? candidate : '';
+    const identity = url ? JSON.stringify([url, layout?.session_id || snapshot.read?.session_id || null,
+      layout?.disc_generation ?? null, selection?.metadata_generation ?? null,
+      selection?.selected_index ?? null]) : '';
+    if ((image.dataset.identity || '') === identity) continue;
+    if (url && image.dataset.url === url) image.removeAttribute('src');
+    image.dataset.identity = identity;
+    image.dataset.url = url;
+    const className = `has-${kind}`;
+    if (layer.classList.contains(className)) layer.classList.remove(className);
+    image.onload = null;
+    image.onerror = null;
+    if (!url) { image.removeAttribute('src'); continue; }
+    image.onload = () => {
+      if (image.dataset.identity === identity && image.complete && image.naturalWidth > 0 &&
+          !layer.classList.contains(className)) layer.classList.add(className);
+    };
+    image.onerror = () => {
+      if (image.dataset.identity === identity && layer.classList.contains(className))
+        layer.classList.remove(className);
+    };
+    image.src = url;
+    if (image.complete && image.naturalWidth > 0) image.onload();
+  }
+}
+
 function mediaMessage(hasDisc, mediaState, enrichmentStatus, selection) {
   if (!hasDisc) return mediaState === 'LOADING' ? 'READING DISC' : 'WAITING FOR DISC';
   if (enrichmentStatus === 'LOADING') return 'LOOKING UP ALBUM';
@@ -958,6 +1014,7 @@ function render(snapshot) {
   renderPicker(snapshot);
   showArt(hasDisc ? snapshot.artwork?.cover : null, disc.layout, snapshot.read?.session_id,
     enrichment.selection);
+  showBackground(snapshot, hasDisc);
   set('read-activity', read.activity || 'UNKNOWN');
   set('read-strategy', read.effective_strategy || 'UNKNOWN');
   const requestedPolicy = read.policy?.requested?.mode;
@@ -1012,11 +1069,19 @@ function render(snapshot) {
 
 // Fetch an initial REST snapshot before opening the live event stream.
 // WebSocket 接続前に REST から初期 snapshot を取得します。
-async function load() {
+async function load(refreshBackground = false) {
+  const snapshotAtRequest = currentSnapshot;
   try {
     const response = await fetch('/api/state', { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    render(await response.json());
+    const snapshot = await response.json();
+    if (!refreshBackground || currentSnapshot === snapshotAtRequest) render(snapshot);
+    if (refreshBackground && currentSnapshot) {
+      // A fresh owner snapshot can supersede an OFF acknowledged after another client's ON.
+      if (snapshot.artwork?.background?.url === retiredBackgroundUrl &&
+          currentSnapshot.artwork?.background?.url === retiredBackgroundUrl) retiredBackgroundUrl = '';
+      showBackground(currentSnapshot, currentSnapshot.disc?.state === 'AUDIO_READY');
+    }
   } catch {
     setConnection('Offline');
   }

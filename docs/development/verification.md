@@ -2,6 +2,96 @@
 
 更新日: 2026-10-13。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## 単一画像runtime試験packageのPi配備（2026-10-13 UTC）
+
+利用者のdeploy指示により、`wpe-primary-runtime`の未commit runtime差分から生成済みの標準
+`picdplayer_0.1.0_arm64.deb`を`bash scripts/deploy.sh`で`picdplayer-pi`へ配備した。
+既存の限定された`sudo -n dpkg -i`権限を使い、sudoers・起動設定・key設定・背景ONは変更しない。
+packageのpostinstにより稼働中daemon/kioskは再起動し、deploy scriptはactive→activeと実効WPEを
+確認して成功した。既知の35秒待機問題は今回発生せず、そのcodeを修正・回避していない。
+
+配備後の観測は次のとおり。これは写真表示や試聴の確認ではない。
+
+- package: `picdplayer 0.1.0 arm64 install ok installed`。
+- daemon: active/running、MainPID `102754`、観測時のNRestarts `0`。
+- kiosk: active/running、MainPID `102778`、実process `picdplayer-wpe`、観測時のNRestarts `0`。
+- launcher: `--version`は`2.54.0`。daemon・launcher・WebKit libraryのpackage所有を確認した。
+- 標準UIのinstall fileと実API配信内容のSHA256はともに`aa359563f0f22a70cf5bdce57517fa6406ed817cac0d6f5fd24d7dc77355013d`で、最後のlocal Chrome試験と同じ内容。
+- Read Policyは配備前後ともSINGLE、75 frames/2 matches/3 attempts/10000 ms、startup由来、persistence_configured=false。
+- 背景状態はrequested/effective/availableがすべてfalse、理由`key_missing`。metadata機能は有効だが、形式上有効なproject keyの未指定・不正・読込不可を区別しないこの理由によりONできない。
+
+同日12:28 UTC、利用者からこの配備版で実機CEC操作と再生→停止を確認し、backgroundをONに
+できないことも確認したとの報告を受けた。CEC/再生→停止は利用者による実機確認済みとして記録する。
+背景ON不可は配備後に観測した`key_missing`と整合し、利用不能時のgateが実機UIでも確認された。
+操作した個々のCEC keyやSettingsの全navigation経路、音声品質・長時間継続はこの報告から推定しない。
+
+serviceの起動・runtime/package同一性はPiで観測済み、CEC/再生→停止は上記の利用者確認済みだが、
+有効なkeyでの背景ON、写真取得/表示、取得中の再生継続、OFF時の写真消去は実機未確認である。
+写真の実機試験には、serviceが読める保護された
+project key fileと起動引数を利用者が別途設定し、再起動後にSettingsで明示ONする必要がある。
+personal keyのclient-keyは未対応であり、keyの値をargv・EnvironmentFile・chat/logへ置かない。
+同日12:54 UTC、利用者はAPI key設定を残課題へ残す方針を示した。設定・実provider認証・写真の
+WPE/Pi試験は今回のcommit/pushを待たせる条件にせず、完了済みとは記録しない。
+
+## 単一画像runtime接続の開発差分（2026-10-13 UTC）
+
+利用者の指示により、ここまでのSettings・画像worker部品・保持済みWPE文書を`699f627`
+（`Checkpoint background settings and image worker integration`）としてlocal commitに保存した。
+commit直前の全CTestは59/59成功し、直後のworktreeはclean。作業branchは
+`feature/25-background-enrichment`、directoryとWPE SDK cacheは従来の`wpe-primary-runtime`を保持する。
+元ワークスペースとDraft #217のworktreeは変更していない。この節は`699f627`後の開発・検証記録である。
+配備と利用者による実機確認は前節を参照する。利用者の追加指示に基づきこの単位をcommit・branch
+pushするが、PR作成・Git merge/cherry-pick・master統合は別の操作として行わない。
+
+Draft #217の単一画像runtime・同一origin配信・optional snapshot参照・標準rendererを再利用する。
+前回のSettingsとRead Policy保存を保持し、master/WPEのCMake全体を旧branchの内容で置換しない。
+既定OFF、keyだけのprovider要求0、明示ON、OFFで協調取消・保持画像/参照の即時失効を維持する。
+metadataをcompileしない構成でも`metadata_disabled`を返すよう、PlayerSessionの初期policyを合わせる。
+候補と画像は空cache pathで一時取得し、disk cacheの採用・保存schema・slideshow・full decode後の
+memory上限はこの単位へ混ぜない。画像の権利判断は利用者に委ねる。写真は配布物へ同梱しない。
+
+以下の過去節の「runtime未接続・ON409」は`699f627`までの境界で、今回の開発差分と区別する。
+通常daemonの実provider、WPE/Pi背景表示、実音声・実CECは未検証であり、合成fixtureやlocal Chromeを
+実機確認とは扱わない。
+
+最終差分で`bash scripts/build-container.sh`はcached WPE SDKを再利用して成功し、標準arm64 Debian
+packageを再生成した。network-noneの全CTestは61/61成功。`699f627`の59件に、実HTTP/WSの
+`background_runtime_transport`とCDP helperの`background_cdp_fixture`を加えた構成である。
+transportは合成provider/画像応答を使い、14 snapshot revision、OFF/artist/辞退/discによる旧参照失効と
+metadata/cover/backgroundの独立更新を確認した。通常daemon・実光学drive・実音声とは区別する。
+`bash scripts/test-package-lifecycle.sh`も成功し、Read Policy保存・Settings回帰は維持した。
+
+別build `build-container/background-no-metadata`ではAPI=ON/METADATA=OFF/WPE=OFFの44/44 CTestが
+成功した。初回は追加key試験が非compile構成に未対応CLI optionを渡し、daemonが起動しない失敗を
+検出した。CMakeをsource of truthとしてmetadata有無を試験へ渡し、非compile構成ではkey試験だけを
+除外した。基本daemon/API/OFFとmetadata_disabledの検証は残し、標準構成のkey_missing・valid key・
+session ON/OFF試験も通過した。API=OFF/METADATA=ON/WPE=OFFのproduction buildも成功したが、
+その構成の全CTestや全option組合せが成功したとは扱わない。
+
+macOS Chrome `155.0.8059.40`の隔離headless instanceで、合成PNG/JPEG/WebP、decode失敗→cover、
+default fallback、OFF、新世代、旧callback無視、1920×1080・640×720の9ケースを確認した。
+横overflow・JS例外なし。狭い画面の既存縦scrollは許可し、同じSTOPPED snapshotのDOM mutationは0。
+このbrowser試験はWS stubとfixture render呼出を使い、backendの実HTTP/WS試験とは別である。
+新renderer上でもSettingsの1920×1080・720×720・390×844×利用可否2状態の6ケースが成功した。
+証跡はworkspace外の`background-runtime-chrome-evidence`へ保存し、画像・secretをrepositoryへ同梱しない。
+独立したruntime差分レビューは具体的指摘なし。全差分と`git diff --check`を確認した。
+
+Settingsとrendererの結合回帰では、state stream切断中にOFFが204でも読込済み写真が残る問題を
+Nodeで再現した。受理時に表示側の現在参照も失効させ、旧callback/遅延modelから復活させないよう
+修正した。403/409拒否では写真を消さず、REST refresh失敗時も確認済みOFFの失効を維持する。
+追加レビューで、別clientのON/new URIが古いOFF応答を追い越すと新URIまで抑止するP2を検出した。
+OFF応答後の新しいRESTと最新の採用済みsnapshotが同じ参照を返した場合だけ再承認し、採用済み
+snapshotから描画し直すことで修正した。遅延ACKと別clientのONを含む回帰試験が通過し、再レビューで
+指摘の解消を確認した。最終sourceでChromeの9 renderer/6 Settingsケースも再実行して成功した。
+refresh中に新しいlive snapshotが到着した場合はRESTの古いmodelで置換しない。No Disc/null sessionの
+応答を待つ間に新sessionが公開される回帰も追加し、最新のalbum/画像を保持することを確認した。
+この最終sourceを再buildし、標準61/61、metadata非compile構成44/44、package lifecycleを再確認した。
+
+runtimeの検証・配備はlocal checkpoint `699f627`後の未commit差分で行った。今回この単位を新branch
+`feature/25-background-enrichment`へ保存・公開し、GitHubのDraft #217/masterは更新しない。
+slideshow・背景設定保存・full decode memory上限、実provider、通常daemonからWPE/Piの写真表示・
+実音声・実CECの最終統合確認は残る。
+
 ## 背景画像workerの統合準備（2026-10-13 UTC）
 
 最新master `f0d44c1`とDraft PR #217のhead `1f95360`に変更がないことを再確認した。

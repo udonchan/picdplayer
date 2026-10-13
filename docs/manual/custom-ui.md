@@ -74,7 +74,8 @@ messageは`{"action":"up"}`形式で、actionは`up/down/left/right/select/back`
 Read PolicyのSINGLE/REPEATをCECの方向/決定/Backで選択し、`GET/POST /api/read-policy`を使用する。
 Artist Backgroundは`GET/POST /api/artist-background`に基づき利用可否・要求値・実効値を表示し、
 利用不能時はONを無効にする。背景設定はsession限りで、Read Policyの保存とは別である。
-現在のmaster runtimeは画像配信・表示が未接続のためONにできず、Custom UIに同じ画面を要求しない。
+この開発差分ではmetadataと有効なproject keyがあればsession ONを要求できるが、画像到着や
+利用許諾済みを意味しない。masterへの統合とは別で、Custom UIに同じ画面・背景描画を要求しない。
 navigationは選択状態や再生結果のsnapshotではない。Viewが状態変更を求める場合はloopbackの
 操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
 標準Playerはこのchannelで基本transport buttonと任意のmetadata候補pickerのfocusを動かす参考実装である。

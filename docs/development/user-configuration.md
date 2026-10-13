@@ -4,9 +4,9 @@
 PR #179で`--settings-file`を明示した場合のRead Policy保存・復元を実装し、masterへ統合済み。
 PR #180で標準PlayerにRead PolicyのSINGLE/REPEATを選ぶSettings画面を部分実装した。
 Settings画面を通じたPi実serviceの再起動後復元は未検証である。一般設定API、Artist Backgroundの
-runtimeでのON受理・保存、hot reloadはない。背景の利用不能状態APIと即時OFFのみ部分実装し、
-key指定だけの候補照会を停止した。SettingsはAPIに基づく背景選択を部分実装し、利用不能時のONを
-無効にする。session ONを含むruntime接続は未統合のDraft PR #217にある。#177は背景保存・実service
+保存、hot reloadはない。この開発差分ではDraft PR #217のsession ON・単一画像runtimeを再利用し、
+key指定だけの候補照会を停止したまま、明示ON時だけ取得・配信する。SettingsはAPIに基づく背景選択を
+部分実装し、利用不能時のONを無効にする。GitHubのmaster統合とは別である。#177は背景保存・実service
 検証が残りOpenであり、このUI変更でRead Policyの保存schemaを拡張しない。
 採用済みの保存・優先順位・適用契約は
 [機能設計](../design/functional-design.md#設定の所有保存適用境界)を正とする。
@@ -19,7 +19,7 @@ key指定だけの候補照会を停止した。SettingsはAPIに基づく背景
 | 項目 | 現行経路 | 設定画面での扱い | 適用・制約 |
 |---|---|---|---|
 | Read Policy（SINGLE/REPEAT、region、matches、attempts、budget） | `--read-verification`は起動時、5項目は`GET/POST /api/read-policy` | 最初の画面候補。基本modeと詳細値を分け、requested/effective/pendingを表示 | 再生中の変更は停止境界までpending。`--settings-file`を指定した場合だけ変更を保存し、保存済み値は次回起動時にCLIの初期値を上書きする |
-| Artist Backgroundの有効/無効 | `GET/POST /api/artist-background`は利用不能状態と即時OFFのみ。ONは409、保存なし | API由来のrequested/effective/availableと理由を表示。既定OFF、利用不能時はON無効、既知の状態でOFF可能。背景設定はsession限りと明示 | #49/#51のruntime配信・表示が前提。画像の権利・許諾判断は利用者に委ねる。key指定だけでは照会しない |
+| Artist Backgroundの有効/無効 | `GET/POST /api/artist-background`。この開発差分では技術的に利用可能ならsession ONを204で受理、利用不能なら409、OFFは即時204。保存なし | API由来のrequested/effective/availableと理由を表示。既定OFF、利用不能時はON無効、既知の状態でOFF可能。背景設定はsession限りと明示 | metadataと有効なproject keyが必要。画像到着とON受理は別。権利・許諾判断は利用者に委ねる。key指定だけでは照会しない |
 | metadata照会 | `--metadata off\|musicbrainz` | 後続候補 | network利用と再起動境界を要設計。Artist Backgroundはartist MBIDがなければ利用不可 |
 | drive速度要求 | `--drive-speed-x 1..255` | 後続の詳細設定候補 | 停止/一時停止中に要求。受理は実測速度や騒音低下を保証しない |
 | direct C2 pointer要求 | `--direct-c2-pointers` | 後続の詳細設定候補 | direct backend限定。能力・downgradeを表示し、C2の有無を読取保証とみなさない |
@@ -38,7 +38,8 @@ providerのAPI認証・アクセス制約と、利用者が判断する画像ご
 project keyとpersonal keyを区別する。設定画面で利用者のpersonal keyを扱う場合は`client-key`経路を
 別途実装・検証する。利用者が必要な権利・許諾を確認した上で明示ONする方針とし、製品は画像の権利を
 保証しない。ON自体が許諾を生むわけではない。包括的許諾を製品側で確認することを実装の前提にしない。
-現段階の操作不能はruntime未接続による。開発試験には合成/利用許諾済みfixtureを使う。
+利用不能・未知の状態ではONを操作できない。この開発差分の単一画像runtimeは空cache pathを使う。
+開発試験には合成/利用許諾済みfixtureを使う。
 ディスクキャッシュの採否・保持期間・容量・削除は、この権利方針とは別に決める。
 
 Read Policyの部分実装ではbuilt-in値→起動引数→保存済みuser値の順に採用する。

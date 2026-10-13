@@ -77,12 +77,25 @@ AGENTS.md §11に英語の追加規約を記載し、限定試行は初回と修
 | [#28 Hide the cursor in the Cage kiosk session](https://github.com/udonchan/picdplayer/issues/28) | kiosk上のcursorを非表示にする方法を調査・検証する。 |
 | [#124 Investigate unintended kiosk scrollbar display](https://github.com/udonchan/picdplayer/issues/124) | TVで意図しないscrollbarを目視した。CDPのDOM probeでは1920×1080 viewportにdocument/root/bodyのoverflowや画面外elementを検出できず、Chromium/Cage/Waylandを含む原因は未確定。UIの見た目変更とは切り分けて調査する。 |
 | [#31 Add CEC-driven controls to the Player view](https://github.com/udonchan/picdplayer/issues/31) | Close済みの親Issue。[#54 loopback操作契約](https://github.com/udonchan/picdplayer/issues/54)、[#55 CEC navigation配信](https://github.com/udonchan/picdplayer/issues/55)、[#56 Player操作UI](https://github.com/udonchan/picdplayer/issues/56)に分割済み。#54はPR #168、#55はPR #167、#56はPR #169をmergeしてClose済み。Piで上下左右・決定・Back、再生/音声・一時停止・停止、右方向キー約2秒長押し後の選択停止を確認した。CECとChromium keydownの二重入力を#56で抑制した。別TV・入力切替時の挙動は未確認。metadata候補pickerは[#166](https://github.com/udonchan/picdplayer/issues/166)で別途扱う。 |
-| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | PR #180のRead Policy選択・詳細表示は統合済み。今回の作業差分では背景APIのrequested/effective/availableと理由を表示し、利用不能時のON無効、session限りの明示ON/OFF要求とCEC/keyboard/pointer操作を追加する。master runtimeはON拒否のままで、背景保存は未実装。権利判断は利用者に委ねる。過去のPi Chromium/CDPでRead Policy表示と操作、Back問題の修正・再deployを確認したが、今回の背景設定のWPE/TV/CEC・実service復元は未確認。 |
+| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | PR #180のRead Policy選択・詳細表示は統合済み。今回の作業差分では背景APIのrequested/effective/availableと理由を表示し、利用不能時のON無効、session限りの明示ON/OFF要求とCEC/keyboard/pointer操作を追加する。master runtimeはON拒否のままで、背景保存は未実装。権利判断は利用者に委ねる。過去のPi Chromium/CDPでRead Policy表示と操作、Back問題の修正・再deployを確認した。今回の配備版では実機CEC・再生→停止・key_missing時の背景ON不可を利用者が確認済み。有効なkeyでのONと写真表示、Settingsの全CEC経路・実service復元は未確認。 |
 
 2026-10-13の統合準備では、Draft #217の既存画像worker・共有上限・fixture試験と候補workerの
 thread宣言順修正をWPE worktreeの開発差分として再利用した。CMakeへの最小登録だけを
 行い、PR全体の競合解消・mergeやruntime ONは行わない。前回の背景Settingsは保持する。
 詳細と今回の検証範囲は[検証状況](verification.md#背景画像workerの統合準備2026-10-13-utc)を参照する。
+
+その後、利用者指示によりSettings・worker部品・保持済みWPE文書をlocal commit `699f627`へ保存した。
+今回の開発branchでは、Draft #217の単一画像runtime・API・optional snapshot参照・標準fallbackを
+再利用し、前回のSettingsと接続する。GitHubのmaster統合とは区別する。#25/#49/#50/#51/#177/#178は
+Openを維持し、slideshow・背景保存・full decode memory上限・通常daemon/WPE/Pi確認は残る。
+記録は[検証状況](verification.md#単一画像runtime接続の開発差分2026-10-13-utc)を参照する。
+
+利用者指示でこの試験packageをPiへ配備し、package・稼働service・WPE 2.54.0の同一性を観測した。
+利用者が実機CEC操作・再生→停止・backgroundのON不可を確認した。背景APIの`key_missing`と
+整合するが、写真の取得/表示・取得中の再生継続・OFF時の消去は未確認。鍵設定と明示ONを含む
+写真試験へ残す。[配備記録](verification.md#単一画像runtime試験packageのpi配備2026-10-13-utc)参照。
+利用者の方針によりAPI key設定は後続の残課題とし、今回のcommit/pushの前提条件にはしない。
+今回の公開単位は単一背景runtimeとSettings接続であり、#25全体や写真の実機受入完了とは扱わない。
 
 ## 設計を先に確定する作業
 
