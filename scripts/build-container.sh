@@ -59,12 +59,18 @@ fi
 # Configure
 # ---------------------------------------------------------------------------
 
+echo "==> Preparing cached WPE runtime"
+bash "${SCRIPT_DIR}/build-wpe-runtime.sh"
+run_build() {
+    docker run --rm -v "${REPO_ROOT}:/src" \
+        -v "${REPO_ROOT}/build-wpe-runtime/2.54.0:/opt/picdplayer-wpe/2.54.0:ro" \
+        -e PKG_CONFIG_PATH=/opt/picdplayer-wpe/2.54.0/lib/pkgconfig \
+        -e LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib \
+        -w /src "${IMAGE}" "$@"
+}
 echo "==> Configuring CMake"
 
-docker run --rm \
-    -v "${REPO_ROOT}:/src" \
-    -w /src \
-    "${IMAGE}" \
+run_build \
     cmake -S . -B "${BUILD_DIR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_PARANOIA="${ENABLE_PARANOIA}" \
@@ -72,6 +78,7 @@ docker run --rm \
         -DENABLE_API=ON \
         -DINSTALL_SYSTEMD_UNIT=ON \
         -DINSTALL_SYSTEMD_KIOSK_UNIT=ON \
+        -DENABLE_WPE_KIOSK=ON \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
         -DPICDPLAYER_SERVICE_USER=picdplayer
 
@@ -81,10 +88,7 @@ docker run --rm \
 
 echo "==> Building"
 
-docker run --rm \
-    -v "${REPO_ROOT}:/src" \
-    -w /src \
-    "${IMAGE}" \
+run_build \
     sh -c "cmake --build '${BUILD_DIR}' -j\$(nproc)"
 
 # ---------------------------------------------------------------------------
@@ -98,10 +102,7 @@ mkdir -p "${STAGE_DIR}"
 
 echo "==> Installing into staging directory"
 
-docker run --rm \
-    -v "${REPO_ROOT}:/src" \
-    -w /src \
-    "${IMAGE}" \
+run_build \
     sh -c "DESTDIR=/src/stage cmake --install '${BUILD_DIR}'"
 
 # ---------------------------------------------------------------------------
@@ -125,10 +126,7 @@ find "${STAGE_DIR}" \( -type f -o -type l \) -print
 
 echo "==> Packaging Debian artifact"
 
-docker run --rm \
-    -v "${REPO_ROOT}:/src" \
-    -w /src \
-    "${IMAGE}" \
+run_build \
     cpack --config "/src/${BUILD_DIR}/CPackConfig.cmake" -G DEB -B /src/package-container
 
 PACKAGE_COUNT="$(find "${PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -print | wc -l | tr -d '[:space:]')"

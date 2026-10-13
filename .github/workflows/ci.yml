@@ -10,13 +10,18 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
       - name: Build Debian arm64 image
         run: docker build -t picdplayer-build .
+      - name: Cache source-built WPE SDK
+        uses: actions/cache@v4
+        with:
+          path: build-wpe-runtime/
+          key: wpe-trixie-arm64-${{ hashFiles('scripts/wpe-source-*', 'scripts/build-wpe-runtime.sh') }}
       - name: Build and stage PiCDPlayer
         run: ./scripts/build-container.sh
       - name: Run hardware-independent tests

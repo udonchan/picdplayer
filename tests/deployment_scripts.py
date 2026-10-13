@@ -29,13 +29,19 @@ class DeploymentScriptsTest(unittest.TestCase):
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         TEST_ROOT=str(self.root), TEST_LOG=str(self.log))
         mock = '''#!/usr/bin/env python3
-import json, os, pathlib, sys
+import json, os, pathlib, shlex, subprocess, sys
 name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 with open(os.environ['TEST_LOG'], 'a') as f:
     f.write(json.dumps([name, args]) + '\\n')
 command = ' '.join(args)
 if name == 'ssh':
+    if 'bash -s --' in command:
+        if os.environ.get('RUNTIME_FAILURE'):
+            sys.exit(1)
+        sys.exit(subprocess.run(['bash', '-s', '--', shlex.split(args[-1])[-1]], input=sys.stdin.read(), text=True).returncode)
+    if 'picdplayer-wpe --version' in command:
+        sys.exit(int(os.environ.get('WPE_VERSION_FAILURE', '0')))
     if 'sudo -n -l' in command:
         sys.exit(int(os.environ.get('DENY_SUDO', '0')))
     if 'ActiveState' in command:
@@ -49,6 +55,10 @@ if name == 'ssh':
     if 'dpkg-query' in command:
         sys.exit(int(os.environ.get('VERIFY_FAILURE', '0')))
 if name == 'docker':
+    if args and args[0] == 'cp':
+        sdk = pathlib.Path(os.environ['TEST_ROOT']) / 'build-wpe-runtime/2.54.0/lib/pkgconfig'
+        sdk.mkdir(parents=True, exist_ok=True)
+        (sdk / 'wpe-webkit-2.0.pc').touch()
     if args[:2] == ['image', 'inspect']:
         sys.exit(int(os.environ.get('NO_IMAGE', '0')))
     if 'cpack' in args:
@@ -61,8 +71,12 @@ if name == 'docker':
         binary.chmod(0o755)
     if '-S' in args and os.environ.get('CONFIGURE_FAILURE'):
         sys.exit(1)
+if name == 'ps':
+    print(os.environ.get('ACTUAL_RUNTIME', 'picdplayer-wpe'))
+if name == 'systemctl':
+    print('101044')
 '''
-        for command in ('ssh', 'rsync', 'docker'):
+        for command in ('ssh', 'rsync', 'docker', 'ps', 'systemctl', 'sleep'):
             path = self.bin / command
             path.write_text(mock)
             path.chmod(0o755)
@@ -108,6 +122,38 @@ if name == 'docker':
     def test_ambiguous_packages_block_ssh(self):
         (self.package / 'another.deb').touch()
         result, calls = self.run_script('deploy.sh')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
+
+    def test_runtime_mismatch_is_not_success(self):
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', RUNTIME_FAILURE='1')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_missing_wpe_is_not_success(self):
+        result, _ = self.run_script('deploy.sh', WPE_VERSION_FAILURE='1')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_real_runtime_check_rejects_fallback(self):
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', ACTUAL_RUNTIME='cage')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('runtime mismatch', result.stdout)
+
+    def test_explicit_chromium_expectation(self):
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', ACTUAL_RUNTIME='cage',
+                                    PICDPLAYER_EXPECT_KIOSK_RUNTIME='chromium')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_wrapper_not_execing_runtime_is_not_success(self):
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', ACTUAL_RUNTIME='bash')
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_inactive_runtime_is_not_started_for_verification(self):
+        result, calls = self.run_script('deploy.sh', BEFORE='inactive', AFTER='inactive')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(any('bash -s --' in ' '.join(args) for name, args in calls))
+
+    def test_invalid_runtime_blocks_transfer(self):
+        result, calls = self.run_script('deploy.sh', PICDPLAYER_EXPECT_KIOSK_RUNTIME='invalid')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls, [])
 

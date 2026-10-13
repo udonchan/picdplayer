@@ -1,0 +1,7 @@
+.git
+.kilo
+build/
+build-*/
+stage/
+package-container/
+release-container/

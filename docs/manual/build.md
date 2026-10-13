@@ -20,6 +20,22 @@ Pi単体で試す場合はメモリ・CPU負荷を抑えるため `-j1` とす�
 Dockerの標準scriptはcontainerのCPU数に応じて並列ビルドする。
 `build/`・`build-*/` はGit管理対象外。
 
+標準Docker buildはWPE kioskを有効にする。`scripts/build-container.sh`は
+`scripts/build-wpe-runtime.sh`で公式WPE 2.54.0と2patchをビルドし、SDKを
+`build-wpe-runtime/2.54.0`へexportしてからアプリをcompileする。source/patch/設定のhashが
+一致するSDKは再利用し、アプリ変更だけでWebKitを再compileしない。SDK cacheがない場合は
+Docker volume `picdplayer-wpe-runtime-2.54.0`の増分buildを使う。
+既存試験volumeを使う場合は`PICDPLAYER_WPE_VOLUME=picdplayer-wpe221-build`を指定できる。
+初回は最大6 GiB/2 CPU/並列2でWebKitをビルドするため時間がかかる。SDK cacheを更新する場合は
+生成物`build-wpe-runtime/recipe`だけを削除して再実行する。volumeは自動削除しない。
+
+CMakeはlauncherを`/usr/local/libexec`、runtimeのlib/libexec/shareを
+`/opt/picdplayer-wpe/2.54.0`へinstall/packageする。header/pkg-configはSDK専用でpackageに入れない。
+wrapperだけがprivate library pathを設定し、ホストのglibc/ldconfigを置き換えない。
+`bubblewrap`/`xdg-dbus-proxy`は明示runtime依存、共有library依存はCPack/shlibdepsを正本とする。
+標準Dockerfileを更新したため、既存imageは`docker build -t picdplayer-build .`で再生成する。
+完全なbase/apt固定と再現性精査はv1.0段階まで保留する。
+
 ## TrixieでのWPE source build成立性調査（#221）
 
 これは[#220](https://github.com/udonchan/picdplayer/issues/220)の供給方式を判断するための

@@ -207,7 +207,7 @@ AVAILABLEの場合に表示する。metadataを有効にするには起動時に
 `--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
 再生位置は表示できる。daemonが取得・cacheした画像をsame-originの`/api/presentation/artwork/cover`から読み、失敗時はCDの
 プレースホルダーを表示する。標準Playerはloopback APIで基本transport操作と曖昧metadata候補の選択を送れる。
-任意のChromium/Cage kioskによる
+任意のWPE優先kiosk（Chromium/Cageは復旧選択肢）による
 tty1への自動表示は[systemd常駐運転](systemd.md#chromiumcage-kiosk)を参照する。
 
 `/debug/status`は以下のtechnical status画面であり、読み取り根拠やdrive能力を確認するために使う。
@@ -229,7 +229,8 @@ GET stateで現在値を復元して再接続する。ここから再生操作�
 
 WPE主runtimeへの移行候補には`scripts/inspect-wpe.py`を用意している。これはChromium CDPとは
 別のWebKit target routingを使い、pageのtitle・readyState・viewport・接続表示を読み取る。
-標準packageへのWPE供給と本番service移行は未完了で、このtoolの追加は実機確認を意味しない。
+標準packageはWPEを供給し、開発Piでは利用者が初回表示・再生を確認した。
+Inspector tool自体の実WebKit接続は未確認であり、tool追加やmock試験を実機確認とは扱わない。
 
 実機のWPEを起動するsudo操作は利用者が行う。既存の隔離rootfsでの一時試験には
 `scripts/test-wpe-kiosk.sh`があるが、通常serviceのWPE移行試験とは別であり、この診断toolは

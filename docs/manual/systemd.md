@@ -167,8 +167,8 @@ restartとdaemon-reloadを行う。
 ### WPE移行候補の境界
 
 このbranchのwrapperはWPEを優先し、`PICDPLAYER_KIOSK_RUNTIME=chromium`で従来経路を
-明示選択できる。WPE launcherは`ENABLE_WPE_KIOSK=ON`でのみbuild/installし、標準Docker
-buildはOFFのため供給しない。launcher欠損・version不適合・前回WPE失敗では、既定の
+明示選択できる。標準Docker buildは`ENABLE_WPE_KIOSK=ON`でlauncherとWPE 2.54.0 runtimeを
+同じpackageへ供給する。launcher欠損・version不適合・前回WPE失敗では、既定の
 `PICDPLAYER_KIOSK_FALLBACK=chromium`に従ってChromiumへ戻る。`none`なら失敗する。
 実行runtimeと理由は`kiosk_runtime: requested=... effective=... reason=...`で観測し、fallbackを
 WPE稼働の証拠にはしない。`PICDPLAYER_WPE`でlauncher pathを指定できる。
@@ -176,10 +176,27 @@ WPEはCageを介さず直接DRMへ接続する。`ExecStopPost`のfailure marker
 復旧する候補を実装し、cgroup停止と10秒のstop timeoutを設定しているが、実systemd/DRMの
 終了・復旧は未検証である。意図した正常停止ではfailure markerを解除する。
 
-Piの本番runtimeは現時点でCage/Chromiumのまま。以下はその従来運用手順であり、
+開発Piはsource-built WPE 2.54.0へ利用者が切り替え、初回の画面表示と再生を確認した。
+CEC/cold boot/失敗復旧等は未確認で、詳細は検証状況を参照する。以下はChromiumの従来運用手順であり、
 新候補の本番切り替え手順ではない。source buildの記録は[検証状況](../development/verification.md)、
 試験構成は[ビルド手順](build.md)を参照する。開発基準はWPE 2.54.0と2patchとし、
 追加の依存精査・完全固定はv1.0段階まで保留する。実機のsudo操作は利用者が行う。
+
+### 標準WPE packageの運用
+
+通常の更新は`scripts/build-container.sh`と`scripts/deploy.sh`を使用する。runtimeは
+`/opt/picdplayer-wpe/2.54.0`、launcherは`/usr/local/libexec/picdplayer-wpe`にpackage所有fileとして
+配置される。wrapperがprivate library pathを設定するので、新規導入に手動のWPE用drop-inは不要。
+packageは既存の`/etc/default/picdplayer-kiosk`や手動導入時のWPE設定を上書きしない。
+新しい依存が不足する場合は利用者がPiで`sudo apt install ./picdplayer-package/picdplayer.deb`を
+実行して導入する。通常deployは既存の限定`dpkg -i`権限だけで、sudoers追加は不要。
+
+Chromiumへ切り戻す場合は、利用者がkiosk設定の実効値を
+`PICDPLAYER_KIOSK_RUNTIME=chromium`に変更してkioskだけをrestartする。手動試験で
+`90-wpe-source.conf`が`/etc/default/picdplayer-wpe`を後から読む場合は、そのfile側の値を変更する。
+daemonは切り戻し操作でrestartしない。通常のアプリpackage更新は既存仕様どおりactiveだった
+daemon/kioskをpostinstがtry-restartする。TV表示、CEC、異常終了復旧はdeploy成功だけから推定しない。
+`PICDPLAYER_EXPECT_KIOSK_RUNTIME=chromium`はdeployの期待値だけで、設定の切り替えではない。
 
 ### 従来runtimeの運用
 

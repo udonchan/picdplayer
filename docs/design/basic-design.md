@@ -55,7 +55,7 @@ flowchart TD
     CEC --> Nav[semantic navigation]
     Nav --> NowPlaying
     NowPlaying -->|loopback操作POST| API
-    NowPlaying --> Kiosk[任意: Cage / Chromium kiosk]
+    NowPlaying --> Kiosk[任意: WPE DRM kiosk / Chromium復旧選択]
 ```
 
 単一process。main threadが再生・media・metadataの正規状態を所有する。

@@ -18,6 +18,8 @@ kiosk_mark kiosk_wrapper_start
 : "${PICDPLAYER_KIOSK_RUNTIME:=wpe}"
 : "${PICDPLAYER_KIOSK_FALLBACK:=chromium}"
 : "${PICDPLAYER_WPE:=@CMAKE_INSTALL_FULL_LIBEXECDIR@/picdplayer-wpe}"
+# The bundled WPE is private to this package, not a host ldconfig replacement.
+export LD_LIBRARY_PATH="/opt/picdplayer-wpe/2.54.0/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 : "${PICDPLAYER_API_WAIT_HOST:=127.0.0.1}"
 : "${PICDPLAYER_API_WAIT_PORT:=8080}"
 : "${PICDPLAYER_API_WAIT_TIMEOUT_SECONDS:=30}"

@@ -69,10 +69,11 @@ Dockerfileを変更した場合は、build imageを再作成してください�
 
 このscriptは次の処理を行います。
 
-1. `picdplayer-build` container内でCMakeをconfigureする
-2. Linux/aarch64向けにビルドする
-3. CMakeのinstall ruleを使い、`stage/`へDESTDIR installする
-4. 同じinstall ruleからCPackで`package-container/`へDebian packageを生成する
+1. WPE 2.54.0と2patchのSDKをcacheから取得し、なければsource buildする
+2. `picdplayer-build` container内でCMakeをconfigureする
+3. Linux/aarch64向けにビルドする
+4. CMakeのinstall ruleを使い、`stage/`へDESTDIR installする
+5. 同じinstall ruleからCPackで`package-container/`へDebian packageを生成する
 
 主なCMake設定は次の通りです。
 
@@ -82,6 +83,7 @@ ENABLE_METADATA=ON
 ENABLE_API=ON
 INSTALL_SYSTEMD_UNIT=ON
 INSTALL_SYSTEMD_KIOSK_UNIT=ON
+ENABLE_WPE_KIOSK=ON
 CMAKE_INSTALL_PREFIX=/usr/local
 PICDPLAYER_SERVICE_USER=picdplayer
 ```
@@ -109,6 +111,8 @@ stage/
 ```
 
 インストール対象と配置先のsource of truthはCMakeの `install()` ruleです。
+WPE launcher/post-stop helperも`usr/local/libexec/`、WPE runtimeも
+`stage/opt/picdplayer-wpe/2.54.0/`へ含まれる。SDK cacheは`build-wpe-runtime/`でGit対象外。
 新しいruntime fileを追加するときは、deploy scriptへ個別のcopy処理を追加するのではなく、
 原則としてCMakeのinstall ruleへ追加します。
 
@@ -217,6 +221,10 @@ deploy後も停止したままとし、deploy scriptは前後のactive stateが�
 要求し、`failed`や遷移中の状態は転送前にエラーとする。deploy後は状態の一致とpackageの
 `install ok installed`を検査する。これは観測時点の確認であり、その後のcrashやTV表示・再生の
 正常性までは保証しない。
+標準deployはWPE launcherのversion 2.54.0も検査する。kioskがactiveの場合はMainPIDのprocess名を
+最大35秒待って確認し、Chromium fallbackをWPE成功として報告しない。Chromiumを明示運用している
+場合のみ`PICDPLAYER_EXPECT_KIOSK_RUNTIME=chromium ./scripts/deploy.sh`を使う。
+このoptionはtarget設定を変更せず、期待値だけを変える。inactiveなら起動して検査しない。
 
 upgrade時は実行中のserviceを残してdpkgがファイルを更新し、configure後に再起動する。
 標準UIはdaemon内に埋め込まれ、Custom UIも起動時に読み込む。新しい配信内容と表示の確認は
@@ -247,6 +255,12 @@ ssh picdplayer-pi 'sudo -n -l /usr/bin/dpkg -i -- ~/picdplayer-package/picdplaye
 
 sudoers設定がない、または固定commandと一致しない場合、deploy scriptはpackage転送前に
 エラー終了する。password promptには進まない。
+
+WPE供給を同じpackageへ統合したため、通常deployのsudoersは上記の既存`dpkg -i` ruleだけで
+足りる。`cp`/`tar`/`env`/shell、`/opt`書き込みや任意`systemctl`のNOPASSWD権限は追加しない。
+新しい依存が不足する初回だけ、利用者が対話的sudoで依存を導入する。deployはaptやsudoersを
+変更しない。手動切り替え時の`/etc/default/picdplayer-wpe`と`90-wpe-source.conf`も自動上書きしない。
+同じ2.54.0 prefixを使うため残して運用できるが、設定の変更/撤去は利用者が行う。
 
 実機測定でdaemonとkioskを個別に起動・停止・再起動する場合は、必要なunitだけを次のように
 追加で許可できる。`/usr/bin/systemctl`のpathはPiで`command -v systemctl`を確認する。
@@ -323,6 +337,8 @@ Raspberry Piは実際のCDドライブ、HDMI audio、CEC、TV表示、systemd�
 上記と同じDocker image作成、`scripts/build-container.sh`によるビルド・stage、
 Docker内のCTest、使い捨てcontainer内の`dpkg` install/upgrade/reinstall/purge検証を実行します。実機のCD-ROM、CEC、ALSA/HDMI、TV表示やPiへのdeployは
 対象外です。公開releaseやRaspberry Pi OS imageの生成もこのworkflowでは行いません。
+WPE SDKはsource/patch/設定hash単位でActions cacheへ保存する。初回source buildを考慮し、
+job上限は180分。cacheを利用した成功はclean buildやbyte-identical再現性の証明ではない。
 
 ## 版付き候補artifactの検査と保存
 

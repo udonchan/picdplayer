@@ -2,6 +2,63 @@
 
 更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## WPE標準packageのPi更新・CEC操作確認（2026-10-13 UTC）
+
+利用者が標準deployを実行して成功し、TVリモコンでアルバム選択→再生→停止を操作して
+確認した。先の手動tar配置とは別に、標準package経由での更新後の正常操作を確認したもの。
+確認後のsudoなしSSH観測では`picdplayer 0.1.0`が`install ok installed`、WPE libraryとlauncherは
+`dpkg-query -S`でpicdplayer package所有だった。kioskはactive、MainPID 101577は
+`picdplayer-wpe`、Web/Network processが存在し、Cage/Chromium processは検出されなかった。
+利用者の表示・リモコン操作確認とagentのprocess/package観測を区別する。
+長押し等のCEC網羅確認、cold boot、異常終了fallback、DRM解放/再起動、長期安定性、
+sandbox隔離の有効性は未確認。追加依存精査・完全固定のv1.0までの保留は維持する。
+利用者は開発中のWPE主runtime運用を優先し、復旧の追加検討は必要時に再開する方針とした。
+既存fallbackと明示Chromium選択は残すが、実機復旧試験を現段階のcommit/取り込み条件にはしない。
+
+## 標準WPE build/package/deployの統合（2026-10-12 UTC）
+
+標準`build-container.sh`はWPE kioskをONにし、CMake install規則でlauncherと
+`/opt/picdplayer-wpe/2.54.0`のruntimeを同じpackageへ収める。header/pkg-configは除外する。
+`build-wpe-runtime.sh`はsource/patch/設定hashでSDKをcacheし、cache miss時だけ専用Docker
+volumeでconfigure/build/stageする。BuildKit attestationの変動で再compileしないよう、volume側は
+imageのRootFS layer一覧を比較する。既存試験volumeを使った生成と、続くSDK cache hitを確認した。
+通常build imageにlauncher用GBM/DRM/XKB headerとruntime依存を追加し、標準package生成が成功した。
+CPack/shlibdepsが外部依存を生成し、bubblewrap/xdg-dbus-proxyだけを明示追加する。
+
+deployは2.54.0の導入を確認し、active kioskのMainPIDが期待runtimeへexecされるまで最大35秒確認する。
+fallbackをWPE成功とせず、inactive kioskは起動しない。Chromium明示運用は期待値を指定できるが、
+target設定は変更しない。sudoersは既存の固定dpkg installだけで足り、追加権限は要求しない。
+packageは既存/etc設定を変更せず、依存不足時のapt導入・設定変更は利用者が行う。
+
+Linux/aarch64の全CTest 58/58と、使い捨てcontainerのpackage install/upgrade/reinstall/purgeが
+成功した。packageにはlauncher、Web/Network/GPU process、InjectedBundle、Inspector資産を含み、
+SDK header/pkg-configを含まないこととlauncher versionを検査した。deploy mockは実際のremote
+検証shellを実行し、fallback/exec未完了/明示Chromiumを区別する。CIの実行は未確認であり、
+SDK Actions cacheと初回source build向け180分上限を設定した。
+この実装・container検証時点ではPiへの新package deploy・sudoers変更・service変更は行っていない。
+先の手動配置による表示/再生確認と、新packageでの更新確認は別である。
+完全固定・clean rebuild・security/license精査のv1.0までの保留方針は維持する。
+
+## Source-built WPEのPi切り替え確認（2026-10-12 UTC）
+
+checkpoint `c0fe77e`のlauncher/wrapper/unitと、2patch付きWPE 2.54.0の成果物を転送した。
+bundleは`wpe-2.54.0-c0fe77e.tar.gz`、転送前後のSHA256は
+`be2f64426c489bd000eac974ab6e786e05561822ad799beacd8d142076732eec`で一致した。
+利用者がsudoによる配置・設定・kiosk切り替えを行い、TVの画面表示と再生に問題がないことを
+確認した。runtimeは`/opt/picdplayer-wpe/2.54.0`、launcherは
+`/usr/local/libexec/picdplayer-wpe`。daemonとホストlibraryはこの切り替えで置き換えていない。
+Chromiumのbinaryは復旧用に残し、従来wrapper/unitは
+`/var/backups/picdplayer-wpe-c0fe77e`へ保全する手順を提示した。
+
+確認後のsudoなしSSH観測ではkioskはactive、MainPID 101044は`picdplayer-wpe`、
+`WPENetworkProcess`/`WPEWebProcess`が存在し、Cage/Chromium processは検出されなかった。
+従って今回の表示確認はChromium fallbackではなくWPEでの初回正常経路の実機確認である。
+利用者による実表示/再生確認と、agentによるprocess観測を区別する。
+CECの網羅的操作、cold boot、異常終了後fallback、DRM解放/再起動、長期性能、sandbox隔離の
+有効性は未確認。追加依存精査/完全固定のv1.0までの保留方針は維持し、#219全体を完了とはしない。
+
+以下のChromium稼働・Pi未確認という記録は、切り替え前の各調査時点の状態である。
+
 ## Trixie WPE source build成立性調査（#221、2026-10-12）
 
 [#221](https://github.com/udonchan/picdplayer/issues/221)を作成し、公式WPE WebKit 2.54.0 sourceを
