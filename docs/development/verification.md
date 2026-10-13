@@ -2,6 +2,26 @@
 
 更新日: 2026-10-13。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## 旧Draft PRの資料保全と統合経路（2026-10-13 UTC）
+
+利用者の指示により、`feature/25-background-enrichment`をmaster向けの単一後継PRとして扱い、
+CIと差分確認後に通常mergeする。旧Draft #217/#192/#194は相互リンクで置換先を示してcloseする対象だが、
+branch/worktreeは削除しない。以後の開発を更新済みmasterから切り直すための整理で、旧PRをすべて
+mergeする操作ではない。原ワークスペースの未commit作業と既存SDK cacheは保持する。
+
+旧PRの固有資料は現在のbranchへ全コピーされていないため、次の固定commit参照で保全する。
+PRのcloseはこれらの履歴・試験証拠を最新実装の結果に読み替えたり、消去したりするものではない。
+
+| 旧PR | 保全対象と固定参照 | 現在の実装との境界 |
+|---|---|---|
+| [#217](https://github.com/udonchan/picdplayer/pull/217) | [元のverification全文](https://github.com/udonchan/picdplayer/blob/1f953606137b5defb616a3ffae02d9b4a57647de/docs/development/verification.md)。単一画像worker、runtime、Pi Chromium CDP、実HTTP/WS component、Draft/local review、provider/OFF gate統合の元のhash・失敗・cleanup条件を保持 | runtime/fixtureは後継branchへ再利用し、WPE build・Settings・追加回帰を合わせた。過去のPi Chromium観測はWPE実写真の証拠ではない |
+| [#192](https://github.com/udonchan/picdplayer/pull/192) | [Pi 3実験報告](https://github.com/udonchan/picdplayer/blob/f2b401020c8e7bead81de743d01e6bde9e4d0f85/docs/development/reports/2026-10-05-wpeplatform-drm-poc/README.md)、[元PoC launcher・Custom UI fixture・MainPID-tree CPU/PSS測定tool](https://github.com/udonchan/picdplayer/tree/f2b401020c8e7bead81de743d01e6bde9e4d0f85/poc/wpe-platform) | 現masterに元PoC directory/reportはない。#222の標準source-build/packageへの採用とは別の実験資料。profile条件の異なるPSS値を比較結論にしない |
+| [#194](https://github.com/udonchan/picdplayer/pull/194) | [元のbounded試験・rescue timer script](https://github.com/udonchan/picdplayer/blob/5f94fe7a7ff0d79ea1dcac7e756e3cf5101a8b4d/poc/wpe-platform/run-pi.sh)、[操作・復旧手順](https://github.com/udonchan/picdplayer/blob/5f94fe7a7ff0d79ea1dcac7e756e3cf5101a8b4d/poc/wpe-platform/README.md)、[元のInspector/TV/復旧検証](https://github.com/udonchan/picdplayer/blob/5f94fe7a7ff0d79ea1dcac7e756e3cf5101a8b4d/docs/development/verification.md) | #192上のstacked trialで、現在の標準runtimeへsid rootfs切替やrescue scriptを移植しない。#222で製品採用経路を置換したが、全復旧条件を検証済みとは扱わない |
+
+統合対象は単一背景runtimeとSettings接続。API key設定、実provider認証・WPE実写真、背景保存・
+slideshow・full decode memory上限は残課題とし、#25などの親/子Issueを自動closeしない。
+WPEの正式供給・cold boot・長期性能・sandbox/復旧検証も旧PR整理をもって完了扱いにしない。
+
 ## 単一画像runtime試験packageのPi配備（2026-10-13 UTC）
 
 利用者のdeploy指示により、`wpe-primary-runtime`の未commit runtime差分から生成済みの標準

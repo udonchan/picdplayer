@@ -62,6 +62,8 @@ flowchart TD
 PlayerController、MediaStateTracker、MetadataSessionは別々の責務を持ち、
 EnrichmentServiceがmetadataの世代・worker・cacheを管理し、Presentation Modelがprovider非依存の表示情報と診断値を公開する。CEC、API、UIが独自の再生状態を所有しない。
 Viewは操作意図と一時的なfocusを扱えるが、再生結果はdaemonのPresentation Modelだけから確定する。
+任意のArtist Backgroundもdaemonが有効状態・取得世代・現行画像参照を所有し、標準Viewは
+同一origin画像を表示するだけとする。背景取得失敗・OFFはCD再生と通常metadataを妨げない。
 
 | 実行場所 | 責務 |
 |---|---|
