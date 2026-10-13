@@ -11,6 +11,16 @@ async function main() {
   const sockets = [];
   const posts = [];
   const policyPosts = [];
+  const backgroundPosts = [];
+  const pendingBackgroundGets = [];
+  const pendingBackgroundPosts = [];
+  let background = { requested: false, effective: false, available: false, unavailable_reason: 'runtime_unavailable' };
+  let backgroundGetStatus = 200;
+  let backgroundPostStatus = 204;
+  let deferBackgroundGet = false;
+  let deferBackgroundPost = false;
+  let backgroundOffline = false;
+  let backgroundGets = 0;
   const pendingPolicyGets = [];
   let deferPolicyGet = false;
   let policyPostStatus = 204;
@@ -54,6 +64,7 @@ async function main() {
     button.dataset.command = command;
     return button;
   });
+  node('settings-close').disabled = false; // Matches the always-enabled Back button in player.html.
   vm.runInNewContext(source, {
     Date: class extends Date { static now() { return now; } },
     performance: { now: () => 1 },
@@ -80,6 +91,20 @@ async function main() {
         if (deferPolicyGet) return new Promise((resolve) => pendingPolicyGets.push(resolve));
         return { ok: policyGetStatus === 200, status: policyGetStatus, json: async () => ({ ...policy }) };
       }
+      if (url === '/api/artist-background') {
+        if (backgroundOffline) throw new Error('offline');
+        if (options?.method === 'POST') {
+          const body = JSON.parse(options.body);
+          backgroundPosts.push(body);
+          if (deferBackgroundPost) return new Promise((resolve) => pendingBackgroundPosts.push(resolve));
+          if (backgroundPostStatus === 204) background = { ...background, requested: body.enabled,
+            effective: body.enabled && background.available };
+          return { status: backgroundPostStatus };
+        }
+        backgroundGets += 1;
+        if (deferBackgroundGet) return new Promise((resolve) => pendingBackgroundGets.push(resolve));
+        return { ok: backgroundGetStatus === 200, status: backgroundGetStatus, json: async () => ({ ...background }) };
+      }
       if (options?.method === 'POST' && url !== '/api/ui-boot') {
         posts.push(url);
         postBodies.push(options.body);
@@ -97,14 +122,20 @@ async function main() {
   assert(sockets[1].url.endsWith('/api/navigation'));
   assert.equal(controls[1].disabled, false); // play
   assert.equal(controls[2].disabled, true); // pause
-  const navigation = (action) => sockets[1].onmessage({ data: JSON.stringify({ action }) });
+  const navigation = (action) => sockets.at(-1).onmessage({ data: JSON.stringify({ action }) });
   assert.equal(controls[6].disabled, false);
+  assert.equal(backgroundGets, 0); // Merely loading the Player never asks for background settings.
   controls[6].onclick({ detail: 1 });
   assert.equal(controls[6].disabled, false);
   await new Promise(setImmediate);
   assert.equal(node('policy-single').dataset.selected, 'true');
   assert.match(node('settings-persistence').textContent, /session only/);
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Startup / Startup.');
+  assert.equal(node('background-on').disabled, true);
+  assert.equal(node('background-off').disabled, false);
+  assert.equal(node('background-off').dataset.selected, 'true');
+  assert.match(node('settings-background-status').textContent, /runtime image delivery/);
+  assert.deepEqual(backgroundPosts, []);
   for (const [requested, effective, expected] of [
     ['startup', 'restored', 'Startup / Restored'],
     ['saved', 'session', 'Saved / Session only'],
@@ -231,7 +262,7 @@ async function main() {
   pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
     requested: { ...policy.requested, mode: 'SINGLE' } }) });
   await new Promise(setImmediate);
-  assert.equal(node('policy-repeat').dataset.focused, 'true'); // Preserve deliberate focus.
+  assert.equal(node('settings-close').dataset.focused, 'true'); // Skip disabled choices and preserve deliberate focus.
   keys.keydown({ key: 'Escape', preventDefault() {} });
   controls[6].onclick({ detail: 1 });
   keys.keydown({ key: 'Escape', preventDefault() {} });
@@ -255,9 +286,11 @@ async function main() {
   keys.keydown({ key: 'Tab', preventDefault() {} });
   assert.equal(activeElement, node('settings-close'));
   keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('policy-single')); // Focus stays inside the dialog.
+  assert.equal(activeElement, node('background-off')); // Focus stays inside the dialog, skips unavailable On.
+  keys.keydown({ key: 'Tab', preventDefault() {} });
+  assert.equal(activeElement, node('policy-single'));
   keys.keydown({ key: 'Tab', shiftKey: true, preventDefault() {} });
-  assert.equal(activeElement, node('settings-close'));
+  assert.equal(activeElement, node('background-off'));
   keys.keydown({ key: 'Escape', preventDefault() {} });
   policyGetStatus = 503;
   controls[6].onclick({ detail: 1 });
@@ -266,6 +299,139 @@ async function main() {
   assert.equal(node('settings-policy-status').textContent, 'Read policy unavailable. Playback is unaffected.');
   keys.keydown({ key: 'Escape', preventDefault() {} });
   policyGetStatus = 200;
+  // Background is independent of Read Policy and never optimistically enables photos.
+  const reopenSettings = async () => {
+    navigation('back');
+    controls[6].onclick({ detail: 1 });
+    await new Promise(setImmediate);
+  };
+  await reopenSettings();
+  node('background-on').onclick({ detail: 1 });
+  assert.equal(backgroundPosts.length, 0);
+  node('background-off').onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.deepEqual(backgroundPosts, [{ enabled: false }]);
+  background = { requested: false, effective: false, available: true, unavailable_reason: null };
+  await reopenSettings();
+  assert.equal(node('background-on').disabled, false);
+  assert.equal(backgroundPosts.length, 1);
+  node('background-on').onclick({ detail: 1 });
+  node('background-on').onclick({ detail: 1 });
+  assert.equal(node('background-off').dataset.selected, 'true'); // No optimistic update.
+  await new Promise(setImmediate);
+  assert.deepEqual(backgroundPosts.at(-1), { enabled: true });
+  assert.equal(backgroundPosts.length, 2); // No duplicate in-flight mutation.
+  assert.equal(node('background-on').dataset.selected, 'true');
+  assert.equal(node('settings-background-state').textContent, 'Requested / effective: On / On.');
+  node('background-off').onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.equal(node('background-off').dataset.selected, 'true');
+  const postCount = backgroundPosts.length;
+  for (const status of [409, 403, 500, 200]) {
+    backgroundPostStatus = status;
+    node('background-on').onclick({ detail: 1 });
+    await new Promise(setImmediate);
+    assert.match(node('settings-background-status').textContent, /change failed/);
+    assert.equal(node('background-off').dataset.selected, 'true');
+  }
+  assert.equal(backgroundPosts.length, postCount + 4);
+  backgroundPostStatus = 204;
+  backgroundGetStatus = 503;
+  node('background-on').onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.match(node('settings-background-state').textContent, /Unknown/); // Accepted is not an observed result.
+  assert.equal(node('background-on').disabled, true);
+  backgroundGetStatus = 200;
+  background = { requested: false, effective: false, available: true, unavailable_reason: null };
+  await reopenSettings();
+  backgroundOffline = true;
+  node('background-on').onclick({ detail: 1 });
+  await new Promise(setImmediate);
+  assert.match(node('settings-background-status').textContent, /change failed/);
+  backgroundOffline = false;
+  for (const malformed of [{}, { ...background, requested: 'false' }, { ...background, effective: 0 },
+    { ...background, available: 'true' }, { ...background, unavailable_reason: undefined },
+    { ...background, requested: false, effective: true }]) {
+    const valid = background;
+    background = malformed;
+    await reopenSettings();
+    assert.equal(node('background-on').disabled, true);
+    assert.equal(node('background-off').disabled, true);
+    assert.match(node('settings-background-state').textContent, /Unknown \/ Unknown/);
+    assert.equal(node('policy-repeat').disabled, false);
+    background = valid;
+  }
+  background = { requested: false, effective: false, available: false, unavailable_reason: 'private-provider-url-or-key' };
+  await reopenSettings();
+  assert.equal(node('background-on').disabled, true);
+  assert.equal(node('background-off').disabled, false);
+  assert(!node('settings-background-status').textContent.includes(background.unavailable_reason));
+  for (const reason of ['key_missing', 'metadata_disabled', '__proto__']) {
+    background.unavailable_reason = reason;
+    await reopenSettings();
+    assert.equal(node('background-on').disabled, true);
+    assert(!node('settings-background-status').textContent.includes('__proto__'));
+  }
+  backgroundGetStatus = 503;
+  await reopenSettings();
+  assert.equal(node('background-on').disabled, true);
+  assert.equal(node('policy-repeat').disabled, false);
+  assert.match(node('settings-background-state').textContent, /Unknown/);
+  backgroundGetStatus = 200;
+  policyGetStatus = 503;
+  background = { requested: false, effective: false, available: true, unavailable_reason: null };
+  await reopenSettings();
+  assert.equal(node('background-on').disabled, false);
+  assert.equal(node('policy-single').disabled, true);
+  policyGetStatus = 200;
+  // A late GET from an earlier opening must not replace the current state.
+  deferBackgroundGet = true;
+  await reopenSettings();
+  assert.equal(node('background-on').disabled, true);
+  await reopenSettings();
+  pendingBackgroundGets.pop()({ ok: true, json: async () => ({ ...background }) });
+  await new Promise(setImmediate);
+  pendingBackgroundGets.shift()({ ok: true, json: async () => ({ requested: true, effective: true,
+    available: true, unavailable_reason: null }) });
+  await new Promise(setImmediate);
+  assert.equal(node('background-off').dataset.selected, 'true');
+  deferBackgroundGet = false;
+  // Reopening during POST retains its guard, then re-reads the authoritative result.
+  deferBackgroundPost = true;
+  node('background-on').onclick({ detail: 1 });
+  const writingCount = backgroundPosts.length;
+  await reopenSettings();
+  node('background-on').onclick({ detail: 1 });
+  assert.equal(backgroundPosts.length, writingCount);
+  background = { ...background, requested: true, effective: true };
+  pendingBackgroundPosts.shift()({ status: 204 });
+  await new Promise(setImmediate);
+  assert.equal(node('background-on').dataset.selected, 'true');
+  assert.equal(node('background-on').disabled, false);
+  deferBackgroundPost = false;
+  // Tab and semantic navigation share focus, including background selection and Back.
+  node('background-off').focus();
+  keys.keydown({ key: 'Tab', preventDefault() {} });
+  assert.equal(activeElement, node('background-on'));
+  now += 300;
+  navigation('left');
+  assert.equal(node('background-off').dataset.focused, 'true');
+  navigation('select');
+  await new Promise(setImmediate);
+  assert.equal(node('background-off').dataset.selected, 'true');
+  now += 300;
+  const keyboardCount = backgroundPosts.length;
+  node('background-on').onclick({ detail: 0 });
+  navigation('select');
+  await new Promise(setImmediate);
+  assert.equal(backgroundPosts.length, keyboardCount + 1);
+  assert.deepEqual(backgroundPosts.at(-1), { enabled: true });
+  const deduplicatedCount = backgroundPosts.length;
+  navigation('select');
+  await new Promise(setImmediate);
+  assert.equal(backgroundPosts.length, deduplicatedCount + 1); // A distinct same-source press remains valid.
+  navigation('back');
+  assert.equal(node('settings-panel').hidden, true);
   failPost = false;
   postStatus = 204;
   snapshot.revision = 6;

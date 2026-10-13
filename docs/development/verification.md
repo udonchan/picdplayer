@@ -1,6 +1,201 @@
 # 検証状況と残課題
 
-更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-13。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## 旧Draft PRの資料保全と統合経路（2026-10-13 UTC）
+
+利用者の指示により、`feature/25-background-enrichment`をmaster向けの単一後継PRとして扱い、
+CIと差分確認後に通常mergeする。旧Draft #217/#192/#194は相互リンクで置換先を示してcloseする対象だが、
+branch/worktreeは削除しない。以後の開発を更新済みmasterから切り直すための整理で、旧PRをすべて
+mergeする操作ではない。原ワークスペースの未commit作業と既存SDK cacheは保持する。
+
+旧PRの固有資料は現在のbranchへ全コピーされていないため、次の固定commit参照で保全する。
+PRのcloseはこれらの履歴・試験証拠を最新実装の結果に読み替えたり、消去したりするものではない。
+
+| 旧PR | 保全対象と固定参照 | 現在の実装との境界 |
+|---|---|---|
+| [#217](https://github.com/udonchan/picdplayer/pull/217) | [元のverification全文](https://github.com/udonchan/picdplayer/blob/1f953606137b5defb616a3ffae02d9b4a57647de/docs/development/verification.md)。単一画像worker、runtime、Pi Chromium CDP、実HTTP/WS component、Draft/local review、provider/OFF gate統合の元のhash・失敗・cleanup条件を保持 | runtime/fixtureは後継branchへ再利用し、WPE build・Settings・追加回帰を合わせた。過去のPi Chromium観測はWPE実写真の証拠ではない |
+| [#192](https://github.com/udonchan/picdplayer/pull/192) | [Pi 3実験報告](https://github.com/udonchan/picdplayer/blob/f2b401020c8e7bead81de743d01e6bde9e4d0f85/docs/development/reports/2026-10-05-wpeplatform-drm-poc/README.md)、[元PoC launcher・Custom UI fixture・MainPID-tree CPU/PSS測定tool](https://github.com/udonchan/picdplayer/tree/f2b401020c8e7bead81de743d01e6bde9e4d0f85/poc/wpe-platform) | 現masterに元PoC directory/reportはない。#222の標準source-build/packageへの採用とは別の実験資料。profile条件の異なるPSS値を比較結論にしない |
+| [#194](https://github.com/udonchan/picdplayer/pull/194) | [元のbounded試験・rescue timer script](https://github.com/udonchan/picdplayer/blob/5f94fe7a7ff0d79ea1dcac7e756e3cf5101a8b4d/poc/wpe-platform/run-pi.sh)、[操作・復旧手順](https://github.com/udonchan/picdplayer/blob/5f94fe7a7ff0d79ea1dcac7e756e3cf5101a8b4d/poc/wpe-platform/README.md)、[元のInspector/TV/復旧検証](https://github.com/udonchan/picdplayer/blob/5f94fe7a7ff0d79ea1dcac7e756e3cf5101a8b4d/docs/development/verification.md) | #192上のstacked trialで、現在の標準runtimeへsid rootfs切替やrescue scriptを移植しない。#222で製品採用経路を置換したが、全復旧条件を検証済みとは扱わない |
+
+統合対象は単一背景runtimeとSettings接続。API key設定、実provider認証・WPE実写真、背景保存・
+slideshow・full decode memory上限は残課題とし、#25などの親/子Issueを自動closeしない。
+WPEの正式供給・cold boot・長期性能・sandbox/復旧検証も旧PR整理をもって完了扱いにしない。
+
+## 単一画像runtime試験packageのPi配備（2026-10-13 UTC）
+
+利用者のdeploy指示により、`wpe-primary-runtime`の未commit runtime差分から生成済みの標準
+`picdplayer_0.1.0_arm64.deb`を`bash scripts/deploy.sh`で`picdplayer-pi`へ配備した。
+既存の限定された`sudo -n dpkg -i`権限を使い、sudoers・起動設定・key設定・背景ONは変更しない。
+packageのpostinstにより稼働中daemon/kioskは再起動し、deploy scriptはactive→activeと実効WPEを
+確認して成功した。既知の35秒待機問題は今回発生せず、そのcodeを修正・回避していない。
+
+配備後の観測は次のとおり。これは写真表示や試聴の確認ではない。
+
+- package: `picdplayer 0.1.0 arm64 install ok installed`。
+- daemon: active/running、MainPID `102754`、観測時のNRestarts `0`。
+- kiosk: active/running、MainPID `102778`、実process `picdplayer-wpe`、観測時のNRestarts `0`。
+- launcher: `--version`は`2.54.0`。daemon・launcher・WebKit libraryのpackage所有を確認した。
+- 標準UIのinstall fileと実API配信内容のSHA256はともに`aa359563f0f22a70cf5bdce57517fa6406ed817cac0d6f5fd24d7dc77355013d`で、最後のlocal Chrome試験と同じ内容。
+- Read Policyは配備前後ともSINGLE、75 frames/2 matches/3 attempts/10000 ms、startup由来、persistence_configured=false。
+- 背景状態はrequested/effective/availableがすべてfalse、理由`key_missing`。metadata機能は有効だが、形式上有効なproject keyの未指定・不正・読込不可を区別しないこの理由によりONできない。
+
+同日12:28 UTC、利用者からこの配備版で実機CEC操作と再生→停止を確認し、backgroundをONに
+できないことも確認したとの報告を受けた。CEC/再生→停止は利用者による実機確認済みとして記録する。
+背景ON不可は配備後に観測した`key_missing`と整合し、利用不能時のgateが実機UIでも確認された。
+操作した個々のCEC keyやSettingsの全navigation経路、音声品質・長時間継続はこの報告から推定しない。
+
+serviceの起動・runtime/package同一性はPiで観測済み、CEC/再生→停止は上記の利用者確認済みだが、
+有効なkeyでの背景ON、写真取得/表示、取得中の再生継続、OFF時の写真消去は実機未確認である。
+写真の実機試験には、serviceが読める保護された
+project key fileと起動引数を利用者が別途設定し、再起動後にSettingsで明示ONする必要がある。
+personal keyのclient-keyは未対応であり、keyの値をargv・EnvironmentFile・chat/logへ置かない。
+同日12:54 UTC、利用者はAPI key設定を残課題へ残す方針を示した。設定・実provider認証・写真の
+WPE/Pi試験は今回のcommit/pushを待たせる条件にせず、完了済みとは記録しない。
+
+## 単一画像runtime接続の開発差分（2026-10-13 UTC）
+
+利用者の指示により、ここまでのSettings・画像worker部品・保持済みWPE文書を`699f627`
+（`Checkpoint background settings and image worker integration`）としてlocal commitに保存した。
+commit直前の全CTestは59/59成功し、直後のworktreeはclean。作業branchは
+`feature/25-background-enrichment`、directoryとWPE SDK cacheは従来の`wpe-primary-runtime`を保持する。
+元ワークスペースとDraft #217のworktreeは変更していない。この節は`699f627`後の開発・検証記録である。
+配備と利用者による実機確認は前節を参照する。利用者の追加指示に基づきこの単位をcommit・branch
+pushするが、PR作成・Git merge/cherry-pick・master統合は別の操作として行わない。
+
+Draft #217の単一画像runtime・同一origin配信・optional snapshot参照・標準rendererを再利用する。
+前回のSettingsとRead Policy保存を保持し、master/WPEのCMake全体を旧branchの内容で置換しない。
+既定OFF、keyだけのprovider要求0、明示ON、OFFで協調取消・保持画像/参照の即時失効を維持する。
+metadataをcompileしない構成でも`metadata_disabled`を返すよう、PlayerSessionの初期policyを合わせる。
+候補と画像は空cache pathで一時取得し、disk cacheの採用・保存schema・slideshow・full decode後の
+memory上限はこの単位へ混ぜない。画像の権利判断は利用者に委ねる。写真は配布物へ同梱しない。
+
+以下の過去節の「runtime未接続・ON409」は`699f627`までの境界で、今回の開発差分と区別する。
+通常daemonの実provider、WPE/Pi背景表示、実音声・実CECは未検証であり、合成fixtureやlocal Chromeを
+実機確認とは扱わない。
+
+最終差分で`bash scripts/build-container.sh`はcached WPE SDKを再利用して成功し、標準arm64 Debian
+packageを再生成した。network-noneの全CTestは61/61成功。`699f627`の59件に、実HTTP/WSの
+`background_runtime_transport`とCDP helperの`background_cdp_fixture`を加えた構成である。
+transportは合成provider/画像応答を使い、14 snapshot revision、OFF/artist/辞退/discによる旧参照失効と
+metadata/cover/backgroundの独立更新を確認した。通常daemon・実光学drive・実音声とは区別する。
+`bash scripts/test-package-lifecycle.sh`も成功し、Read Policy保存・Settings回帰は維持した。
+
+別build `build-container/background-no-metadata`ではAPI=ON/METADATA=OFF/WPE=OFFの44/44 CTestが
+成功した。初回は追加key試験が非compile構成に未対応CLI optionを渡し、daemonが起動しない失敗を
+検出した。CMakeをsource of truthとしてmetadata有無を試験へ渡し、非compile構成ではkey試験だけを
+除外した。基本daemon/API/OFFとmetadata_disabledの検証は残し、標準構成のkey_missing・valid key・
+session ON/OFF試験も通過した。API=OFF/METADATA=ON/WPE=OFFのproduction buildも成功したが、
+その構成の全CTestや全option組合せが成功したとは扱わない。
+
+macOS Chrome `155.0.8059.40`の隔離headless instanceで、合成PNG/JPEG/WebP、decode失敗→cover、
+default fallback、OFF、新世代、旧callback無視、1920×1080・640×720の9ケースを確認した。
+横overflow・JS例外なし。狭い画面の既存縦scrollは許可し、同じSTOPPED snapshotのDOM mutationは0。
+このbrowser試験はWS stubとfixture render呼出を使い、backendの実HTTP/WS試験とは別である。
+新renderer上でもSettingsの1920×1080・720×720・390×844×利用可否2状態の6ケースが成功した。
+証跡はworkspace外の`background-runtime-chrome-evidence`へ保存し、画像・secretをrepositoryへ同梱しない。
+独立したruntime差分レビューは具体的指摘なし。全差分と`git diff --check`を確認した。
+
+Settingsとrendererの結合回帰では、state stream切断中にOFFが204でも読込済み写真が残る問題を
+Nodeで再現した。受理時に表示側の現在参照も失効させ、旧callback/遅延modelから復活させないよう
+修正した。403/409拒否では写真を消さず、REST refresh失敗時も確認済みOFFの失効を維持する。
+追加レビューで、別clientのON/new URIが古いOFF応答を追い越すと新URIまで抑止するP2を検出した。
+OFF応答後の新しいRESTと最新の採用済みsnapshotが同じ参照を返した場合だけ再承認し、採用済み
+snapshotから描画し直すことで修正した。遅延ACKと別clientのONを含む回帰試験が通過し、再レビューで
+指摘の解消を確認した。最終sourceでChromeの9 renderer/6 Settingsケースも再実行して成功した。
+refresh中に新しいlive snapshotが到着した場合はRESTの古いmodelで置換しない。No Disc/null sessionの
+応答を待つ間に新sessionが公開される回帰も追加し、最新のalbum/画像を保持することを確認した。
+この最終sourceを再buildし、標準61/61、metadata非compile構成44/44、package lifecycleを再確認した。
+
+runtimeの検証・配備はlocal checkpoint `699f627`後の未commit差分で行った。今回この単位を新branch
+`feature/25-background-enrichment`へ保存・公開し、GitHubのDraft #217/masterは更新しない。
+slideshow・背景設定保存・full decode memory上限、実provider、通常daemonからWPE/Piの写真表示・
+実音声・実CECの最終統合確認は残る。
+
+## 背景画像workerの統合準備（2026-10-13 UTC）
+
+最新master `f0d44c1`とDraft PR #217のhead `1f95360`に変更がないことを再確認した。
+同PRはOpen/Draft・masterに対して競合中であり、git merge/cherry-pick・commit・pushは行わない。
+この記録は統合準備時点の境界である。その後の利用者指示により、Settings・worker部品・保持済み
+WPE文書の変更をlocal commitで保存してから次のruntime単位へ進む。GitHubへのpush・PR作成・
+merge・deployは別の操作であり、今回のcommit指示には含まれない。
+WPE worktreeに画像workerのheader/source/fixture試験と8 MiB共有上限をそのまま再利用し、
+候補workerのthread宣言順修正も再利用した。これら6ファイルは`git hash-object`でPR #217側と
+同一内容であることを確認した。CMakeはworkerのcompileと試験登録だけを追加し、現在のWPE
+build/package/test設定を保持する。一般provider frameworkや新たなcache方針は導入しない。
+
+この単位はruntime未接続の部品統合である。背景policy・EnrichmentService・画像API・snapshot・
+rendererには手を加えず、既定OFF・ON409、key指定だけのprovider呼出0、前回のSettings差分を
+維持する。試験の取得経路は合成HTTP応答と空cache pathであり、実写真・実provider・secretに
+依存しない。8 MiBは取得/返却bytes上限で、full decode後のmemory上限ではない。
+背景設定の保存・slideshow・runtime画像配信・WPE/Pi表示は今回の完了条件に含めない。
+
+今回の最終sourceで`bash scripts/build-container.sh`を実行し、アプリ・worker・標準arm64 Debian
+packageのbuildが成功した。WPE SDKは再利用し、WebKitの再buildやcache破棄はない。
+network-noneで全CTest 59/59成功。これはmasterの58件と画像worker単体試験1件であり、同じ59件
+だったDraft #217の試験構成とは異なる。runtime transport/CDP試験はまだ取り込んでいない。
+`artist_background_worker`と`artist_background_image_worker`をそれぞれ100回反復して成功し、
+`bash scripts/test-package-lifecycle.sh`も成功した。SettingsとRead Policy保存の既存回帰試験も通過した。
+新規3ファイルを含めてsource/差分を確認し、初期化順・serial失効・取消/shutdown・上限・CMake登録を
+照合した。独立レビューの成功は今回の検証結果に含めない。
+
+次のruntime単位では既存PR #217のpolicy/service/API/presentation/rendererを一緒に扱う。
+静的照合では、同PRのAPI=ON/METADATA=OFF時の利用不能理由についてdaemon試験の期待値
+`metadata_disabled`と実装の`runtime_unavailable`に差がある。今回そのcode/試験は取り込んでおらず、
+後続の統合時に実行して解決する必要がある。通常daemon・実provider・WPE/Pi表示・音声・CECは未検証。
+
+## 背景機能の再開時棚卸し（2026-10-13 UTC）
+
+GitHubの最新masterは`f0d44c1`。PR #174/#175/#176/#213はmerge済みで、Artist識別、
+metadata先行・後続cover、provider/画像取得部品、既定OFF・利用不能APIは作り直さない。
+一方、[Draft PR #217](https://github.com/udonchan/picdplayer/pull/217)はOpenで、単一画像の
+memory-only取得、世代失効、同一origin配信、標準Playerのfallback、session ONを実装済みだが
+master未統合。再確認時のGitHub状態は`CONFLICTING`/`DIRTY`で、今回その競合解消・mergeは行わない。
+以下の過去記録にある「runtime未実装」はmasterとの境界または当時の状態であり、
+未統合branchの実装が存在しないという意味ではない。#25/#49/#50/#51/#177/#178はOpenを維持する。
+
+古い#25/#49/#51本文の製品側包括的許諾確認gateは現在の方針では採用しない。画像の権利・許諾・
+表示条件の判断は利用者に委ね、製品は保証せず、既定OFF・明示ON・外部写真非同梱を維持する。
+PR #217の一時的memory経路と、PR #176のfile cache部品の試験済みは別であり、ディスク保存の
+採否・保持・削除を決定したことにはならない。project keyの`api-key`とpersonal keyの`client-key`も
+区別する。#164、deploy待機時間問題、WPE復旧・正式供給精査は今回の実装に含めない。
+
+今回の最小単位は#178の背景Settings。既存4 field APIへ接続し、利用不能・UnknownではONを
+有効にせず、Read Policyと独立して表示・要求する。背景保存schemaは変更しない。
+背景runtime・slideshowを再実装せず、通常daemon/WPEでの背景の実機確認も行わない。
+作業場所は`wpe-primary-runtime`で、開始時点の4文書の未commit変更を保全する。
+元ワークスペースとDraft #217のworktreeは変更しない。標準buildのWPE SDKはcache再利用を確認した。
+
+背景Settingsのfixtureでは利用不能時のON無効とOFF要求、技術的に利用可能な場合の明示ON/OFF、
+204後の再取得、403/409/500・通信失敗、不正/欠落field・未知理由、閉じる/再表示時の古いGETと
+処理中POSTの重複防止・再取得をNodeで確認した。既存のRead Policy、metadata候補、transportの
+試験も維持する。初回にはfake BackがHTMLと異なりdisabled、再接続後のhelperが旧socketへ入力を
+送るfixtureの不整合を検出し、実DOM/現在のnavigation入力へ合わせて修正した。
+
+`docker build -t picdplayer-build .`は既存layerを再利用し、`bash scripts/build-container.sh`で
+WPE SDKを再利用してアプリ・埋込UIを再build、arm64 Debian packageを生成した。再build後の
+`docker run --rm --network none -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure`
+は58/58成功、`ui_controls_javascript`の10回反復と`bash scripts/test-package-lifecycle.sh`も成功した。
+実装差分の独立レビューで具体的な問題はなく、全diffと`git diff --check`を確認した。
+通常CIに実provider・secretは不要。
+未変更の`ApiCommand::session_id`省略初期化warningは残り、今回の範囲へ修正を混ぜない。
+package lifecycleの削除時warningは、無関係なfile/directoryを保持する試験の期待された結果である。
+
+macOS Google Chrome `155.0.8059.40`のheadless/CDPでは、1920×1080・720×720・390×844を
+利用不能/利用可能の合成API各2状態で計6ケース確認した。横overflowなし、dialog/surfaceはviewport内、
+有効な背景選択肢とBackへTabで到達でき、JS例外と明示選択なしの設定POSTは0。
+狭いviewportではsurface内の縦scrollを許可し、focusとBackの到達を確認した。外部画像は禁止し、
+WebSocketはstubである。これは標準UIのlocal browser試験で、WPE、Pi、provider、実serviceの証拠ではない。
+背景保存、slideshow、通常daemonからWPE/TVへの背景写真表示・音声・実CECは未実装/未検証である。
+
+## WPE移行のmaster統合とレビュー（2026-10-13 UTC）
+
+PR [#222](https://github.com/udonchan/picdplayer/pull/222)をmaster `f0d44c1`へmergeした。
+PR CI [38327626644](https://github.com/udonchan/picdplayer/actions/runs/38327626644)は
+03:06:42 UTCにSUCCESS、mergeは03:07:43 UTC。以下の「CI未確認」は当時の履歴である。
+レビューではdeployの約35秒待機とkioskの最大300秒API待機設定の不一致を確認した。
+API起動が遅い有効な設定でdeployが早期失敗し得るが、修正・遅延起動の再現試験は未実施。
+今回の文書更新ではコード変更も実機操作も行っていない。
 
 ## WPE標準packageのPi更新・CEC操作確認（2026-10-13 UTC）
 

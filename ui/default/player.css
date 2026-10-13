@@ -32,10 +32,49 @@ body {
 }
 
 main {
+  position: relative;
+  z-index: 1;
   max-width: 1540px;
   min-height: 100vh;
   margin: auto;
   padding: clamp(18px, 3vh, 32px) clamp(28px, 4vw, 48px);
+}
+
+.player-background {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(ellipse at top, #202b2e, var(--bg) 75%);
+}
+
+.player-background img {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+}
+
+#background-cover {
+  filter: blur(28px);
+  transform: scale(1.08);
+}
+
+.player-background.has-cover #background-cover,
+.player-background.has-artist #background-artist {
+  opacity: .24;
+}
+
+.player-background.has-artist #background-cover {
+  opacity: 0;
+}
+
+.player-background::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(#10131455, #101314bb);
 }
 
 .connection {

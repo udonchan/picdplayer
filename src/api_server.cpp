@@ -31,7 +31,15 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiUiBootHandler& ui_boot_handler,
                               const ApiArtworkProvider& artwork_provider,
                               const ApiStateProvider& read_history_provider,
-                              const ApiStateProvider& artist_background_provider) {
+                              const ApiStateProvider& artist_background_provider,
+                              const ApiBackgroundArtworkProvider& background_artwork_provider) {
+    if (path.starts_with("/api/presentation/artwork/background/")) {
+        if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
+        if (background_artwork_provider) {
+            if (auto asset = background_artwork_provider(path)) return *asset;
+        }
+        return {404, "application/json", R"({"error":"not_found"})"};
+    }
     if (path == "/api/artist-background" && method == "GET") {
         if (!artist_background_provider)
             return {503, "application/json", R"({"error":"artist_background_unavailable"})"};
@@ -259,6 +267,7 @@ struct ApiServer::Implementation {
     ApiStateProvider state_provider;
     ApiStateProvider read_history_provider;
     ApiStateProvider artist_background_provider;
+    ApiBackgroundArtworkProvider background_artwork_provider;
     ApiCommandHandler command_handler;
     ApiReadPolicyProvider read_policy_provider;
     ApiArtworkProvider artwork_provider;
@@ -302,7 +311,7 @@ struct ApiServer::Implementation {
         };
         return route_api_request(method, path, state_provider,
             local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry,
-            artwork_provider, read_history_provider, artist_background_provider);
+            artwork_provider, read_history_provider, artist_background_provider, background_artwork_provider);
     }
 
     static int send_response(lws* wsi, const ApiResponse& response) {
@@ -439,12 +448,13 @@ struct ApiServer::Implementation {
     Implementation(std::string listen_address, int listen_port, ApiStateProvider provider,
                    ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle,
                    ApiArtworkProvider artwork, ApiStateProvider history_provider,
-                   ApiStateProvider background_provider)
+                   ApiStateProvider background_provider, ApiBackgroundArtworkProvider background_artwork)
         : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
           command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)),
           artwork_provider(std::move(artwork)) {
         read_history_provider = std::move(history_provider);
         artist_background_provider = std::move(background_provider);
+        background_artwork_provider = std::move(background_artwork);
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
         websocket_state = state_provider();
         if (port < 0 || port > 65535) throw std::invalid_argument("API port is outside 0..65535");
@@ -471,11 +481,12 @@ struct ApiServer::Implementation {
 ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
                      ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui,
                       ApiArtworkProvider artwork_provider, ApiStateProvider read_history_provider,
-                      ApiStateProvider artist_background_provider)
+                      ApiStateProvider artist_background_provider, ApiBackgroundArtworkProvider background_artwork_provider)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
                                                         std::move(handler), std::move(policy_provider), std::move(ui),
                                                         std::move(artwork_provider), std::move(read_history_provider),
-                                                        std::move(artist_background_provider))) {}
+                                                        std::move(artist_background_provider),
+                                                        std::move(background_artwork_provider))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

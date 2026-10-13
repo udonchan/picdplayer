@@ -69,14 +69,36 @@ AGENTS.md §11に英語の追加規約を記載し、限定試行は初回と修
 | [#135 Validate metadata HTTP failure handling with deterministic mocks](https://github.com/udonchan/picdplayer/issues/135) | #38の実装後検証。test-only `MetadataOptions::http_get`で429/Retry-After、503再試行、CAA routing、cancel、connection failureからworker ERRORへの変換を確認。loopback TLS fixtureで実`HttpClient`のRetry-After、redirect、本文上限、timeout、private peer拒否をDockerで確認した。古いdisc世代のERRORをsessionが採用しないこと、worker待機中もhardware非依存の再生commandが進むことも確認済み。Piでは『The Slip』の一時cacheによるfresh MusicBrainz lookup、隔離daemonのUS候補によるfresh CAA cover公開、到達不能なHTTPS proxyでのenrichment ERRORと再生位置進行を確認。JP候補のCAAは404で画像なし、元のsystemd daemonとJP候補・再生位置は復元済み。実network断・timeout中の音声無欠落は未確認だが、#135の完了条件に長期安定試験は含めない。長期運転は#184、物理異常媒体・別driveは#146で保留する。 |
 | [#17 Define metadata mapping for unusual TOCs and disc identity](https://github.com/udonchan/picdplayer/issues/17) | 親Issue。[#39 先頭trackが1でないTOC](https://github.com/udonchan/picdplayer/issues/39)ではMusicBrainz medium positionをTOC順の物理track番号へ対応付け、曲数不一致をERRORへする実装とDocker試験を追加した。実機の非1始まりTOC確認は未実施。[#40 同一TOCの識別限界](https://github.com/udonchan/picdplayer/issues/40)が残る。 |
 | [#25 Add artist backgrounds as progressive player enrichment](https://github.com/udonchan/picdplayer/issues/25) | 親Issue。[#48 artist識別](https://github.com/udonchan/picdplayer/issues/48)、[#49 provider/cache](https://github.com/udonchan/picdplayer/issues/49)、[#50 段階的配信](https://github.com/udonchan/picdplayer/issues/50)、[#51 Player表示](https://github.com/udonchan/picdplayer/issues/51)に分割済み。外部写真の表示は標準UI先行とし、Custom UIへ自動注入しない。画像の権利・許諾判断は利用者に委ね、既定OFF・明示ON・画像非同梱を維持する。ディスクキャッシュは別途設計する。 |
-| [#49 Deliver optional artist background images through a bounded cache](https://github.com/udonchan/picdplayer/issues/49) | 作業branchでfanart.tv v3.2の有界parser、候補JSONの有界cache/negative cache、保護されたproject key file設定、選択済みArtist MBIDの別worker取得をDocker/aarch64検証済み。写真1件の有界取得・外形検査・file cache部品も合成fixtureで確認したがruntime未接続。実provider通信、画像のAPI配信、実機表示は未着手。画像利用の権利・許諾判断は利用者に委ね、包括的許諾の製品側確認を実装gateにしない（[検証ノート](verification.md#fanarttv画像の権利条件2026-10-02再確認)）。現行`api-key`はproject key用でpersonal keyには未対応。ディスクキャッシュの採否・保持・削除は独立して検討し、既存file cache部品の存在だけでruntime採用を決めない。 |
-| [#177 Persist user settings for read policy and artist backgrounds](https://github.com/udonchan/picdplayer/issues/177) | #41の保存・優先順位契約を入力に、Read PolicyとArtist Backgroundの明示ON/OFFをdaemonが保存・公開する。PR #179をmergeし、`--settings-file`指定時のRead Policy保存・復元を部分実装した。実daemon APIの再起動試験はDockerとPiの隔離processで確認した。保存値と起動引数の競合、保存失敗時の状態不変をDockerで追加検証した。PiのStateDirectory所有者は確認済みだが、稼働中daemonは保存先未指定で、実serviceの保存・復元は未確認。#176をbaseとするPR #213で背景の既定OFF・利用不可API・即時OFFを部分実装し、key指定だけの候補照会を停止した。ON・保存・UIは未実装で、#49/#51のruntime経路が整うまでは利用可能と表示しない。画像の許諾判断は利用者に委ねる。 |
-| [#50 Support progressive delivery of visual enrichment](https://github.com/udonchan/picdplayer/issues/50) | PR #175をmergeし、MusicBrainz metadataをCAAより先に公開する経路、後続artworkの世代照合、独立した失敗statusをDockerで検証済み。Artist Background自体の配信とPiでの更新順序確認は残り、IssueはOpenを維持する。 |
+| [#49 Deliver optional artist background images through a bounded cache](https://github.com/udonchan/picdplayer/issues/49) | PR #176のfanart.tv有界parser、候補JSON/negative cache、保護されたproject key file、写真1件の有界取得・外形検査・file cache部品はmasterへ統合済み。単一画像のmemory-only runtime取得・不透明な同一origin配信は[旧Draft #217](https://github.com/udonchan/picdplayer/pull/217)から[後継branch](https://github.com/udonchan/picdplayer/tree/feature/25-background-enrichment)へ再利用し、合成fixtureで検証した。API key設定・実provider認証・WPEでの写真表示・full decode memory上限は残課題。画像利用の判断は利用者に委ね、包括的許諾確認を製品側gateにしない（[検証ノート](verification.md#fanarttv画像の権利条件2026-10-02再確認)）。`api-key`はproject key用でpersonal key未対応。ディスク保存の採否・保持・削除は未決定。 |
+| [#177 Persist user settings for read policy and artist backgrounds](https://github.com/udonchan/picdplayer/issues/177) | PR #179の`--settings-file`指定時のRead Policy保存・復元は統合済み。実daemon APIの再起動をDockerとPi隔離processで確認し、保存値と起動引数の競合・保存失敗時の状態不変をDockerで検証した。稼働中Pi serviceは保存先未指定で実service復元は未確認。PR #213の既定OFF・利用不可API・即時OFFも統合済み。session ONは旧#217から後継branchへ再利用しSettingsと接続したが、背景の保存schema・復元は未実装。Read Policyの保存情報を背景へ流用しない。 |
+| [#50 Support progressive delivery of visual enrichment](https://github.com/udonchan/picdplayer/issues/50) | PR #175のmetadata先行・後続artwork世代照合・独立失敗statusは統合済み。背景画像の後続snapshot/WS公開は旧#217から後継branchへ再利用し合成component transportで確認済み。通常daemonとWPE/Piでの写真更新順序・取得中の再生継続確認は残り、IssueはOpenを維持する。 |
+| [#51 Render artist backgrounds and slow slideshow in Player](https://github.com/udonchan/picdplayer/issues/51) | 単一背景画像、artist→blurred cover→default、decode失敗・旧callback失効は旧#217から後継branchへ再利用しSettingsのOFFと整合させた。Pi Chromium/local Chromeの合成fixture確認をWPE/TV実写真確認と読み替えない。複数画像・shuffle・slow crossfade・reduced motion・foreground可読性の実写真確認が残る。Custom UIへ背景を自動注入しない。 |
 | [#48 Expose selected artist identity for enrichment](https://github.com/udonchan/picdplayer/issues/48) | PR #174をmergeしてClose済み。選択済みreleaseのartist-creditから、単一の有効なArtist MBIDだけをEnrichment内部へ渡す。複数IDはAMBIGUOUS、欠損・不正・Various ArtistsはUNAVAILABLE。外部背景provider、Viewへの画像契約は#49/#51へ分離する。 |
 | [#28 Hide the cursor in the Cage kiosk session](https://github.com/udonchan/picdplayer/issues/28) | kiosk上のcursorを非表示にする方法を調査・検証する。 |
 | [#124 Investigate unintended kiosk scrollbar display](https://github.com/udonchan/picdplayer/issues/124) | TVで意図しないscrollbarを目視した。CDPのDOM probeでは1920×1080 viewportにdocument/root/bodyのoverflowや画面外elementを検出できず、Chromium/Cage/Waylandを含む原因は未確定。UIの見た目変更とは切り分けて調査する。 |
 | [#31 Add CEC-driven controls to the Player view](https://github.com/udonchan/picdplayer/issues/31) | Close済みの親Issue。[#54 loopback操作契約](https://github.com/udonchan/picdplayer/issues/54)、[#55 CEC navigation配信](https://github.com/udonchan/picdplayer/issues/55)、[#56 Player操作UI](https://github.com/udonchan/picdplayer/issues/56)に分割済み。#54はPR #168、#55はPR #167、#56はPR #169をmergeしてClose済み。Piで上下左右・決定・Back、再生/音声・一時停止・停止、右方向キー約2秒長押し後の選択停止を確認した。CECとChromium keydownの二重入力を#56で抑制した。別TV・入力切替時の挙動は未確認。metadata候補pickerは[#166](https://github.com/udonchan/picdplayer/issues/166)で別途扱う。 |
-| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | PR #180でRead PolicyのSINGLE/REPEAT選択と詳細値表示を実装した。#177の任意保存はRead Policyのみ部分実装済み。SettingsはAPI由来のrequested/effectiveの出所も別々に表示し、読込中・失敗・欠損fieldをUnknownとして扱う。Artist Backgroundの明示ON/OFFは#49/#51のruntime接続後に扱い、権利判断が利用者に委ねられることを説明する。PiのChromium/CDPで1920×1080表示とREPEAT→SINGLE操作を確認。TV実機でBackボタンへCEC方向キーで移れない問題を確認して修正し、Node回帰試験は通過、Piへ再デプロイ済み。出所表示のPi実表示、修正版のCEC実操作と実serviceでの保存・復元は未確認。 |
+| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | PR #180のRead Policy選択・詳細表示は統合済み。背景APIのrequested/effective/availableと理由を表示し、利用不能時のON無効、session限りの明示ON/OFF要求とCEC/keyboard/pointer操作を後継branchで追加した。背景保存は未実装。権利判断は利用者に委ねる。過去のPi Chromium/CDPでRead Policy表示と操作、Back問題の修正・再deployを確認した。今回の配備版では実機CEC・再生→停止・key_missing時の背景ON不可を利用者が確認済み。有効なkeyでのONと写真表示、Settingsの全CEC経路・実service復元は未確認。 |
+
+2026-10-13の統合準備では、Draft #217の既存画像worker・共有上限・fixture試験と候補workerの
+thread宣言順修正をWPE worktreeの開発差分として再利用した。CMakeへの最小登録だけを
+行い、PR全体の競合解消・mergeやruntime ONは行わない。前回の背景Settingsは保持する。
+詳細と今回の検証範囲は[検証状況](verification.md#背景画像workerの統合準備2026-10-13-utc)を参照する。
+
+その後、利用者指示によりSettings・worker部品・保持済みWPE文書をlocal commit `699f627`へ保存した。
+今回の開発branchでは、Draft #217の単一画像runtime・API・optional snapshot参照・標準fallbackを
+再利用し、前回のSettingsと接続する。GitHubのmaster統合とは区別する。#25/#49/#50/#51/#177/#178は
+Openを維持し、slideshow・背景保存・full decode memory上限・通常daemon/WPE/Pi確認は残る。
+記録は[検証状況](verification.md#単一画像runtime接続の開発差分2026-10-13-utc)を参照する。
+
+利用者指示でこの試験packageをPiへ配備し、package・稼働service・WPE 2.54.0の同一性を観測した。
+利用者が実機CEC操作・再生→停止・backgroundのON不可を確認した。背景APIの`key_missing`と
+整合するが、写真の取得/表示・取得中の再生継続・OFF時の消去は未確認。鍵設定と明示ONを含む
+写真試験へ残す。[配備記録](verification.md#単一画像runtime試験packageのpi配備2026-10-13-utc)参照。
+利用者の方針によりAPI key設定は後続の残課題とし、今回のcommit/pushの前提条件にはしない。
+今回の公開単位は単一背景runtimeとSettings接続であり、#25全体や写真の実機受入完了とは扱わない。
+旧Draft #217/#192/#194は単一の後継PRとmerge済み#222で実装提案を置換し、固有の履歴・試験toolは
+[固定commit参照](verification.md#旧draft-prの資料保全と統合経路2026-10-13-utc)で保存する。
+PRのcloseで関連Issueの残条件を消さず、元branch/worktreeとSDK cacheも自動削除しない。
 
 ## 設計を先に確定する作業
 
@@ -140,19 +162,18 @@ README、Guide、Design、Manual、Developmentと、History/旧パスの案内�
 
 ## WPE主runtimeへの移行
 
-Chromiumを安全な切り戻し選択肢として残し、WPEを主runtimeとする移行候補を
-`feature/wpe-primary-runtime`で実装中。2026-10-12にInspector診断のdeadline・異常応答を補修し、
-標準Linux/aarch64 build・CTest 58/58・package lifecycleを確認した。ただし標準buildは
-WPE SDK無効でlauncherを含まず、Piの稼働runtimeもCage/Chromiumのままである。
-その後、利用者がsource-built WPE 2.54.0へPiのkioskを切り替え、TVの画面表示と再生を確認した。
+WPEを主runtimeとする標準build/package/deployをPR #222でmasterへ取り込んだ
+（`f0d44c1`）。Chromiumの明示選択・fallback実装は保持し、実機復旧の確認済みを意味しない。
+標準Linux/aarch64 build・CTest 58/58・package lifecycleとPR CIの成功を確認した。
+利用者が標準packageをPiへdeployし、TVリモコンによるアルバム選択・再生・停止を確認した。
 sudoなしのprocess観測でもWPEがMainPIDで、Chromium fallbackではないことを確認した。
-詳細と未検証範囲は[検証状況](verification.md#source-built-wpeのpi切り替え確認2026-10-12-utc)を参照する。
+詳細と未検証範囲は[検証状況](verification.md#wpe標準packageのpi更新cec操作確認2026-10-13-utc)を参照する。
 
 | Issue | 主な範囲 |
 |---|---|
 | [#219](https://github.com/udonchan/picdplayer/issues/219) | WPE主serviceの起動・終了・DRM解放・失敗後のChromium復旧を実機で確認する。mock試験やserviceのactiveだけで表示成功と判断しない。 |
 | [#220](https://github.com/udonchan/picdplayer/issues/220) | WPE 2.54以降の固定・再現可能な供給、依存・provenance・更新経路を確立する。隔離sid rootfsをTrixie hostへ混在させない。 |
-| [#221](https://github.com/udonchan/picdplayer/issues/221) | #220の供給候補として、SHA256固定のWPE 2.54.0をTrixie/arm64でsource buildした。VIDEO guardとsandbox seccomp linkの2patch付き省略構成で増分build/stage、既存launcher compile/link/versionとprocess群の依存解決を確認済み。無改変source・最終recipeのclean rebuild・Pi runtime・正式供給は未確認。詳細は検証状況を参照する。 |
+| [#221](https://github.com/udonchan/picdplayer/issues/221) | #220の供給候補として、SHA256固定のWPE 2.54.0をTrixie/arm64でsource buildした。VIDEO guardとsandbox seccomp linkの2patch付き省略構成でbuild/stage、launcherとprocess群の依存解決を確認。標準packageのPi更新・基本CEC操作も確認済み。無改変sourceの成立、完全な再現性、正式供給の完成とは区別する。詳細は検証状況を参照する。 |
 
 Buildroot採用は前提としない。sudoが必要な実機操作は利用者が行い、診断toolからserviceの
 切り替えやsudoers変更を行わない。既存PoCの確認と新しい本番serviceの確認は区別する。
@@ -168,6 +189,8 @@ sudoなしで確認した。cold boot・DRM解放・異常終了fallback等は�
 2026-10-13 UTC、利用者の方針により、開発中はWPEを主runtimeとして進め、復旧の追加検討は
 必要になった時点へ保留する。既存の明示Chromium選択/fallback実装は保持するが、追加の実機
 復旧試験を現段階の取り込み条件にはしない。未確認を確認済みとは扱わない。
+レビューでdeployのruntime待機上限35秒とkioskのAPI待機設定上限300秒の不一致を確認した。
+長い待機設定では正常起動前にdeployが失敗を報告し得る。コードは未修正で、背景機能とは別の残課題。
 
 ## Buildrootの検討成果保全と採用保留
 

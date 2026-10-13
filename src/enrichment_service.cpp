@@ -1,6 +1,7 @@
 #include "enrichment_service.hpp"
 
 #include "artist_background_worker.hpp"
+#include "artist_background_image_worker.hpp"
 #include "logger.hpp"
 #include "metadata_lookup.hpp"
 #include "metadata_session.hpp"
@@ -9,12 +10,13 @@
 #include <fstream>
 #include <cctype>
 #include <utility>
+#include <random>
 
 class EnrichmentService::Implementation {
 public:
     explicit Implementation(bool enabled, std::string directory,
                             const ArtistBackgroundPolicy& policy, std::string artist_key)
-        : cache_directory(std::move(directory)), background_policy(policy) {
+        : cache_directory(std::move(directory)), background_policy(policy), background_key(std::move(artist_key)) {
         if (!enabled) return;
         // Keep this path for serving validated same-origin artwork after the
         // worker has finished. The worker receives its own copy.
@@ -33,33 +35,56 @@ public:
                 options.cancelled = cancelled;
                 return lookup_cover_art_release(release_id, options);
             });
-        if (background_policy.effective() && !artist_key.empty()) {
+    }
+
+    void clear_background() {
+        if (background_worker) background_worker->cancel_pending();
+        if (image_worker) image_worker->cancel_pending();
+        background_request.reset();
+        image_request.reset();
+        background_lookup = {};
+        background_image.reset();
+        background_reference.clear();
+        image_index = 0;
+    }
+
+    void start_image() {
+        if (!background_request || image_index >= background_lookup.images.size()) return;
+        image_request = ArtistBackgroundImageRequest{background_request->generation,
+            background_request->artist_mbid, background_lookup.images[image_index]};
+        image_worker->request(*image_request);
+    }
+
+    void ensure_background_workers() {
+        if (!background_worker) {
             background_worker = std::make_unique<ArtistBackgroundWorker>(
-                [key = std::move(artist_key), directory = cache_directory](
+                [key = background_key](
                     const std::string& mbid, const ArtistBackgroundWorker::Cancelled& cancelled) {
-                    return lookup_artist_backgrounds(mbid, key, cancelled, {}, directory);
+                    return lookup_artist_backgrounds(mbid, key, cancelled, {}, {});
+                });
+            image_worker = std::make_unique<ArtistBackgroundImageWorker>(
+                [](const ArtistBackgroundImageRequest& input,
+                   const ArtistBackgroundImageWorker::Cancelled& cancelled) {
+                    return load_artist_background_image(input.artist_mbid, input.candidate, {}, cancelled);
                 });
         }
     }
 
     void sync_background_request() {
-        if (!background_policy.effective()) {
-            if (background_worker) background_worker->cancel_pending();
-            background_request.reset();
-            background_lookup = {};
+        if (!background_policy.effective() || background_key.empty()) {
+            clear_background();
             return;
         }
-        if (!background_worker) return;
         const auto artist = selected_artist_identity(session.snapshot());
         if (artist.status != ArtistIdentityStatus::available || artist.mbid.empty()) {
-            if (background_request) background_worker->cancel_pending();
-            background_request.reset();
-            background_lookup = {};
+            clear_background();
             return;
         }
         ArtistBackgroundRequest wanted{session.generation(), artist.mbid};
         if (background_request && background_request->generation == wanted.generation &&
             background_request->artist_mbid == wanted.artist_mbid) return;
+        clear_background();
+        ensure_background_workers();
         background_worker->request(wanted);
         background_request = std::move(wanted);
         background_lookup = {};
@@ -69,10 +94,19 @@ public:
     std::unique_ptr<MetadataWorker> worker;
     std::unique_ptr<ArtworkWorker> artwork_worker;
     std::unique_ptr<ArtistBackgroundWorker> background_worker;
+    std::unique_ptr<ArtistBackgroundImageWorker> image_worker;
     std::string cache_directory;
     const ArtistBackgroundPolicy& background_policy;
+    std::string background_key;
     std::optional<ArtistBackgroundRequest> background_request;
     ArtistBackgroundLookup background_lookup;
+    std::optional<ArtistBackgroundImageRequest> image_request;
+    std::size_t image_index = 0;
+    std::optional<ArtistBackgroundImage> background_image;
+    std::string background_reference;
+    const std::string reference_nonce = std::to_string(std::random_device{}()) + "-" +
+                                        std::to_string(std::random_device{}());
+    std::uint64_t asset_sequence = 0;
 };
 
 EnrichmentService::EnrichmentService(bool enabled, std::string cache_directory,
@@ -85,6 +119,7 @@ EnrichmentService::~EnrichmentService() = default;
 void EnrichmentService::begin_if_needed(const DiscToc& toc) {
     if (!implementation_->worker) return;
     if (const auto request = implementation_->session.begin_if_needed(toc)) {
+        stop_background();
         implementation_->artwork_worker->cancel_pending();
         implementation_->worker->request(*request);
     }
@@ -98,9 +133,7 @@ void EnrichmentService::invalidate() {
 }
 
 void EnrichmentService::stop_background() {
-    if (implementation_->background_worker) implementation_->background_worker->cancel_pending();
-    implementation_->background_request.reset();
-    implementation_->background_lookup = {};
+    implementation_->clear_background();
 }
 
 void EnrichmentService::poll() {
@@ -131,6 +164,8 @@ void EnrichmentService::poll() {
                 artist.mbid != requested->artist_mbid ||
                 implementation_->session.generation() != requested->generation) continue;
             implementation_->background_lookup = std::move(background_result.lookup);
+            if (implementation_->background_lookup.status == ArtistBackgroundLookupStatus::available)
+                implementation_->start_image();
             const char* status = implementation_->background_lookup.status == ArtistBackgroundLookupStatus::available
                 ? "AVAILABLE" : implementation_->background_lookup.status == ArtistBackgroundLookupStatus::unavailable
                 ? "UNAVAILABLE" : "ERROR";
@@ -138,6 +173,44 @@ void EnrichmentService::poll() {
                                           << " count=" << implementation_->background_lookup.images.size();
         }
     }
+    if (implementation_->image_worker) {
+        ArtistBackgroundImageWorkerResult image_result;
+        while (implementation_->image_worker->pop(image_result)) {
+            const auto& wanted = implementation_->image_request;
+            if (!implementation_->background_policy.effective() || !wanted ||
+                image_result.request.generation != wanted->generation ||
+                image_result.request.artist_mbid != wanted->artist_mbid ||
+                image_result.request.candidate.id != wanted->candidate.id ||
+                image_result.request.candidate.url != wanted->candidate.url ||
+                implementation_->session.generation() != wanted->generation ||
+                selected_artist_identity(implementation_->session.snapshot()).mbid != wanted->artist_mbid)
+                continue;
+            if (image_result.image) {
+                implementation_->background_image = std::move(image_result.image);
+                implementation_->background_reference = "/api/presentation/artwork/background/" +
+                    implementation_->reference_nonce + "-" + std::to_string(++implementation_->asset_sequence);
+            } else {
+                ++implementation_->image_index;
+                implementation_->start_image();
+            }
+        }
+    }
+}
+
+std::optional<std::string> EnrichmentService::background_url() const {
+    const auto& state = *implementation_;
+    if (!state.background_policy.effective() || !state.background_image || !state.image_request ||
+        state.image_request->generation != state.session.generation() ||
+        selected_artist_identity(state.session.snapshot()).mbid != state.image_request->artist_mbid ||
+        state.background_reference.empty()) return std::nullopt;
+    return state.background_reference;
+}
+
+std::optional<EnrichmentArtworkAsset> EnrichmentService::background_asset(std::string_view reference) const {
+    const auto current = background_url();
+    if (!current || *current != reference) return std::nullopt;
+    return EnrichmentArtworkAsset{implementation_->background_image->mime_type,
+                                 implementation_->background_image->bytes};
 }
 
 const MetadataResult& EnrichmentService::snapshot() const { return implementation_->session.snapshot(); }

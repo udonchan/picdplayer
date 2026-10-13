@@ -60,7 +60,10 @@ unitはRead Policyの任意保存先として`StateDirectory=picdplayer`を作�
 `--settings-file`には絶対ファイルパスを指定する。空文字・相対パス・末尾が`/`のパスは起動時に拒否する。
 通常のunitはこの引数を自動付与しない。標準PlayerのSettings画面ではRead Policyの
 SINGLE/REPEATを選べるが、保存は`--settings-file`指定時だけ有効になる。
-Artist Backgroundの有効化はまだない。
+Artist BackgroundのSettingsはAPI由来の利用可否を表示する。この開発差分ではmetadataと有効な
+project keyがあればsession ONを明示要求できるが、key指定だけでは候補・画像を取得しない。
+OFFは即時取消と参照失効を要求し、再生の停止境界を待たない。画像の許諾判断は利用者に委ねる。
+背景設定の保存は未実装で、Read Policyの保存先指定を背景の保存案内へ流用しない。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
 scriptはCMake install規則から生成したDebian packageをinstallする。package postinstはdaemon-reload後に
@@ -90,7 +93,7 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 設定変更は`sudo systemctl restart picdplayer.service`で反映する。
 
 `--artist-background-key-file /etc/picdplayer/fanart-api-key`の起動オプションは保持するが、
-現段階では背景が既定OFF・利用不可のため、有効なkeyを指定しても候補JSONや写真を取得しない。
+背景は既定OFFのため、有効なkeyを指定しても明示ON前には候補JSONや写真を取得しない。
 従来のkey指定だけで候補を照会する開発経路は停止した。
 保持するprovider部品はfanart.tvの**project key**を`api-key`ヘッダーで送る。personal key用の
 `client-key`経路は未実装なので、利用者のpersonal keyをこのfileに設定しない。
@@ -98,10 +101,12 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 symlinkやgroup/world writableを許可しない。最大256文字の空白を含まないASCII keyを置き、末尾の
 改行1文字だけは許可する。例としてroot所有・group `picdplayer`・mode `0640`を使える。
 ファイルが存在しない、または無効な場合はkey/pathをlogへ出さず、Artist候補取得だけを無効化する。
-metadata取得とCD再生は続ける。`GET /api/artist-background`は`runtime_unavailable`を返す。
-loopback POSTのOFFは冪等204、ONは409で拒否する。背景設定の保存、写真のdownload、
-API配信、Playerへの表示は未実装である。
-key file指定は将来の写真表示設定をONにしたことを意味しない。現在のON拒否はruntime未接続による。
+metadata取得とCD再生は続ける。`GET /api/artist-background`はmetadataが無効・非compileなら
+`metadata_disabled`、metadataが有効でkeyがない・不正なら`key_missing`を返す。
+この開発差分のloopback POSTではOFFは冪等204、技術的に利用可能なONは画像到着前でも204、
+利用不能なONは409で拒否する。背景設定の保存は未実装。写真の一時取得・同一origin配信と
+標準Playerの単一背景表示はDraft PR #217から再利用したもので、master統合・実機確認とは区別する。
+key file指定は写真表示をONにしたことを意味せず、ON受理も画像到着・利用許諾済みを保証しない。
 画像利用に必要な権利・許諾の確認は利用者に委ね、製品が許諾を保証しないことを説明して明示ONを求める。
 ディスクキャッシュを行うかどうかは、この権利方針とは別に設計する。
 
@@ -164,9 +169,9 @@ restartとdaemon-reloadを行う。
 
 ## Chromium/Cage kiosk
 
-### WPE移行候補の境界
+### WPE主runtimeの境界
 
-このbranchのwrapperはWPEを優先し、`PICDPLAYER_KIOSK_RUNTIME=chromium`で従来経路を
+標準wrapperはWPEを優先し、`PICDPLAYER_KIOSK_RUNTIME=chromium`で従来経路を
 明示選択できる。標準Docker buildは`ENABLE_WPE_KIOSK=ON`でlauncherとWPE 2.54.0 runtimeを
 同じpackageへ供給する。launcher欠損・version不適合・前回WPE失敗では、既定の
 `PICDPLAYER_KIOSK_FALLBACK=chromium`に従ってChromiumへ戻る。`none`なら失敗する。
@@ -176,9 +181,10 @@ WPEはCageを介さず直接DRMへ接続する。`ExecStopPost`のfailure marker
 復旧する候補を実装し、cgroup停止と10秒のstop timeoutを設定しているが、実systemd/DRMの
 終了・復旧は未検証である。意図した正常停止ではfailure markerを解除する。
 
-開発Piはsource-built WPE 2.54.0へ利用者が切り替え、初回の画面表示と再生を確認した。
-CEC/cold boot/失敗復旧等は未確認で、詳細は検証状況を参照する。以下はChromiumの従来運用手順であり、
-新候補の本番切り替え手順ではない。source buildの記録は[検証状況](../development/verification.md)、
+開発Piはsource-built WPE 2.54.0へ利用者が切り替え、その後標準packageで更新し、
+TVリモコンによるアルバム選択・再生・停止を確認した。CEC長押し等の網羅確認、cold boot、
+失敗復旧等は未確認。通常更新は次節、Chromiumの従来運用はその後の節で説明する。
+source buildと実機確認の記録は[検証状況](../development/verification.md)、
 試験構成は[ビルド手順](build.md)を参照する。開発基準はWPE 2.54.0と2patchとし、
 追加の依存精査・完全固定はv1.0段階まで保留する。実機のsudo操作は利用者が行う。
 

@@ -9,14 +9,15 @@ ALSA再生headに対応する根拠の推定をsnapshotへ公開するところ�
 Phase 1bではこのsnapshotだけを入力にする読み取り専用technical status画面を追加した。
 これは診断用であり、TV向け本番UIやauthoritative stateを兼ねない。
 `/player`は同じsnapshotを表示用に整形するNow Playing画面である。画面は状態を所有せず、
-操作POSTも送らない。曲情報・artwork・進捗に加えて、read activity、実効policy、block buffer、
+操作はloopback APIへのPOSTでdaemonへ要求する。曲情報・artwork・進捗に加えて、read activity、実効policy、block buffer、
 current/latest evidence、stream warning、drive capabilityと有界なdisc read mapを表示する。
 任意導入の`picdplayer-kiosk.service`はWPEPlatform DRMのWPE launcherを優先して起動し、
 この画面だけをtty1へ表示する。daemonとbrowserは別serviceであり、browserが状態を所有しない。
 Chromium/Cageは明示選択と復旧用に残す。標準Docker buildはWPE 2.54.0と2patchのruntimeを
 同じDebian packageへ収める。requested/effective runtimeを区別し、fallbackをWPE成功とは扱わない。
 Now Playing document内のcursorはCSSで隠すが、Cageのerror pageや他applicationまで含む
-cursor非表示の保証、画面遷移、画面からの操作、quiet bootは未実装である。
+cursor非表示の保証やquiet bootは未実装である。標準Playerにはtransport操作、metadata候補選択、
+Read PolicyのSettings画面があり、状態変更の正本はdaemon側に置く。
 
 ### PlayerのIntegrity表示
 
@@ -165,10 +166,14 @@ rename、directory syncを試みる。現行実装ではrename後のdirectory sy
 この場合、新値が現在見えていても電源断後の耐久性は確認できない。完全な耐久性を要件にする場合は
 この失敗時のAPI結果と復旧動作を#177で再検討する。
 
-Artist Backgroundは既定OFFで、`GET/POST /api/artist-background`で利用不能状態の取得とOFFだけを
-部分実装する。ONは常に409で拒否し、保存・復元・Settings UIは未実装。provider key fileの存在は
-利用者による表示許可ではなく、候補JSONの取得も開始しない。ONを受理する前に、#49/#51の取得・配信・表示経路、
-API認証・アクセス制約、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
+Artist Backgroundは既定OFFで、`GET/POST /api/artist-background`からsession限りのON/OFFを扱う。
+この開発branchはDraft PR #217のruntimeを再利用する。metadataと保護fileから読込済みの形式上有効なproject keyが利用可能なら、
+No Discや画像到着前でもONを204で受理する。利用不能なら409で状態を変えず、理由をGETで示す。
+背景設定の保存・復元は未実装。SettingsはAPIの利用可否を表示し、利用不能時にONを有効にしない。
+provider key fileの存在は利用者の表示許可ではなく、keyだけでは候補JSONの取得も開始しない。
+OFFで要求を協調取消し、保持画像・参照を即時失効させる。取得・通信・decodeの失敗は設定受理と
+区別し、再生・通常metadata・操作を継続する。利用可能表示はprovider側の認証成功・network到達も保証しない。
+master `f0d44c1`のON拒否は開発差分の統合前の状態である。
 ダウンロード画像の利用に必要な権利・許諾・表示条件の確認と利用判断は利用者に委ねる。
 製品は画像の権利を保証せず、明示ON自体が権利者の許諾を生むわけではないことを説明する。
 全画像の包括的許諾を製品側で確認することはruntime実装の前提にしない。外部写真は配布物へ同梱しない。
@@ -242,7 +247,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | GET /api/read-history | STREAM詳細履歴とDISC領域集計。通常snapshotとは別取得 |
 | GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
-| GET/POST /api/artist-background | 利用不能状態の取得と即時OFFのみ。ON拒否。本文・公開field・statusは[メッセージ契約](message-contract.md#公開経路と生成元)参照 |
+| GET/POST /api/artist-background | 利用可否・要求値・実効値とsession限りの明示ON/OFF。画像到着・保存とは別。本文・公開field・statusは[メッセージ契約](message-contract.md#公開経路と生成元)参照 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | WS /api/navigation | CECの短命なsemantic navigation入力。接続前の入力は再送しない。clientからのmessageは不可 |
 | GET /debug/status | drive/read/disc/eventを表示する読み取り専用diagnostic HTML |
@@ -287,17 +292,29 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。technical stat
 keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
-標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
-部分実装する。CEC方向でSINGLE/REPEAT/Backを選択し、決定でpolicy変更または画面を閉じる。
+標準PlayerのSettingsはRead PolicyのSINGLE/REPEAT選択と4つの詳細値の確認、Artist Backgroundの
+利用可否とsession限りのON/OFF操作を扱う。CEC方向で有効な選択肢とBackへ移動し、決定で
+変更を要求するか画面を閉じる。
 リモコンの戻るキーでもPlayerへ戻り、
 選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
-結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
-有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの
+結果を示し、API失敗時は再生を止めない。詳細値の編集は未実装である。Read Policyの任意保存は
+#177で部分実装済みで、同APIの
 `persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
 session限りと扱い、単なるPOST受理を保存済みと表示しない。
 Settingsには`GET /api/read-policy`の`requested_source`と`effective_source`を別々に表示する。
 `startup/restored/saved/session`以外またはfield欠損はUnknownとし、保存先指定やPOST受理から出所を推測しない。
 読込中・取得失敗時は前回の出所を残さず、pending時は要求値と実効値の出所が異なり得る。
+背景状態はSettingsを開いたときに`GET /api/artist-background`でRead Policyと独立して取得する。
+requested/effective/availableをAPIから表示し、欠損・型不正・取得失敗はUnknownとして操作を無効にする。
+ONはavailableがtrueの場合の明示操作のみ、OFFは既知の状態で操作可能とする。POSTの204後に
+同APIを再取得し、状態を楽観的に更新しない。背景のeffectiveは写真到着・decode成功を意味しない。
+背景の保存はなく、Read Policyの保存情報を背景へ流用しない。利用不能・未知の状態でONを操作できない。
+単一画像runtimeとsession ONはDraft PR #217からこの開発差分へ再利用したもので、GitHubのmasterへ
+mergeしたことを意味しない。閉じた画面や再表示前の古い応答は適用しない。
+SettingsからのOFFが204で受理されたら、state streamの遅延・切断を待たず現在のartist画像を消す。
+失効した不透明参照は旧callback/遅延modelで復活させず、cover fallbackは維持する。受理後に開始する
+REST snapshotと最新の採用済みsnapshotが同じ参照を再承認した場合だけ失効扱いを解除する。
+これにより別clientのONが古いOFF応答を追い越した場合も、daemonの公開モデルに従って表示する。
 曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
 操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
 `Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の
@@ -352,12 +369,15 @@ loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で
 選択済みreleaseのartist-credit内のartist IDから、背景取得用の単一Artist MBIDも内部で判定する。
 異なるartist IDが複数ならAMBIGUOUS、ID欠損・不正形式・Various ArtistsならUNAVAILABLEとし、
 album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契約へ直接公開しない。
-単一の選択済みArtist MBIDについて背景画像候補のmetadataを別workerで取得する部品は保持するが、
-現段階では利用gateがOFFのためworkerを生成せず、key指定時も候補JSON・写真の取得は行わない。
-候補JSONの上限付きfile cacheと画像取得部品はruntimeから利用しない。CD再生と通常metadataは維持する。
+ON時は選択済み単一Artist MBIDのfanart.tv候補JSONを別workerで取得し、画像workerで候補を順に試す。
+現行世代・artist・候補に一致する取得済み画像1件だけをopaqueな同一origin参照で公開する。
+候補JSONと画像は空cache pathで一時的に取得・保持し、ディスク保存の採否は別途設計する。
+OFFではworkerを生成・要求せず、作成済みworkerは取消して保持結果を消す。CD再生と通常metadataは維持する。
 現行key fileはproject keyを`api-key`ヘッダーで送る開発用設定であり、personal keyの`client-key`には
 対応しない。候補取得と利用者の写真表示ONは別の状態とし、既定OFF・利用者の明示ONを維持する。
-現段階のON拒否はruntime未接続によるもので、個々の画像の許諾を製品側で確認できないことを理由にしない。
+利用不能時のON拒否は技術的な利用可否によるもので、個々の画像の許諾を製品側で確認できないことを理由にしない。
+標準Playerはartist背景→ぼかしたcover→既定背景へfallbackし、古い画像完了とdecode失敗を無視する。
+Custom UIへ背景描画を注入しない。slideshow・背景設定保存は未実装。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。

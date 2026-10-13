@@ -31,6 +31,20 @@ int main() {
         check(rendered.find("provider-private") == std::string::npos &&
               rendered.find("recording-private") == std::string::npos);
         check(json["artwork"]["cover"].is_null());
+        check(json["artwork"]["background"].is_null());
+        const std::string background_reference = "/api/presentation/artwork/background/opaque-123";
+        const auto enriched = make_presentation_model(8, player, MediaLifecycleState::audio_ready,
+            toc, metadata, {}, {}, {}, false, 1, 1, background_reference);
+        const auto enriched_json = nlohmann::json::parse(serialize_presentation_model(enriched));
+        check(enriched_json["artwork"]["background"]["url"] == background_reference);
+        check(enriched_json["artwork"]["background"]["width"].is_null());
+        check(!presentation_json_equal_ignoring_revision(json.dump(), enriched_json.dump()));
+        const auto loading = make_presentation_model(9, player, MediaLifecycleState::loading,
+            toc, metadata, {}, {}, {}, false, 1, 1, background_reference);
+        check(!loading.artwork.background_url);
+        const auto no_disc = make_presentation_model(10, player, MediaLifecycleState::no_disc,
+            std::nullopt, metadata, {}, {}, {}, false, {}, {}, background_reference);
+        check(!no_disc.artwork.background_url);
         auto diagnostic_model = model;
         diagnostic_model.drive.vendor = "Test drive";
         diagnostic_model.read.stats.direct_retries = 7;

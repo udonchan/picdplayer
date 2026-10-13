@@ -13,6 +13,7 @@ import urllib.request
 
 
 binary = sys.argv[1]
+metadata_enabled = sys.argv[2] == "1"
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -22,7 +23,7 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def verify_background_api(port):
+def verify_background_api(port, available=False, reason="metadata_disabled"):
     root = f"http://127.0.0.1:{port}/api/"
 
     def request(path, body=None, method="GET"):
@@ -34,8 +35,8 @@ def verify_background_api(port):
         except urllib.error.HTTPError as error:
             return error.code, error.read()
 
-    expected = {"requested": False, "effective": False, "available": False,
-                "unavailable_reason": "runtime_unavailable"}
+    expected = {"requested": False, "effective": False, "available": available,
+                "unavailable_reason": None if available else reason}
     deadline = time.monotonic() + 3
     while True:
         try:
@@ -47,7 +48,7 @@ def verify_background_api(port):
     assert status == 200 and json.loads(body) == expected, (status, body)
     policy_before = request("read-policy")
     assert policy_before[0] == 200
-    for payload, expected_status in [(b'{"enabled":true}', 409),
+    for payload, expected_status in [(b'{"enabled":true}', 204 if available else 409),
                                       (b'{"enabled":false}', 204),
                                       (b'{"enabled":false}', 204),
                                       (b'{"enabled":0}', 400),
@@ -55,12 +56,14 @@ def verify_background_api(port):
                                       (b'x' * 513, 413)]:
         status, body = request("artist-background", payload, "POST")
         assert status == expected_status, (status, body)
+        if status == 204:
+            expected["requested"] = expected["effective"] = json.loads(payload)["enabled"]
         assert json.loads(request("artist-background")[1]) == expected
     assert request("artist-background", method="PUT")[0] == 405
     assert request("read-policy") == policy_before
     state = json.loads(request("state")[1])
     assert state["player"]["state"] == "NO_DISC", state
-    assert "background" not in state["artwork"], state["artwork"]
+    assert state["artwork"]["background"] is None, state["artwork"]
 
 
 base = [
@@ -100,37 +103,13 @@ finally:
         persistent.kill()
         persistent.wait()
 
-# An optional background provider credential failure must not prevent playback
-# service startup or expose the configured path in logs.
-invalid_key_path = "/nonexistent/picdplayer-artist-secret"
-optional = subprocess.Popen(
-    [*base, "--metadata", "musicbrainz", "--artist-background-key-file", invalid_key_path],
-    stdin=subprocess.DEVNULL,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    text=True,
-)
-try:
-    ready, _, _ = select.select([optional.stdout], [], [], 3)
-    assert ready, "player did not start with a missing optional key"
-    time.sleep(0.3)
-    assert optional.poll() is None, optional.communicate(timeout=1)
-    optional.send_signal(signal.SIGTERM)
-    out, err = optional.communicate(timeout=3)
-    assert optional.returncode == 0, (out, err)
-    assert "disabled invalid_key_file" in err, err
-    assert invalid_key_path not in out + err, (out, err)
-finally:
-    if optional.poll() is None:
-        optional.kill()
-        optional.wait()
-
-with tempfile.NamedTemporaryFile(mode="w", encoding="ascii") as key_file:
-    key_file.write("test-api-key\n")
-    key_file.flush()
+if metadata_enabled:
+    # An optional background provider credential failure must not prevent playback
+    # service startup or expose the configured path in logs.
+    invalid_key_path = "/nonexistent/picdplayer-artist-secret"
     port = free_port()
-    configured = subprocess.Popen(
-        [*base, "--metadata", "musicbrainz", "--artist-background-key-file", key_file.name,
+    optional = subprocess.Popen(
+        [*base, "--metadata", "musicbrainz", "--artist-background-key-file", invalid_key_path,
          "--api-port", str(port)],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -138,19 +117,47 @@ with tempfile.NamedTemporaryFile(mode="w", encoding="ascii") as key_file:
         text=True,
     )
     try:
-        ready, _, _ = select.select([configured.stdout], [], [], 3)
-        assert ready, "player did not start with a valid optional key"
-        verify_background_api(port)
+        ready, _, _ = select.select([optional.stdout], [], [], 3)
+        assert ready, "player did not start with a missing optional key"
+        verify_background_api(port, reason="key_missing")
         time.sleep(0.3)
-        configured.send_signal(signal.SIGTERM)
-        out, err = configured.communicate(timeout=3)
-        assert configured.returncode == 0, (out, err)
-        assert "disabled invalid_key_file" not in err, err
-        assert "test-api-key" not in out + err, (out, err)
+        assert optional.poll() is None, optional.communicate(timeout=1)
+        optional.send_signal(signal.SIGTERM)
+        out, err = optional.communicate(timeout=3)
+        assert optional.returncode == 0, (out, err)
+        assert "disabled invalid_key_file" in err, err
+        assert invalid_key_path not in out + err, (out, err)
     finally:
-        if configured.poll() is None:
-            configured.kill()
-            configured.wait()
+        if optional.poll() is None:
+            optional.kill()
+            optional.wait()
+
+    with tempfile.NamedTemporaryFile(mode="w", encoding="ascii") as key_file:
+        key_file.write("test-api-key\n")
+        key_file.flush()
+        port = free_port()
+        configured = subprocess.Popen(
+            [*base, "--metadata", "musicbrainz", "--artist-background-key-file", key_file.name,
+             "--api-port", str(port)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            ready, _, _ = select.select([configured.stdout], [], [], 3)
+            assert ready, "player did not start with a valid optional key"
+            verify_background_api(port, available=True)
+            time.sleep(0.3)
+            configured.send_signal(signal.SIGTERM)
+            out, err = configured.communicate(timeout=3)
+            assert configured.returncode == 0, (out, err)
+            assert "disabled invalid_key_file" not in err, err
+            assert "test-api-key" not in out + err, (out, err)
+        finally:
+            if configured.poll() is None:
+                configured.kill()
+                configured.wait()
 
 interactive = subprocess.run(
     [*base, "--interactive"],

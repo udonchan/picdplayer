@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 struct EnrichmentArtworkAsset {
     std::string mime_type;
@@ -34,6 +35,8 @@ public:
     bool decline_candidates(std::uint64_t generation);
     bool has_cover_asset() const;
     std::optional<EnrichmentArtworkAsset> cover_asset() const;
+    std::optional<std::string> background_url() const;
+    std::optional<EnrichmentArtworkAsset> background_asset(std::string_view reference) const;
 
 private:
     std::unique_ptr<Implementation> implementation_;

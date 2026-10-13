@@ -120,7 +120,10 @@ version付きJSONへ保存し、次のdaemon起動時に読み戻す。保存済
 `--read-verification`から作った初期値より優先する。保存失敗時はPOSTを拒否して現在値を維持する。
 破損・非対応version・範囲外の保存値は採用せず、起動引数側へ戻してwarningを記録する。
 この機能はAPI有効buildの`--player`で使い、親directoryは事前にservice userが書ける状態にする。
-指定しなければ従来どおりruntime変更は再起動後に残らない。設定画面と背景ON/OFFは未実装。
+指定しなければ従来どおりruntime変更は再起動後に残らない。標準PlayerのSettingsからSINGLE/REPEATを
+変更できる。背景設定もAPI由来の利用可否を示す。この開発差分ではmetadataと有効なproject keyが
+あれば明示ONを要求できる。key指定だけでは外部取得を開始せず、画像到着・許諾済みも保証しない。
+背景の保存は未実装で、Read Policyの保存設定とは独立してsession限りと表示する。
 `GET /api/read-policy`の`persistence_configured`は保存先を指定したかだけを示し、個々のPOSTの
 保存成功はHTTP応答で確認する。falseのとき変更は現在のdaemon sessionだけに有効である。
 `requested_source`と`effective_source`はそれぞれ要求値と適用済み値の出所を示す。

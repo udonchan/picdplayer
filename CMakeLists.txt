@@ -83,7 +83,8 @@ if(ENABLE_METADATA)
         src/metadata_parser.cpp src/http_client.cpp src/metadata_lookup.cpp src/metadata_worker.cpp
         src/metadata_session.cpp src/enrichment_service.cpp src/metadata_retry_policy.cpp src/metadata_cache.cpp
         src/http_security_policy.cpp src/artist_background_parser.cpp src/artist_background_provider.cpp
-        src/artist_background_worker.cpp src/artist_background_key.cpp src/artist_background_image.cpp)
+        src/artist_background_worker.cpp src/artist_background_key.cpp src/artist_background_image.cpp
+        src/artist_background_image_worker.cpp)
     target_compile_definitions(cdplayerd PRIVATE ENABLE_METADATA=1)
     target_link_libraries(cdplayerd PRIVATE PkgConfig::DISCID CURL::libcurl nlohmann_json::nlohmann_json)
 endif()
@@ -393,11 +394,21 @@ if(BUILD_TESTING)
         add_test(NAME artist_background_worker COMMAND artist_background_worker_test)
         add_executable(enrichment_background_gate_test tests/enrichment_background_gate_test.cpp
             src/enrichment_service.cpp src/metadata_worker.cpp src/metadata_session.cpp
-            src/artist_background_worker.cpp src/disc_toc.cpp src/logger.cpp)
+            src/artist_background_worker.cpp src/artist_background_image_worker.cpp src/disc_toc.cpp src/logger.cpp)
         target_include_directories(enrichment_background_gate_test PRIVATE include)
         target_compile_features(enrichment_background_gate_test PRIVATE cxx_std_20)
         target_compile_options(enrichment_background_gate_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(enrichment_background_gate_test PRIVATE Threads::Threads)
+        if(ENABLE_API)
+            target_sources(enrichment_background_gate_test PRIVATE src/api_server.cpp src/ui_bundle.cpp
+                src/player_controller.cpp
+                src/cec_input.cpp src/repeated_read_policy.cpp src/repeated_read_verifier.cpp
+                src/presentation_model.cpp src/presentation_json.cpp src/daemon_snapshot_json.cpp
+                src/drive_capabilities.cpp src/integrity_state.cpp src/player_event.cpp)
+            target_include_directories(enrichment_background_gate_test PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+            target_compile_definitions(enrichment_background_gate_test PRIVATE ENABLE_API=1)
+            target_link_libraries(enrichment_background_gate_test PRIVATE PkgConfig::WEBSOCKETS nlohmann_json::nlohmann_json)
+        endif()
         add_test(NAME enrichment_background_gate COMMAND enrichment_background_gate_test)
         set_tests_properties(enrichment_background_gate PROPERTIES TIMEOUT 10)
         add_executable(artist_background_key_test tests/artist_background_key_test.cpp src/artist_background_key.cpp)
@@ -412,6 +423,15 @@ if(BUILD_TESTING)
         target_compile_options(artist_background_image_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(artist_background_image_test PRIVATE CURL::libcurl)
         add_test(NAME artist_background_image COMMAND artist_background_image_test)
+        add_executable(artist_background_image_worker_test tests/artist_background_image_worker_test.cpp
+            src/artist_background_image_worker.cpp src/artist_background_image.cpp
+            src/metadata_cache.cpp src/http_client.cpp src/http_security_policy.cpp)
+        target_include_directories(artist_background_image_worker_test PRIVATE include)
+        target_compile_features(artist_background_image_worker_test PRIVATE cxx_std_20)
+        target_compile_options(artist_background_image_worker_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(artist_background_image_worker_test PRIVATE CURL::libcurl Threads::Threads)
+        add_test(NAME artist_background_image_worker COMMAND artist_background_image_worker_test)
+        set_tests_properties(artist_background_image_worker PROPERTIES TIMEOUT 10)
         add_executable(metadata_retry_policy_test tests/metadata_retry_policy_test.cpp src/metadata_retry_policy.cpp)
         target_include_directories(metadata_retry_policy_test PRIVATE include)
         target_compile_features(metadata_retry_policy_test PRIVATE cxx_std_20)
@@ -469,6 +489,11 @@ if(BUILD_TESTING)
         add_test(NAME paranoia_reader COMMAND paranoia_reader_test)
     endif()
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(ENABLE_METADATA AND ENABLE_API)
+        add_test(NAME background_runtime_transport COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/background_runtime_transport.py $<TARGET_FILE:enrichment_background_gate_test>)
+        set_tests_properties(background_runtime_transport PROPERTIES TIMEOUT 20)
+    endif()
     add_test(NAME wpe_inspector_protocol COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/wpe_inspector_test.py)
     set_tests_properties(wpe_inspector_protocol PROPERTIES TIMEOUT 10)
@@ -486,6 +511,9 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_kiosk_test.py)
     add_test(NAME measure_kiosk_cdp COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/measure_kiosk_cdp_test.py)
+    add_test(NAME background_cdp_fixture COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/background_cdp_fixture_test.py)
+    set_tests_properties(background_cdp_fixture PROPERTIES TIMEOUT 10)
     add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
         ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
@@ -504,6 +532,6 @@ if(BUILD_TESTING)
         set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
     endif()
     add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
-    add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd>)
+    add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd> $<BOOL:${ENABLE_METADATA}>)
     set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
 endif()
