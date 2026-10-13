@@ -11,7 +11,7 @@
 #include <utility>
 
 namespace {
-constexpr std::size_t image_limit = 8 * 1024 * 1024;
+constexpr std::size_t image_limit = artist_background_image_limit;
 constexpr MetadataCachePolicy image_policy{std::chrono::days(30), 64ULL * 1024 * 1024};
 
 bool safe_name(std::string_view value) {

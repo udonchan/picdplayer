@@ -128,7 +128,17 @@
           <dt>Time budget</dt><dd id="settings-budget">—</dd>
         </dl>
         <p class="settings-note">Detailed values are shown for inspection; use the API to change them.</p>
-        <div class="settings-unavailable"><h3>Artist background</h3><p>Unavailable until image delivery and use conditions are ready. External photos remain off.</p></div>
+        <div class="settings-unavailable">
+          <h3>Artist background</h3>
+          <div class="settings-choices" role="group" aria-label="Artist background">
+            <button id="background-off" type="button" disabled>Off</button>
+            <button id="background-on" type="button" disabled>On</button>
+          </div>
+          <p id="settings-background-state" class="settings-note">Requested / effective: Unknown / Unknown.</p>
+          <p id="settings-background-status" class="settings-status" role="status">Loading background availability...</p>
+          <p class="settings-note">Background changes apply to this daemon session only. Effective On does not mean a photo has loaded.</p>
+          <p class="settings-note">On allows the configured external provider to fetch artist photos. You are responsible for checking image rights and permissions; PiCDPlayer does not guarantee them. On does not grant permission. External photos are not bundled.</p>
+        </div>
       </div>
     </section>
   </main>

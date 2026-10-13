@@ -20,7 +20,9 @@
 
 背景状態にはkey、内部path、provider URL、Artist MBIDを含めない。背景設定の保存・復元は未実装で、
 Read Policyのpending/source/保存情報を流用しない。key指定だけでは候補JSONも写真も取得しない。
-背景画像の配信、snapshotへの参照追加、Settings UI、ON受理条件と保存schemaは後続実装とする。
+標準SettingsはこのAPIをRead Policyと独立して読み、利用不能理由と要求値・実効値を表示する。
+現在のruntimeではONを無効にし、既知の状態でOFFのみ要求できる。背景画像の配信、snapshotへの
+参照追加、ON受理条件はDraft PR #217の未統合実装、背景の保存schemaは後続作業である。
 
 `PlayerSession` → `make_presentation_model` → `serialize_presentation_model`が公開経路。
 `diagnostic_fields`を共有してdrive/read/recent_eventsを投影する。

@@ -42,11 +42,11 @@ private:
     void run();
 
     Lookup lookup_;
-    std::thread thread_;
     std::mutex mutex_;
     std::condition_variable changed_;
     std::atomic<bool> closing_ = false;
     std::atomic<std::uint64_t> request_serial_ = 0;
     std::optional<ArtistBackgroundRequest> pending_;
     std::optional<ArtistBackgroundWorkerResult> result_;
+    std::thread thread_;
 };

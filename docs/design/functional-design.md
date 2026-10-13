@@ -9,14 +9,15 @@ ALSA再生headに対応する根拠の推定をsnapshotへ公開するところ�
 Phase 1bではこのsnapshotだけを入力にする読み取り専用technical status画面を追加した。
 これは診断用であり、TV向け本番UIやauthoritative stateを兼ねない。
 `/player`は同じsnapshotを表示用に整形するNow Playing画面である。画面は状態を所有せず、
-操作POSTも送らない。曲情報・artwork・進捗に加えて、read activity、実効policy、block buffer、
+操作はloopback APIへのPOSTでdaemonへ要求する。曲情報・artwork・進捗に加えて、read activity、実効policy、block buffer、
 current/latest evidence、stream warning、drive capabilityと有界なdisc read mapを表示する。
 任意導入の`picdplayer-kiosk.service`はWPEPlatform DRMのWPE launcherを優先して起動し、
 この画面だけをtty1へ表示する。daemonとbrowserは別serviceであり、browserが状態を所有しない。
 Chromium/Cageは明示選択と復旧用に残す。標準Docker buildはWPE 2.54.0と2patchのruntimeを
 同じDebian packageへ収める。requested/effective runtimeを区別し、fallbackをWPE成功とは扱わない。
 Now Playing document内のcursorはCSSで隠すが、Cageのerror pageや他applicationまで含む
-cursor非表示の保証、画面遷移、画面からの操作、quiet bootは未実装である。
+cursor非表示の保証やquiet bootは未実装である。標準Playerにはtransport操作、metadata候補選択、
+Read PolicyのSettings画面があり、状態変更の正本はdaemon側に置く。
 
 ### PlayerのIntegrity表示
 
@@ -166,7 +167,8 @@ rename、directory syncを試みる。現行実装ではrename後のdirectory sy
 この失敗時のAPI結果と復旧動作を#177で再検討する。
 
 Artist Backgroundは既定OFFで、`GET/POST /api/artist-background`で利用不能状態の取得とOFFだけを
-部分実装する。ONは常に409で拒否し、保存・復元・Settings UIは未実装。provider key fileの存在は
+部分実装する。このruntimeではONは常に409で拒否し、背景設定の保存・復元は未実装。Settingsは
+このAPIの利用可否を表示し、利用不能時にONを有効にしない。provider key fileの存在は
 利用者による表示許可ではなく、候補JSONの取得も開始しない。ONを受理する前に、#49/#51の取得・配信・表示経路、
 API認証・アクセス制約、secret管理、利用不能理由を確定し、OFFで外部写真の取得・表示を止めることを検証する。
 ダウンロード画像の利用に必要な権利・許諾・表示条件の確認と利用判断は利用者に委ねる。
@@ -287,17 +289,25 @@ DOMのtextContentとして扱い、HTMLとして解釈しない。technical stat
 keyboardでfocusを移してloopback POSTで要求する。方向入力は現在の横一列の操作で前後に進み、
 selectで実行、backでfocusを解除する。POST受理は状態確定ではなく、次のsnapshotを正とする。
 同じリモコン操作がCEC channelとbrowserのkey/clickの両方に届いても、標準Playerは一度だけ操作する。
-標準PlayerのSettingsは現在、Read PolicyのSINGLE/REPEAT選択と4つの詳細値の確認だけを
-部分実装する。CEC方向でSINGLE/REPEAT/Backを選択し、決定でpolicy変更または画面を閉じる。
+標準PlayerのSettingsはRead PolicyのSINGLE/REPEAT選択と4つの詳細値の確認、Artist Backgroundの
+利用可否とsession限りのON/OFF操作を扱う。CEC方向で有効な選択肢とBackへ移動し、決定で
+変更を要求するか画面を閉じる。
 リモコンの戻るキーでもPlayerへ戻り、
 選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
-結果を示し、API失敗時は再生を止めない。詳細値の編集、Artist Backgroundの
-有効化は未実装である。Read Policyの任意保存は#177で部分実装済みで、同APIの
+結果を示し、API失敗時は再生を止めない。詳細値の編集は未実装である。Read Policyの任意保存は
+#177で部分実装済みで、同APIの
 `persistence_configured`がtrueの場合だけ成功した変更の保存案内を表示する。fieldがない旧daemonは
 session限りと扱い、単なるPOST受理を保存済みと表示しない。
 Settingsには`GET /api/read-policy`の`requested_source`と`effective_source`を別々に表示する。
 `startup/restored/saved/session`以外またはfield欠損はUnknownとし、保存先指定やPOST受理から出所を推測しない。
 読込中・取得失敗時は前回の出所を残さず、pending時は要求値と実効値の出所が異なり得る。
+背景状態はSettingsを開いたときに`GET /api/artist-background`でRead Policyと独立して取得する。
+requested/effective/availableをAPIから表示し、欠損・型不正・取得失敗はUnknownとして操作を無効にする。
+ONはavailableがtrueの場合の明示操作のみ、OFFは既知の状態で操作可能とする。POSTの204後に
+同APIを再取得し、状態を楽観的に更新しない。背景のeffectiveは写真到着・decode成功を意味しない。
+背景の保存はなく、Read Policyの保存情報を背景へ流用しない。現在のmaster runtimeは利用不能のため
+ONを操作できない。単一画像runtimeとsession ONは未統合のDraft PR #217にあり、このUI変更で
+provider取得・画像配信を有効化するものではない。閉じた画面や再表示前の古い応答は適用しない。
 曖昧候補が現れたら候補pickerを一度自動表示する。同じ候補群でbackを押して閉じた後は自動再表示せず、
 操作列末尾の`Choose album`から開き直せる。選択後も複数候補の存在と選択中の候補番号を示し、
 `Change album`から再び開ける。選択済み候補への再操作は状態を変えず、別候補の選択は現行世代の

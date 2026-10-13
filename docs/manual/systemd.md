@@ -60,7 +60,8 @@ unitはRead Policyの任意保存先として`StateDirectory=picdplayer`を作�
 `--settings-file`には絶対ファイルパスを指定する。空文字・相対パス・末尾が`/`のパスは起動時に拒否する。
 通常のunitはこの引数を自動付与しない。標準PlayerのSettings画面ではRead Policyの
 SINGLE/REPEATを選べるが、保存は`--settings-file`指定時だけ有効になる。
-Artist Backgroundの有効化はまだない。
+Artist BackgroundのSettingsはAPI由来の利用可否を表示するが、現在のruntimeではONを選べない。
+背景設定の保存は未実装で、Read Policyの保存先指定を背景の保存案内へ流用しない。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
 scriptはCMake install規則から生成したDebian packageをinstallする。package postinstはdaemon-reload後に
@@ -164,9 +165,9 @@ restartとdaemon-reloadを行う。
 
 ## Chromium/Cage kiosk
 
-### WPE移行候補の境界
+### WPE主runtimeの境界
 
-このbranchのwrapperはWPEを優先し、`PICDPLAYER_KIOSK_RUNTIME=chromium`で従来経路を
+標準wrapperはWPEを優先し、`PICDPLAYER_KIOSK_RUNTIME=chromium`で従来経路を
 明示選択できる。標準Docker buildは`ENABLE_WPE_KIOSK=ON`でlauncherとWPE 2.54.0 runtimeを
 同じpackageへ供給する。launcher欠損・version不適合・前回WPE失敗では、既定の
 `PICDPLAYER_KIOSK_FALLBACK=chromium`に従ってChromiumへ戻る。`none`なら失敗する。
@@ -176,9 +177,10 @@ WPEはCageを介さず直接DRMへ接続する。`ExecStopPost`のfailure marker
 復旧する候補を実装し、cgroup停止と10秒のstop timeoutを設定しているが、実systemd/DRMの
 終了・復旧は未検証である。意図した正常停止ではfailure markerを解除する。
 
-開発Piはsource-built WPE 2.54.0へ利用者が切り替え、初回の画面表示と再生を確認した。
-CEC/cold boot/失敗復旧等は未確認で、詳細は検証状況を参照する。以下はChromiumの従来運用手順であり、
-新候補の本番切り替え手順ではない。source buildの記録は[検証状況](../development/verification.md)、
+開発Piはsource-built WPE 2.54.0へ利用者が切り替え、その後標準packageで更新し、
+TVリモコンによるアルバム選択・再生・停止を確認した。CEC長押し等の網羅確認、cold boot、
+失敗復旧等は未確認。通常更新は次節、Chromiumの従来運用はその後の節で説明する。
+source buildと実機確認の記録は[検証状況](../development/verification.md)、
 試験構成は[ビルド手順](build.md)を参照する。開発基準はWPE 2.54.0と2patchとし、
 追加の依存精査・完全固定はv1.0段階まで保留する。実機のsudo操作は利用者が行う。
 

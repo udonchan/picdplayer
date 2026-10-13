@@ -76,8 +76,9 @@ const setHidden = (element, value) => {
 // View が保持するのは focus だけで、再生状態は daemon の snapshot を正とします。
 const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
 const policyButtons = [byId('policy-single'), byId('policy-repeat')];
+const backgroundButtons = [byId('background-off'), byId('background-on')];
 const settingsCloseButton = byId('settings-close');
-const settingsActions = [...policyButtons, settingsCloseButton];
+const settingsActions = [...policyButtons, settingsCloseButton, ...backgroundButtons];
 let focusedControl = -1;
 let pendingCommand = null;
 let feedbackTimer;
@@ -87,6 +88,11 @@ let settingsFocusMoved = false;
 let settingsRequestId = 0;
 let policyState = null;
 let pendingPolicy = false;
+let backgroundState = null;
+let backgroundStatus = '';
+let backgroundLoading = false;
+let backgroundRequestId = 0;
+let pendingBackground = false;
 let pickerOpen = false;
 let pickerIndex = 0;
 let pickerKey = '';
@@ -348,6 +354,78 @@ function renderPolicySettings() {
   if (valid) set('settings-policy-status', policyState.pending
     ? `Requested ${requested.mode}; effective ${effective?.mode || 'UNKNOWN'} until playback stops.`
     : `Effective ${effective?.mode || requested.mode}.`);
+  renderBackgroundSettings();
+}
+function renderBackgroundSettings() {
+  const valid = backgroundState !== null;
+  backgroundButtons.forEach((button, index) => {
+    button.disabled = !valid || backgroundLoading || pendingBackground || (index === 1 && !backgroundState.available);
+    button.dataset.selected = String(valid && backgroundState.requested === Boolean(index));
+    button.dataset.focused = String(settingsOpen && focusedPolicy === settingsActions.indexOf(button));
+    button.setAttribute?.('aria-pressed', String(valid && backgroundState.requested === Boolean(index)));
+  });
+  set('settings-background-state', valid
+    ? `Requested / effective: ${backgroundState.requested ? 'On' : 'Off'} / ${backgroundState.effective ? 'On' : 'Off'}.`
+    : 'Requested / effective: Unknown / Unknown.');
+  set('settings-background-status', backgroundStatus);
+}
+async function loadBackgroundSettings() {
+  const sessionId = settingsRequestId;
+  const requestId = ++backgroundRequestId;
+  backgroundLoading = true;
+  backgroundStatus = 'Loading background availability...';
+  renderBackgroundSettings();
+  try {
+    const response = await fetch('/api/artist-background');
+    if (!response.ok) throw new Error('Background unavailable');
+    const loaded = await response.json();
+    if (!loaded || ['requested', 'effective', 'available'].some((key) => typeof loaded[key] !== 'boolean') ||
+        !(loaded.unavailable_reason === null || typeof loaded.unavailable_reason === 'string') ||
+        (loaded.effective && (!loaded.requested || !loaded.available))) throw new Error('Invalid background state');
+    if (!settingsOpen || sessionId !== settingsRequestId || requestId !== backgroundRequestId) return;
+    backgroundState = loaded;
+    const reasons = {
+      runtime_unavailable: 'Unavailable: runtime image delivery is not connected.',
+      key_missing: 'Unavailable: a valid project key is not configured.',
+      metadata_disabled: 'Unavailable: metadata is disabled.',
+    };
+    backgroundStatus = loaded.available ? 'Available. Choose On explicitly to allow artist photos.'
+      : Object.prototype.hasOwnProperty.call(reasons, loaded.unavailable_reason)
+        ? reasons[loaded.unavailable_reason] : 'Unavailable: background capability is not ready.';
+  } catch {
+    if (!settingsOpen || sessionId !== settingsRequestId || requestId !== backgroundRequestId) return;
+    backgroundState = null;
+    backgroundStatus = 'Background availability unknown. Playback is unaffected.';
+  } finally {
+    if (settingsOpen && sessionId === settingsRequestId && requestId === backgroundRequestId) {
+      backgroundLoading = false;
+      renderBackgroundSettings();
+    }
+  }
+}
+async function selectBackground(index) {
+  if (!settingsOpen || pendingBackground || backgroundButtons[index]?.disabled) return;
+  const sessionId = settingsRequestId;
+  pendingBackground = true;
+  backgroundStatus = 'Applying background choice...';
+  renderBackgroundSettings();
+  let failed = false;
+  try {
+    const response = await fetch('/api/artist-background', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: Boolean(index) }),
+    });
+    if (response.status !== 204) failed = true;
+  } catch {
+    failed = true;
+  } finally {
+    // A reopened dialog needs a fresh read even when the write began in an old one.
+    if (settingsOpen && (!failed || sessionId !== settingsRequestId)) await loadBackgroundSettings();
+    pendingBackground = false;
+    if (failed && settingsOpen && sessionId === settingsRequestId)
+      backgroundStatus = 'Background change failed. Current playback continues.';
+    if (settingsOpen) renderBackgroundSettings();
+  }
 }
 async function loadPolicySettings() {
   const requestId = settingsRequestId;
@@ -373,17 +451,22 @@ function focusPolicy(index) {
   focusedPolicy = index;
   renderPolicySettings();
   settingsActions[index]?.focus?.({ preventScroll: true });
+  settingsActions[index]?.scrollIntoView?.({ block: 'nearest' });
 }
 function openSettings() {
   settingsOpen = true;
   settingsFocusMoved = false;
   settingsRequestId += 1;
   policyState = null;
+  backgroundState = null;
+  backgroundStatus = 'Loading background availability...';
+  backgroundLoading = true;
   setHidden(byId('settings-panel'), false);
   focusPolicy(0);
   set('settings-policy-status', 'Loading read policy…');
   set('settings-persistence', 'Checking whether changes are saved…');
   void loadPolicySettings();
+  void loadBackgroundSettings();
 }
 function closeSettings() {
   settingsOpen = false;
@@ -445,11 +528,16 @@ function handleNavigation(action) {
     else if (action === 'left' || action === 'up' || action === 'right' || action === 'down') {
       settingsFocusMoved = true;
       const direction = action === 'left' || action === 'up' ? -1 : 1;
-      focusPolicy((focusedPolicy + direction + settingsActions.length) % settingsActions.length);
+      const enabled = settingsActions.map((button, index) => !button.disabled ? index : -1)
+        .filter((index) => index >= 0);
+      const position = enabled.indexOf(focusedPolicy);
+      if (enabled.length) focusPolicy(enabled[position < 0 ? (direction > 0 ? 0 : enabled.length - 1)
+        : (position + direction + enabled.length) % enabled.length]);
     }
     else if (action === 'select') {
       if (focusedPolicy === 2) closeSettings();
-      else void selectPolicy(focusedPolicy);
+      else if (focusedPolicy < 2) void selectPolicy(focusedPolicy);
+      else void selectBackground(focusedPolicy - 3);
     }
     return;
   }
@@ -493,20 +581,27 @@ controls.forEach((button, index) => button.addEventListener('click', (event) => 
   else activateControl(button);
 }));
 policyButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
+  settingsFocusMoved = true;
   focusPolicy(index);
   if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
   else void selectPolicy(index);
+}));
+backgroundButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
+  settingsFocusMoved = true;
+  focusPolicy(index + 3);
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else void selectBackground(index);
 }));
 settingsCloseButton.addEventListener?.('click', closeSettings);
 document.addEventListener('keydown', (event) => {
   if (settingsOpen && event.key === 'Tab') {
     event.preventDefault();
     settingsFocusMoved = true;
-    const targets = [...policyButtons.filter((button) => !button.disabled), settingsCloseButton];
+    const targets = settingsActions.filter((button) => !button.disabled);
     const current = targets.indexOf(document.activeElement);
     const next = current < 0 ? (event.shiftKey ? targets.length - 1 : 0)
       : (current + (event.shiftKey ? targets.length - 1 : 1)) % targets.length;
-    targets[next].focus?.({ preventScroll: true });
+    focusPolicy(settingsActions.indexOf(targets[next]));
     return;
   }
   const actions = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'back' };

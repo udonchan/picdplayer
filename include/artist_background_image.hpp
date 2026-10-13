@@ -4,6 +4,7 @@
 #include "http_client.hpp"
 
 #include <filesystem>
+#include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
@@ -13,6 +14,8 @@ struct ArtistBackgroundImage {
     std::string mime_type;
     std::string bytes;
 };
+
+inline constexpr std::size_t artist_background_image_limit = 8 * 1024 * 1024;
 
 using ArtistImageHttpGet = std::function<HttpResponse(
     std::string_view, std::size_t, const std::function<bool()>&)>;

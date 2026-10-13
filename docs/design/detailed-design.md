@@ -282,6 +282,11 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
 | [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | main threadのArtistBackgroundPolicyをEnrichmentServiceへ参照で渡し、effectiveがfalseならworkerを生成・要求しない。現段階はON拒否なのでkey指定時も生成しない。既存部品の選択済みArtist MBID・metadata世代照合と取消は保持。OFF handlerはpolicy適用後に即時取消・内部候補消去し、再生停止を待たない |
 | [load_artist_background_image](../../src/artist_background_image.cpp) | 現段階ではruntime未接続。候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得する部品。JPEG/PNG/WebPの外形とContent-Typeを照合し、full decodeの保証はしない |
+| [ArtistBackgroundImageWorker](../../src/artist_background_image_worker.cpp) | Draft PR #217から再利用した画像取得部品。現在のruntimeでは未生成・未接続。実行中1件・最新pending1件・result1件を保持し、要求serialの変更で旧結果を破棄する。取消・shutdownをlookupへ通知し、返却bytesは共通の8 MiB上限とJPEG/PNG/WebP MIMEを検査する。main ownerの世代・artist・候補照合やViewのfull decodeを代替しない |
+
+候補workerと画像workerはいずれもthread memberをmutex・condition variable・状態memberより後に
+宣言する。constructorで開始するthreadが未構築の状態へアクセスしないための順序である。
+画像workerの登録・部品試験は、背景のON受理、runtime取得、API配信、disk cache採用を意味しない。
 
 MetadataWorker.cancel_pendingは未開始requestと保存結果を消す。実行中HTTPの中断はshutdownの
 closingフラグだけに連動する。交換時の安全性は中断ではなくMetadataSession.applyで保証する。
