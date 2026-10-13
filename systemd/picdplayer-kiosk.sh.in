@@ -15,6 +15,11 @@ kiosk_mark kiosk_wrapper_start
 : "${PICDPLAYER_KIOSK_URL:=http://127.0.0.1:8080/player}"
 : "${PICDPLAYER_CAGE:=/usr/bin/cage}"
 : "${PICDPLAYER_CHROMIUM:=/usr/bin/chromium}"
+: "${PICDPLAYER_KIOSK_RUNTIME:=wpe}"
+: "${PICDPLAYER_KIOSK_FALLBACK:=chromium}"
+: "${PICDPLAYER_WPE:=@CMAKE_INSTALL_FULL_LIBEXECDIR@/picdplayer-wpe}"
+# The bundled WPE is private to this package, not a host ldconfig replacement.
+export LD_LIBRARY_PATH="/opt/picdplayer-wpe/2.54.0/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 : "${PICDPLAYER_API_WAIT_HOST:=127.0.0.1}"
 : "${PICDPLAYER_API_WAIT_PORT:=8080}"
 : "${PICDPLAYER_API_WAIT_TIMEOUT_SECONDS:=30}"
@@ -34,10 +39,35 @@ if (( port < 1 || port > 65535 || wait_seconds < 1 || wait_seconds > 300 )); the
   echo "picdplayer-kiosk: port must be 1..65535; wait timeout must be 1..300 seconds" >&2
   exit 2
 fi
-if [[ ! -x "$PICDPLAYER_CAGE" || ! -x "$PICDPLAYER_CHROMIUM" ]]; then
+case "$PICDPLAYER_KIOSK_RUNTIME" in wpe|chromium) ;; *) echo 'invalid kiosk runtime' >&2; exit 2 ;; esac
+case "$PICDPLAYER_KIOSK_FALLBACK" in chromium|none) ;; *) echo 'invalid kiosk fallback' >&2; exit 2 ;; esac
+
+effective=$PICDPLAYER_KIOSK_RUNTIME
+reason=explicit
+if [[ $effective == wpe ]]; then
+  reason=primary
+  if [[ -f $XDG_RUNTIME_DIR/chromium-fallback ]]; then
+    reason=wpe-previous-failure
+  elif [[ ! -x $PICDPLAYER_WPE ]]; then
+    reason=wpe-missing
+  elif ! version=$(timeout --kill-after=1s 5s "$PICDPLAYER_WPE" --version) ||
+       ! [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] ||
+       (( 10#${BASH_REMATCH[1]} < 2 || (10#${BASH_REMATCH[1]} == 2 && 10#${BASH_REMATCH[2]} < 54) )); then
+    reason=wpe-incompatible
+  fi
+  if [[ $reason != primary ]]; then
+    if [[ $PICDPLAYER_KIOSK_FALLBACK == none ]]; then
+      echo "kiosk_runtime: requested=wpe unavailable=$reason fallback=none" >&2
+      exit 1
+    fi
+    effective=chromium
+  fi
+fi
+if [[ $effective == chromium && ( ! -x $PICDPLAYER_CAGE || ! -x $PICDPLAYER_CHROMIUM ) ]]; then
   echo "picdplayer-kiosk: install Cage and Chromium or correct their paths" >&2
   exit 2
 fi
+echo "kiosk_runtime: requested=$PICDPLAYER_KIOSK_RUNTIME effective=$effective reason=$reason"
 
 kiosk_mark api_wait_start
 deadline=$((SECONDS + wait_seconds))
@@ -60,6 +90,11 @@ while true; do
   sleep 1
 done
 
+if [[ $effective == wpe ]]; then
+  printf '%s\n' wpe > "$XDG_RUNTIME_DIR/wpe-attempt"
+  kiosk_mark wpe_exec
+  exec "$PICDPLAYER_WPE" "$PICDPLAYER_KIOSK_URL"
+fi
 kiosk_mark cage_exec
 exec "$PICDPLAYER_CAGE" -- "$PICDPLAYER_CHROMIUM" \
   --ozone-platform=wayland \

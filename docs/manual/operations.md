@@ -207,7 +207,7 @@ AVAILABLEの場合に表示する。metadataを有効にするには起動時に
 `--metadata-cache PATH`を指定する。metadataが無い、見つからない、または複数候補の場合も、track番号と
 再生位置は表示できる。daemonが取得・cacheした画像をsame-originの`/api/presentation/artwork/cover`から読み、失敗時はCDの
 プレースホルダーを表示する。標準Playerはloopback APIで基本transport操作と曖昧metadata候補の選択を送れる。
-任意のChromium/Cage kioskによる
+任意のWPE優先kiosk（Chromium/Cageは復旧選択肢）による
 tty1への自動表示は[systemd常駐運転](systemd.md#chromiumcage-kiosk)を参照する。
 
 `/debug/status`は以下のtechnical status画面であり、読み取り根拠やdrive能力を確認するために使う。
@@ -224,6 +224,36 @@ NO DISCと表示する。右上がLiveならWebSocket接続中。切断時はRec
 GET stateで現在値を復元して再接続する。ここから再生操作は行わない。
 
 これはPhase 1bの診断画面であり、TV向け本番UIやkiosk起動ではない。
+
+## WPE候補のInspector診断
+
+WPE主runtimeへの移行候補には`scripts/inspect-wpe.py`を用意している。これはChromium CDPとは
+別のWebKit target routingを使い、pageのtitle・readyState・viewport・接続表示を読み取る。
+標準packageはWPEを供給し、開発Piでは利用者が初回表示・再生を確認した。
+Inspector tool自体の実WebKit接続は未確認であり、tool追加やmock試験を実機確認とは扱わない。
+
+実機のWPEを起動するsudo操作は利用者が行う。既存の隔離rootfsでの一時試験には
+`scripts/test-wpe-kiosk.sh`があるが、通常serviceのWPE移行試験とは別であり、この診断toolは
+serviceの停止・起動やsudoers変更を行わない。InspectorはWPEの起動時に
+`WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`でloopback限定にする。
+既にInspectorを有効化したWPEが動作している場合だけ、Macで別terminalからSSH転送する。
+
+```sh
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:19223:127.0.0.1:9223 PI_HOST
+```
+
+別terminalで、このcheckoutのrootから実行する。追加のPython packageは不要。
+
+```sh
+python3 scripts/inspect-wpe.py --list
+python3 scripts/inspect-wpe.py --target-url http://127.0.0.1:8080/player
+```
+
+一致するtargetが一つだけの場合に接続する。WebSocket接続開始からhandshake・外側ack・page応答まで
+25秒のdeadlineを共有し、無応答のsocket操作は最大5秒で失敗する（接続確立は最大15秒）。
+targetの破棄・pause状態・protocol error・JavaScript評価例外は失敗として扱い、debuggerのresumeや
+画面遷移は実行しない。終了時はsocketを閉じる。SSH転送も確認後にCtrl-Cで終了する。
+JSON取得成功はTVのfirst pixel、描画の正しさ、音声、CEC、長期安定性の確認とは区別する。
 
 ## ログの読み方
 

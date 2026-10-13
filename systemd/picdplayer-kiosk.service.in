@@ -3,6 +3,8 @@ Description=PiCDPlayer Now Playing kiosk
 After=picdplayer.service
 Wants=picdplayer.service
 Conflicts=getty@tty1.service
+StartLimitIntervalSec=60s
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -19,6 +21,7 @@ StandardOutput=journal
 StandardError=journal
 RuntimeDirectory=picdplayer-kiosk
 RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=restart
 StateDirectory=picdplayer
 StateDirectoryMode=0750
 CacheDirectory=picdplayer
@@ -29,6 +32,9 @@ Environment=XDG_CACHE_HOME=/var/cache/picdplayer
 Environment=HOME=/var/lib/picdplayer
 EnvironmentFile=-/etc/default/picdplayer-kiosk
 ExecStart=@CMAKE_INSTALL_FULL_LIBEXECDIR@/picdplayer-kiosk
+ExecStopPost=@CMAKE_INSTALL_FULL_LIBEXECDIR@/picdplayer-kiosk-post-stop
+KillMode=control-group
+TimeoutStopSec=10s
 Restart=on-failure
 RestartSec=2s
 

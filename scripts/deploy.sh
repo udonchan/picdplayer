@@ -18,6 +18,11 @@ TARGET="${PICDPLAYER_TARGET:-picdplayer-pi}"
 LOCAL_PACKAGE_DIR="${REPO_ROOT}/package-container"
 REMOTE_PACKAGE_DIR="picdplayer-package"
 REMOTE_PACKAGE_NAME="picdplayer.deb"
+EXPECTED_RUNTIME="${PICDPLAYER_EXPECT_KIOSK_RUNTIME:-wpe}"
+case "${EXPECTED_RUNTIME}" in
+    wpe|chromium) ;;
+    *) echo 'ERROR: PICDPLAYER_EXPECT_KIOSK_RUNTIME must be wpe or chromium' >&2; exit 2 ;;
+esac
 
 echo "==> PiCDPlayer deploy"
 echo "    repository : ${REPO_ROOT}"
@@ -110,6 +115,28 @@ if [[ "${DAEMON_STATE_AFTER}" != "${DAEMON_STATE_BEFORE}" ||
     exit 1
 fi
 ssh "${TARGET}" "test \"\$(dpkg-query -W -f='\${Status}' picdplayer)\" = 'install ok installed' && test -x /usr/local/bin/cdplayerd && test -x /usr/local/libexec/picdplayer-kiosk"
+ssh "${TARGET}" 'test "$(env LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib /usr/local/libexec/picdplayer-wpe --version)" = 2.54.0'
+if [[ "${KIOSK_STATE_AFTER}" == active ]]; then
+    # Type=simple can still be in the API-wait wrapper after try-restart returns.
+    ssh "${TARGET}" "bash -s -- '${EXPECTED_RUNTIME}'" <<'VERIFY'
+set -eu
+case "$1" in wpe) expected=picdplayer-wpe ;; chromium) expected=cage ;; esac
+for ((attempt=0; attempt<35; attempt++)); do
+    pid=$(systemctl show -p MainPID --value picdplayer-kiosk.service)
+    actual=$(ps -p "${pid:-0}" -o comm= 2>/dev/null) || actual=none
+    if [[ $actual == "$expected" ]]; then
+        echo "kiosk_runtime_verified: expected=$1 process=$actual pid=$pid"
+        exit 0
+    fi
+    if [[ $actual == cage || $actual == picdplayer-wpe ]]; then break; fi
+    sleep 1
+done
+echo "ERROR: kiosk runtime mismatch: expected=$expected actual=$actual" >&2
+exit 1
+VERIFY
+else
+    echo 'kiosk_runtime_verified: inactive (not started for verification)'
+fi
 
 echo
 echo "==> Deployment completed successfully"

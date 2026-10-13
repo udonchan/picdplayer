@@ -20,6 +20,59 @@ Pi単体で試す場合はメモリ・CPU負荷を抑えるため `-j1` とす�
 Dockerの標準scriptはcontainerのCPU数に応じて並列ビルドする。
 `build/`・`build-*/` はGit管理対象外。
 
+標準Docker buildはWPE kioskを有効にする。`scripts/build-container.sh`は
+`scripts/build-wpe-runtime.sh`で公式WPE 2.54.0と2patchをビルドし、SDKを
+`build-wpe-runtime/2.54.0`へexportしてからアプリをcompileする。source/patch/設定のhashが
+一致するSDKは再利用し、アプリ変更だけでWebKitを再compileしない。SDK cacheがない場合は
+Docker volume `picdplayer-wpe-runtime-2.54.0`の増分buildを使う。
+既存試験volumeを使う場合は`PICDPLAYER_WPE_VOLUME=picdplayer-wpe221-build`を指定できる。
+初回は最大6 GiB/2 CPU/並列2でWebKitをビルドするため時間がかかる。SDK cacheを更新する場合は
+生成物`build-wpe-runtime/recipe`だけを削除して再実行する。volumeは自動削除しない。
+
+CMakeはlauncherを`/usr/local/libexec`、runtimeのlib/libexec/shareを
+`/opt/picdplayer-wpe/2.54.0`へinstall/packageする。header/pkg-configはSDK専用でpackageに入れない。
+wrapperだけがprivate library pathを設定し、ホストのglibc/ldconfigを置き換えない。
+`bubblewrap`/`xdg-dbus-proxy`は明示runtime依存、共有library依存はCPack/shlibdepsを正本とする。
+標準Dockerfileを更新したため、既存imageは`docker build -t picdplayer-build .`で再生成する。
+完全なbase/apt固定と再現性精査はv1.0段階まで保留する。
+
+## TrixieでのWPE source build成立性調査（#221）
+
+これは[#220](https://github.com/udonchan/picdplayer/issues/220)の供給方式を判断するための
+[#221](https://github.com/udonchan/picdplayer/issues/221)の試験で、標準buildや製品runtimeではない。
+WPE WebKit 2.54.0の公式sourceをSHA256固定で取得し、Trixie/arm64の依存でビルドする。
+sid repository、ホストのglibc更新、Pi deploy、Buildrootは使用しない。
+
+```sh
+docker build --platform linux/arm64 -f scripts/wpe-source-probe.Dockerfile \
+  -t picdplayer-wpe-source-probe:2.54.0-trixie .
+docker volume create picdplayer-wpe221-build
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work picdplayer-wpe-source-probe:2.54.0-trixie configure
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work picdplayer-wpe-source-probe:2.54.0-trixie build
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work picdplayer-wpe-source-probe:2.54.0-trixie stage
+docker run --rm --platform linux/arm64 --network none --memory 6g --cpus 2 \
+  -v picdplayer-wpe221-build:/work -v "$PWD:/src:ro" \
+  picdplayer-wpe-source-probe:2.54.0-trixie verify
+```
+
+volume内の`/work/logs/`にpackage版・toolchain・configure/build/install logを保持する。
+stageはvolume内の`/work/stage/opt/picdplayer-wpe/2.54.0/`で、ホストの`/usr`へinstallしない。
+並列数は2。失敗後もvolumeを保持し、configure成功・build成功・runtime成功を分けて記録する。
+DRMとbubblewrap sandboxを有効化し、legacy API・Wayland/headless・動画・Web Audio・WebCodecs・GStreamer・音声合成・
+spellcheck・hyphenation・documentation/introspection・WebDriver・libbacktraceを無効化する。
+この省略構成はCustom UI全般の互換性を保証しない。base tagとapt package版は現時点では
+取得時点依存であり、package一覧とimage IDを記録して評価する。製品供給の完全固定は後続課題。
+2.54.0はVIDEO=OFFでmedia bindingの条件guard不足によるcompile failureを観測したため、
+`scripts/wpe-source-video-disabled.patch`をfuzz 0で適用する。公式source hashとこの追加patchを
+区別して追跡し、無改変upstreamのbuild成功とは扱わない。
+加えてsandbox用libseccompが最終linkから欠落したため、
+`scripts/wpe-source-sandbox-link.patch`でWPE/sandbox有効時のtargetへ明示linkする。
+sandboxをOFFにして回避しない。`verify`は専用prefixを使って既存launcherをcompile/linkし、
+`--version`とlauncher/Web/Network/GPU processの`ldd -r`を検査する。DRMには接続しない。
+
 ## 実行権限と基本起動
 
 daemonはrootで動かさず、実行ユーザーがCEC・CD・ALSA deviceへアクセスできるようにする。

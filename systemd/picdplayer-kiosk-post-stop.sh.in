@@ -1,0 +1,16 @@
+#!/bin/bash
+set -eu
+
+# systemd has stopped the complete kiosk cgroup before the next restart.
+: "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must be set}"
+attempt=$XDG_RUNTIME_DIR/wpe-attempt
+fallback=$XDG_RUNTIME_DIR/chromium-fallback
+if [[ ${SERVICE_RESULT:-success} == success ]]; then
+  rm -f -- "$fallback"
+elif [[ -f $attempt ]]; then
+  if [[ ${PICDPLAYER_KIOSK_FALLBACK:-chromium} == chromium ]]; then
+    printf '%s\n' "${SERVICE_RESULT}" > "$fallback"
+    echo "kiosk_runtime: next=chromium reason=wpe-${SERVICE_RESULT}"
+  fi
+fi
+rm -f -- "$attempt"

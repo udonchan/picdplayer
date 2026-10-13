@@ -4,9 +4,30 @@ option(ENABLE_PARANOIA "Enable libcdio-paranoia reader" OFF)
 option(ENABLE_METADATA "Enable MusicBrainz metadata support" OFF)
 option(ENABLE_API "Enable the local control API" OFF)
 option(INSTALL_SYSTEMD_UNIT "Install the picdplayer systemd service" OFF)
-option(INSTALL_SYSTEMD_KIOSK_UNIT "Install the optional PiCDPlayer Chromium kiosk service" OFF)
+option(INSTALL_SYSTEMD_KIOSK_UNIT "Install the optional PiCDPlayer kiosk service" OFF)
+option(ENABLE_WPE_KIOSK "Build the WPEPlatform direct DRM kiosk launcher" OFF)
+set(PICDPLAYER_WPE_MIN_VERSION "2.54" CACHE STRING "Minimum supported WPEPlatform version")
+set(PICDPLAYER_WPE_RUNTIME_DIR "/opt/picdplayer-wpe/2.54.0" CACHE PATH "Source-built WPE runtime and SDK")
 set(PICDPLAYER_SERVICE_USER "picdplayer" CACHE STRING "User for the systemd service")
 include(GNUInstallDirs)
+if(ENABLE_WPE_KIOSK)
+    enable_language(C)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(WPE_KIOSK REQUIRED IMPORTED_TARGET
+        "wpe-platform-drm-2.0>=${PICDPLAYER_WPE_MIN_VERSION}"
+        "wpe-webkit-2.0>=${PICDPLAYER_WPE_MIN_VERSION}")
+    add_executable(picdplayer-wpe src/wpe_kiosk.c)
+    target_compile_features(picdplayer-wpe PRIVATE c_std_11)
+    target_compile_options(picdplayer-wpe PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_libraries(picdplayer-wpe PRIVATE PkgConfig::WPE_KIOSK)
+    install(TARGETS picdplayer-wpe DESTINATION ${CMAKE_INSTALL_LIBEXECDIR})
+    if(NOT EXISTS "${PICDPLAYER_WPE_RUNTIME_DIR}/lib/pkgconfig/wpe-platform-drm-2.0.pc")
+        message(FATAL_ERROR "Source-built WPE runtime is missing: ${PICDPLAYER_WPE_RUNTIME_DIR}")
+    endif()
+    install(DIRECTORY "${PICDPLAYER_WPE_RUNTIME_DIR}/"
+        DESTINATION /opt/picdplayer-wpe/2.54.0 USE_SOURCE_PERMISSIONS
+        PATTERN include EXCLUDE PATTERN pkgconfig EXCLUDE)
+endif()
 set(PICDPLAYER_SYSTEMD_UNIT_DIR "lib/systemd/system" CACHE STRING
     "Systemd unit install directory (relative to install prefix or absolute)")
 if(ENABLE_PARANOIA OR ENABLE_METADATA)
@@ -83,6 +104,7 @@ endif()
 configure_file(systemd/picdplayer.service.in picdplayer.service @ONLY)
 configure_file(systemd/picdplayer-kiosk.service.in picdplayer-kiosk.service @ONLY)
 configure_file(systemd/picdplayer-kiosk.sh.in picdplayer-kiosk @ONLY)
+configure_file(systemd/picdplayer-kiosk-post-stop.sh.in picdplayer-kiosk-post-stop @ONLY)
 if(INSTALL_SYSTEMD_UNIT)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picdplayer.service
             DESTINATION ${PICDPLAYER_SYSTEMD_UNIT_DIR})
@@ -91,6 +113,7 @@ if(INSTALL_SYSTEMD_KIOSK_UNIT)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/picdplayer-kiosk.service
             DESTINATION ${PICDPLAYER_SYSTEMD_UNIT_DIR})
     install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/picdplayer-kiosk
+            ${CMAKE_CURRENT_BINARY_DIR}/picdplayer-kiosk-post-stop
             DESTINATION ${CMAKE_INSTALL_LIBEXECDIR})
 endif()
 
@@ -109,6 +132,10 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "arm64")
 endif()
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+if(ENABLE_WPE_KIOSK)
+    set(CPACK_DEBIAN_PACKAGE_PRIVATE_DIRS "${PICDPLAYER_WPE_RUNTIME_DIR}/lib")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "bubblewrap, xdg-dbus-proxy")
+endif()
 # Generate lifecycle scripts only for the units included by this configuration.
 set(PICDPLAYER_PACKAGE_SERVICES "")
 if(INSTALL_SYSTEMD_UNIT)
@@ -442,6 +469,14 @@ if(BUILD_TESTING)
         add_test(NAME paranoia_reader COMMAND paranoia_reader_test)
     endif()
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(NAME wpe_inspector_protocol COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/wpe_inspector_test.py)
+    set_tests_properties(wpe_inspector_protocol PROPERTIES TIMEOUT 10)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_test(NAME kiosk_runtime_selection COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/kiosk_runtime_test.py)
+        set_tests_properties(kiosk_runtime_selection PROPERTIES TIMEOUT 15)
+    endif()
     if(ENABLE_METADATA)
         add_test(NAME http_client COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/http_client_https.py $<TARGET_FILE:http_client_test>)

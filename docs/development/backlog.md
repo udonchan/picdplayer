@@ -138,6 +138,37 @@ README、Guide、Design、Manual、Developmentと、History/旧パスの案内�
 
 この整理で新たな実機試験を行ったことにはしない。未確認事項は各Issueの完了条件として残す。
 
+## WPE主runtimeへの移行
+
+Chromiumを安全な切り戻し選択肢として残し、WPEを主runtimeとする移行候補を
+`feature/wpe-primary-runtime`で実装中。2026-10-12にInspector診断のdeadline・異常応答を補修し、
+標準Linux/aarch64 build・CTest 58/58・package lifecycleを確認した。ただし標準buildは
+WPE SDK無効でlauncherを含まず、Piの稼働runtimeもCage/Chromiumのままである。
+その後、利用者がsource-built WPE 2.54.0へPiのkioskを切り替え、TVの画面表示と再生を確認した。
+sudoなしのprocess観測でもWPEがMainPIDで、Chromium fallbackではないことを確認した。
+詳細と未検証範囲は[検証状況](verification.md#source-built-wpeのpi切り替え確認2026-10-12-utc)を参照する。
+
+| Issue | 主な範囲 |
+|---|---|
+| [#219](https://github.com/udonchan/picdplayer/issues/219) | WPE主serviceの起動・終了・DRM解放・失敗後のChromium復旧を実機で確認する。mock試験やserviceのactiveだけで表示成功と判断しない。 |
+| [#220](https://github.com/udonchan/picdplayer/issues/220) | WPE 2.54以降の固定・再現可能な供給、依存・provenance・更新経路を確立する。隔離sid rootfsをTrixie hostへ混在させない。 |
+| [#221](https://github.com/udonchan/picdplayer/issues/221) | #220の供給候補として、SHA256固定のWPE 2.54.0をTrixie/arm64でsource buildした。VIDEO guardとsandbox seccomp linkの2patch付き省略構成で増分build/stage、既存launcher compile/link/versionとprocess群の依存解決を確認済み。無改変source・最終recipeのclean rebuild・Pi runtime・正式供給は未確認。詳細は検証状況を参照する。 |
+
+Buildroot採用は前提としない。sudoが必要な実機操作は利用者が行い、診断toolからserviceの
+切り替えやsudoers変更を行わない。既存PoCの確認と新しい本番serviceの確認は区別する。
+開発基準は今回のWPE 2.54.0・2patch・設定とする。主要依存36packageはPiに導入済みで、
+追加の依存/ABI精査、clean rebuild、最終供給環境の完全固定はv1.0確定段階まで保留する。
+最終固定はBuildroot検討再開時に評価し、現時点の開発・初回実機試験を待たせない。
+具体的不具合が出た場合だけ必要な範囲を調査する。これは#220の正式供給完了ではない。
+標準build/packageはWPEを有効化し、runtimeを専用prefixへ同梱する開発用供給経路を実装した。
+deployはversionとactive kioskのMainPIDを検査する。通常deployのsudoers追加は不要。
+SDK cache・package lifecycleはcontainer検証済み。2026-10-13 UTC、利用者が標準packageを
+Piへdeployし、TVリモコンでアルバム選択→再生→停止を確認した。WPE稼働とpackage所有も
+sudoなしで確認した。cold boot・DRM解放・異常終了fallback等は引き続き未確認。
+2026-10-13 UTC、利用者の方針により、開発中はWPEを主runtimeとして進め、復旧の追加検討は
+必要になった時点へ保留する。既存の明示Chromium選択/fallback実装は保持するが、追加の実機
+復旧試験を現段階の取り込み条件にはしない。未確認を確認済みとは扱わない。
+
 ## Buildrootの検討成果保全と採用保留
 
 2026-10-12、利用者の判断によりBuildroot採用・追加実装を保留した。成果は破棄せず、

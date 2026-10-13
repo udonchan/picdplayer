@@ -36,6 +36,7 @@ class CdpTest(unittest.TestCase):
                          [data, response, data, complete]):
             with self.subTest(messages=messages):
                 ws = cdp.WebSocket.__new__(cdp.WebSocket)
+                ws.deadline = None
                 ws.socket = Mock()
                 ws.next_id = 0
                 ws.events = {}
@@ -46,6 +47,7 @@ class CdpTest(unittest.TestCase):
 
     def test_incomplete_trace_raises(self):
         ws = cdp.WebSocket.__new__(cdp.WebSocket)
+        ws.deadline = None
         ws.socket = Mock()
         ws.next_id = 0
         ws.events = {}
@@ -55,6 +57,7 @@ class CdpTest(unittest.TestCase):
 
     def test_websocket_payload_bytes_count_only_received_text_payloads(self):
         ws = cdp.WebSocket.__new__(cdp.WebSocket)
+        ws.deadline = None
         ws.socket = Mock()
         ws.next_id = 0
         ws.events = {}
@@ -71,6 +74,49 @@ class CdpTest(unittest.TestCase):
         self.assertEqual(ws.events["Network.webSocketFrameReceived"], 2)
         self.assertEqual(ws.event_payload_bytes["Network.webSocketFrameReceived"],
                          len("測定".encode("utf-8")))
+
+    def test_expired_deadline_does_not_connect(self):
+        with patch.object(cdp.time, 'monotonic', return_value=10), \
+                patch.object(cdp.socket, 'create_connection') as connect:
+            with self.assertRaisesRegex(TimeoutError, 'deadline expired'):
+                cdp.WebSocket('ws://127.0.0.1:9223/socket/1/2/WebPage', deadline=9)
+        connect.assert_not_called()
+
+    def test_deadline_bounds_trickling_handshake(self):
+        sock = Mock()
+        sock.recv.return_value = b'H'
+        with patch.object(cdp.socket, 'create_connection', return_value=sock), \
+                patch.object(cdp.time, 'monotonic', side_effect=[0, 0, 1, 2, 3]):
+            with self.assertRaisesRegex(TimeoutError, 'deadline expired'):
+                cdp.WebSocket('ws://127.0.0.1:9223/socket/1/2/WebPage', deadline=3)
+        self.assertEqual(sock.recv.call_count, 2)
+        sock.close.assert_called_once()
+
+    def test_deadline_bounds_trickling_frame(self):
+        ws = cdp.WebSocket.__new__(cdp.WebSocket)
+        ws.deadline = 3
+        ws.socket = Mock()
+        ws.socket.recv.return_value = b'x'
+        ws.pending = b''
+        with patch.object(cdp.time, 'monotonic', side_effect=[0, 1, 2, 3]):
+            with self.assertRaisesRegex(TimeoutError, 'deadline expired'):
+                ws.read_exact(100)
+        self.assertEqual(ws.socket.recv.call_count, 2)
+
+    def test_deadline_bounds_events_without_ack(self):
+        ws = cdp.WebSocket.__new__(cdp.WebSocket)
+        ws.deadline = 3
+        ws.socket = Mock()
+        ws.next_id = 0
+        ws.events = {}
+        ws.event_payload_bytes = {}
+        event = cdp.json.dumps({'method': 'Runtime.event'}).encode()
+        ws.pending = (bytes([0x81, len(event)]) + event) * 10
+        with patch.object(cdp.time, 'monotonic', side_effect=[0, 1, 1, 2, 2, 3]):
+            with self.assertRaisesRegex(TimeoutError, 'deadline expired'):
+                ws.call('Target.sendMessageToTarget')
+        self.assertEqual(ws.events, {'Runtime.event': 2})
+        ws.socket.recv.assert_not_called()
 
     def test_reset_event_counters_preserves_transport_state(self):
         ws = cdp.WebSocket.__new__(cdp.WebSocket)

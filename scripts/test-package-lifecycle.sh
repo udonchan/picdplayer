@@ -53,6 +53,8 @@ EOF
 
         # A package upgrade must retain files that have never been package-owned.
         printf unrelated > /usr/local/share/picdplayer/unrelated-test-file
+        mkdir -p /etc/default
+        printf custom-setting > /etc/default/picdplayer-kiosk
 
         dpkg -i /package/picdplayer.deb >/dev/null
         test "$(dpkg-query -W -f="\${Status}" picdplayer)" = "install ok installed"
@@ -60,6 +62,15 @@ EOF
         test -f /usr/local/share/picdplayer/unrelated-test-file
         test -x /usr/local/bin/cdplayerd
         test -x /usr/local/libexec/picdplayer-kiosk
+        test "$(cat /etc/default/picdplayer-kiosk)" = custom-setting
+        test -x /usr/local/libexec/picdplayer-wpe
+        test -f /opt/picdplayer-wpe/2.54.0/share/wpe-webkit-2.0/inspector.gresource
+        test "$(env LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib /usr/local/libexec/picdplayer-wpe --version)" = 2.54.0
+        test ! -d /opt/picdplayer-wpe/2.54.0/include
+        test ! -d /opt/picdplayer-wpe/2.54.0/lib/pkgconfig
+        for process in WPEWebProcess WPENetworkProcess WPEGPUProcess; do
+            test -x "/opt/picdplayer-wpe/2.54.0/libexec/wpe-webkit-2.0/$process"
+        done
 
         # The same artifact is also a supported re-install path.
         dpkg -i /package/picdplayer.deb >/dev/null

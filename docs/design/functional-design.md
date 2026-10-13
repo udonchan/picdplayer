@@ -11,8 +11,10 @@ Phase 1bではこのsnapshotだけを入力にする読み取り専用technical 
 `/player`は同じsnapshotを表示用に整形するNow Playing画面である。画面は状態を所有せず、
 操作POSTも送らない。曲情報・artwork・進捗に加えて、read activity、実効policy、block buffer、
 current/latest evidence、stream warning、drive capabilityと有界なdisc read mapを表示する。
-任意導入の`picdplayer-kiosk.service`はCageからWayland版Chromiumを起動し、
+任意導入の`picdplayer-kiosk.service`はWPEPlatform DRMのWPE launcherを優先して起動し、
 この画面だけをtty1へ表示する。daemonとbrowserは別serviceであり、browserが状態を所有しない。
+Chromium/Cageは明示選択と復旧用に残す。標準Docker buildはWPE 2.54.0と2patchのruntimeを
+同じDebian packageへ収める。requested/effective runtimeを区別し、fallbackをWPE成功とは扱わない。
 Now Playing document内のcursorはCSSで隠すが、Cageのerror pageや他applicationまで含む
 cursor非表示の保証、画面遷移、画面からの操作、quiet bootは未実装である。
 
