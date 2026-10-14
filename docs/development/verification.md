@@ -2,7 +2,47 @@
 
 更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
-## fanart.tvローカルkey PoC（#229、2026-10-14 UTC）
+## fanart.tv実API・Pi配備の追補（#229、2026-10-14 UTC）
+
+利用者がPiへProject key fileを追加し、PoC配備・設定反映・限定診断を明示承認した。
+`/etc/picdplayer/fanart-api-key`はroot:picdplayer・0640・通常fileで、内容は端末外へ取得していない。
+初期daemonの引数にはfile指定がなく、背景APIは`key_missing`だった。既存extra argsを保持してpathだけを
+追加し、変更前の設定は`/etc/default/picdplayer.fanart-poc-backup-20261014T124854Z`へroot専用0600で保存した。
+key file・homeの権限変更、sudoers変更、keyのbuild注入は行っていない。
+
+標準`./scripts/deploy.sh`で配備し、daemon/kioskはactive→active、WPE 2.54の専用launcher稼働を確認した。
+利用者はTVのpickerでThe Slip / Nine Inch NailsのUS版（2008-07-22）を選択した。
+承認済み再配備後には同じTOC・候補の全field一致を確認してその選択だけを復元した。CDはSTOPPEDを維持した。
+
+最初の背景ONは204で受理されたが参照が到着しなかった。端末内のnative診断はAPI応答本文・画像名・keyを
+出さずHTTP status・件数・条件一致と承認された親directoryのみを集計した。HTTP 200、背景13件、全件が
+正数の寸法・HTTPS公式CDN、artist MBID一致、本文にkey値なしを確認した。全画像は`/fanart/`直下のflat形式で、
+従来のArtist MBID/artistbackground階層という仮定が全件を除外していた。music階層だけへの緩和でも0件であり、
+実応答のdirectoryを確認してflat形式のみに追加対応した。型とartistはJSONを正とし、URL構造から推測しない。
+確認済みflatと既存music階層をparser・image loader・native HTTPで同じ安全検査へ統一した。
+HTTP/別host/query/fragment/traversal/percent escape等は拒否し、既存negative試験を弱めていない。
+
+一時診断をservice userでhomeから実行した最初の試行はPermission deniedで停止した。
+権限を緩めず、利用者の追加承認後にroot所有0755の`/var/tmp/picdplayer-fanart-poc-check`から実行した。
+診断後はそこに置いたexecutableとhomeの転送用executableを削除し、応答本文・実写真・keyをGitへ含めていない。
+SSH multiplexのBroken pipeと観測timeoutも発生したため、その試行を合格証跡へ使わず、新接続・unbuffered出力で再検証した。
+
+最終flat修正を標準buildで再build・stage・package生成し、CTest **62/62成功（31.53秒）**、package lifecycle成功、
+標準deploy成功を確認した。実daemonからJPEG **3枚、280462/366775/578294 bytes、合計1225531 bytes**を
+同一originの不透明URLでHTTP 200取得し、hashは3件とも異なった。modelは45000 ms/4000 ms、
+legacyのurlはurls先頭と一致し、全image responseに`Cache-Control: no-store`がある。
+OFFで旧3参照を全て404に失効し、再ONで異なる3参照が発行された。最後は背景ON・US版選択・STOPPEDである。
+
+WPE稼働と実画像配信を確認したが、TV目視・実音声/CEC継続・長期CPU/memoryはまだ未検証である。
+利用者の要請によりWPEスクリーンショット経路を調査し、upstream 2.54.0の`Page.snapshotRect`を確認した。
+既存PageClientのinner targetへViewport rectを送り、PNGのdataURLを取得する経路である。
+実機ではInspector port 9223が閉じていた。起動時のloopback限定`WEBKIT_INSPECTOR_HTTP_SERVER`と
+kiosk再起動が必要だが、その一時設定の承認は未確定のため実施せず、PNGも未取得である。
+別browserの再描画やChromiumへ切り替えた画像を実WPEの証拠として使っていない。
+将来取得する場合もWebKitのrendered-page snapshotであり、DRM scanout・HDMI・TV目視の証拠とは区別する。
+実keyの失効/rotation、公開同梱許可、画像license/creditは引き続きFuture Workで、Issue/PRは完了扱いにしない。
+
+## fanart.tvローカルkey PoCの初期実装（#229、2026-10-14 UTC）
 
 最新master `fb09474`から隔離した`feature/fanart-local-poc`で開発し、原workspaceの既存変更を保持した。
 公式API文書の直接取得はCloudflare 403のため、同日に利用者が提供したOpenAPI本文でv3.2/music、

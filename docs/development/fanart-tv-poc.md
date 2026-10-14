@@ -56,6 +56,11 @@ Enrichmentが選択済みreleaseの一意なArtist MBIDを使う。曖昧なarti
 写真を取得しない。Player coreのTOC/PCM/ALSA経路やbrowser JavaScriptへ認証処理を追加しない。
 ネイティブHTTPが`https://webservice.fanart.tv/v3.2/music/{Artist MBID}`へ`api-key` headerを送る。
 keyをURLへ含めず、認証付きredirectを拒否し、asset CDNへkeyを転送しない。
+Artist MBID一致と`artistbackground`型はAPIのJSONで検証し、画像URLのdirectory名から推測しない。
+2026-10-14の実APIは全13件が`https://assets.fanart.tv/fanart/`直下のflat画像を返した。
+公式文書の例にあるmusic階層と、この確認済みflat形式のみを許可する。HTTPS・正確なCDN host・
+2048 bytes以下・安全なpath segmentを要求し、HTTP、別host、query/fragment、空segment、traversal、
+percent escapeは拒否する。keyは画像取得へ渡さず、redirect/public peer/MIME/bytesの検査も維持する。
 
 候補JSONと画像は別workerで処理し、取得済み画像を段階的に公開する。現行runtimeはmemory-onlyで、
 既存cache部品へ空pathを渡す。新たなディスクcacheの採否・保持期間・削除方針は決めない。
@@ -102,6 +107,8 @@ API応答から個々の写真の権利者・包括的許諾を推定しない�
 標準の[Mac + Docker build/deploy](../manual/mac-docker-development.md)を使用する。
 このPoCの検証でkeyをpackageへ注入しない。実API試験は開発者のkeyを設定した端末だけで行う。
 本作業での自動試験と実機確認は[検証状況](verification.md)を参照する。
+同日の実機試験でProject keyによるHTTP 200、JPEG 3枚の同一origin配信、OFFでの全参照404、
+再ONでの新参照3件を確認した。これをTV目視・聴感や長期負荷の確認とは区別する。
 
 1. 既存設定を記録し、標準packageを通常のdeploy手順で導入する。daemonとkioskを別に二重起動しない。
 2. `journalctl -u picdplayer-kiosk.service -b -o cat`の`kiosk_runtime`で`effective=wpe`を確認する。

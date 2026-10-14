@@ -1,5 +1,6 @@
 #include "artist_background_image.hpp"
 #include "metadata_cache.hpp"
+#include "http_security_policy.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -14,13 +15,6 @@ namespace {
 constexpr std::size_t image_limit = artist_background_image_limit;
 constexpr MetadataCachePolicy image_policy{std::chrono::days(30), 64ULL * 1024 * 1024};
 
-bool safe_name(std::string_view value) {
-    return !value.empty() && value.size() <= 255 && value.front() != '.' &&
-        std::all_of(value.begin(), value.end(), [](unsigned char c) {
-            return std::isalnum(c) || c == '-' || c == '_' || c == '.';
-        });
-}
-
 bool allowed_candidate(std::string_view mbid, const ArtistBackgroundCandidate& candidate) {
     if (mbid.size() != 36 || candidate.width == 0 || candidate.height == 0 ||
         candidate.id.empty() || candidate.id.size() > 64 ||
@@ -32,10 +26,7 @@ bool allowed_candidate(std::string_view mbid, const ArtistBackgroundCandidate& c
             if (mbid[i] != '-') return false;
         } else if (!std::isxdigit(static_cast<unsigned char>(mbid[i]))) return false;
     }
-    const std::string prefix = "https://assets.fanart.tv/fanart/music/" + std::string(mbid) +
-                               "/artistbackground/";
-    return candidate.url.starts_with(prefix) &&
-           safe_name(std::string_view(candidate.url).substr(prefix.size()));
+    return is_allowed_artist_background_url(candidate.url);
 }
 
 std::optional<std::string> image_mime(std::string_view bytes) {

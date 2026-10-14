@@ -107,8 +107,7 @@ HttpResponse HttpClient::get(std::string_view url, std::size_t maximum_bytes,
         throw std::invalid_argument("API key is only allowed for fanart.tv music requests");
     if (follow_cover_art && !is_allowed_cover_art_url(url))
         throw std::invalid_argument("Cover Art URL host is not allowed");
-    if (fanart_asset && (!url.starts_with("https://assets.fanart.tv/fanart/music/") ||
-                         url.find_first_of("?#") != std::string_view::npos))
+    if (fanart_asset && !is_allowed_artist_background_url(url))
         throw std::invalid_argument("Artist background asset URL is not allowed");
     if (!api_key.empty() && (api_key.size() > 256 ||
         std::any_of(api_key.begin(), api_key.end(), [](unsigned char c) {

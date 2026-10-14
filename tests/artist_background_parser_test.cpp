@@ -39,6 +39,20 @@ int main() {
             R"(","artistbackground":[{"id":"6","url":")" + prefix +
             R"(native.jpg","width":"1920","height":"1080","lang":"en","likes":"7"}]})";
         check(parse_artist_backgrounds(native, artist).size() == 1);
+        const auto opaque = std::string(R"({"mbid_id":")") + artist +
+            R"(","artistbackground":[{"id":"7","url":"https://assets.fanart.tv/fanart/music/backgrounds/opaque-photo.jpg","width":"1920","height":"1080"}]})";
+        check(parse_artist_backgrounds(opaque, artist).size() == 1);
+        const auto flat = std::string(R"({"mbid_id":")") + artist +
+            R"(","artistbackground":[{"id":"9","url":"https://assets.fanart.tv/fanart/flat-photo.jpg","width":"1920","height":"1080"}]})";
+        const auto flat_images = parse_artist_backgrounds(flat, artist);
+        check(flat_images.size() == 1 && flat_images[0].url == "https://assets.fanart.tv/fanart/flat-photo.jpg");
+        for (const auto* suffix : {"../escape.jpg", "%2e%2e/escape.jpg", "folder//image.jpg",
+                                  "folder/", "folder/image.jpg?key=x", "folder/image.jpg#fragment"}) {
+            const auto rejected = std::string(R"({"mbid_id":")") + artist +
+                R"(","artistbackground":[{"id":"8","url":"https://assets.fanart.tv/fanart/music/)" + suffix +
+                R"(","width":"1920","height":"1080"}]})";
+            check(parse_artist_backgrounds(rejected, artist).empty());
+        }
         bool malformed = false;
         try { (void)parse_artist_backgrounds("invalid JSON", artist); }
         catch (const std::runtime_error&) { malformed = true; }
