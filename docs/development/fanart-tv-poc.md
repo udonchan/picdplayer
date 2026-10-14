@@ -108,7 +108,9 @@ API応答から個々の写真の権利者・包括的許諾を推定しない�
 このPoCの検証でkeyをpackageへ注入しない。実API試験は開発者のkeyを設定した端末だけで行う。
 本作業での自動試験と実機確認は[検証状況](verification.md)を参照する。
 同日の実機試験でProject keyによるHTTP 200、JPEG 3枚の同一origin配信、OFFでの全参照404、
-再ONでの新参照3件を確認した。これをTV目視・聴感や長期負荷の確認とは区別する。
+再ONでの新参照3件を確認した。同じPiのWPE rendered-page snapshotで1920×1080の写真背景描画も確認した。
+これを物理TV目視・聴感、厳密な切替時間測定や長期負荷の確認とは区別する。snapshotはtmpだけに保存し、
+Git/PR/配布物へ含めない。Inspectorはloopbackで一時利用し、撮影後に無効化した。
 
 1. 既存設定を記録し、標準packageを通常のdeploy手順で導入する。daemonとkioskを別に二重起動しない。
 2. `journalctl -u picdplayer-kiosk.service -b -o cat`の`kiosk_runtime`で`effective=wpe`を確認する。

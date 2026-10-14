@@ -33,13 +33,19 @@ SSH multiplexのBroken pipeと観測timeoutも発生したため、その試行�
 legacyのurlはurls先頭と一致し、全image responseに`Cache-Control: no-store`がある。
 OFFで旧3参照を全て404に失効し、再ONで異なる3参照が発行された。最後は背景ON・US版選択・STOPPEDである。
 
-WPE稼働と実画像配信を確認したが、TV目視・実音声/CEC継続・長期CPU/memoryはまだ未検証である。
-利用者の要請によりWPEスクリーンショット経路を調査し、upstream 2.54.0の`Page.snapshotRect`を確認した。
-既存PageClientのinner targetへViewport rectを送り、PNGのdataURLを取得する経路である。
-実機ではInspector port 9223が閉じていた。起動時のloopback限定`WEBKIT_INSPECTOR_HTTP_SERVER`と
-kiosk再起動が必要だが、その一時設定の承認は未確定のため実施せず、PNGも未取得である。
-別browserの再描画やChromiumへ切り替えた画像を実WPEの証拠として使っていない。
-将来取得する場合もWebKitのrendered-page snapshotであり、DRM scanout・HDMI・TV目視の証拠とは区別する。
+WPE screenshotは当初Inspector無効・一時再起動の承認未確定で保留したが、後続の「tmpへ保存」指示で実施した。
+sudo認証の期限切れ時は変更前に停止し、利用者が手元で`sudo -v`を更新した後に続行した。パスワードは取得していない。
+一時runtime drop-inでkioskだけへ`WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`を設定し、kioskを再起動した。
+SSH転送も`127.0.0.1:19323`限定とし、既存PageClientのinner targetでRuntime評価と`Page.snapshotRect`に成功した。
+実機WPEのrendered-page PNGは**1920×1080、1069402 bytes**で、ローカルOSのtmpへmode0600で保存した。
+SHA-256は`c1d044a265bb1f5447641eebc28f01750878f85a9f9d62f9f620d7321b3ac7b9`。
+PNGでNine Inch Nailsの実写真背景、The Slipのcover・metadata・STOPPED・DAEMON CONNECTEDを確認した。
+2画像layerともcomplete/naturalWidth1920/naturalHeight1080で、opacityは0/0.24だった。
+これは写真decodeと実WPE page描画の証拠であり、45秒/4秒の厳密な時間測定、全3画像の連続切替試験ではない。
+撮影後は一時drop-inと転送用fileを削除、daemon-reloadとkiosk再起動で通常状態へ戻し、port9223閉鎖・
+`picdplayer-wpe`稼働を確認した。SSH転送も停止した。daemon PID105812は不変で、再生・key設定には触れていない。
+画像はtmpだけに置き、Git・PR・releaseへ含めていない。別browserの再描画やChromiumを証拠に使っていない。
+DRM scanout・HDMI・TV目視、実音声/CEC継続・長期CPU/memoryはまだ未検証である。
 実keyの失効/rotation、公開同梱許可、画像license/creditは引き続きFuture Workで、Issue/PRは完了扱いにしない。
 
 ## fanart.tvローカルkey PoCの初期実装（#229、2026-10-14 UTC）
