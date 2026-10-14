@@ -37,14 +37,24 @@ int main() {
             toc, metadata, {}, {}, {}, false, 1, 1, background_reference);
         const auto enriched_json = nlohmann::json::parse(serialize_presentation_model(enriched));
         check(enriched_json["artwork"]["background"]["url"] == background_reference);
+        check(enriched_json["artwork"]["background"]["urls"] == std::vector<std::string>{background_reference});
+        check(enriched_json["artwork"]["background"]["dwell_ms"] == 45000);
+        check(enriched_json["artwork"]["background"]["crossfade_ms"] == 4000);
         check(enriched_json["artwork"]["background"]["width"].is_null());
         check(!presentation_json_equal_ignoring_revision(json.dump(), enriched_json.dump()));
+        const std::vector<std::string> references{background_reference, background_reference + "-2", background_reference + "-3"};
+        const auto multi = make_presentation_model(8, player, MediaLifecycleState::audio_ready,
+            toc, metadata, {}, {}, {}, false, 1, 1, {}, references);
+        const auto multi_json = nlohmann::json::parse(serialize_presentation_model(multi));
+        check(multi_json["artwork"]["background"]["url"] == background_reference);
+        check(multi_json["artwork"]["background"]["urls"] == references);
+        check(!presentation_json_equal_ignoring_revision(enriched_json.dump(), multi_json.dump()));
         const auto loading = make_presentation_model(9, player, MediaLifecycleState::loading,
-            toc, metadata, {}, {}, {}, false, 1, 1, background_reference);
-        check(!loading.artwork.background_url);
+            toc, metadata, {}, {}, {}, false, 1, 1, background_reference, references);
+        check(!loading.artwork.background_url && loading.artwork.background_urls.empty());
         const auto no_disc = make_presentation_model(10, player, MediaLifecycleState::no_disc,
-            std::nullopt, metadata, {}, {}, {}, false, {}, {}, background_reference);
-        check(!no_disc.artwork.background_url);
+            std::nullopt, metadata, {}, {}, {}, false, {}, {}, background_reference, references);
+        check(!no_disc.artwork.background_url && no_disc.artwork.background_urls.empty());
         auto diagnostic_model = model;
         diagnostic_model.drive.vendor = "Test drive";
         diagnostic_model.read.stats.direct_retries = 7;

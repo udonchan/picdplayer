@@ -128,13 +128,32 @@ def run(binary):
             assert state()["artwork"]["background"] is None
             control("release")
             available = await_snapshot(lambda value: value["artwork"]["background"] is not None)
-            first = available["artwork"]["background"]["url"]
+            background = available["artwork"]["background"]
+            first = background["url"]
+            assert background["urls"] == [first]
+            assert background["dwell_ms"] == 45000 and background["crossfade_ms"] == 4000
             status, data, headers = request(first)
             assert status == 200 and data == image.read_bytes()
             assert headers["Content-Type"] == "image/png" and headers["Cache-Control"] == "no-store"
+            # Real production service publishes each newly retained URL over WS, not just a fixture JSON list.
+            control("release-later")
+            two = await_snapshot(lambda value: value["artwork"]["background"] is not None and
+                                 len(value["artwork"]["background"]["urls"]) == 2)
+            available = await_snapshot(lambda value: value["artwork"]["background"] is not None and
+                                       len(value["artwork"]["background"]["urls"]) == 3)
+            references = available["artwork"]["background"]["urls"]
+            assert two["revision"] > metadata["revision"] and available["revision"] > two["revision"]
+            assert two["artwork"]["background"]["urls"] == references[:2]
+            assert available["artwork"]["background"]["url"] == first == references[0]
+            assert len(set(references)) == 3
+            for index, reference in enumerate(references):
+                status, data, headers = request(reference)
+                assert status == 200 and data == image.read_bytes() + (str(index + 2).encode() if index else b"")
+                assert headers["Cache-Control"] == "no-store"
+            assert all("fanart" not in value and "0383dadf" not in value for value in references)
             assert request("/api/artist-background", {"enabled": False})[0] == 204
             await_snapshot(lambda value: value["revision"] > available["revision"] and value["artwork"]["background"] is None)
-            assert request(first)[0] == 404
+            assert all(request(reference)[0] == 404 for reference in references)
             drain_counts()
             off_counts = counts.copy()
             time.sleep(0.08)
@@ -143,7 +162,8 @@ def run(binary):
             assert request("/api/read-policy")[:2] == policy_before
 
             assert request("/api/artist-background", {"enabled": True})[0] == 204
-            available = await_snapshot(lambda value: value["artwork"]["background"] is not None)
+            available = await_snapshot(lambda value: value["artwork"]["background"] is not None and
+                                       len(value["artwork"]["background"]["urls"]) == 3)
             await_condition(lambda: counts["image"] >= off_counts["image"] + 2)
             before_hold = counts["image"]
             delayed_reference = available["artwork"]["background"]["url"]
@@ -155,27 +175,33 @@ def run(binary):
             time.sleep(0.05)
             assert state()["artwork"]["background"] is None and request(delayed_reference)[0] == 404
             assert request("/api/artist-background", {"enabled": True})[0] == 204
-            available = await_snapshot(lambda value: value["artwork"]["background"] is not None)
+            available = await_snapshot(lambda value: value["artwork"]["background"] is not None and
+                                       len(value["artwork"]["background"]["urls"]) == 3)
             previous = available["artwork"]["background"]["url"]
+            previous_references = available["artwork"]["background"]["urls"]
             selection = available["enrichment"]["selection"]
             command = {"session_id": selection["session_id"], "disc_generation": selection["disc_generation"],
                        "metadata_generation": selection["metadata_generation"], "candidate_index": 1}
             assert request("/api/metadata-selection", command)[0] == 204
-            assert request(previous)[0] == 404
+            assert all(request(reference)[0] == 404 for reference in previous_references)
             changed = await_snapshot(lambda value: value["artwork"]["background"] is not None and
-                                     value["artwork"]["background"]["url"] != previous)
+                                     value["artwork"]["background"]["url"] != previous and
+                                     len(value["artwork"]["background"]["urls"]) == 3)
             previous = changed["artwork"]["background"]["url"]
+            previous_references = changed["artwork"]["background"]["urls"]
             command["candidate_index"] = None
             assert request("/api/metadata-selection", command)[0] == 204
             await_snapshot(lambda value: value["enrichment"]["selection"]["state"] == "DECLINED")
-            assert request(previous)[0] == 404
+            assert all(request(reference)[0] == 404 for reference in previous_references)
             command["candidate_index"] = 0
             assert request("/api/metadata-selection", command)[0] == 204
-            reselected = await_snapshot(lambda value: value["artwork"]["background"] is not None)
+            reselected = await_snapshot(lambda value: value["artwork"]["background"] is not None and
+                                       len(value["artwork"]["background"]["urls"]) == 3)
             disc_reference = reselected["artwork"]["background"]["url"]
+            disc_references = reselected["artwork"]["background"]["urls"]
             assert request("/api/eject", method="POST")[0] == 202
             await_snapshot(lambda value: value["disc"]["state"] == "NO_DISC")
-            assert request(disc_reference)[0] == 404
+            assert all(request(reference)[0] == 404 for reference in disc_references)
             assert request("/api/artist-background", {"enabled": True})[0] == 204
             drain_counts()
             before_offline = counts["background"]

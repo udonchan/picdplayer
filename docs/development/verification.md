@@ -2,6 +2,55 @@
 
 更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## fanart.tvローカルkey PoC（#229、2026-10-14 UTC）
+
+最新master `fb09474`から隔離した`feature/fanart-local-poc`で開発し、原workspaceの既存変更を保持した。
+公式API文書の直接取得はCloudflare 403のため、同日に利用者が提供したOpenAPI本文でv3.2/music、
+`api-key`、`artistbackground`、429/`Retry-After`を確認した。規約・key案内は公式WordPress REST公開本文を参照した。
+仕様根拠、設定、WPE実機手順と配布Future Workは[PoC文書](fanart-tv-poc.md)に記録する。
+
+実装は環境変数key、明示key file優先、既定OFF、有界な複数画像の段階配信、45秒/4秒slideshow、
+全参照の失効、provider rate-limitのprocess内待機である。runtimeは空cache pathを維持する。
+画像上限は圧縮bytesであり、full decodeのmemory上限や個別写真の許諾を保証しない。
+
+Linux/aarch64では既存のWPE SDKを標準scriptがrecipe照合して再利用し、
+`./scripts/build-container.sh`によるapplication build・staging・Debian package生成に成功した。
+Enrichment/Presentation/実HTTP・WS transportの3/3試験に成功し、非同期Enrichmentとtransportは
+各20回、合計40回の反復に成功した。metadata OFF/API ONのbuildとPresentation/daemonの2/2試験も成功した。
+実transportは1→2→3枚のsnapshot revision更新、先頭URLの維持、全画像GET成功、OFF/artist/辞退/disc変更時の
+全参照404を確認した。合成componentと画像を使う試験であり、通常daemonの実provider通信とは異なる。
+
+macOSの5本のNode UI試験と構文検査に成功し、render試験は20/20回の反復に成功した。
+0/1/複数、shuffle、段階追加、遅延decode・失敗、OFF・旧timer・disc世代、reduced motionを確認した。
+同一STOPPED snapshot 60回はDOM write 0、position更新60回は72 writeの既存結果を維持した。
+最終のHTML出典表示追補後も5本のNode試験を再実行して成功した。
+
+最初の全CTestは60/62成功で、追加TLS試験のopenssl CLI依存とdaemon試験のasset URL誤りが失敗した。
+daemonのURLを実際の`/player.js`・`/player.css`へ修正し、networkなしcontainerでkey/daemon 2/2を再確認した。
+有効/不正な環境変数のfixture keyは状態API・HTML/JS/CSS・stdout/stderrに含まれず、No Discは維持した。
+TLS fixtureは既存test keyと公開test certificateを使う方式へ変更し、openssl CLI依存を除去した。
+巨大な`Retry-After`秒数をlibcurlが失うケースはnative headerでdelta-secondsを保持し、時計上限への
+飽和で期限を短縮しないよう補修した。APIとCDNの独立した待機、正値/欠落/不正/0/巨大値、
+同時要求の非待機拒否、実TLSの要求数と`api-key` header限定を3/3 focused試験で確認した。
+
+最終sourceで標準buildを再実行し、全CTest **62/62成功（31.29秒）**、Debian package lifecycleも成功した。
+API OFF/METADATA ON/WPE OFFのproduction `cdplayerd` buildも成功したが、全option組合せは未確認である。
+staging全体のfixture API key文字列scanは一致0件だった。実keyは設定・build注入していない。
+
+```sh
+./scripts/build-container.sh
+docker run --rm --network none -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
+./scripts/test-package-lifecycle.sh
+```
+
+全差分と関連設計・backlogを確認した。別のread-only reviewでもEnrichment/model/UI/key経路に指摘はなかった。
+buildには未変更の`src/api_server.cpp`のmissing-field initializer warningが残るが、今回のHTTP追加warningは解消した。
+
+実API用`FANART_TV_API_KEY`はこの作業sessionに未設定で、実API接続を実施していない。
+Raspberry Piへのdeploy、WPE/TVでの実写真表示・crossfade・可読性、取得中の実CD音声/CEC、
+長時間CPU/memoryと復旧は未検証。既存のWPE稼働記録を今回の写真表示成功へ読み替えない。
+[#229](https://github.com/udonchan/picdplayer/issues/229)はこれらの完了条件が残るためOpenを維持する。
+
 ## WPE Issueの完了・置換と残条件移管（2026-10-14 UTC）
 
 利用者の指示により、既存の証拠と最新Issue本文/コメントを照合して整理した。新規実機試験・

@@ -1,6 +1,7 @@
 """No hardware: persistent player ignores stdin EOF; interactive player does not."""
 
 import signal
+import os
 import json
 import socket
 import select
@@ -14,6 +15,7 @@ import urllib.request
 
 binary = sys.argv[1]
 metadata_enabled = sys.argv[2] == "1"
+os.environ.pop("FANART_TV_API_KEY", None)
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -104,6 +106,32 @@ finally:
         persistent.wait()
 
 if metadata_enabled:
+    # Only the native daemon receives the fixture secret; public responses and
+    # assets must never contain it, even when a malformed key disables fetching.
+    for secret, available in [("fixture-environment-secret-229", True),
+                              ("fixture invalid secret-229", False)]:
+        port = free_port()
+        environment = dict(os.environ, FANART_TV_API_KEY=secret)
+        configured = subprocess.Popen(
+            [*base, "--metadata", "musicbrainz", "--api-port", str(port)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, env=environment,
+        )
+        try:
+            verify_background_api(port, available=available, reason="key_missing")
+            for path in ["/api/state", "/api/artist-background", "/player",
+                         "/player.js", "/player.css"]:
+                with opener.open(f"http://127.0.0.1:{port}{path}", timeout=1) as response:
+                    assert secret.encode() not in response.read(), path
+            configured.send_signal(signal.SIGTERM)
+            out, err = configured.communicate(timeout=3)
+            assert configured.returncode == 0, (out, err)
+            assert secret not in out + err, "environment key leaked into daemon output"
+        finally:
+            if configured.poll() is None:
+                configured.kill()
+                configured.wait()
+
     # An optional background provider credential failure must not prevent playback
     # service startup or expose the configured path in logs.
     invalid_key_path = "/nonexistent/picdplayer-artist-secret"
@@ -125,7 +153,7 @@ if metadata_enabled:
         optional.send_signal(signal.SIGTERM)
         out, err = optional.communicate(timeout=3)
         assert optional.returncode == 0, (out, err)
-        assert "disabled invalid_key_file" in err, err
+        assert "disabled invalid_key" in err, err
         assert invalid_key_path not in out + err, (out, err)
     finally:
         if optional.poll() is None:
@@ -152,7 +180,7 @@ if metadata_enabled:
             configured.send_signal(signal.SIGTERM)
             out, err = configured.communicate(timeout=3)
             assert configured.returncode == 0, (out, err)
-            assert "disabled invalid_key_file" not in err, err
+            assert "disabled invalid_key" not in err, err
             assert "test-api-key" not in out + err, (out, err)
         finally:
             if configured.poll() is None:

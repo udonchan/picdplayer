@@ -4,9 +4,9 @@
 PR #179で`--settings-file`を明示した場合のRead Policy保存・復元を実装し、masterへ統合済み。
 PR #180で標準PlayerにRead PolicyのSINGLE/REPEATを選ぶSettings画面を部分実装した。
 Settings画面を通じたPi実serviceの再起動後復元は未検証である。一般設定API、Artist Backgroundの
-保存、hot reloadはない。この開発差分ではDraft PR #217のsession ON・単一画像runtimeを再利用し、
+保存、hot reloadはない。PR #223でsession ON・単一画像runtimeをmasterへ統合し、
 key指定だけの候補照会を停止したまま、明示ON時だけ取得・配信する。SettingsはAPIに基づく背景選択を
-部分実装し、利用不能時のONを無効にする。GitHubのmaster統合とは別である。#177は背景保存・実service
+部分実装し、利用不能時のONを無効にする。#229でローカル環境変数keyと複数画像を追加する。#177は背景保存・実service
 検証が残りOpenであり、このUI変更でRead Policyの保存schemaを拡張しない。
 採用済みの保存・優先順位・適用契約は
 [機能設計](../design/functional-design.md#設定の所有保存適用境界)を正とする。
@@ -26,7 +26,7 @@ key指定だけの候補照会を停止したまま、明示ON時だけ取得・
 | buffer容量/startup量 | `--read-buffer-frames`、`--startup-buffer-frames` | 後続候補 | 15 frame刻み、15..2250、startup≦capacity。現状は起動時設定 |
 | CDDA reader | `--cdda-reader direct\|paranoia` | 初期画面から除外 | build optionとライセンス・reader再生成に関わる運用者設定 |
 | audio/CEC/CD device、audio latency、API listen/port、Custom UI path | 起動引数とsystemd environment | 初期画面から除外 | 誤設定で操作不能になり得る機器/運用者設定。rollbackと再起動境界が必要 |
-| metadata cache path、Artist Background API key file | 起動引数または開発中の起動引数 | 初期画面から除外 | 現行のkey fileは`api-key`ヘッダーを使うproject key用。personal keyの`client-key`は未実装。cacheの保存先とsecretの管理はUI表示設定から分離し、keyをAPIへ返さない |
+| metadata cache path、Artist Background API key | 起動引数のkey fileを優先、未指定時だけローカル開発用`FANART_TV_API_KEY` | 初期画面から除外 | `api-key`ヘッダーを使うproject key用。personal keyの`client-key`は未実装。cacheの保存先とsecretの管理はUI表示設定から分離し、keyをAPIへ返さない。[PoC設定手順](fanart-tv-poc.md)参照 |
 | diagnostic/probe/fixture flag | 起動引数 | 除外 | 通常の利用者設定ではない |
 
 画面へ載せる最初の実用範囲は、既存APIのRead Policyと、#49/#51が利用可能になった後の
@@ -38,7 +38,7 @@ providerのAPI認証・アクセス制約と、利用者が判断する画像ご
 project keyとpersonal keyを区別する。設定画面で利用者のpersonal keyを扱う場合は`client-key`経路を
 別途実装・検証する。利用者が必要な権利・許諾を確認した上で明示ONする方針とし、製品は画像の権利を
 保証しない。ON自体が許諾を生むわけではない。包括的許諾を製品側で確認することを実装の前提にしない。
-利用不能・未知の状態ではONを操作できない。この開発差分の単一画像runtimeは空cache pathを使う。
+利用不能・未知の状態ではONを操作できない。#229の有界な複数画像runtimeも空cache pathを使う。
 開発試験には合成/利用許諾済みfixtureを使う。
 ディスクキャッシュの採否・保持期間・容量・削除は、この権利方針とは別に決める。
 

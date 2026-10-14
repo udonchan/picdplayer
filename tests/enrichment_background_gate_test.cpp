@@ -26,6 +26,9 @@ std::atomic<unsigned> cover_calls{0};
 std::atomic<unsigned> metadata_calls{0};
 std::atomic<unsigned> image_calls{0};
 std::atomic<bool> hold_images{false}, image_started{false}, offline{false};
+std::atomic<bool> hold_later_images{false};
+enum class ImageScenario { fallback, multiple, duplicates, aggregate, partial_aggregate, invalid, bounded, empty };
+std::atomic<ImageScenario> image_scenario{ImageScenario::fallback};
 std::string fixture_png;
 #define check(value) do { if (!(value)) throw std::runtime_error("enrichment background gate test failed at line " + std::to_string(__LINE__)); } while (0)
 void await_metadata(EnrichmentService& service) {
@@ -75,8 +78,29 @@ ArtistBackgroundLookup lookup_artist_backgrounds(std::string_view mbid, std::str
     check(path.empty() && key == "synthetic-project-key");
     if (offline) return {ArtistBackgroundLookupStatus::error, {}};
     ArtistBackgroundLookup result{ArtistBackgroundLookupStatus::available, {}};
-    for (const auto* id : {"1", "2"}) result.images.push_back({id,
-        "https://assets.fanart.tv/fanart/music/" + std::string(mbid) + "/artistbackground/fixture.jpg", 1920, 1080});
+    const auto add = [&](std::string id, std::string file) {
+        result.images.push_back({std::move(id), "https://assets.fanart.tv/fanart/music/" +
+            std::string(mbid) + "/artistbackground/" + file + ".jpg", 1920, 1080});
+    };
+    switch (image_scenario.load()) {
+    case ImageScenario::fallback: add("1", "1"); add("2", "2"); break;
+    case ImageScenario::multiple:
+        for (unsigned i = 1; i <= 5; ++i) add(std::to_string(i), std::to_string(i));
+        break;
+    case ImageScenario::duplicates:
+        add("1", "1"); add("1", "duplicate-id"); add("2", "2"); add("3", "2");
+        add("4", "same-bytes"); add("5", "5"); add("6", "6"); add("7", "7");
+        break;
+    case ImageScenario::aggregate:
+    case ImageScenario::partial_aggregate:
+    case ImageScenario::invalid:
+        for (unsigned i = 2; i <= 6; ++i) add(std::to_string(i), std::to_string(i));
+        break;
+    case ImageScenario::bounded:
+        for (unsigned i = 1; i <= 33; ++i) add(std::to_string(i), std::to_string(i));
+        break;
+    case ImageScenario::empty: break;
+    }
     return result;
 }
 
@@ -85,9 +109,30 @@ std::optional<ArtistBackgroundImage> load_artist_background_image(std::string_vi
     const std::function<bool()>& cancelled, const ArtistImageHttpGet&) {
     ++image_calls;
     check(path.empty());
-    if (candidate.id == "1") return std::nullopt;
+    const auto scenario = image_scenario.load();
+    if (candidate.id == "1" || scenario == ImageScenario::bounded) return std::nullopt;
     image_started = true;
     while (hold_images && !cancelled()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    while (hold_later_images && candidate.id != "2" && !cancelled())
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (scenario == ImageScenario::aggregate)
+        return ArtistBackgroundImage{"image/jpeg", std::string(artist_background_image_limit, candidate.id.front())};
+    if (scenario == ImageScenario::partial_aggregate) {
+        const unsigned mib = candidate.id == "2" ? 6 : candidate.id == "3" ? 7 : candidate.id == "4" ? 4 : 3;
+        return ArtistBackgroundImage{"image/jpeg", std::string(mib * 1024 * 1024, candidate.id.front())};
+    }
+    if (scenario == ImageScenario::invalid) {
+        if (candidate.id == "2") return ArtistBackgroundImage{"image/jpeg", {}};
+        if (candidate.id == "3") return ArtistBackgroundImage{"image/jpeg", std::string(artist_background_image_limit + 1, 'x')};
+        if (candidate.id == "4") return ArtistBackgroundImage{"text/html", "not-an-image"};
+        if (candidate.id == "5") return std::nullopt;
+    }
+    if (scenario != ImageScenario::fallback) {
+        const auto suffix = candidate.id == "2" || (scenario == ImageScenario::duplicates && candidate.id == "4")
+            ? std::string{} : candidate.id;
+        return fixture_png.empty() ? ArtistBackgroundImage{"image/jpeg", "synthetic-image-bytes" + suffix}
+                                  : ArtistBackgroundImage{"image/png", fixture_png + suffix};
+    }
     return fixture_png.empty() ? ArtistBackgroundImage{"image/jpeg", "synthetic-image-bytes"}
                                : ArtistBackgroundImage{"image/png", fixture_png};
 }
@@ -111,6 +156,8 @@ int serve_fixture(int port, const std::string& image_path) {
     input.seekg(0);
     fixture_png.assign(std::istreambuf_iterator<char>(input), {});
     check(fixture_png.starts_with(std::string("\x89PNG\r\n\x1a\n", 8)));
+    image_scenario = ImageScenario::multiple;
+    hold_later_images = true;
     const auto toc = make_audio_toc(1, std::vector<std::int32_t>{0}, 7500);
     ArtistBackgroundPolicy policy(true);
     EnrichmentService enrichment(true, {}, policy, "synthetic-project-key");
@@ -138,7 +185,7 @@ int serve_fixture(int port, const std::string& image_path) {
         auto next = serialize_presentation_model(make_presentation_model(revision + 1, player.state(),
             disc ? MediaLifecycleState::audio_ready : MediaLifecycleState::no_disc, disc,
             enrichment.snapshot(), {}, read, {}, false, disc_generation, enrichment.generation(),
-            enrichment.background_url()));
+            enrichment.background_url(), enrichment.background_urls()));
         if (presentation_json_equal_ignoring_revision(state, next)) return;
         ++revision;
         state = std::move(next);
@@ -201,6 +248,7 @@ int serve_fixture(int port, const std::string& image_path) {
                 image_started = false;
                 enrichment.stop_background();
             } else if (command == "release") hold_images = false;
+            else if (command == "release-later") hold_later_images = false;
             else throw std::runtime_error("unknown test-fixture stdin control");
         }
         enrichment.poll();
@@ -292,7 +340,8 @@ int main(int argc, char** argv) {
                 ReadDiagnostics read;
                 read.session_id = "fixture-session";
                 return serialize_presentation_model(make_presentation_model(1, {}, MediaLifecycleState::audio_ready,
-                    toc, service.snapshot(), {}, read, {}, false, 1, service.generation(), service.background_url()));
+                    toc, service.snapshot(), {}, read, {}, false, 1, service.generation(), service.background_url(),
+                    service.background_urls()));
             };
             const ApiStateProvider status = [&] { return policy.json(); };
             const ApiCommandHandler commands = [&](const ApiCommand& command) {
@@ -365,7 +414,91 @@ int main(int argc, char** argv) {
             check(!service.background_url() && policy.effective());
             check(service.snapshot().status == MetadataStatus::available);
         }
-        std::cout << "PASS: OFF zero requests; ON delivery, fallback, invalidation, cancellation and offline metadata independence\n";
+        offline = false;
+        for (const auto scenario : {ImageScenario::empty, ImageScenario::multiple, ImageScenario::duplicates,
+                                   ImageScenario::aggregate, ImageScenario::partial_aggregate,
+                                   ImageScenario::invalid, ImageScenario::bounded}) {
+            image_scenario = scenario;
+            const auto calls_before = image_calls.load();
+            ArtistBackgroundPolicy policy(true);
+            EnrichmentService service(true, {}, policy, "synthetic-project-key");
+            service.begin_if_needed(toc);
+            await_metadata(service);
+            check(service.background_urls().empty());
+            check(policy.set_enabled(true));
+            const unsigned expected_calls = scenario == ImageScenario::empty ? 0 :
+                scenario == ImageScenario::multiple ? 4 : scenario == ImageScenario::duplicates ? 5 :
+                scenario == ImageScenario::partial_aggregate ? 4 :
+                scenario == ImageScenario::aggregate ? 2 : scenario == ImageScenario::invalid ? 5 : 32;
+            const std::size_t expected_images = scenario == ImageScenario::multiple || scenario == ImageScenario::duplicates ||
+                scenario == ImageScenario::partial_aggregate
+                ? 3 : scenario == ImageScenario::aggregate ? 2 : scenario == ImageScenario::invalid ? 1 : 0;
+            if (expected_calls) await(service, [&] { return image_calls >= calls_before + expected_calls; });
+            // Drain the final asynchronous result, then verify exhaustion/caps do not schedule more work.
+            for (unsigned i = 0; i < 30; ++i) {
+                service.poll();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            const auto urls = service.background_urls();
+            check(urls.size() == expected_images && image_calls == calls_before + expected_calls);
+            if (urls.empty()) check(!service.background_url());
+            else check(service.background_url() == urls.front());
+            std::size_t bytes = 0;
+            for (const auto& url : urls) {
+                const auto asset = service.background_asset(url);
+                check(asset && asset->bytes.size() <= artist_background_image_limit);
+                bytes += asset->bytes.size();
+            }
+            check(bytes <= 16 * 1024 * 1024);
+            if (scenario == ImageScenario::aggregate || scenario == ImageScenario::partial_aggregate)
+                check(bytes == 16 * 1024 * 1024);
+            check(policy.set_enabled(false));
+            check(service.background_urls().empty());
+            for (const auto& url : urls) check(!service.background_asset(url));
+            service.stop_background();
+            check(service.background_urls().empty());
+            for (const auto& url : urls) check(!service.background_asset(url));
+            if (expected_images) {
+                check(policy.set_enabled(true));
+                await(service, [&] { return service.background_urls().size() == expected_images; });
+                const auto before_decline = service.background_urls();
+                check(service.decline_candidates(service.generation()));
+                for (const auto& url : before_decline) check(!service.background_asset(url));
+                check(service.select_candidate(service.generation(), 0));
+                await(service, [&] { return service.background_urls().size() == expected_images; });
+                const auto before_artist = service.background_urls();
+                check(service.select_candidate(service.generation(), 1));
+                for (const auto& url : before_artist) check(!service.background_asset(url));
+                await(service, [&] { return service.background_urls().size() == expected_images; });
+                const auto before_disc = service.background_urls();
+                service.invalidate();
+                check(service.background_urls().empty());
+                for (const auto& url : before_disc) check(!service.background_asset(url));
+            }
+        }
+        {
+            image_scenario = ImageScenario::multiple;
+            hold_later_images = true;
+            ArtistBackgroundPolicy policy(true);
+            EnrichmentService service(true, {}, policy, "synthetic-project-key");
+            service.begin_if_needed(toc);
+            await_metadata(service);
+            check(policy.set_enabled(true));
+            await(service, [&] { return service.background_urls().size() == 1; });
+            const auto first = *service.background_url();
+            const auto first_asset = service.background_asset(first);
+            check(first_asset && first_asset->bytes == "synthetic-image-bytes");
+            const auto generation = service.generation();
+            service.invalidate();
+            hold_later_images = false;
+            service.begin_if_needed(toc);
+            await_metadata(service);
+            check(service.generation() != generation);
+            await(service, [&] { return service.background_urls().size() == 3; });
+            check(!service.background_asset(first));
+            check(service.background_url() != first);
+        }
+        std::cout << "PASS: OFF zero requests; 0/1/multi delivery, deduplication, image/count/aggregate/candidate caps, all-reference revocation, cancellation and offline metadata independence\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

@@ -11,6 +11,7 @@ PiCDPlayerのドキュメントは日本語を正文とする。目的に合わ�
 | APIの現行メッセージを確認したい | [再生・診断メッセージ契約](design/message-contract.md) |
 | 画面をカスタマイズしたい | [Custom UI](manual/custom-ui.md)、[将来の設定基盤](development/user-configuration.md) |
 | 実装・検証状況と残課題を知りたい | [検証状況](development/verification.md) |
+| ローカルkeyでfanart.tv背景を検証したい | [fanart.tv PoC](development/fanart-tv-poc.md) |
 | 読み取り信頼性の要求と実装境界を確認したい | [読み取り信頼性の仕様](design/integrity-design.md) |
 | 次に取り組む作業を選びたい | [残課題とIssue一覧](development/backlog.md) |
 | 将来の設計候補を調べたい | [デジタル出力の拡張案](development/digital-audio-output.md)、[設定基盤の拡張案](development/user-configuration.md) |

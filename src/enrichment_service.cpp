@@ -11,6 +11,8 @@
 #include <cctype>
 #include <utility>
 #include <random>
+#include <algorithm>
+#include <set>
 
 class EnrichmentService::Implementation {
 public:
@@ -43,16 +45,28 @@ public:
         background_request.reset();
         image_request.reset();
         background_lookup = {};
-        background_image.reset();
-        background_reference.clear();
+        background_images.clear();
+        retained_bytes = 0;
+        candidate_ids.clear();
+        candidate_urls.clear();
         image_index = 0;
     }
 
     void start_image() {
-        if (!background_request || image_index >= background_lookup.images.size()) return;
-        image_request = ArtistBackgroundImageRequest{background_request->generation,
-            background_request->artist_mbid, background_lookup.images[image_index]};
-        image_worker->request(*image_request);
+        image_request.reset();
+        if (!background_request || background_images.size() >= 3 ||
+            retained_bytes >= aggregate_limit) return;
+        while (image_index < background_lookup.images.size() && image_index < 32) {
+            const auto& candidate = background_lookup.images[image_index++];
+            const bool duplicate = candidate_ids.contains(candidate.id) || candidate_urls.contains(candidate.url);
+            candidate_ids.insert(candidate.id);
+            candidate_urls.insert(candidate.url);
+            if (duplicate) continue;
+            image_request = ArtistBackgroundImageRequest{background_request->generation,
+                background_request->artist_mbid, candidate};
+            image_worker->request(*image_request);
+            return;
+        }
     }
 
     void ensure_background_workers() {
@@ -102,8 +116,14 @@ public:
     ArtistBackgroundLookup background_lookup;
     std::optional<ArtistBackgroundImageRequest> image_request;
     std::size_t image_index = 0;
-    std::optional<ArtistBackgroundImage> background_image;
-    std::string background_reference;
+    struct RetainedImage {
+        ArtistBackgroundImage image;
+        std::string reference;
+    };
+    std::vector<RetainedImage> background_images;
+    static constexpr std::size_t aggregate_limit = 16 * 1024 * 1024;
+    std::size_t retained_bytes = 0;
+    std::set<std::string> candidate_ids, candidate_urls;
     const std::string reference_nonce = std::to_string(std::random_device{}()) + "-" +
                                         std::to_string(std::random_device{}());
     std::uint64_t asset_sequence = 0;
@@ -185,32 +205,42 @@ void EnrichmentService::poll() {
                 implementation_->session.generation() != wanted->generation ||
                 selected_artist_identity(implementation_->session.snapshot()).mbid != wanted->artist_mbid)
                 continue;
-            if (image_result.image) {
-                implementation_->background_image = std::move(image_result.image);
-                implementation_->background_reference = "/api/presentation/artwork/background/" +
-                    implementation_->reference_nonce + "-" + std::to_string(++implementation_->asset_sequence);
-            } else {
-                ++implementation_->image_index;
-                implementation_->start_image();
+            if (image_result.image && image_result.image->bytes.size() <=
+                Implementation::aggregate_limit - implementation_->retained_bytes &&
+                std::none_of(implementation_->background_images.begin(), implementation_->background_images.end(),
+                    [&](const auto& retained) { return retained.image.bytes == image_result.image->bytes; })) {
+                implementation_->retained_bytes += image_result.image->bytes.size();
+                auto reference = "/api/presentation/artwork/background/" + implementation_->reference_nonce +
+                    "-" + std::to_string(++implementation_->asset_sequence);
+                implementation_->background_images.push_back({std::move(*image_result.image), std::move(reference)});
             }
+            implementation_->start_image();
         }
     }
 }
 
 std::optional<std::string> EnrichmentService::background_url() const {
+    const auto urls = background_urls();
+    return urls.empty() ? std::nullopt : std::optional<std::string>(urls.front());
+}
+
+std::vector<std::string> EnrichmentService::background_urls() const {
     const auto& state = *implementation_;
-    if (!state.background_policy.effective() || !state.background_image || !state.image_request ||
-        state.image_request->generation != state.session.generation() ||
-        selected_artist_identity(state.session.snapshot()).mbid != state.image_request->artist_mbid ||
-        state.background_reference.empty()) return std::nullopt;
-    return state.background_reference;
+    if (!state.background_policy.effective() || !state.background_request ||
+        state.background_request->generation != state.session.generation() ||
+        selected_artist_identity(state.session.snapshot()).mbid != state.background_request->artist_mbid) return {};
+    std::vector<std::string> urls;
+    for (const auto& retained : state.background_images) urls.push_back(retained.reference);
+    return urls;
 }
 
 std::optional<EnrichmentArtworkAsset> EnrichmentService::background_asset(std::string_view reference) const {
-    const auto current = background_url();
-    if (!current || *current != reference) return std::nullopt;
-    return EnrichmentArtworkAsset{implementation_->background_image->mime_type,
-                                 implementation_->background_image->bytes};
+    const auto urls = background_urls();
+    if (std::find(urls.begin(), urls.end(), reference) == urls.end()) return std::nullopt;
+    for (const auto& retained : implementation_->background_images)
+        if (retained.reference == reference)
+            return EnrichmentArtworkAsset{retained.image.mime_type, retained.image.bytes};
+    return std::nullopt;
 }
 
 const MetadataResult& EnrichmentService::snapshot() const { return implementation_->session.snapshot(); }

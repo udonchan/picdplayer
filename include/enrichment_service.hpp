@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 struct EnrichmentArtworkAsset {
     std::string mime_type;
@@ -36,6 +37,7 @@ public:
     bool has_cover_asset() const;
     std::optional<EnrichmentArtworkAsset> cover_asset() const;
     std::optional<std::string> background_url() const;
+    std::vector<std::string> background_urls() const;
     std::optional<EnrichmentArtworkAsset> background_asset(std::string_view reference) const;
 
 private:

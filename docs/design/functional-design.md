@@ -309,8 +309,8 @@ requested/effective/availableをAPIから表示し、欠損・型不正・取得
 ONはavailableがtrueの場合の明示操作のみ、OFFは既知の状態で操作可能とする。POSTの204後に
 同APIを再取得し、状態を楽観的に更新しない。背景のeffectiveは写真到着・decode成功を意味しない。
 背景の保存はなく、Read Policyの保存情報を背景へ流用しない。利用不能・未知の状態でONを操作できない。
-単一画像runtimeとsession ONはDraft PR #217からこの開発差分へ再利用したもので、GitHubのmasterへ
-mergeしたことを意味しない。閉じた画面や再表示前の古い応答は適用しない。
+単一画像runtimeとsession ONはPR #223でmasterへ統合済みであり、#229で複数画像へ拡張する。
+閉じた画面や再表示前の古い応答は適用しない。
 SettingsからのOFFが204で受理されたら、state streamの遅延・切断を待たず現在のartist画像を消す。
 失効した不透明参照は旧callback/遅延modelで復活させず、cover fallbackは維持する。受理後に開始する
 REST snapshotと最新の採用済みsnapshotが同じ参照を再承認した場合だけ失効扱いを解除する。
@@ -370,14 +370,22 @@ loopback限定APIで明示選択できる。標準UIのCEC候補pickerは#166で
 異なるartist IDが複数ならAMBIGUOUS、ID欠損・不正形式・Various ArtistsならUNAVAILABLEとし、
 album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契約へ直接公開しない。
 ON時は選択済み単一Artist MBIDのfanart.tv候補JSONを別workerで取得し、画像workerで候補を順に試す。
-現行世代・artist・候補に一致する取得済み画像1件だけをopaqueな同一origin参照で公開する。
+現行世代・artist・候補に一致する画像を段階的にopaqueな同一origin参照で公開する。
+重複候補を除き、保持は最大3枚・圧縮bytes合計16 MiB、各画像8 MiB以下とする。
 候補JSONと画像は空cache pathで一時的に取得・保持し、ディスク保存の採否は別途設計する。
 OFFではworkerを生成・要求せず、作成済みworkerは取消して保持結果を消す。CD再生と通常metadataは維持する。
-現行key fileはproject keyを`api-key`ヘッダーで送る開発用設定であり、personal keyの`client-key`には
+明示key fileを優先し、未指定時だけローカル開発用`FANART_TV_API_KEY`を読む。
+不正な明示fileから環境変数へのfallbackは行わない。project keyを`api-key`ヘッダーで送る設定であり、personal keyの`client-key`には
 対応しない。候補取得と利用者の写真表示ONは別の状態とし、既定OFF・利用者の明示ONを維持する。
 利用不能時のON拒否は技術的な利用可否によるもので、個々の画像の許諾を製品側で確認できないことを理由にしない。
 標準Playerはartist背景→ぼかしたcover→既定背景へfallbackし、古い画像完了とdecode失敗を無視する。
-Custom UIへ背景描画を注入しない。slideshow・背景設定保存は未実装。
+複数画像は45秒滞在・4秒crossfadeのshuffle slideshowとし、1枚なら静止する。
+reduced motionではfadeを即時にし、追加画像・同じsnapshotで現在表示やtimerを初期化しない。
+Custom UIへ背景描画を注入しない。背景設定保存は未実装。
+自動retryはせず、fanart APIと画像CDNの429後は別々のprocess共有期限で`Retry-After`を尊重する。
+次画像候補への切替でもCDNの期限を迂回せず、API期限はCAA・MusicBrainz・画像CDN要求を停止しない。
+待機値欠落・不正時の60秒はPoC側の方針で、公式quotaではない。
+設定・仕様根拠・公開配布の未決事項は[fanart.tv PoC](../development/fanart-tv-poc.md)を参照する。
 曲長の正規値はDiscToc。metadataのms長は参考値である。
 
 単一候補または明示選択された候補のCAA JSONを取得し、frontの500px→large→元画像URLを選ぶ。
