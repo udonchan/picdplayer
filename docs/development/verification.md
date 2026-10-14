@@ -2,6 +2,14 @@
 
 更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## fanart.tv PoCのmaster統合判断（2026-10-14 15:05 UTC）
+
+利用者がPR #230のmaster取り込みを明示承認した。ローカルProject keyによる実API取得、
+有界な画像配信とOFF失効、実WPEの写真描画、基本再生の利用者確認を根拠とする。
+master統合はfanart.tvの正式採用、key同梱許可、個別写真の再掲載許諾や全hardware条件の完了を意味しない。
+未確認のCEC詳細・音声欠落・厳密な切替時間・長期負荷はIssue #229へ保持し、実装の統合と検証範囲を分ける。
+PRのDraftを解除して最新HEADのCI成功を確認するフローとし、画像本体・key・元workspaceの無関係な変更は含めない。
+
 ## fanart.tvの権利確認と利用者による実機確認（2026-10-14 15:00 UTC）
 
 利用者はThe SlipのジャケットへのCCライセンス適用を確認した。一方、fanart.tv由来の背景写真は別の素材で、
@@ -20,7 +28,8 @@ PNGはtmpに保持し、PRには画像本体ではなく描画確認の事実・
 今回の静止表示は配信枚数に対して想定どおりである。fanart.tvに登録されている画像自体が1枚なのか、
 検証条件や取得失敗で他候補が採用されなかったのかは、この状態APIだけでは判定しない。
 Nine Inch Nailsでの実3枚配信・WPE snapshot確認とは分け、複数画像の実機での厳密な時間測定は未実施とする。
-CEC詳細・音声欠落・長期負荷と個別写真の再掲載許諾は残条件で、Issue #229/PR #230のOpen/Draftは維持する。
+CEC詳細・音声欠落・長期負荷と個別写真の再掲載許諾は残条件としてIssue #229をOpenで維持する。
+後続のmaster統合承認によりPRのDraftを解除するが、これらを確認済みへ読み替えない。
 
 ## fanart.tv実API・Pi配備の追補（#229、2026-10-14 UTC）
 
@@ -67,7 +76,8 @@ PNGでNine Inch Nailsの実写真背景、The Slipのcover・metadata・STOPPED�
 画像はtmpだけに置き、Git・PR・releaseへ含めていない。別browserの再描画やChromiumを証拠に使っていない。
 この撮影時点ではDRM scanout・HDMI・TV目視、実音声/CEC継続・長期CPU/memoryは未検証だった。
 後続の利用者による実機確認は上の追補に記録し、確認主体と範囲を分ける。
-実keyの失効/rotation、公開同梱許可、画像license/creditは引き続きFuture Workで、Issue/PRは完了扱いにしない。
+実keyの失効/rotation、公開同梱許可、画像license/creditは引き続きFuture Workとして保持し、
+実装PRのmaster統合と、残る検証・配布条件の完了を区別する。
 
 ## fanart.tvローカルkey PoCの初期実装（#229、2026-10-14 UTC）
 
