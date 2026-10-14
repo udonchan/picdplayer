@@ -17,7 +17,13 @@ from urllib.request import urlopen
 
 
 class WebSocket:
-    def __init__(self, url, deadline=None):
+    maximum_message_bytes = 4 * 1024 * 1024
+
+    def __init__(self, url, deadline=None, maximum_message_bytes=None):
+        if maximum_message_bytes is not None:
+            if type(maximum_message_bytes) is not int or not 0 < maximum_message_bytes <= 16 * 1024 * 1024:
+                raise ValueError('WebSocket message limit must be 1..16777216 bytes')
+            self.maximum_message_bytes = maximum_message_bytes
         # CDP's page target is only accessed through localhost SSH forwarding.
         assert url.startswith("ws://127.0.0.1:")
         host_path = url[5:]
@@ -83,7 +89,7 @@ class WebSocket:
             length = struct.unpack("!H", self.read_exact(2))[0]
         elif length == 127:
             length = struct.unpack("!Q", self.read_exact(8))[0]
-        if length > 4 * 1024 * 1024:
+        if length > self.maximum_message_bytes:
             raise RuntimeError("CDP message too large")
         body = self.read_exact(length)
         if first & 0xF == 8:

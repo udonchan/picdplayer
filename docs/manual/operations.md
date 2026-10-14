@@ -228,10 +228,11 @@ GET stateで現在値を復元して再接続する。ここから再生操作�
 
 これはPhase 1bの診断画面であり、TV向け本番UIやkiosk起動ではない。
 
-## WPE候補のInspector診断
+## WPEのInspector診断とスクリーンショット
 
-WPE主runtimeへの移行候補には`scripts/inspect-wpe.py`を用意している。これはChromium CDPとは
+WPE主runtimeには`scripts/inspect-wpe.py`を用意している。これはChromium CDPとは
 別のWebKit target routingを使い、pageのtitle・readyState・viewport・接続表示を読み取る。
+`--screenshot PATH`を指定すると、実WPEの現在のviewportを`Page.snapshotRect`でPNGへ保存する。
 標準packageはWPEを供給し、開発Piでは利用者が初回表示・再生を確認した。
 2026-10-14にはこのtoolのPageClientを再利用して実WebKit接続、Runtime評価、`Page.snapshotRect`のPNG取得に
 成功した（[fanart.tv検証記録](../development/verification.md)）。tool追加やmock試験だけを実機確認とは扱わない。
@@ -240,10 +241,32 @@ WPE主runtimeへの移行候補には`scripts/inspect-wpe.py`を用意してい�
 `scripts/test-wpe-kiosk.sh`があるが、通常serviceのWPE移行試験とは別であり、この診断toolは
 serviceの停止・起動やsudoers変更を行わない。InspectorはWPEの起動時に
 `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`でloopback限定にする。
+`WEBKIT_INSPECTOR_SERVER`は別protocolなので、このHTTP/WebSocket toolの設定として代用しない。
+通常のkioskで一時的に有効化する場合は、Pi上で専用runtime drop-inを作る。既存の同名fileがある場合は
+上書きせず、別名を選ぶ。ほかのdrop-inや`/etc/default/picdplayer-kiosk`を置換しない。
+
+```sh
+sudo mkdir -p /run/systemd/system/picdplayer-kiosk.service.d
+sudoedit /run/systemd/system/picdplayer-kiosk.service.d/90-wpe-screenshot.conf
+```
+
+この新規fileには次の設定だけを記載する。API keyは記載しない。
+
+```ini
+[Service]
+Environment=WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223
+```
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl restart picdplayer-kiosk.service
+```
+
+これはkioskの再起動を伴うため、利用者が実機状態を確認して実行する。daemonや再生操作は変更しない。
 既にInspectorを有効化したWPEが動作している場合だけ、Macで別terminalからSSH転送する。
 
 ```sh
-ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:19223:127.0.0.1:9223 PI_HOST
+ssh -nNT -o ExitOnForwardFailure=yes -L 127.0.0.1:19223:127.0.0.1:9223 PI_HOST
 ```
 
 別terminalで、このcheckoutのrootから実行する。追加のPython packageは不要。
@@ -251,13 +274,34 @@ ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:19223:127.0.0.1:9223 PI_HOST
 ```sh
 python3 scripts/inspect-wpe.py --list
 python3 scripts/inspect-wpe.py --target-url http://127.0.0.1:8080/player
+python3 scripts/inspect-wpe.py --screenshot /tmp/picdplayer-wpe.png
 ```
+
+PNGはscriptを実行したMac等へ保存する。親directoryは事前に存在する必要があり、既存fileやsymlinkは
+上書きしない。再撮影は別名を指定する。保存modeは0600、PNGは最大8 MiB。JSON結果にはpath・pixel寸法・
+byte数を出し、画像本体のbase64はstdoutへ出さない。PNGのsignature/IHDR CRC/IENDを検査するが、
+汎用decoderによる全pixel検証ではない。viewportは3840×2160相当まで、HiDPIのPNGは7680×4320相当まで。
+撮影時だけWebSocket message上限を16 MiBへ増やし、既存の観測・Chromium測定は4 MiBのままにする。
+`--list`と`--screenshot`は同時に指定できない。target照合・protocol・PNG・書込失敗時は成功として出力せず、
+接続を閉じる。途中で生成したfileへの書込に失敗した場合はそのfileを削除する。
 
 一致するtargetが一つだけの場合に接続する。WebSocket接続開始からhandshake・外側ack・page応答まで
 25秒のdeadlineを共有し、無応答のsocket操作は最大5秒で失敗する（接続確立は最大15秒）。
 targetの破棄・pause状態・protocol error・JavaScript評価例外は失敗として扱い、debuggerのresumeや
 画面遷移は実行しない。終了時はsocketを閉じる。SSH転送も確認後にCtrl-Cで終了する。
 JSON取得成功はTVのfirst pixel、描画の正しさ、音声、CEC、長期安定性の確認とは区別する。
+PNGも実WPEのrendered-page snapshotであり、DRM scanoutや物理TVの撮影ではない。third-party画像が含まれる
+場合は権利条件を別途確認し、未確認のPNGをGit/PR/配布物へ追加しない。
+
+撮影後はPi上で今回作成した専用fileだけを削除し、通常kioskへ戻す。既存overrideをまとめて消す操作はしない。
+
+```sh
+sudo rm /run/systemd/system/picdplayer-kiosk.service.d/90-wpe-screenshot.conf
+sudo systemctl daemon-reload
+sudo systemctl restart picdplayer-kiosk.service
+```
+
+Inspector portが閉じたことと通常WPEの稼働を確認し、Mac側のSSH転送も終了する。
 
 ## ログの読み方
 
