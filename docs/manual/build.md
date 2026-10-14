@@ -36,6 +36,11 @@ wrapperだけがprivate library pathを設定し、ホストのglibc/ldconfigを
 標準Dockerfileを更新したため、既存imageは`docker build -t picdplayer-build .`で再生成する。
 完全なbase/apt固定と再現性精査はv1.0段階まで保留する。
 
+CI用の共通SDKはmaster限定の`.github/workflows/wpe-sdk.yml`で同じexport scriptとrecipeを使って
+準備・保存する。通常CIとcache key/pathを合わせ、アプリはfresh checkoutからbuild/testする。
+初回seed・cache scope・手動実行と未確認範囲は[共通WPE SDK cache](mac-docker-development.md#master側の共通wpe-sdk-cache)参照。
+この追加workflowはローカルSDK/volume、build recipe、標準install/package内容を変更しない。
+
 ## TrixieでのWPE source build成立性調査（#221）
 
 これは[#220](https://github.com/udonchan/picdplayer/issues/220)の供給方式を判断するための
