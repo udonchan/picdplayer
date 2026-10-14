@@ -340,6 +340,35 @@ Docker内のCTest、使い捨てcontainer内の`dpkg` install/upgrade/reinstall/
 WPE SDKはsource/patch/設定hash単位でActions cacheへ保存する。初回source buildを考慮し、
 job上限は180分。cacheを利用した成功はclean buildやbyte-identical再現性の証明ではない。
 
+### master側の共通WPE SDK cache
+
+`.github/workflows/wpe-sdk.yml`はWPE SDKだけを準備・保存する専用workflowである。
+`master`へのSDK recipe/関連workflow変更のpush、または`master`を指定した手動実行で動く。
+job自体も`refs/heads/master`だけを受け付ける。feature branchでの手動実行はjobをskipし、
+PRや`pull_request_target`からmaster側のcacheを書き換える経路は用意しない。
+
+このworkflowをmasterへ取り込んだ後、手動で準備する場合は次を実行する。
+
+```sh
+gh workflow run wpe-sdk.yml --ref master
+```
+
+通常CIと同じcache key・`build-wpe-runtime/`を使い、restore後も既存の
+`bash scripts/build-wpe-runtime.sh`によるrecipe/SDK marker検査を行う。SDK準備が成功した直後に
+cacheを保存し、アプリbuild・CTest・package生成やPi deployは行わない。アプリの通常CIは変更せず、
+fresh checkoutから自身をbuild/testしながら、自身のscopeまたはmasterで利用可能なcacheをWPEに再利用する。
+
+Actions cacheはscopeを持ち、別PRの`refs/pull/.../merge`や兄弟feature branchにある同じkeyのcacheを
+masterへrestoreできない。PR #223のcacheがあるだけではmasterの初回seedが済んだことにはならない。
+master側に同じrecipeのSDKがない場合、この専用jobは一度source buildするため約2時間級の負荷があり得る。
+通常PRのCIは本変更ではcache miss時のsource build fallbackを残す。master cacheの消失・recipe変更時も
+必ず短時間で済むとは保証せず、まず専用workflowで準備してからPRのbuildを開始する。
+
+cache keyはWPE source/probe/patch/SDK export scriptの入力に対応し、アプリ・UI・文書だけの変更では
+更新しない。restore/saveは分離し、失敗・取消で未完成SDKを成功cacheとして保存しない。
+cache保存完了と、次のPRでの実restore・所要時間短縮は別の検証である。専用workflowのmerge/実行前に
+共通cacheの運用開始済みとは扱わない。正式SDK配布・依存完全固定・ABI/再現性精査は引き続き後続課題。
+
 ## 版付き候補artifactの検査と保存
 
 CIはbuild、全CTest、package lifecycleの成功後に、`bash scripts/prepare-release.sh`で

@@ -1,6 +1,43 @@
 # 検証状況と残課題
 
-更新日: 2026-10-13。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## master側の共通WPE SDK workflow（2026-10-13 UTC）
+
+PR #223は最新head `124e07e`のCIが成功し、`ebb1c71`でmasterへ通常mergeした。旧Draft #217/#194/#192は
+固有資料を固定commit参照で保全してcloseし、別途mergeしていない。元の未commit workspace、旧worktreeと
+SDK cacheは保持した。今回の作業場所は同じ`wpe-primary-runtime`、branchはmasterからの`feature/wpe-sdk-cache`。
+
+利用者が選んだ最小単位として、trusted masterでWPE SDKだけを準備・保存する専用workflowを追加する。
+通常CIとcache key/pathを共有し、restore→既存SDK script検査/build→成功時saveに限定する。
+master以外のdispatchはjobをskipし、PR由来codeをmaster cache producerとして実行しない。
+アプリbuild・CTest・packageはこのproducerには含めず、通常CI・WPE recipe/export・ローカルSDK/volumeは
+変更しない。通常PRのcache miss fallbackや正式SDK供給方式をこの単位で置き換えない。
+
+実装開始時のcache一覧は旧WPE branchとPR #222/#223のmerge refにあり、master refにはなかった。
+同じkeyでも別PR/兄弟branchのcacheはmasterの初回seedに使えないため、source buildが一度必要になり得る。
+workflowのmasterへの導入、実GitHub上の初回cache save、別PRからのrestore、短縮時間はこの時点では未検証。
+API key・画像・Pi・service設定には触れず、SDKのcache成功を実機・ABI/再現性・正式配布の証拠にしない。
+
+`python3 tests/wpe_sdk_workflow_test.py`の4 unittestが成功した。実consumerからkey/pathを取得し、
+master guard・trusted trigger・read-only権限・restore/build/save順・成功後miss時saveを静的に照合する。
+17種類の不正producer変異と2種類のconsumer不一致を拒否し、正常fixtureを各case後に復元する。
+これは限定された文字列/step契約試験で、一般YAML parserやGitHub上の実行試験ではない。
+利用可能なactionlintは確認できず、workflowは手動で構文・GitHub Actionsの条件を照合した。
+
+`bash scripts/build-wpe-runtime.sh`は`Reusing cached WPE SDK`で成功した。recipe入力・consumer workflow・
+SDK scriptは差分なしで、volume再作成・cache破棄・WebKit sourceの再buildは行わない。
+`bash scripts/build-container.sh`が成功し、既存SDKを再利用して標準arm64 Debian packageを生成した。
+network-noneの全CTestは追加workflow試験を含む62/62成功、package lifecycleも成功した。
+独立レビューで指摘された「master cacheだけ」の不正確な説明を、自身のscopeまたはmasterのcacheを
+利用する説明へ修正した。全source/文書差分を確認し、`git diff --check`も成功した。
+上記はlocal開発時の確認で、実cache save/restoreや所要時間短縮の証明ではない。
+
+2026-10-14 UTC、利用者指示により実GitHub上のPoCへ進む。導入PRの最新headの通常CIを完走してから
+masterへworkflowを統合し、master scopeのSDK producerを完走させる。その後、別branch・新規PRから
+通常のアプリbuild・全CTest・package lifecycle・候補artifact検証を実行し、同一PRの再run cacheではなく
+master cacheを新しいrunnerでrestoreすることを確認する。初回seedは短縮後の通常CIと別に記録し、
+PR #223の2時間31分29秒をcold基準に各step/全体時間を比較する。結果は実測後に追記する。
 
 ## 旧Draft PRの資料保全と統合経路（2026-10-13 UTC）
 

@@ -519,6 +519,8 @@ if(BUILD_TESTING)
         ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
     add_test(NAME debian_control_inventory COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/debian_control_inventory_test.py)
+    add_test(NAME wpe_sdk_workflow COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/wpe_sdk_workflow_test.py)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(NAME release_artifact COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_artifact_test.py)

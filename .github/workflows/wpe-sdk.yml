@@ -1,0 +1,42 @@
+name: WPE SDK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/wpe-sdk.yml
+      - .github/workflows/ci.yml
+      - scripts/wpe-source-*
+      - scripts/build-wpe-runtime.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wpe-sdk-master
+  cancel-in-progress: false
+
+jobs:
+  build-sdk:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Restore source-built WPE SDK
+        uses: actions/cache/restore@v4
+        id: sdk-cache
+        with:
+          path: build-wpe-runtime/
+          key: wpe-trixie-arm64-${{ hashFiles('scripts/wpe-source-*', 'scripts/build-wpe-runtime.sh') }}
+      - name: Build and validate WPE SDK
+        run: bash scripts/build-wpe-runtime.sh
+      - name: Save source-built WPE SDK
+        uses: actions/cache/save@v4
+        if: steps.sdk-cache.outputs.cache-hit != 'true'
+        with:
+          path: build-wpe-runtime/
+          key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
