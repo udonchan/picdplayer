@@ -369,6 +369,11 @@ cache keyはWPE source/probe/patch/SDK export scriptの入力に対応し、ア�
 cache保存完了と、次のPRでの実restore・所要時間短縮は別の検証である。専用workflowのmerge/実行前に
 共通cacheの運用開始済みとは扱わない。正式SDK配布・依存完全固定・ABI/再現性精査は引き続き後続課題。
 
+2026-10-14の実GitHub PoCでは、#224のmaster統合と初回seed成功後、新規PR #225の最初の通常CIが
+master cacheを復元し、WebKit再buildなしで全62試験・package lifecycle・候補検証まで3分30秒で成功した。
+初回seedは別途2時間21分12秒を要した。cold #223の2時間31分29秒に対する97.69%短縮は単回測定であり、
+今後のcache消失やrecipe変更での所要時間を保証しない。[証跡](../development/verification.md#github初回seedと別pr-poc2026-10-14-utc)参照。
+
 ## 版付き候補artifactの検査と保存
 
 CIはbuild、全CTest、package lifecycleの成功後に、`bash scripts/prepare-release.sh`で

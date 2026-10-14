@@ -4,6 +4,70 @@
 
 ## master側の共通WPE SDK workflow（2026-10-13 UTC）
 
+### GitHub初回seedと別PR PoC（2026-10-14 UTC）
+
+[導入PR #224](https://github.com/udonchan/picdplayer/pull/224)のhead `3834335`は
+[通常CI](https://github.com/udonchan/picdplayer/actions/runs/38493515639)が成功し、`6cfd485`でmasterへ
+通常mergeした。導入jobは2時間28分33秒、build/stageは2時間27分16秒、CTestは62/62（29.75秒）、
+package lifecycle・版付き候補検証/保存も成功した。SDK cache missと8833 taskのWebKit source buildを
+ログで確認した。これはcold導入時間で、短縮済みの実績ではない。
+
+master pushにより[WPE SDK producer](https://github.com/udonchan/picdplayer/actions/runs/38507076726)が
+head `6cfd4859bc49df9323db3dfd4287eff8620a0bf5`、event `push`で成功した。
+jobは03:36:01→05:57:13 UTCの2時間21分12秒。Build/validateは2時間21分7秒、cache saveは2秒だった。
+SDKだけの初回source build/exportを完了し、アプリのbuild・試験・packageはこのjobで実行していない。
+
+- cache ID: `8921859496`。
+- scope: `refs/heads/master`。
+- key: `wpe-trixie-arm64-527a5a4b9b6539ec1e2681975270f28e78b3820aab0cc682c3212a99ecdc8666`。
+- size: `56218952` bytes、作成: `2026-10-14T05:57:12.03094Z`。
+- restore時のmiss、SDK export成功、明示saveの`Cache saved with key`とAPIのmaster ref登録を確認した。
+
+このseed完了後のmasterから`poc/wpe-sdk-warm-ci`を新たに作り、この記録だけを変更する新規PRで
+通常CIのPoCを行う。consumer workflow・SDK recipe・アプリsourceには変更を加えない。
+このPR自身のcacheがまだない最初のrunで、master cacheのrestore、SDK marker再利用、WebKitの
+再configure/buildなし、アプリclean build・全CTest・package lifecycle・候補検証の成功を確認する。
+初回seedが成功しただけではPoC完了・短縮済みとは扱わず、以下の実測で確認した。
+既存の元workspace/worktree・branchとSDK/volumeは保持し、Pi・API key・正式releaseには触れない。
+
+[新規PR #225](https://github.com/udonchan/picdplayer/pull/225)のhead
+`9f1775a63b0c3997f98ab00e1b67913d3228147a`に対する最初の
+[通常CI](https://github.com/udonchan/picdplayer/actions/runs/38520106671)が成功した。
+jobは06:04:41→06:08:11 UTCの3分30秒（queue待機を含まないjob時間）。このPR/branchに事前cacheはなく、
+workflow・SDK recipe・アプリ・compile/test設定を変更していない。cache一覧にはPR #225の新cacheはなく、
+master cache ID `8921859496`のlastAccessedAtが`2026-10-14T06:05:19.644931Z`へ更新された。
+ログのrestore sizeは同じ`56218952` bytes、同一key、`Cache restored successfully`、
+`Reusing cached WPE SDK`、終了時の`Cache hit occurred on the primary key ... not saving cache`を確認した。
+
+| 測定 | SDK状態 | job全体 | build/stage | CTest |
+|---|---|---|---|---|
+| #223 cold基準 | miss・WebKit source build | 2時間31分29秒 | 2時間30分12秒 | 61/61 |
+| #224導入CI | miss・WebKit source build | 2時間28分33秒 | 2時間27分16秒 | 62/62・29.75秒 |
+| master SDK初回seed | miss・SDKだけをsource build/export/save | 2時間21分12秒 | SDK build/validate 2時間21分7秒 | アプリ試験なし |
+| #225 first warm CI | master cache hit・SDK検査後再利用 | **3分30秒** | **2分13秒** | **62/62・30.60秒** |
+
+warmのstepはDocker build 36秒、SDK restore 1秒、アプリbuild/stage 133秒、全試験31秒、
+package lifecycle 2秒、候補検証1秒、artifact保存3秒だった。cold #223に対しjob時間で
+8879秒（2時間27分59秒）、97.69%短縮、43.28倍の速度となった。#223は61試験、#224/#225は
+追加SDK契約試験を含む62試験であり、完全に同じcommit/試験数の統計比較ではない。
+単回の異なる新規runner比較で、平均・分散・今後の全runで同じ時間を保証する結果ではない。
+
+warmログではアプリ用CMakeを新規生成し各C++ targetをcompile/linkした。WebKitのsource path・
+8833 taskのconfigure/ninja buildはなく、restoreしたSDKを使った。全CTest、Debian package
+lifecycle、clean tree/版・payload/mode・依存metadataの候補検証を省略していない。
+候補artifact IDは`11873392487`、名前は`picdplayer-0.1.0-2c09e586390cd65901f60e0ce175f923b95d9331`。
+`2c09e...`はPRのcheckoutされたmerge refであり、PR head `9f1775a...`と混同しない。
+artifact zip SHA256は`1e8b5753d9e30a0bbab007b3691f2a0122f1757d9fd96b0bbf70f03c260ff8e1`で、
+7日間保存の候補であって正式release公開/承認ではない。
+
+PoCの合格条件（別PRからmaster SDK復元・WebKit再buildなし・全検証成功・実測短縮）は満たした。
+結果文書の後続commitのCIはこの最初のcross-PR測定とは別runとして扱う。#225は検証記録を保存する
+docs-only PRとして保全し、このPoCを理由に追加のruntime変更や未指示のmergeを行わない。
+cache消失/recipe変更でのcold fallback、正式SDK供給、全ABI/byte-identical再現性、Pi/実写真の保証は
+引き続き対象外である。
+
+### Local実装と検証（2026-10-13 UTC）
+
 PR #223は最新head `124e07e`のCIが成功し、`ebb1c71`でmasterへ通常mergeした。旧Draft #217/#194/#192は
 固有資料を固定commit参照で保全してcloseし、別途mergeしていない。元の未commit workspace、旧worktreeと
 SDK cacheは保持した。今回の作業場所は同じ`wpe-primary-runtime`、branchはmasterからの`feature/wpe-sdk-cache`。
@@ -16,7 +80,7 @@ master以外のdispatchはjobをskipし、PR由来codeをmaster cache producer�
 
 実装開始時のcache一覧は旧WPE branchとPR #222/#223のmerge refにあり、master refにはなかった。
 同じkeyでも別PR/兄弟branchのcacheはmasterの初回seedに使えないため、source buildが一度必要になり得る。
-workflowのmasterへの導入、実GitHub上の初回cache save、別PRからのrestore、短縮時間はこの時点では未検証。
+workflowのmasterへの導入、実GitHub上の初回cache save、別PRからのrestore、短縮時間はlocal実装時点では未検証だった。
 API key・画像・Pi・service設定には触れず、SDKのcache成功を実機・ABI/再現性・正式配布の証拠にしない。
 
 `python3 tests/wpe_sdk_workflow_test.py`の4 unittestが成功した。実consumerからkey/pathを取得し、
