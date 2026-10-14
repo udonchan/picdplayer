@@ -171,9 +171,18 @@ sudoなしのprocess観測でもWPEがMainPIDで、Chromium fallbackではない
 
 | Issue | 主な範囲 |
 |---|---|
-| [#219](https://github.com/udonchan/picdplayer/issues/219) | WPE主serviceの起動・終了・DRM解放・失敗後のChromium復旧を実機で確認する。mock試験やserviceのactiveだけで表示成功と判断しない。 |
-| [#220](https://github.com/udonchan/picdplayer/issues/220) | WPE 2.54以降の固定・再現可能な供給、依存・provenance・更新経路を確立する。隔離sid rootfsをTrixie hostへ混在させない。 |
-| [#221](https://github.com/udonchan/picdplayer/issues/221) | #220の供給候補として、SHA256固定のWPE 2.54.0をTrixie/arm64でsource buildした。VIDEO guardとsandbox seccomp linkの2patch付き省略構成でbuild/stage、launcherとprocess群の依存解決を確認。標準packageのPi更新・基本CEC操作も確認済み。無改変sourceの成立、完全な再現性、正式供給の完成とは区別する。詳細は検証状況を参照する。 |
+| [#219](https://github.com/udonchan/picdplayer/issues/219) | Open。標準切替・package接続と基本CEC/再生停止は確認済み。現行WPEのcold boot、正常/異常終了、API/WS/daemon不在、DRM解放・child残留、fallback、詳細UI/Custom UI/Inspector/inputの未確認matrixを旧#191/#193から集約。追加復旧検討は必要時まで保留し、旧sid trialやmockを現行serviceの実機証拠にしない。 |
+| [#220](https://github.com/udonchan/picdplayer/issues/220) | Open。source/version/2patchの開発供給と標準package/SDK cacheは成立済み。v1.0へ保留した依存固定・ABI・sandbox実隔離/権限・更新/正式供給を旧#189/#191/#193から集約。sid rootfsをhost混在/製品供給へ転用しない。 |
+| [#221](https://github.com/udonchan/picdplayer/issues/221) | 成立性調査としてCompletedでClose。SHA256固定2.54.0＋VIDEO guard/seccomp linkの2patch付きTrixie/arm64構成でconfigure/build/stage、pkg-config、launcher/processのlink/依存検査を記録し、#222〜#225の後続CIで成果を保全・検証。無改変upstream・完全再現性・正式供給とは区別し、残条件は#219/#220へ追跡する。 |
+| [#226](https://github.com/udonchan/picdplayer/issues/226) | Open。deployの約35秒の実効runtime確認とkioskの最大300秒API待機を整合させる独立tooling Issue。code修正・長い待機の再現試験は未実施。 |
+
+2026-10-14の整理では、#189は採用評価・意思決定、#191は最小direct DRM PoC成立と残条件移管の
+CompletedとしてCloseした。旧#190のCage＋Cog比較と#193のopt-in sid trialはNot planned/supersededで
+Closeし、未完了checkboxを一括成功へ変更していない。固有の観測・失敗・toolは元コメントと
+[固定commit保全表](verification.md#旧draft-prの資料保全と統合経路2026-10-13-utc)から追跡する。
+性能/長期測定は#83、背景写真・key/decode memory/保存/slideshowは#25関連、Buildrootは保留のまま。
+この整理結果のrepository文書への統合は[#227](https://github.com/udonchan/picdplayer/issues/227)で追跡し、
+統合完了を#219/#220/#226などの残タスクの完了とは扱わない。
 
 Buildroot採用は前提としない。sudoが必要な実機操作は利用者が行い、診断toolからserviceの
 切り替えやsudoers変更を行わない。既存PoCの確認と新しい本番serviceの確認は区別する。
@@ -190,7 +199,7 @@ sudoなしで確認した。cold boot・DRM解放・異常終了fallback等は�
 必要になった時点へ保留する。既存の明示Chromium選択/fallback実装は保持するが、追加の実機
 復旧試験を現段階の取り込み条件にはしない。未確認を確認済みとは扱わない。
 レビューでdeployのruntime待機上限35秒とkioskのAPI待機設定上限300秒の不一致を確認した。
-長い待機設定では正常起動前にdeployが失敗を報告し得る。コードは未修正で、背景機能とは別の残課題。
+長い待機設定では正常起動前にdeployが失敗を報告し得る。コードは未修正で、背景機能とは別の#226へ追跡する。
 
 ## Buildrootの検討成果保全と採用保留
 
@@ -229,7 +238,7 @@ SDKだけをtrusted masterで準備・保存し、通常のアプリbuild/test�
 workflowは#224でmasterへ統合し、master scopeの初回seed（2時間21分12秒）は成功した。
 新規PR #225の最初の通常CIでmaster cacheを復元し、62/62 CTest・package lifecycle・候補検証を省略せず
 jobを3分30秒で完走した。cold #223の2時間31分29秒から97.69%短縮した単回PoCとして記録する。
-cache消失/recipe変更時のcold fallback、正式供給や#219/#220/#221の
+cache消失/recipe変更時のcold fallback、正式供給や#219/#220の
 全条件を完了扱いにはしない。[運用手順](../manual/mac-docker-development.md#master側の共通wpe-sdk-cache)参照。
 PoCは導入CI→master seed→別branch/新規PRの通常CIの順とし、全試験を省略せず、cache復元と時間短縮を
 実測する。初回seedとwarm CIの時間を混同せず、SDK cache成功を実機動作や再現性の保証にしない。

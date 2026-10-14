@@ -2,6 +2,37 @@
 
 更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## WPE Issueの完了・置換と残条件移管（2026-10-14 UTC）
+
+利用者の指示により、既存の証拠と最新Issue本文/コメントを照合して整理した。新規実機試験・
+code変更・SDK build/cache操作はこの整理では行わない。原workspaceの未commit作業、旧branch/worktreeを保持する。
+文書2件をmasterへ統合する追跡Issueは[#227](https://github.com/udonchan/picdplayer/issues/227)で、
+このIssueの完了と現行WPEの実機受入・供給・deploy修正の完了を区別する。
+
+| Issue | 整理後 | 完了/置換の意味と残条件 |
+|---|---|---|
+| #221 | Closed / Completed | 2patch付きTrixie sourceの成立性調査、記録・review・master保全と後続CIを完了。無改変upstream・正式供給・全ABI/sandboxは#220、実機受入は#219 |
+| #189 | Closed / Completed | 利用者のdirect DRM採用判断と評価/証拠の後続実装への引継ぎを完了。全runtime/v1.0受入ではない |
+| #191 | Closed / Completed | 最小Pi direct DRM PoC成立と残条件移管を完了。当時の判断Bや未確認/失敗、旧checkboxを全成功へ読み替えない |
+| #190 | Closed / Not planned | Cage＋Cogのlegacy比較は選択された直接WPEPlatform経路に置換。正常終了/全入力/切断復帰/同条件性能の未実施を消さない |
+| #193 | Closed / Not planned | opt-in sid trialは#222の標準source-built runtimeへ置換。旧#194のtimer/SSH/復旧は現行productionの成功ではない |
+| #219 | Open | 現行runtimeのcold boot・失敗/終了/復旧・DRM/child・詳細UI/入力/HTTPWS/Inspectorの未確認matrixを集約 |
+| #220 | Open | 開発供給を成立済みと区別し、v1.0の依存固定/ABI/sandbox実隔離・権限・更新/正式供給へ残す |
+| #226 | Open | deployの約35秒判定とkiosk API待機最大300秒の独立不一致。code・実機遅延再現は未修正/未実施 |
+
+#219/#220本文と移管コメントを先に更新してから旧Issueをcloseした。#221の成立性5条件のみは
+確認済みとして本文を更新し、元の32分失敗/2patch/資源・依存記録を保持した。#191等の全受入条件を
+黙って削除・checkせず、closure commentへ移管先と限界を残した。固定資料は以下の旧Draft保全表を参照する。
+
+性能・長期安定性は#83、boot/quiet bootは#3/#19、エラーは#188、Custom UI更新は#18/#42と関連付ける。
+写真・key・decoded memory・背景保存/slideshowは#25/#49/#50/#51/#177/#178へ残し、WPE Issueへ二重登録しない。
+Buildroot#74/#198〜#200は別の保留で、採用を前提にせず、#28のChromium cursorが解決したとも主張しない。
+追加復旧検討は必要時まで、供給完全固定/追加ABIはv1.0段階まで保留する利用者方針を維持する。
+
+[新規#226](https://github.com/udonchan/picdplayer/issues/226)はmaster `07bcfa1`のdeploy.sh:119–135と
+kiosk wrapper:23–39を根拠に、正当な遅延起動、deadline/fallback/inactive、既存状態の維持を合成fixtureで
+有界検証する完了条件を定義した。このIssue作成・整理は修正の実行やtarget設定変更を承認したものではない。
+
 ## master側の共通WPE SDK workflow（2026-10-13 UTC）
 
 ### GitHub初回seedと別PR PoC（2026-10-14 UTC）
