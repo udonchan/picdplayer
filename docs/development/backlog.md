@@ -172,7 +172,7 @@ sudoなしのprocess観測でもWPEがMainPIDで、Chromium fallbackではない
 
 | Issue | 主な範囲 |
 |---|---|
-| [#219](https://github.com/udonchan/picdplayer/issues/219) | Open。標準切替・package接続と基本CEC/再生停止は確認済み。現行WPEのcold boot、正常/異常終了、API/WS/daemon不在、DRM解放・child残留、fallback、詳細UI/Custom UI/Inspector/inputの未確認matrixを旧#191/#193から集約。追加復旧検討は必要時まで保留し、旧sid trialやmockを現行serviceの実機証拠にしない。 |
+| [#219](https://github.com/udonchan/picdplayer/issues/219) | Open。標準切替・package接続と基本CEC/再生停止は確認済み。Inspectorに新規PNG保存CLIを追加し、macOS/Linux各28試験と利用者の基本動作確認を記録した（[操作手順](../manual/operations.md)、[検証記録](verification.md)）。現行WPEのcold boot、正常/異常終了、API/WS/daemon不在、DRM解放・child残留、fallback、詳細UI/Custom UI/Inspector/inputの未確認matrixを旧#191/#193から集約。Debug/Release分離は後続作業で今回未実装。追加復旧検討は必要時まで保留し、旧sid trialやmockを現行serviceの実機証拠にしない。 |
 | [#220](https://github.com/udonchan/picdplayer/issues/220) | Open。source/version/2patchの開発供給と標準package/SDK cacheは成立済み。v1.0へ保留した依存固定・ABI・sandbox実隔離/権限・更新/正式供給を旧#189/#191/#193から集約。sid rootfsをhost混在/製品供給へ転用しない。 |
 | [#221](https://github.com/udonchan/picdplayer/issues/221) | 成立性調査としてCompletedでClose。SHA256固定2.54.0＋VIDEO guard/seccomp linkの2patch付きTrixie/arm64構成でconfigure/build/stage、pkg-config、launcher/processのlink/依存検査を記録し、#222〜#225の後続CIで成果を保全・検証。無改変upstream・完全再現性・正式供給とは区別し、残条件は#219/#220へ追跡する。 |
 | [#226](https://github.com/udonchan/picdplayer/issues/226) | Open。deployの約35秒の実効runtime確認とkioskの最大300秒API待機を整合させる独立tooling Issue。code修正・長い待機の再現試験は未実施。 |

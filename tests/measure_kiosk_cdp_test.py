@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import struct
 from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location(
@@ -11,6 +12,36 @@ spec.loader.exec_module(cdp)
 
 
 class CdpTest(unittest.TestCase):
+    def test_frame_byte_limit_is_bounded_and_opt_in(self):
+        for limit in (4 * 1024 * 1024, 16 * 1024 * 1024):
+            ws = cdp.WebSocket.__new__(cdp.WebSocket)
+            ws.deadline = None
+            ws.maximum_message_bytes = limit
+            ws.pending = b'\x81\x7f' + struct.pack('!Q', limit + 1)
+            ws.socket = Mock()
+            with self.assertRaisesRegex(RuntimeError, 'message too large'): ws.receive()
+            ws.socket.recv.assert_not_called()
+        self.assertEqual(cdp.WebSocket.maximum_message_bytes, 4 * 1024 * 1024)
+        for limit in (0, -1, True, 16 * 1024 * 1024 + 1):
+            with patch.object(cdp.socket, 'create_connection') as connect:
+                with self.assertRaises(ValueError):
+                    cdp.WebSocket('ws://127.0.0.1:9223/socket/1/2/WebPage', maximum_message_bytes=limit)
+                connect.assert_not_called()
+
+    def test_large_snapshot_frame_is_allowed_only_with_larger_limit(self):
+        body = cdp.json.dumps({'data': 'x' * (4 * 1024 * 1024)}).encode()
+        for limit in (4 * 1024 * 1024, 16 * 1024 * 1024):
+            ws = cdp.WebSocket.__new__(cdp.WebSocket)
+            ws.deadline = None
+            ws.maximum_message_bytes = limit
+            ws.pending = b'\x81\x7f' + struct.pack('!Q', len(body)) + body
+            ws.socket = Mock()
+            if limit == 4 * 1024 * 1024:
+                with self.assertRaisesRegex(RuntimeError, 'message too large'): ws.receive()
+            else:
+                self.assertEqual(len(ws.receive()['data']), 4 * 1024 * 1024)
+            ws.socket.recv.assert_not_called()
+
     def test_handshake_eof_closes_socket(self):
         sock = Mock()
         sock.recv.side_effect = [b"HTTP/1.1 101", b"", AssertionError("read after EOF")]

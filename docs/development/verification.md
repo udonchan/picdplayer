@@ -2,6 +2,28 @@
 
 更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## WPEスクリーンショットCLIと表示確認（2026-10-14 23:04 UTC）
+
+利用者から実機での表示確認ができたとの報告を得た。これは利用者の表示確認であり、厳密な切替時間・
+CEC全経路・音声欠落・長期負荷の試験と同一視しない。
+再利用可能なdebug toolとして既存`inspect-wpe.py`へ`--screenshot PATH`を追加する。
+前回成功したWebKit inner targetの`Page.snapshotRect`を再利用し、PNG外形・寸法・8 MiB上限・
+新規fileのみの保存・0600・書込失敗cleanupを検査する。serviceやSSH転送・sudoersを自動操作しない。
+一時Inspectorの明示有効化/復元と、ローカル保存の使い方は[操作・診断](../manual/operations.md)へ記録する。
+当初は新CLIの実機再撮影を未実施としていた。23:33 UTCの失敗は一覧HTTP取得時のConnection resetで、
+MacのSSH port19223は待受中だが、Piの9223は接続拒否・専用runtime drop-in不在・kiosk未再起動だった。
+agentは読み取りだけで原因を確認し、Inspectorの有効化手順を提示した。23:37 UTCに利用者から
+「一旦動作確認はできました」と報告を得た。これは新CLIの基本動作の利用者確認であり、
+agent自身が新しいPNG・寸法・復元状態を再取得した結果とは区別する。
+Debug/Release profile分離とDebugでの標準remote debug、Releaseでのlog抑制は次セッションへ延期し、
+今回の変更ではbuild profile・logger既定・Inspectorの標準起動設定を変更しない。
+macOSで`python3 tests/wpe_inspector_test.py`の16件と`python3 tests/measure_kiosk_cdp_test.py`の12件、
+合計28件が成功した。同じ2本をnetworkなしLinux/aarch64 containerで実行して28件成功した。
+新規PNG/0600、既存file・symlinkの非上書き、不正data URL/base64/PNG/viewport、8 MiB上限、
+書込失敗cleanup、CLI成功/失敗時のsocket closeを確認した。既存観測のdeadline等のassertionは維持した。
+shared WebSocketは既定4 MiBのまま、明示した16 MiBだけで大きなframeを受理する試験も追加した。
+`--help`と`git diff --check`は成功。変更はPython tool/testと文書で、C++ source・WPE launcher・serviceは変更していない。
+
 ## fanart.tv PoCのmaster統合判断（2026-10-14 15:05 UTC）
 
 利用者がPR #230のmaster取り込みを明示承認した。ローカルProject keyによる実API取得、
