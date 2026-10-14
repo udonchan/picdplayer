@@ -98,6 +98,8 @@ key案内と規約の公開本文は公式WordPress RESTの
 不要な要求・bulk取得を避け、commercial useには書面同意が必要で、第三者向けAPIへの組込みは禁止とされる。
 公開programでは利用者へfanart.tvと使用画像を案内し、artworkへの貢献を呼びかける規定がある。
 標準Settingsにはfanart.tvの出典・websiteと貢献の呼びかけを記載する。個別画像のcreditや許諾を保証しない。
+規約には投稿者へのattribution/royaltyなしの利用文言もあるが、各権利者の著作権留保と許可確認を同時に記載する。
+投稿者への支払不要を、写真の権利者からの無条件の再掲載許諾とは扱わない。
 写真の出典はfanart.tvであり、画像の著作権は各権利者に残る。利用者は用途に応じて権利条件を確認する。
 API応答から個々の写真の権利者・包括的許諾を推定しない。privateなローカルPoCを明示的に禁止する条項は
 取得できた本文では確認されていないが、全条件について無条件の許可を確認したものではない。
@@ -111,6 +113,8 @@ API応答から個々の写真の権利者・包括的許諾を推定しない�
 再ONでの新参照3件を確認した。同じPiのWPE rendered-page snapshotで1920×1080の写真背景描画も確認した。
 これを物理TV目視・聴感、厳密な切替時間測定や長期負荷の確認とは区別する。snapshotはtmpだけに保存し、
 Git/PR/配布物へ含めない。Inspectorはloopbackで一時利用し、撮影後に無効化した。
+利用者から基本再生に問題が見られないとの実機報告も得た。後続CDのartist「大森靖子」は状態APIで採用1枚を
+確認し、静止表示は仕様どおりだった。登録総数や他候補の除外理由をこのAPIから推定しない。
 
 1. 既存設定を記録し、標準packageを通常のdeploy手順で導入する。daemonとkioskを別に二重起動しない。
 2. `journalctl -u picdplayer-kiosk.service -b -o cat`の`kiosk_runtime`で`effective=wpe`を確認する。

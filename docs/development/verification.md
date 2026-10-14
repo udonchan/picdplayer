@@ -2,6 +2,26 @@
 
 更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## fanart.tvの権利確認と利用者による実機確認（2026-10-14 15:00 UTC）
+
+利用者はThe SlipのジャケットへのCCライセンス適用を確認した。一方、fanart.tv由来の背景写真は別の素材で、
+個別の権利者・再掲載可能なライセンスは未確認である。公式規約の公開本文をWordPress RESTで確認した。
+投稿者へのattribution/royaltyなしの利用文言があるが、著作権は各権利者に残ることと、その権利を侵害する
+利用では権利者の許可を確認することも明記されている。投稿者が写真の権利者であるとは推定しない。
+公式artistページは403で、写真の原出典・個別許諾まで確認できなかった。API仕様のCC表記も写真へ流用しない。
+利用者は背景のある実機画像を重視し、権利未確認のPNGを無理に公開しない方針とした。
+PNGはtmpに保持し、PRには画像本体ではなく描画確認の事実・方法・残条件だけを記録する。
+この調査ではAPI keyを取得せず、追加の認証付きAPI要求も行っていない。
+
+同日15:00 UTCに利用者が実機で確認し、「再生機能等は問題なさそう」と報告した。
+これは基本再生のユーザー確認であり、agentが音声を聴いた結果、全操作経路・CEC・長時間の無欠落試験ではない。
+現在のCDでは背景が1種類に見えるとの報告に対し、実機APIのrevision2236でartist「大森靖子」、STOPPED、
+`artwork.background.urls`が1件であることを確認した。1枚は静止、2〜3枚は45000 ms滞在・4000 ms crossfadeなので、
+今回の静止表示は配信枚数に対して想定どおりである。fanart.tvに登録されている画像自体が1枚なのか、
+検証条件や取得失敗で他候補が採用されなかったのかは、この状態APIだけでは判定しない。
+Nine Inch Nailsでの実3枚配信・WPE snapshot確認とは分け、複数画像の実機での厳密な時間測定は未実施とする。
+CEC詳細・音声欠落・長期負荷と個別写真の再掲載許諾は残条件で、Issue #229/PR #230のOpen/Draftは維持する。
+
 ## fanart.tv実API・Pi配備の追補（#229、2026-10-14 UTC）
 
 利用者がPiへProject key fileを追加し、PoC配備・設定反映・限定診断を明示承認した。
@@ -45,7 +65,8 @@ PNGでNine Inch Nailsの実写真背景、The Slipのcover・metadata・STOPPED�
 撮影後は一時drop-inと転送用fileを削除、daemon-reloadとkiosk再起動で通常状態へ戻し、port9223閉鎖・
 `picdplayer-wpe`稼働を確認した。SSH転送も停止した。daemon PID105812は不変で、再生・key設定には触れていない。
 画像はtmpだけに置き、Git・PR・releaseへ含めていない。別browserの再描画やChromiumを証拠に使っていない。
-DRM scanout・HDMI・TV目視、実音声/CEC継続・長期CPU/memoryはまだ未検証である。
+この撮影時点ではDRM scanout・HDMI・TV目視、実音声/CEC継続・長期CPU/memoryは未検証だった。
+後続の利用者による実機確認は上の追補に記録し、確認主体と範囲を分ける。
 実keyの失効/rotation、公開同梱許可、画像license/creditは引き続きFuture Workで、Issue/PRは完了扱いにしない。
 
 ## fanart.tvローカルkey PoCの初期実装（#229、2026-10-14 UTC）
