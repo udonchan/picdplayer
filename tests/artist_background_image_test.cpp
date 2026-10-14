@@ -106,6 +106,32 @@ int main() {
                                    100, {}, RedirectPolicy::fanart_asset);
         } catch (const std::invalid_argument&) { rejected = true; }
         check(rejected);
+        auto opaque = candidate();
+        opaque.url = "https://assets.fanart.tv/fanart/music/backgrounds/opaque-photo.jpg";
+        check(load_artist_background_image(artist, opaque, {}, {}, image_get)->bytes == jpeg);
+        opaque.url = "https://assets.fanart.tv/fanart/flat-photo.jpg";
+        ArtistImageHttpGet flat_get = [&](std::string_view url, std::size_t limit, const std::function<bool()>&) {
+            check(url == opaque.url && limit == 8 * 1024 * 1024);
+            return response(200, "image/jpeg", jpeg);
+        };
+        check(load_artist_background_image(artist, opaque, {}, {}, flat_get)->bytes == jpeg);
+        for (const auto* url : {"http://assets.fanart.tv/fanart/music/photo.jpg",
+                               "https://assets.fanart.tv.evil.example/fanart/music/photo.jpg",
+                               "https://assets.fanart.tv/fanart/music/../photo.jpg",
+                               "https://assets.fanart.tv/fanart/music/%2e%2e/photo.jpg",
+                               "https://assets.fanart.tv/fanart/music/photo.jpg?token=x",
+                               "https://assets.fanart.tv/fanart/flat-photo.jpg?token=x",
+                               "https://assets.fanart.tv/fanart/movies/flat-photo.jpg",
+                               "https://assets.fanart.tv/fanart/../flat-photo.jpg"}) {
+            opaque.url = url;
+            const auto before = calls;
+            check(!load_artist_background_image(artist, opaque, {}, {}, image_get));
+            check(calls == before);
+            bool denied = false;
+            try { (void)HttpClient{}.get(url, 100, {}, RedirectPolicy::fanart_asset); }
+            catch (const std::invalid_argument&) { denied = true; }
+            check(denied);
+        }
         std::filesystem::remove_all(root, error);
         std::cout << "PASS: bounded artist image fetch and cache\n";
     } catch (const std::exception& failure) {

@@ -282,7 +282,7 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
 | [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | main threadのArtistBackgroundPolicyをEnrichmentServiceへ参照で渡す。既定OFFではworkerを生成・要求しない。ONかつ単一Artist MBIDがある時にlazy生成し、空cache pathで候補を取得する。世代とartist一致時だけ採用。OFF handlerは即時取消・画像と参照消去し、再生停止を待たない |
 | [load_artist_background_image](../../src/artist_background_image.cpp) | 候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得。runtimeは空cache pathを渡す。JPEG/PNG/WebPの外形とContent-Typeを照合し、full decodeの保証はしない |
-| [ArtistBackgroundImageWorker](../../src/artist_background_image_worker.cpp) | Draft PR #217から再利用。実行中1件・最新pending1件・result1件を保持し、serialの変更で失効結果を格納しない。mainはeffective・世代・Artist MBID・候補ID/URLを再照合し1画像を保持、失敗なら次候補を試す。返却bytesは8 MiB上限とJPEG/PNG/WebP MIMEを検査する。内部IDを含まないnonce+sequenceの参照をsnapshotへ公開し、Viewのfull decodeは代替しない |
+| [ArtistBackgroundImageWorker](../../src/artist_background_image_worker.cpp) | PR #223でruntime統合済み。実行中1件・最新pending1件・result1件を保持し、serialの変更で失効結果を格納しない。mainはeffective・世代・Artist MBID・候補ID/URLを再照合し、重複を除いて成功/失敗とも次候補を試す。画像8 MiB、保持最大3枚・合計16 MiBを上限とし、nonce+sequenceの参照を段階公開する。全参照をOFF/世代変更で失効する。Viewのfull decodeは代替しない |
 
 候補workerと画像workerはいずれもthread memberをmutex・condition variable・状態memberより後に
 宣言する。constructorで開始するthreadが未構築の状態へアクセスしないための順序である。
@@ -306,11 +306,12 @@ HTTP本文上限はあるが、全JSON fieldへの厳密な型検証は保証し
 Artist候補は`artist-background/{artist-mbid}.json`を同じ64 MiB総量のcacheに含める。
 検証済みJSONは7日、404の空markerは1日を期限とし、期限切れJSONはprovider失敗時だけ利用する。
 key fileの読込みと失敗警告は`Signals`がsignal maskを設定した後に行い、logger threadを先に
-起動しない。keyの値・path・provider URLはsnapshotとlogへ出さない。
+起動しない。key file未指定の場合だけ環境変数を読む。keyの値・path・provider URLはsnapshotとlogへ出さない。
 写真本体を取得する部品のfile cacheは同じ64 MiB総量を使い、URL変更時には別entryとなる。
 新しい取得は30日経過時に試み、network失敗時だけ有効な期限切れentryを使う。
-403/404/410で削除された画像や不正な200応答は古いentryを破棄する。部品はまだworker・API・UIから
-呼んでいないため、実機で外部画像を取得・表示したことを意味しない。
+403/404/410で削除された画像や不正な200応答は古いentryを破棄する。
+runtimeの画像workerは空cache pathでこの取得部品を呼ぶため、file cacheは採用していない。
+部品・合成fixtureの成功を実機で外部画像を取得・表示した証拠とは扱わない。
 
 ## drive spindle control
 

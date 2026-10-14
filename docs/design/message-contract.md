@@ -23,7 +23,7 @@
 Read Policyのpending/source/保存情報を流用しない。key指定だけでは候補JSONも写真も取得しない。
 標準SettingsはこのAPIをRead Policyと独立して読み、利用不能理由と要求値・実効値を表示する。
 利用不能時のONを無効にし、既知の状態でOFFを要求できる。背景画像の配信、snapshotへの参照、
-session ONはDraft PR #217からこの開発差分へ再利用した。GitHubのmaster統合とは区別する。
+session ONはPR #223でmasterへ統合済み。複数画像配信は#229のPoC拡張で、実provider・WPE写真表示の確認とは区別する。
 候補JSON・画像取得は空cache pathの一時的memory経路で、ディスク保存の採否と背景の保存schemaは後続作業である。
 
 `PlayerSession` → `make_presentation_model` → `serialize_presentation_model`が公開経路。
@@ -81,6 +81,8 @@ N/A等のUIラベルを新しいwire enumとみなさない。
 | artwork.cover.mime_type, width, height | null | 現行JSONでは常にnull。取得画像のHTTP Content-Typeとは別 |
 | artwork.background | object? | OFF・画像準備前・取得失敗・現行audio discなしはnull。ON受理はこのfieldの存在を保証しない |
 | artwork.background.url | string | 取得結果の世代に対応する同一originの不透明画像参照。旧参照は失効し、clientは新snapshotから再構築する |
+| artwork.background.urls | array of string | 同世代の取得済み不透明画像参照、最大3枚。段階的に追加され、先頭はurlと同じ。旧client用urlは維持し、旧payloadのurls欠落時はurlを単一画像として使える |
+| artwork.background.dwell_ms, crossfade_ms | uint | 標準View用の滞在45000 ms・crossfade4000 ms。再生時計とは独立。reduced motion時はViewがfadeを即時化する |
 | artwork.background.mime_type, width, height | null | 実HTTPのContent-Typeと別。full decodeや寸法検証済みとは扱わない |
 | drive, read | object | 以下の診断情報 |
 | recent_events | array | 以下の有界event窓 |

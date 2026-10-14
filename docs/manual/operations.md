@@ -233,7 +233,8 @@ GET stateで現在値を復元して再接続する。ここから再生操作�
 WPE主runtimeへの移行候補には`scripts/inspect-wpe.py`を用意している。これはChromium CDPとは
 別のWebKit target routingを使い、pageのtitle・readyState・viewport・接続表示を読み取る。
 標準packageはWPEを供給し、開発Piでは利用者が初回表示・再生を確認した。
-Inspector tool自体の実WebKit接続は未確認であり、tool追加やmock試験を実機確認とは扱わない。
+2026-10-14にはこのtoolのPageClientを再利用して実WebKit接続、Runtime評価、`Page.snapshotRect`のPNG取得に
+成功した（[fanart.tv検証記録](../development/verification.md)）。tool追加やmock試験だけを実機確認とは扱わない。
 
 実機のWPEを起動するsudo操作は利用者が行う。既存の隔離rootfsでの一時試験には
 `scripts/test-wpe-kiosk.sh`があるが、通常serviceのWPE移行試験とは別であり、この診断toolは

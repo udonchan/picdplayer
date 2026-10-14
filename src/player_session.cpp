@@ -185,10 +185,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
     ArtistBackgroundPolicy artist_background_policy(false, "metadata_disabled");
 #ifdef ENABLE_METADATA
     std::string artist_background_key;
-    if (!artist_background_key_file.empty()) {
-        try { artist_background_key = load_artist_background_key(artist_background_key_file); }
+    {
+        try { artist_background_key = resolve_artist_background_key(artist_background_key_file); }
         catch (const std::exception&) {
-            log_warning("artist_background") << "disabled invalid_key_file";
+            log_warning("artist_background") << "disabled invalid_key";
         }
     }
     artist_background_policy = ArtistBackgroundPolicy(metadata_enabled && !artist_background_key.empty(),
@@ -298,15 +298,17 @@ void run_player_session(const std::string& device, CddaBackend backend,
         read.strategy_pending = applied_strategy.pending;
         bool has_cover_asset = false;
         std::optional<std::string> background_url;
+        std::vector<std::string> background_urls;
 #ifdef ENABLE_METADATA
         if (metadata_enabled) has_cover_asset = enrichment.has_cover_asset();
         if (metadata_enabled) background_url = enrichment.background_url();
+        if (metadata_enabled) background_urls = enrichment.background_urls();
 #endif
         auto candidate = serialize_presentation_model(make_presentation_model(
             api_revision + 1, state, media_state.state(), loaded_toc, metadata,
             drive_capabilities, read, recent_events, has_cover_asset,
             toc_needs_refresh ? std::nullopt : std::optional<std::uint64_t>(disc_generation),
-            metadata_generation, std::move(background_url)));
+            metadata_generation, std::move(background_url), std::move(background_urls)));
         if (!api_state_json.empty() &&
             presentation_json_equal_ignoring_revision(candidate, api_state_json)) return false;
         ++api_revision;

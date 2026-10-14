@@ -51,7 +51,7 @@ std::string serialize_presentation_model(const PresentationModel& model) {
                         {"artist", optional(model.disc.artist)}}}, {"tracks", std::move(tracks)},
               {"enrichment", {{"status", metadata_name(model.enrichment.status)}, {"selection", std::move(selection)}}},
               {"artwork", {{"cover", model.artwork.cover_url ? Json{{"url", *model.artwork.cover_url}, {"mime_type", nullptr}, {"width", nullptr}, {"height", nullptr}} : Json(nullptr)},
-                           {"background", model.artwork.background_url ? Json{{"url", *model.artwork.background_url}, {"mime_type", nullptr}, {"width", nullptr}, {"height", nullptr}} : Json(nullptr)}}}};
+                           {"background", model.artwork.background_url ? Json{{"url", *model.artwork.background_url}, {"urls", model.artwork.background_urls}, {"dwell_ms", 45000}, {"crossfade_ms", 4000}, {"mime_type", nullptr}, {"width", nullptr}, {"height", nullptr}} : Json(nullptr)}}}};
     root.update(diagnostic_fields(model.drive, model.read, model.recent_events));
     return root.dump();
 }

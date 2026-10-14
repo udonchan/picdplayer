@@ -98,17 +98,21 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 保持するprovider部品はfanart.tvの**project key**を`api-key`ヘッダーで送る。personal key用の
 `client-key`経路は未実装なので、利用者のpersonal keyをこのfileに設定しない。
 引数やEnvironmentFileにkeyの**値**を書かない。ファイルはservice userが読める通常ファイルとし、
-symlinkやgroup/world writableを許可しない。最大256文字の空白を含まないASCII keyを置き、末尾の
+symlink、group writable、otherの全権限を許可しない。最大256文字の空白を含まないASCII keyを置き、末尾の
 改行1文字だけは許可する。例としてroot所有・group `picdplayer`・mode `0640`を使える。
 ファイルが存在しない、または無効な場合はkey/pathをlogへ出さず、Artist候補取得だけを無効化する。
 metadata取得とCD再生は続ける。`GET /api/artist-background`はmetadataが無効・非compileなら
 `metadata_disabled`、metadataが有効でkeyがない・不正なら`key_missing`を返す。
 この開発差分のloopback POSTではOFFは冪等204、技術的に利用可能なONは画像到着前でも204、
 利用不能なONは409で拒否する。背景設定の保存は未実装。写真の一時取得・同一origin配信と
-標準Playerの単一背景表示はDraft PR #217から再利用したもので、master統合・実機確認とは区別する。
+標準Playerの単一背景表示はPR #223でmasterへ統合済みであり、実provider・実機写真の確認とは区別する。
 key file指定は写真表示をONにしたことを意味せず、ON受理も画像到着・利用許諾済みを保証しない。
 画像利用に必要な権利・許諾の確認は利用者に委ね、製品が許諾を保証しないことを説明して明示ONを求める。
 ディスクキャッシュを行うかどうかは、この権利方針とは別に設計する。
+
+file未指定時には`FANART_TV_API_KEY`を読むローカル開発用PoC経路もある。
+常駐serviceでは上記file方式を維持し、browser/kioskやbuildへkeyを渡さない。
+設定優先順、Git除外、複数画像表示、WPE実機確認は[fanart.tv PoC](../development/fanart-tv-poc.md)を参照する。
 
 手動のplayerやCD読み取り診断を実行する前には`sudo systemctl stop picdplayer.service`で
 serviceを停止する。同じdrive・ALSA・CECを複数のplayerから同時操作しない。

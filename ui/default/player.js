@@ -420,17 +420,8 @@ async function selectBackground(index) {
     if (response.status !== 204) failed = true;
     else if (index === 0) {
       // OFF expires the current asset even if its state-stream update is delayed.
-      const image = byId('background-artist');
-      if (image) {
-        if (image.dataset.url) retiredBackgroundUrl = image.dataset.url;
-        image.dataset.identity = '';
-        image.dataset.url = '';
-        image.onload = null;
-        image.onerror = null;
-        image.removeAttribute('src');
-      }
-      const layer = byId('player-background');
-      if (layer?.classList?.contains('has-artist')) layer.classList.remove('has-artist');
+      retiredBackgroundUrl = currentSnapshot?.artwork?.background?.url || '';
+      resetArtistBackground();
       await load(true);
     }
   } catch {
@@ -916,20 +907,138 @@ function showArt(artwork, layout, session, selection) {
   if (image.complete && image.naturalWidth > 0) image.onload();
 }
 
+let artistBackgroundEpoch = 0;
+let artistBackgroundKey = '';
+let artistBackgroundUrls = [];
+let artistBackgroundBag = [];
+let artistBackgroundFailed = new Set();
+let artistBackgroundCurrent = null;
+let artistBackgroundPending = null;
+let artistBackgroundTimer = null;
+let artistBackgroundDwell = 45000;
+let artistBackgroundFade = 4000;
+const artistBackgroundImages = () => [byId('background-artist'), byId('background-artist-next')].filter(Boolean);
+
+// Removing both sources cancels pending loads; the epoch also expires decode promises and timers.
+function resetArtistBackground() {
+  artistBackgroundEpoch += 1;
+  clearTimeout(artistBackgroundTimer);
+  artistBackgroundTimer = null;
+  artistBackgroundKey = '';
+  artistBackgroundUrls = [];
+  artistBackgroundBag = [];
+  artistBackgroundFailed = new Set();
+  artistBackgroundCurrent = null;
+  artistBackgroundPending = null;
+  for (const image of artistBackgroundImages()) {
+    image.onload = null;
+    image.onerror = null;
+    image.dataset.identity = '';
+    image.dataset.url = '';
+    setStyle(image, 'transitionDuration', '0ms');
+    setStyle(image, 'opacity', '0');
+    image.removeAttribute('src');
+  }
+  const layer = byId('player-background');
+  if (layer?.classList.contains('has-artist')) layer.classList.remove('has-artist');
+}
+
+function scheduleArtistBackground() {
+  if (artistBackgroundTimer !== null || artistBackgroundPending || !artistBackgroundCurrent ||
+      artistBackgroundUrls.filter((url) => !artistBackgroundFailed.has(url)).length < 2) return;
+  const epoch = artistBackgroundEpoch;
+  artistBackgroundTimer = setTimeout(() => {
+    if (epoch !== artistBackgroundEpoch) return;
+    artistBackgroundTimer = null;
+    loadArtistBackground();
+  }, artistBackgroundDwell);
+}
+
+function loadArtistBackground(firstUrl) {
+  const epoch = artistBackgroundEpoch;
+  const currentUrl = artistBackgroundCurrent?.dataset.url;
+  if (!artistBackgroundBag.length) {
+    artistBackgroundBag = artistBackgroundUrls.filter((url) => url !== currentUrl && !artistBackgroundFailed.has(url));
+    for (let i = artistBackgroundBag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [artistBackgroundBag[i], artistBackgroundBag[j]] = [artistBackgroundBag[j], artistBackgroundBag[i]];
+    }
+  }
+  const url = firstUrl || artistBackgroundBag.shift();
+  if (!url) return;
+  artistBackgroundBag = artistBackgroundBag.filter((entry) => entry !== url);
+  const image = artistBackgroundImages().find((entry) => entry !== artistBackgroundCurrent);
+  if (!image) return;
+  const token = {};
+  artistBackgroundPending = token;
+  image.dataset.url = url;
+  image.dataset.identity = JSON.stringify([epoch, url]);
+  setStyle(image, 'transitionDuration', '0ms');
+  setStyle(image, 'opacity', '0');
+  const valid = () => epoch === artistBackgroundEpoch && image.dataset.url === url && image.onerror === failed;
+  const failed = () => {
+    if (!valid() || (artistBackgroundPending !== token && artistBackgroundCurrent !== image)) return;
+    image.onload = null;
+    image.onerror = null;
+    artistBackgroundFailed.add(url);
+    artistBackgroundBag = artistBackgroundBag.filter((entry) => entry !== url);
+    if (artistBackgroundCurrent === image) {
+      artistBackgroundCurrent = null;
+      setStyle(image, 'opacity', '0');
+      byId('player-background').classList.remove('has-artist');
+      clearTimeout(artistBackgroundTimer);
+      artistBackgroundTimer = null;
+    }
+    if (artistBackgroundPending === token) artistBackgroundPending = null;
+    if (!artistBackgroundPending) loadArtistBackground();
+  };
+  const show = () => {
+    if (!valid() || artistBackgroundPending !== token) return;
+    artistBackgroundPending = null;
+    const previous = artistBackgroundCurrent;
+    const fade = previous && !globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      ? artistBackgroundFade : 0;
+    setStyle(image, 'transitionDuration', `${fade}ms`);
+    setStyle(image, 'opacity', '.24');
+    if (previous) {
+      setStyle(previous, 'transitionDuration', `${fade}ms`);
+      setStyle(previous, 'opacity', '0');
+    }
+    artistBackgroundCurrent = image;
+    const layer = byId('player-background');
+    if (!layer.classList.contains('has-artist')) layer.classList.add('has-artist');
+    if (fade) {
+      artistBackgroundTimer = setTimeout(() => {
+        if (epoch !== artistBackgroundEpoch) return;
+        artistBackgroundTimer = null;
+        scheduleArtistBackground();
+      }, fade);
+    } else scheduleArtistBackground();
+  };
+  let decoding = false;
+  image.onload = () => {
+    if (!valid() || artistBackgroundPending !== token || decoding || !image.complete || image.naturalWidth <= 0) return;
+    decoding = true;
+    if (typeof image.decode !== 'function') { show(); return; }
+    try { Promise.resolve(image.decode()).then(show, failed); } catch { failed(); }
+  };
+  image.onerror = failed;
+  image.removeAttribute('src');
+  image.src = url;
+  if (image.complete && image.naturalWidth > 0) image.onload();
+}
+
 function showBackground(snapshot, hasDisc) {
   const layer = byId('player-background');
   if (!layer) return;
   const artwork = snapshot.artwork || {};
   const selection = snapshot.enrichment?.selection;
   const layout = snapshot.disc?.layout;
-  for (const kind of ['cover', 'artist']) {
+  for (const kind of ['cover']) {
     const image = byId(`background-${kind}`);
     if (!image) continue;
-    const candidate = kind === 'artist' ? artwork.background?.url : artwork.cover?.url;
-    const allowed = typeof candidate === 'string' && (kind === 'artist'
-      ? /^\/api\/presentation\/artwork\/background\/[a-zA-Z0-9-]+$/.test(candidate)
-      : candidate === '/api/presentation/artwork/cover');
-    const url = hasDisc && allowed && (kind !== 'artist' || candidate !== retiredBackgroundUrl) ? candidate : '';
+    const candidate = artwork.cover?.url;
+    const url = hasDisc && candidate === '/api/presentation/artwork/cover' ? candidate : '';
     const identity = url ? JSON.stringify([url, layout?.session_id || snapshot.read?.session_id || null,
       layout?.disc_generation ?? null, selection?.metadata_generation ?? null,
       selection?.selected_index ?? null]) : '';
@@ -952,6 +1061,32 @@ function showBackground(snapshot, hasDisc) {
     };
     image.src = url;
     if (image.complete && image.naturalWidth > 0) image.onload();
+  }
+  const background = artwork.background;
+  const localUrl = (url) => typeof url === 'string' && /^\/api\/presentation\/artwork\/background\/[a-zA-Z0-9-]+$/.test(url);
+  const urls = hasDisc && background?.url !== retiredBackgroundUrl
+    ? [...new Set((Array.isArray(background?.urls) ? background.urls : [background?.url]).filter(localUrl))].slice(0, 3) : [];
+  const key = urls.length ? JSON.stringify([layout?.session_id || snapshot.read?.session_id || null,
+    layout?.disc_generation ?? null, snapshot.disc?.artist ?? null,
+    selection?.metadata_generation ?? null, selection?.selected_index ?? null]) : '';
+  // Only a prefix extension belongs to the same delivery; replacement/reordering expires old work.
+  const progressive = key === artistBackgroundKey && artistBackgroundUrls.length <= urls.length &&
+    artistBackgroundUrls.every((url, index) => url === urls[index]);
+  if (!progressive) resetArtistBackground();
+  if (!urls.length) return;
+  artistBackgroundKey = key;
+  const added = urls.filter((url) => !artistBackgroundUrls.includes(url));
+  artistBackgroundUrls = urls;
+  const bounded = (value, min, max, fallback) => Number.isSafeInteger(value) && value >= min && value <= max ? value : fallback;
+  artistBackgroundDwell = bounded(background.dwell_ms, 10000, 300000, 45000);
+  artistBackgroundFade = bounded(background.crossfade_ms, 0, 10000, 4000);
+  if (!progressive || (!artistBackgroundCurrent && !artistBackgroundPending && added.length)) {
+    loadArtistBackground(added[0] || urls[0]);
+  } else {
+    for (const url of added) {
+      artistBackgroundBag.splice(Math.floor(Math.random() * (artistBackgroundBag.length + 1)), 0, url);
+    }
+    scheduleArtistBackground();
   }
 }
 

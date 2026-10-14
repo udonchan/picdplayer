@@ -24,6 +24,39 @@ int main() {
             R"(../other.jpg","width":"1920","height":"1080"}]})";
         check(parse_artist_backgrounds(traversal, artist).empty());
         check(parse_artist_backgrounds(std::string(R"({"mbid_id":")") + artist + R"("})", artist).empty());
+        check(parse_artist_backgrounds(std::string(R"({"mbid_id":")") + artist +
+                                      R"(","artistbackground":[]})", artist).empty());
+        // Dimensions are our safety filter, not a claimed OpenAPI requirement.
+        for (const auto& dimensions : {"", R"(,"width":"0","height":"1080")",
+                                      R"(,"width":"16385","height":"1080")",
+                                      R"(,"width":"1920","height":-1)"}) {
+            const auto filtered = std::string(R"({"mbid_id":")") + artist +
+                R"(","artistbackground":[{"id":"5","url":")" + prefix +
+                "safe.jpg\"" + dimensions + "}]}";
+            check(parse_artist_backgrounds(filtered, artist).empty());
+        }
+        const auto native = std::string(R"({"mbid_id":")") + artist +
+            R"(","artistbackground":[{"id":"6","url":")" + prefix +
+            R"(native.jpg","width":"1920","height":"1080","lang":"en","likes":"7"}]})";
+        check(parse_artist_backgrounds(native, artist).size() == 1);
+        const auto opaque = std::string(R"({"mbid_id":")") + artist +
+            R"(","artistbackground":[{"id":"7","url":"https://assets.fanart.tv/fanart/music/backgrounds/opaque-photo.jpg","width":"1920","height":"1080"}]})";
+        check(parse_artist_backgrounds(opaque, artist).size() == 1);
+        const auto flat = std::string(R"({"mbid_id":")") + artist +
+            R"(","artistbackground":[{"id":"9","url":"https://assets.fanart.tv/fanart/flat-photo.jpg","width":"1920","height":"1080"}]})";
+        const auto flat_images = parse_artist_backgrounds(flat, artist);
+        check(flat_images.size() == 1 && flat_images[0].url == "https://assets.fanart.tv/fanart/flat-photo.jpg");
+        for (const auto* suffix : {"../escape.jpg", "%2e%2e/escape.jpg", "folder//image.jpg",
+                                  "folder/", "folder/image.jpg?key=x", "folder/image.jpg#fragment"}) {
+            const auto rejected = std::string(R"({"mbid_id":")") + artist +
+                R"(","artistbackground":[{"id":"8","url":"https://assets.fanart.tv/fanart/music/)" + suffix +
+                R"(","width":"1920","height":"1080"}]})";
+            check(parse_artist_backgrounds(rejected, artist).empty());
+        }
+        bool malformed = false;
+        try { (void)parse_artist_backgrounds("invalid JSON", artist); }
+        catch (const std::runtime_error&) { malformed = true; }
+        check(malformed);
         bool mismatch = false;
         try { (void)parse_artist_backgrounds(body, "89ad4ac3-39f7-470e-963a-56509c546377"); }
         catch (const std::runtime_error&) { mismatch = true; }

@@ -5,6 +5,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 
@@ -21,12 +22,26 @@ private:
 };
 }
 
+std::string resolve_artist_background_key(const std::string& path) {
+    if (!path.empty()) return load_artist_background_key(path);
+    const char* value = std::getenv("FANART_TV_API_KEY");
+    if (!value || !*value) return {};
+    std::string contents;
+    for (std::size_t i = 0; value[i]; ++i) {
+        const auto c = static_cast<unsigned char>(value[i]);
+        if (i >= 256 || c <= 0x20 || c >= 0x7f)
+            throw std::runtime_error("artist background key has invalid contents");
+        contents.push_back(value[i]);
+    }
+    return contents;
+}
+
 std::string load_artist_background_key(const std::string& path) {
     if (path.empty()) throw std::invalid_argument("artist background key path is empty");
     FileDescriptor file(::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK));
     if (file.get() < 0) throw std::runtime_error("artist background key file could not be opened");
     struct stat info{};
-    if (::fstat(file.get(), &info) != 0 || !S_ISREG(info.st_mode) || (info.st_mode & 0022) != 0 ||
+    if (::fstat(file.get(), &info) != 0 || !S_ISREG(info.st_mode) || (info.st_mode & 0027) != 0 ||
         info.st_size <= 0 || info.st_size > 257)
         throw std::runtime_error("artist background key file is not a protected regular file");
     std::string contents;

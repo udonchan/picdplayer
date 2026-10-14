@@ -1,4 +1,5 @@
 #include "artist_background_parser.hpp"
+#include "http_security_policy.hpp"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -19,13 +20,6 @@ bool valid_mbid(std::string_view value) {
     }
     return true;
 }
-bool safe_asset_name(std::string_view value) {
-    if (value.empty() || value.size() > 255 || value.front() == '.') return false;
-    return std::all_of(value.begin(), value.end(), [](unsigned char c) {
-        return std::isalnum(c) || c == '-' || c == '_' || c == '.';
-    });
-}
-
 unsigned dimension(const Json& object, const char* key) {
     const auto it = object.find(key);
     if (it == object.end()) return 0;
@@ -68,8 +62,6 @@ std::vector<ArtistBackgroundCandidate> parse_artist_backgrounds(
     if (images == root.end()) return {};
     if (!images->is_array() || images->size() > image_limit)
         throw std::runtime_error("fanart.tv artistbackground is not a bounded array");
-    const std::string prefix = "https://assets.fanart.tv/fanart/music/" +
-                               std::string(artist_mbid) + "/artistbackground/";
     std::vector<ArtistBackgroundCandidate> result;
     for (const auto& image : *images) {
         if (!image.is_object()) continue;
@@ -78,8 +70,7 @@ std::vector<ArtistBackgroundCandidate> parse_artist_backgrounds(
             dimension(image, "width"), dimension(image, "height")};
         if (candidate.id.empty() || candidate.id.size() > 64 ||
             !std::all_of(candidate.id.begin(), candidate.id.end(), [](unsigned char c) { return std::isdigit(c); }) ||
-            !candidate.url.starts_with(prefix) || !safe_asset_name(
-                std::string_view(candidate.url).substr(prefix.size())) ||
+            !is_allowed_artist_background_url(candidate.url) ||
             candidate.width == 0 || candidate.height == 0) continue;
         result.push_back(std::move(candidate));
     }

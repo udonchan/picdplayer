@@ -59,6 +59,25 @@ int main() {
             throw std::runtime_error("simulated timeout");
         };
         check(lookup_artist_backgrounds(artist, "test-key", {}, failing).status == ArtistBackgroundLookupStatus::error);
+        HttpResponse response{.status = 200, .content_type = "application/json", .body = fixture,
+                              .retry_after_seconds = {}};
+        FanartHttpGet variants = [&](std::string_view, std::string_view, std::size_t,
+                                    const std::function<bool()>&) { return response; };
+        response.body = "invalid JSON";
+        check(lookup_artist_backgrounds(artist, "test-key", {}, variants).status == ArtistBackgroundLookupStatus::error);
+        response.body = fixture;
+        response.content_type = "text/html";
+        check(lookup_artist_backgrounds(artist, "test-key", {}, variants).status == ArtistBackgroundLookupStatus::error);
+        response.content_type = "application/json; charset=utf-8";
+        response.body = std::string(R"({"mbid_id":")") + artist + R"(","artistbackground":[]})";
+        check(lookup_artist_backgrounds(artist, "test-key", {}, variants).status == ArtistBackgroundLookupStatus::unavailable);
+        response.body = std::string(R"({"mbid_id":")") + artist + R"(","artistbackground":[
+            {"id":"1","url":"https://assets.fanart.tv/fanart/music/)" + artist + R"(/artistbackground/one.jpg","width":"1920","height":"1080","lang":"en","likes":"4"},
+            {"id":"2","url":"https://assets.fanart.tv/fanart/music/)" + artist + R"(/artistbackground/two.jpg","width":"1600","height":"900","lang":"","likes":"0"}]})";
+        const auto multiple = lookup_artist_backgrounds(artist, "test-key", {}, variants);
+        check(multiple.status == ArtistBackgroundLookupStatus::available && multiple.images.size() == 2);
+        check(multiple.images[0].id == "1" && multiple.images[1].id == "2" &&
+              multiple.images[0].width == 1920 && multiple.images[1].height == 900);
         const auto root = std::filesystem::temp_directory_path() /
             ("picdplayer-artist-provider-" + std::to_string(::getpid()));
         std::error_code ec;

@@ -2,6 +2,132 @@
 
 更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## fanart.tv PoCのmaster統合判断（2026-10-14 15:05 UTC）
+
+利用者がPR #230のmaster取り込みを明示承認した。ローカルProject keyによる実API取得、
+有界な画像配信とOFF失効、実WPEの写真描画、基本再生の利用者確認を根拠とする。
+master統合はfanart.tvの正式採用、key同梱許可、個別写真の再掲載許諾や全hardware条件の完了を意味しない。
+未確認のCEC詳細・音声欠落・厳密な切替時間・長期負荷はIssue #229へ保持し、実装の統合と検証範囲を分ける。
+PRのDraftを解除して最新HEADのCI成功を確認するフローとし、画像本体・key・元workspaceの無関係な変更は含めない。
+
+## fanart.tvの権利確認と利用者による実機確認（2026-10-14 15:00 UTC）
+
+利用者はThe SlipのジャケットへのCCライセンス適用を確認した。一方、fanart.tv由来の背景写真は別の素材で、
+個別の権利者・再掲載可能なライセンスは未確認である。公式規約の公開本文をWordPress RESTで確認した。
+投稿者へのattribution/royaltyなしの利用文言があるが、著作権は各権利者に残ることと、その権利を侵害する
+利用では権利者の許可を確認することも明記されている。投稿者が写真の権利者であるとは推定しない。
+公式artistページは403で、写真の原出典・個別許諾まで確認できなかった。API仕様のCC表記も写真へ流用しない。
+利用者は背景のある実機画像を重視し、権利未確認のPNGを無理に公開しない方針とした。
+PNGはtmpに保持し、PRには画像本体ではなく描画確認の事実・方法・残条件だけを記録する。
+この調査ではAPI keyを取得せず、追加の認証付きAPI要求も行っていない。
+
+同日15:00 UTCに利用者が実機で確認し、「再生機能等は問題なさそう」と報告した。
+これは基本再生のユーザー確認であり、agentが音声を聴いた結果、全操作経路・CEC・長時間の無欠落試験ではない。
+現在のCDでは背景が1種類に見えるとの報告に対し、実機APIのrevision2236でartist「大森靖子」、STOPPED、
+`artwork.background.urls`が1件であることを確認した。1枚は静止、2〜3枚は45000 ms滞在・4000 ms crossfadeなので、
+今回の静止表示は配信枚数に対して想定どおりである。fanart.tvに登録されている画像自体が1枚なのか、
+検証条件や取得失敗で他候補が採用されなかったのかは、この状態APIだけでは判定しない。
+Nine Inch Nailsでの実3枚配信・WPE snapshot確認とは分け、複数画像の実機での厳密な時間測定は未実施とする。
+CEC詳細・音声欠落・長期負荷と個別写真の再掲載許諾は残条件としてIssue #229をOpenで維持する。
+後続のmaster統合承認によりPRのDraftを解除するが、これらを確認済みへ読み替えない。
+
+## fanart.tv実API・Pi配備の追補（#229、2026-10-14 UTC）
+
+利用者がPiへProject key fileを追加し、PoC配備・設定反映・限定診断を明示承認した。
+`/etc/picdplayer/fanart-api-key`はroot:picdplayer・0640・通常fileで、内容は端末外へ取得していない。
+初期daemonの引数にはfile指定がなく、背景APIは`key_missing`だった。既存extra argsを保持してpathだけを
+追加し、変更前の設定は`/etc/default/picdplayer.fanart-poc-backup-20261014T124854Z`へroot専用0600で保存した。
+key file・homeの権限変更、sudoers変更、keyのbuild注入は行っていない。
+
+標準`./scripts/deploy.sh`で配備し、daemon/kioskはactive→active、WPE 2.54の専用launcher稼働を確認した。
+利用者はTVのpickerでThe Slip / Nine Inch NailsのUS版（2008-07-22）を選択した。
+承認済み再配備後には同じTOC・候補の全field一致を確認してその選択だけを復元した。CDはSTOPPEDを維持した。
+
+最初の背景ONは204で受理されたが参照が到着しなかった。端末内のnative診断はAPI応答本文・画像名・keyを
+出さずHTTP status・件数・条件一致と承認された親directoryのみを集計した。HTTP 200、背景13件、全件が
+正数の寸法・HTTPS公式CDN、artist MBID一致、本文にkey値なしを確認した。全画像は`/fanart/`直下のflat形式で、
+従来のArtist MBID/artistbackground階層という仮定が全件を除外していた。music階層だけへの緩和でも0件であり、
+実応答のdirectoryを確認してflat形式のみに追加対応した。型とartistはJSONを正とし、URL構造から推測しない。
+確認済みflatと既存music階層をparser・image loader・native HTTPで同じ安全検査へ統一した。
+HTTP/別host/query/fragment/traversal/percent escape等は拒否し、既存negative試験を弱めていない。
+
+一時診断をservice userでhomeから実行した最初の試行はPermission deniedで停止した。
+権限を緩めず、利用者の追加承認後にroot所有0755の`/var/tmp/picdplayer-fanart-poc-check`から実行した。
+診断後はそこに置いたexecutableとhomeの転送用executableを削除し、応答本文・実写真・keyをGitへ含めていない。
+SSH multiplexのBroken pipeと観測timeoutも発生したため、その試行を合格証跡へ使わず、新接続・unbuffered出力で再検証した。
+
+最終flat修正を標準buildで再build・stage・package生成し、CTest **62/62成功（31.53秒）**、package lifecycle成功、
+標準deploy成功を確認した。実daemonからJPEG **3枚、280462/366775/578294 bytes、合計1225531 bytes**を
+同一originの不透明URLでHTTP 200取得し、hashは3件とも異なった。modelは45000 ms/4000 ms、
+legacyのurlはurls先頭と一致し、全image responseに`Cache-Control: no-store`がある。
+OFFで旧3参照を全て404に失効し、再ONで異なる3参照が発行された。最後は背景ON・US版選択・STOPPEDである。
+
+WPE screenshotは当初Inspector無効・一時再起動の承認未確定で保留したが、後続の「tmpへ保存」指示で実施した。
+sudo認証の期限切れ時は変更前に停止し、利用者が手元で`sudo -v`を更新した後に続行した。パスワードは取得していない。
+一時runtime drop-inでkioskだけへ`WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`を設定し、kioskを再起動した。
+SSH転送も`127.0.0.1:19323`限定とし、既存PageClientのinner targetでRuntime評価と`Page.snapshotRect`に成功した。
+実機WPEのrendered-page PNGは**1920×1080、1069402 bytes**で、ローカルOSのtmpへmode0600で保存した。
+SHA-256は`c1d044a265bb1f5447641eebc28f01750878f85a9f9d62f9f620d7321b3ac7b9`。
+PNGでNine Inch Nailsの実写真背景、The Slipのcover・metadata・STOPPED・DAEMON CONNECTEDを確認した。
+2画像layerともcomplete/naturalWidth1920/naturalHeight1080で、opacityは0/0.24だった。
+これは写真decodeと実WPE page描画の証拠であり、45秒/4秒の厳密な時間測定、全3画像の連続切替試験ではない。
+撮影後は一時drop-inと転送用fileを削除、daemon-reloadとkiosk再起動で通常状態へ戻し、port9223閉鎖・
+`picdplayer-wpe`稼働を確認した。SSH転送も停止した。daemon PID105812は不変で、再生・key設定には触れていない。
+画像はtmpだけに置き、Git・PR・releaseへ含めていない。別browserの再描画やChromiumを証拠に使っていない。
+この撮影時点ではDRM scanout・HDMI・TV目視、実音声/CEC継続・長期CPU/memoryは未検証だった。
+後続の利用者による実機確認は上の追補に記録し、確認主体と範囲を分ける。
+実keyの失効/rotation、公開同梱許可、画像license/creditは引き続きFuture Workとして保持し、
+実装PRのmaster統合と、残る検証・配布条件の完了を区別する。
+
+## fanart.tvローカルkey PoCの初期実装（#229、2026-10-14 UTC）
+
+最新master `fb09474`から隔離した`feature/fanart-local-poc`で開発し、原workspaceの既存変更を保持した。
+公式API文書の直接取得はCloudflare 403のため、同日に利用者が提供したOpenAPI本文でv3.2/music、
+`api-key`、`artistbackground`、429/`Retry-After`を確認した。規約・key案内は公式WordPress REST公開本文を参照した。
+仕様根拠、設定、WPE実機手順と配布Future Workは[PoC文書](fanart-tv-poc.md)に記録する。
+
+実装は環境変数key、明示key file優先、既定OFF、有界な複数画像の段階配信、45秒/4秒slideshow、
+全参照の失効、provider rate-limitのprocess内待機である。runtimeは空cache pathを維持する。
+画像上限は圧縮bytesであり、full decodeのmemory上限や個別写真の許諾を保証しない。
+
+Linux/aarch64では既存のWPE SDKを標準scriptがrecipe照合して再利用し、
+`./scripts/build-container.sh`によるapplication build・staging・Debian package生成に成功した。
+Enrichment/Presentation/実HTTP・WS transportの3/3試験に成功し、非同期Enrichmentとtransportは
+各20回、合計40回の反復に成功した。metadata OFF/API ONのbuildとPresentation/daemonの2/2試験も成功した。
+実transportは1→2→3枚のsnapshot revision更新、先頭URLの維持、全画像GET成功、OFF/artist/辞退/disc変更時の
+全参照404を確認した。合成componentと画像を使う試験であり、通常daemonの実provider通信とは異なる。
+
+macOSの5本のNode UI試験と構文検査に成功し、render試験は20/20回の反復に成功した。
+0/1/複数、shuffle、段階追加、遅延decode・失敗、OFF・旧timer・disc世代、reduced motionを確認した。
+同一STOPPED snapshot 60回はDOM write 0、position更新60回は72 writeの既存結果を維持した。
+最終のHTML出典表示追補後も5本のNode試験を再実行して成功した。
+
+最初の全CTestは60/62成功で、追加TLS試験のopenssl CLI依存とdaemon試験のasset URL誤りが失敗した。
+daemonのURLを実際の`/player.js`・`/player.css`へ修正し、networkなしcontainerでkey/daemon 2/2を再確認した。
+有効/不正な環境変数のfixture keyは状態API・HTML/JS/CSS・stdout/stderrに含まれず、No Discは維持した。
+TLS fixtureは既存test keyと公開test certificateを使う方式へ変更し、openssl CLI依存を除去した。
+巨大な`Retry-After`秒数をlibcurlが失うケースはnative headerでdelta-secondsを保持し、時計上限への
+飽和で期限を短縮しないよう補修した。APIとCDNの独立した待機、正値/欠落/不正/0/巨大値、
+同時要求の非待機拒否、実TLSの要求数と`api-key` header限定を3/3 focused試験で確認した。
+
+最終sourceで標準buildを再実行し、全CTest **62/62成功（31.29秒）**、Debian package lifecycleも成功した。
+API OFF/METADATA ON/WPE OFFのproduction `cdplayerd` buildも成功したが、全option組合せは未確認である。
+staging全体のfixture API key文字列scanは一致0件だった。実keyは設定・build注入していない。
+
+```sh
+./scripts/build-container.sh
+docker run --rm --network none -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
+./scripts/test-package-lifecycle.sh
+```
+
+全差分と関連設計・backlogを確認した。別のread-only reviewでもEnrichment/model/UI/key経路に指摘はなかった。
+buildには未変更の`src/api_server.cpp`のmissing-field initializer warningが残るが、今回のHTTP追加warningは解消した。
+
+実API用`FANART_TV_API_KEY`はこの作業sessionに未設定で、実API接続を実施していない。
+Raspberry Piへのdeploy、WPE/TVでの実写真表示・crossfade・可読性、取得中の実CD音声/CEC、
+長時間CPU/memoryと復旧は未検証。既存のWPE稼働記録を今回の写真表示成功へ読み替えない。
+[#229](https://github.com/udonchan/picdplayer/issues/229)はこれらの完了条件が残るためOpenを維持する。
+
 ## WPE Issueの完了・置換と残条件移管（2026-10-14 UTC）
 
 利用者の指示により、既存の証拠と最新Issue本文/コメントを照合して整理した。新規実機試験・

@@ -61,9 +61,18 @@ main {
   transform: scale(1.08);
 }
 
-.player-background.has-cover #background-cover,
-.player-background.has-artist #background-artist {
+.player-background.has-cover #background-cover {
   opacity: .24;
+}
+
+#background-artist,
+#background-artist-next {
+  transition: opacity 4s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #background-artist,
+  #background-artist-next { transition-duration: 0s !important; }
 }
 
 .player-background.has-artist #background-cover {

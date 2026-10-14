@@ -75,7 +75,10 @@ Read PolicyのSINGLE/REPEATをCECの方向/決定/Backで選択し、`GET/POST /
 Artist Backgroundは`GET/POST /api/artist-background`に基づき利用可否・要求値・実効値を表示し、
 利用不能時はONを無効にする。背景設定はsession限りで、Read Policyの保存とは別である。
 この開発差分ではmetadataと有効なproject keyがあればsession ONを要求できるが、画像到着や
-利用許諾済みを意味しない。masterへの統合とは別で、Custom UIに同じ画面・背景描画を要求しない。
+利用許諾済みを意味しない。session設定と単一背景はPR #223でmaster統合済み。
+Custom UIに同じ画面・背景描画を要求しない。#229の複数画像拡張ではoptionalな
+`artwork.background.urls`、`dwell_ms`、`crossfade_ms`を追加するが、既存の`url`は維持する。
+Custom UIが追加fieldを使わなくても従来の表示は維持できる。keyやprovider URLは受け取らない。
 navigationは選択状態や再生結果のsnapshotではない。Viewが状態変更を求める場合はloopbackの
 操作POSTを使用し、結果は`/api/state`または`/api/events`で確認する。
 標準Playerはこのchannelで基本transport buttonと任意のmetadata候補pickerのfocusを動かす参考実装である。

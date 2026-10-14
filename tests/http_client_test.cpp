@@ -6,6 +6,9 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <chrono>
+#include <future>
+#include <atomic>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -55,8 +58,74 @@ int main(int argc, char** argv) {
                                RedirectPolicy::follow_cover_art_archive, "secret"); }
         catch (const std::invalid_argument&) { key_redirect_rejected = true; }
         check(key_redirect_rejected);
+        bool key_query_rejected = false;
+        try { (void)client.get("https://webservice.fanart.tv/v3.2/music/id?api_key=secret", 1024,
+                               {}, RedirectPolicy::reject, "secret"); }
+        catch (const std::invalid_argument&) { key_query_rejected = true; }
+        check(key_query_rejected);
         std::cout << "PASS: deterministic HTTPS connection failure\n";
 #ifdef PICDPLAYER_HTTP_TEST_HOOKS
+        if (argc == 4) {
+            const std::string mode = argv[3];
+            const std::string api = "https://webservice.fanart.tv/v3.2/music/";
+            HttpClient::TestTransport transport{
+                .ca_file = argv[2],
+                .resolve = {"webservice.fanart.tv:443:127.0.0.1",
+                            "assets.fanart.tv:443:127.0.0.1", "musicbrainz.org:443:127.0.0.1"},
+                .allow_private_peer = true};
+            HttpClient fixture(transport);
+            const auto redirect = fixture.get(api + "redirect", 1024, {}, RedirectPolicy::reject, "fixture-project-key");
+            check(redirect.status == 302 && redirect.body.empty());
+            if (mode == "asset") {
+                const std::string assets = "https://assets.fanart.tv/fanart/music/";
+                const auto busy = fixture.get(assets + "first", 1024, {}, RedirectPolicy::fanart_asset);
+                check(busy.status == 429 && busy.retry_after_seconds == 4);
+                const auto blocked = HttpClient(transport).get(assets + "second", 1024, {}, RedirectPolicy::fanart_asset);
+                check(blocked.status == 429 && blocked.body.empty() && blocked.content_type.empty() &&
+                      blocked.retry_after_seconds && *blocked.retry_after_seconds > 0 && *blocked.retry_after_seconds <= 4);
+                check(fixture.get(api + "first", 1024, {}, RedirectPolicy::reject, "fixture-project-key").status == 200);
+                check(fixture.get("https://musicbrainz.org/ok", 1024).status == 200);
+                std::cout << "PASS: independent CDN cooldown blocks next candidate without blocking API/metadata\n";
+                return 0;
+            }
+            if (mode == "concurrent") {
+                std::promise<void> started;
+                std::atomic<bool> signalled = false;
+                auto first = std::async(std::launch::async, [&] {
+                    return fixture.get(api + "first", 1024, [&] {
+                        if (!signalled.exchange(true)) started.set_value();
+                        return false;
+                    }, RedirectPolicy::reject, "fixture-project-key");
+                });
+                started.get_future().wait();
+                const auto before = std::chrono::steady_clock::now();
+                const auto blocked = HttpClient(transport).get(api + "second", 1024, {},
+                    RedirectPolicy::reject, "fixture-project-key");
+                check(blocked.status == 429 && blocked.body.empty() && blocked.content_type.empty() &&
+                      blocked.retry_after_seconds == 1);
+                check(std::chrono::steady_clock::now() - before < std::chrono::milliseconds(100));
+                check(first.get().status == 429);
+            } else {
+                const auto busy = fixture.get(api + "first", 1024, {}, RedirectPolicy::reject, "fixture-project-key");
+                check(busy.status == 429);
+                if (mode == "positive") check(busy.retry_after_seconds == 4);
+                if (mode == "huge") check(busy.retry_after_seconds == 9223372036854775807LL);
+            }
+            // New client and artist simulate worker recreation after OFF/ON.
+            const auto blocked = HttpClient(transport).get(api + "second", 1024, {},
+                RedirectPolicy::reject, "fixture-project-key");
+            check(blocked.status == 429 && blocked.body.empty() && blocked.content_type.empty());
+            check(blocked.retry_after_seconds && *blocked.retry_after_seconds > 0);
+            if (mode == "positive" || mode == "concurrent") check(*blocked.retry_after_seconds <= 4);
+            else if (mode == "huge") check(*blocked.retry_after_seconds > 60);
+            else check(*blocked.retry_after_seconds >= 59 && *blocked.retry_after_seconds <= 60);
+            check(fixture.get(api + "unauthenticated", 1024).status == 200);
+            check(fixture.get("https://assets.fanart.tv/fanart/music/image.jpg", 1024, {},
+                              RedirectPolicy::fanart_asset).status == 200);
+            check(fixture.get("https://musicbrainz.org/ok", 1024).status == 200);
+            std::cout << "PASS: native fanart authentication and process cooldown " << mode << '\n';
+            return 0;
+        }
         check(argc == 1 || argc == 3);
         if (argc == 3) {
             const auto port = std::stoi(argv[1]);

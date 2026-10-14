@@ -312,4 +312,217 @@ async function main() {
   assert(layer.classList.contains('has-artist'));
   console.log('PASS: identical values, position, metadata, artwork lifecycle, disc removal and OFF without state events');
 }
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+async function slideshowTests() {
+  const nodes = new Map();
+  const timers = new Map();
+  let now = 0;
+  let timerId = 0;
+  let reducedMotion = false;
+  let srcWrites = 0;
+  function node(id) {
+    if (!nodes.has(id)) {
+      const classes = new Set();
+      const value = { dataset: {}, style: {}, textContent: '', complete: false, naturalWidth: 0,
+        classList: { contains: (name) => classes.has(name), add: (name) => classes.add(name), remove: (name) => classes.delete(name) },
+        removeAttribute(name) { delete this[name]; if (name === 'src') { this.complete = false; this.naturalWidth = 0; } },
+        setAttribute() {}, addEventListener() {},
+      };
+      nodes.set(id, new Proxy(value, { set(target, key, value) {
+        if (key === 'src') srcWrites++;
+        target[key] = value;
+        return true;
+      } }));
+    }
+    return nodes.get(id);
+  }
+  let stateReply;
+  const context = {
+    performance: { now: () => now },
+    document: { readyState: 'complete', getElementById: node, querySelectorAll: () => [], addEventListener() {} },
+    location: { protocol: 'http:', host: 'localhost' },
+    fetch: (url, options) => {
+      if (url === '/api/artist-background') return Promise.resolve(options?.method === 'POST'
+        ? { status: 204 } : { ok: true, json: async () => ({ requested: false, effective: false, available: true, unavailable_reason: null }) });
+      return new Promise((resolve) => { if (url === '/api/state') stateReply = resolve; });
+    },
+    WebSocket: class {}, requestAnimationFrame() {},
+    matchMedia: () => ({ matches: reducedMotion }),
+    setTimeout(fn, delay) { const id = ++timerId; timers.set(id, { fn, at: now + delay }); return id; },
+    clearTimeout(id) { timers.delete(id); },
+  };
+  vm.runInNewContext(source, context);
+  const url = (name) => `/api/presentation/artwork/background/${name}`;
+  const model = { revision: 1, player: { state: 'STOPPED' }, disc: { state: 'AUDIO_READY', artist: 'Artist' },
+    artwork: { cover: { url: '/api/presentation/artwork/cover' }, background: null } };
+  function render(urls, timing = {}) {
+    model.revision++;
+    model.artwork.background = urls === null ? null : { url: urls[0], urls, dwell_ms: 45000, crossfade_ms: 4000, ...timing };
+    context.render(JSON.parse(JSON.stringify(model)));
+  }
+  const images = () => [node('background-artist'), node('background-artist-next')];
+  const visible = () => images().find((image) => image.style.opacity === '.24');
+  const pending = () => images().find((image) => image.src && image.style.opacity === '0' && image.onload);
+  function loaded(image) { image.complete = true; image.naturalWidth = 100; image.onload(); }
+  function tick(ms) {
+    const end = now + ms;
+    while (true) {
+      const next = [...timers].sort((a, b) => a[1].at - b[1].at)[0];
+      if (!next || next[1].at > end) break;
+      now = next[1].at; timers.delete(next[0]); next[1].fn();
+    }
+    now = end;
+  }
+  const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+  render(null);
+  assert.equal(timers.size, 0, 'zero images: no slideshow timer');
+  loaded(node('background-cover'));
+  render([url('a')]); loaded(pending());
+  assert.equal(visible().src, url('a'));
+  assert.equal(timers.size, 0, 'one image: no slideshow timer');
+  const first = visible();
+  tick(20000);
+  render([url('a'), url('b')]);
+  const deadline = [...timers.values()][0].at;
+  tick(10000);
+  render([url('a'), url('b'), url('c')]);
+  assert.equal(visible(), first, 'progressive additions keep current image');
+  assert.equal([...timers.values()][0].at, deadline, 'multiple additions do not restart dwell');
+  const writesBefore = srcWrites;
+  for (let i = 0; i < 60; i++) context.render(JSON.parse(JSON.stringify(model)));
+  assert.equal(srcWrites, writesBefore, 'identical references do not reload');
+  assert.equal([...timers.values()][0].at, deadline);
+  tick(34999); assert.equal(pending(), undefined);
+  tick(1);
+  const second = pending();
+  assert(second); assert.equal(visible(), first, 'preloading retains current');
+  let decodeResolve;
+  second.decode = () => new Promise((resolve) => { decodeResolve = resolve; });
+  loaded(second);
+  assert.equal(visible(), first, 'load waits for decode');
+  decodeResolve(); await flush();
+  assert.equal(visible(), second); assert.equal(second.style.transitionDuration, '4000ms');
+  assert.equal(first.style.opacity, '0');
+  assert.equal([...timers.values()][0].at, now + 4000);
+  tick(3999); assert.equal(timers.size, 1);
+  tick(1); assert.equal([...timers.values()][0].at, now + 45000);
+  const seen = [url('a'), second.src];
+  tick(45000); const third = pending(); delete third.decode; loaded(third); seen.push(third.src);
+  assert.equal(new Set(seen).size, 3, 'bag visits each progressive image before repeating');
+  for (let i = 0; i < 6; i++) {
+    tick(49000);
+    const before = visible(); const next = pending(); delete next.decode; loaded(next);
+    assert.notEqual(next.src, before.src, 'no immediate repeat across bag refills');
+    assert.notEqual(next, before, 'two alternating layers');
+  }
+  render([url('fail-a'), url('fail-b'), url('fail-c')]);
+  loaded(pending()); const good = visible();
+  tick(45000); const failedUrl = pending().src; pending().onerror();
+  assert.equal(visible(), good, 'failed next retains valid current');
+  const other = pending(); assert(other); assert.notEqual(other.src, failedUrl);
+  other.decode = () => Promise.reject(new Error('decode failed'));
+  loaded(other); await flush();
+  assert.equal(visible(), good, 'decode rejection retains valid current');
+  assert.equal(timers.size, 0, 'only one viable image remains');
+  good.onerror();
+  assert.equal(visible(), undefined);
+  assert(!node('player-background').classList.contains('has-artist'));
+  assert(node('player-background').classList.contains('has-cover'), 'all failures fall back to blurred cover');
+  node('background-cover').onerror();
+  assert(!node('player-background').classList.contains('has-cover'), 'failed cover falls back to default');
+  delete other.decode;
+  render([url('stale-a'), url('stale-b')]); loaded(pending()); tick(45000);
+  const stale = pending(); let staleDecode;
+  stale.decode = () => new Promise((resolve) => { staleDecode = resolve; });
+  const staleLoad = stale.onload; const staleError = stale.onerror;
+  loaded(stale);
+  render([url('replacement-a'), url('replacement-b')]);
+  staleLoad(); staleError(); staleDecode(); await flush();
+  assert.equal(visible(), undefined, 'replacement invalidates load/decode/error callbacks');
+  delete stale.decode; loaded(pending());
+  const staleTimer = [...timers.values()][0].fn;
+  model.disc.artist = 'Other artist'; render([url('replacement-a'), url('replacement-b')]);
+  staleTimer(); assert.equal(timers.size, 0, 'artist replacement cancels old timer');
+  loaded(pending());
+  model.disc.state = 'NO_DISC'; render([url('replacement-a'), url('replacement-b')]);
+  assert.equal(timers.size, 0); assert(images().every((image) => !image.src));
+  model.disc.state = 'AUDIO_READY';
+  render([url('off-a'), url('off-b')]); loaded(pending()); tick(45000);
+  const offLoad = pending().onload; const offTimerCount = timers.size;
+  assert.equal(offTimerCount, 0);
+  context.openSettings(); await flush();
+  const off = context.selectBackground(0); await flush();
+  assert.equal(timers.size, 0); assert(images().every((image) => !image.src), 'OFF ACK cancels both layers');
+  offLoad(); assert.equal(visible(), undefined);
+  stateReply({ ok: false, status: 503 }); await off;
+  context.render(JSON.parse(JSON.stringify(model)));
+  assert(images().every((image) => !image.src), 'delayed entire list stays retired after OFF');
+  context.closeSettings();
+  reducedMotion = true;
+  render([url('motion-a'), url('motion-b')]); loaded(pending()); tick(45000); loaded(pending());
+  assert.equal(visible().style.transitionDuration, '0ms');
+  assert.equal([...timers.values()][0].at, now + 45000, 'reduced motion keeps slow dwell without fade timer');
+  render([url('bounded-a'), url('bounded-b')], { dwell_ms: -1, crossfade_ms: Infinity });
+  loaded(pending()); assert.equal([...timers.values()][0].at, now + 45000);
+  reducedMotion = false; tick(45000); loaded(pending());
+  assert.equal(visible().style.transitionDuration, '4000ms', 'invalid timing uses bounded defaults');
+  render([url('timing-a'), url('timing-b')], { dwell_ms: 60000, crossfade_ms: 2000 });
+  loaded(pending()); assert.equal([...timers.values()][0].at, now + 60000);
+  tick(60000); loaded(pending()); assert.equal(visible().style.transitionDuration, '2000ms');
+  render(null); assert.equal(timers.size, 0);
+  model.artwork.background = { url: url('legacy') }; context.render(model); loaded(pending());
+  assert.equal(visible().src, url('legacy')); assert.equal(timers.size, 0, 'legacy url is static');
+  render([url('throw-a'), url('throw-b')]);
+  pending().decode = () => { throw new Error('decode throws'); }; loaded(pending());
+  const survivor = pending(); delete survivor.decode; loaded(survivor);
+  assert.equal(visible().src, url('throw-b'), 'synchronous decode failure tries another image');
+  render(['https://provider.invalid/private.jpg']);
+  assert(images().every((image) => !image.src), 'provider URLs never become image sources');
+  render([url('progress-a')]);
+  const progressiveImage = pending(); let progressiveDecode;
+  progressiveImage.decode = () => new Promise((resolve) => { progressiveDecode = resolve; });
+  const progressiveLoad = progressiveImage.onload;
+  loaded(progressiveImage);
+  render([url('progress-a'), url('progress-b')]);
+  render([url('progress-a'), url('progress-b'), url('progress-c')]);
+  assert.equal(pending(), progressiveImage);
+  assert.equal(progressiveImage.onload, progressiveLoad, 'progression preserves pending decode');
+  progressiveDecode(); await flush(); delete progressiveImage.decode;
+  assert.equal(visible(), progressiveImage); assert.equal(timers.size, 1);
+  tick(45000); loaded(pending());
+  const fadeDeadline = [...timers.values()][0].at;
+  context.render(JSON.parse(JSON.stringify(model)));
+  assert.equal([...timers.values()][0].at, fadeDeadline, 'identical snapshot preserves fade timer');
+  render([url('progress-a'), url('progress-c')]);
+  assert.equal(visible(), undefined, 'same first URL with list removal is replacement');
+  assert.equal(timers.size, 0);
+  loaded(pending());
+  render([url('progress-a'), url('progress-b')]);
+  assert.equal(visible(), undefined, 'same first URL with changed later reference is replacement');
+  loaded(pending());
+  model.read = { session_id: 'disc-session' };
+  model.disc.layout = { session_id: 'disc-session', disc_generation: 1 };
+  render([url('disc-a'), url('disc-b')]); loaded(pending());
+  const discTimer = [...timers.values()][0].fn;
+  model.disc.layout.disc_generation++;
+  render([url('disc-a'), url('disc-b')]);
+  discTimer(); assert.equal(visible(), undefined); assert.equal(timers.size, 0, 'disc generation cancels dwell');
+  loaded(pending());
+  context.openSettings(); await flush();
+  const offDwellTimer = [...timers.values()][0].fn;
+  const offDwell = context.selectBackground(0); await flush();
+  offDwellTimer(); assert.equal(timers.size, 0); assert(images().every((image) => !image.src));
+  stateReply({ ok: false, status: 503 }); await offDwell;
+  context.closeSettings();
+  render([url('off-decode-a'), url('off-decode-b')]); loaded(pending()); tick(45000);
+  const offDecodeImage = pending(); let offDecodeResolve;
+  offDecodeImage.decode = () => new Promise((resolve) => { offDecodeResolve = resolve; });
+  loaded(offDecodeImage);
+  context.openSettings(); await flush();
+  const offDecode = context.selectBackground(0); await flush();
+  offDecodeResolve(); await flush();
+  assert.equal(visible(), undefined); assert.equal(timers.size, 0, 'OFF expires pending decode');
+  stateReply({ ok: false, status: 503 }); await offDecode;
+  console.log('PASS: progressive pending decode, fade stability, same-first replacement, disc generation, OFF dwell and OFF decode cancellation');
+  console.log('PASS: slideshow progression, shuffle, dwell/fade, preload/decode, failures, stale work, OFF, reduced motion and legacy snapshots');
+}
+main().then(slideshowTests).catch((error) => { console.error(error); process.exitCode = 1; });
