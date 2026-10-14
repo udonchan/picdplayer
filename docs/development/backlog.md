@@ -226,11 +226,14 @@ WPE runtimeの#192/#194は別の検討で、今回の保留・PR整理の対象�
 WPEのCI cacheはmaster側の共通SDK専用workflowを開発し、実GitHub PoCを進める。PR #223のCIは2時間31分29秒を要し、
 既存cacheは旧feature/PR merge refに限られていて、新しいPRから利用できるmaster cacheはなかった。
 SDKだけをtrusted masterで準備・保存し、通常のアプリbuild/test・既存SDK recipeは維持する。
-workflowは#224でmasterへ統合し、master scopeの初回seed（2時間21分12秒）は成功した。別PRのrestoreと短縮測定は
-未確認であり、正式供給や#219/#220/#221の
+workflowは#224でmasterへ統合し、master scopeの初回seed（2時間21分12秒）は成功した。
+新規PR #225の最初の通常CIでmaster cacheを復元し、62/62 CTest・package lifecycle・候補検証を省略せず
+jobを3分30秒で完走した。cold #223の2時間31分29秒から97.69%短縮した単回PoCとして記録する。
+cache消失/recipe変更時のcold fallback、正式供給や#219/#220/#221の
 全条件を完了扱いにはしない。[運用手順](../manual/mac-docker-development.md#master側の共通wpe-sdk-cache)参照。
 PoCは導入CI→master seed→別branch/新規PRの通常CIの順とし、全試験を省略せず、cache復元と時間短縮を
 実測する。初回seedとwarm CIの時間を混同せず、SDK cache成功を実機動作や再現性の保証にしない。
+[実測証拠と限界](verification.md#github初回seedと別pr-poc2026-10-14-utc)を参照する。
 
 [#79 文書整合](https://github.com/udonchan/picdplayer/issues/79)、
 [#80 CDP接続・trace集計](https://github.com/udonchan/picdplayer/issues/80)、
