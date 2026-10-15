@@ -46,11 +46,16 @@ PICDPLAYER_BUILD_TYPE="$profile" bash scripts/test-package-lifecycle.sh
 
 INFO出力で故障注入・readinessを確認する既存試験はCTestから明示的に`PICDPLAYER_LOG_LEVEL=info`を指定し、
 元の試験経路を維持した。Release既定の抑制は別のdaemon/global logger試験で確認する。
-同じSDKを使用するRelease/Debugのbuild/test/package lifecycleをCIにも追加したが、GitHub上のCI実行は未確認。
+同じSDKを使用するRelease/Debugのbuild/test/package lifecycleをCIにも追加した。
 PR #232の初回CI（run `38693489296`）はRelease検証後、Debug切替前のCPack作業directory削除で
 permission deniedとなった。Linux host上でcontainerのroot所有出力をrunnerが削除できないことが原因で、
 macOS Dockerのbind mountでの成功では検出できなかった。build/install/CPackを呼出元UID/GIDで実行する
-修正と引数の回帰assertを追加した。sudoや既存成果物の強制削除は行わず、新しいCIで再検証する。
+修正と引数の回帰assertを追加した。sudoや既存成果物の強制削除は行っていない。
+修正commit `8a8480374f8d4d4f11074eb110b3a16bcbe222d1`の
+[CI run 38694667757](https://github.com/udonchan/picdplayer/actions/runs/38694667757)は
+2026-10-15 06:55 UTCに6分27秒で成功した。Release/Debug各65/65、両package lifecycle、
+Release candidate検査・保存の成功と両buildのSDK再利用を実logで確認した。
+これはLinux runner上のprofile切替の検証であり、Piの実機確認ではない。
 修正後も隔離コピーの`bash review-uid.sh`でDebug/Releaseを再buildし、各CTest 65/65とpackage lifecycleは
 exit 0（`review-uid-{Debug,Release}-{build,tests,package}.log`）。先行するinline検証driverは変数展開により
 Docker image引数が空になって`invalid reference format`で停止したため、script化して再実行した。
