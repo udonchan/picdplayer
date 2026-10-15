@@ -99,6 +99,8 @@ PICDPLAYER_SERVICE_USER=picdplayer
 
 一方、`stage/` は毎回作り直されます。ここにはCMakeが定義するインストール対象が、
 Raspberry Pi上のfilesystem layoutを保った状態で生成されます。
+configure/build/install/CPackのcontainerは呼出元のUID/GIDで動かし、Linux hostでも次回build時に
+自身の生成物を更新・再作成できるようにする。旧root所有の成果物を自動chown/sudo削除する処理はない。
 
 例:
 

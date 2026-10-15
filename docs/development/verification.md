@@ -47,6 +47,14 @@ PICDPLAYER_BUILD_TYPE="$profile" bash scripts/test-package-lifecycle.sh
 INFO出力で故障注入・readinessを確認する既存試験はCTestから明示的に`PICDPLAYER_LOG_LEVEL=info`を指定し、
 元の試験経路を維持した。Release既定の抑制は別のdaemon/global logger試験で確認する。
 同じSDKを使用するRelease/Debugのbuild/test/package lifecycleをCIにも追加したが、GitHub上のCI実行は未確認。
+PR #232の初回CI（run `38693489296`）はRelease検証後、Debug切替前のCPack作業directory削除で
+permission deniedとなった。Linux host上でcontainerのroot所有出力をrunnerが削除できないことが原因で、
+macOS Dockerのbind mountでの成功では検出できなかった。build/install/CPackを呼出元UID/GIDで実行する
+修正と引数の回帰assertを追加した。sudoや既存成果物の強制削除は行わず、新しいCIで再検証する。
+修正後も隔離コピーの`bash review-uid.sh`でDebug/Releaseを再buildし、各CTest 65/65とpackage lifecycleは
+exit 0（`review-uid-{Debug,Release}-{build,tests,package}.log`）。先行するinline検証driverは変数展開により
+Docker image引数が空になって`invalid reference format`で停止したため、script化して再実行した。
+これはapplication試験の失敗ではなく、再実行前の試験成功を主張しない。
 Release最小構成（metadata/API/systemd/WPEをOFF）もconfigure/build成功、CTest 37/37（exit 0）。
 初回の36/37失敗は`player_daemon`がAPI無効でも`--api-port`を渡すfixtureの問題だった。
 `git show 3194660:tests/player_daemon.py`で同じ経路を確認し、今回の回帰ではないと判定した。

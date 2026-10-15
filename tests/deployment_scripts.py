@@ -178,6 +178,10 @@ if name == 'systemctl':
                 self.assertEqual(list(self.package.glob('*.deb')), [])
                 if not env:
                     self.assertTrue(any('cpack' in args for name, args in calls))
+                    for name, args in calls:
+                        if name == 'docker' and ('-S' in args or 'cpack' in args or '--install' in ' '.join(args)):
+                            self.assertIn('--user', args)
+                            self.assertEqual(args[args.index('--user') + 1], f'{os.getuid()}:{os.getgid()}')
 
     def test_invalid_optional_paranoia_setting_blocks_build(self):
         result, calls = self.run_script('build-container.sh', PICDPLAYER_ENABLE_PARANOIA='invalid')

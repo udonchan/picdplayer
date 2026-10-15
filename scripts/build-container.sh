@@ -66,7 +66,8 @@ fi
 echo "==> Preparing cached WPE runtime"
 bash "${SCRIPT_DIR}/build-wpe-runtime.sh"
 run_build() {
-    docker run --rm -v "${REPO_ROOT}:/src" \
+    # Keep build/stage/CPack output removable by the caller on Linux hosts.
+    docker run --rm --user "$(id -u):$(id -g)" -v "${REPO_ROOT}:/src" \
         -v "${REPO_ROOT}/build-wpe-runtime/2.54.0:/opt/picdplayer-wpe/2.54.0:ro" \
         -e PKG_CONFIG_PATH=/opt/picdplayer-wpe/2.54.0/lib/pkgconfig \
         -e LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib \
