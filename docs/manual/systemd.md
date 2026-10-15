@@ -72,6 +72,13 @@ Piで`sudo systemd-analyze verify picdplayer.service picdplayer-kiosk.service`�
 
 ## 起動設定
 
+build profileの既定とruntimeの診断overrideは独立している。daemonのlog levelは
+`/etc/default/picdplayer`の`PICDPLAYER_LOG_LEVEL=debug|info|warning`、kioskのInspectorは
+`/etc/default/picdplayer-kiosk`の`PICDPLAYER_INSPECTOR=on|off`で明示できる。
+設定file・drop-inはpackage更新で消さないため、Releaseへ切替えても既存のInspector明示ONは残る。
+loopback制約、優先順、専用設定だけの復元手順は[操作・診断](operations.md#診断profileとoverride)参照。
+実機の設定変更・service再起動は具体的な承認後に行う。
+
 unit内に開発機の既定値がある。変更は`/etc/default/picdplayer`へ必要な項目だけ書く。
 
 ```sh
@@ -325,7 +332,7 @@ wrapperはjournalへ`kiosk_boot: event=... wrapper_elapsed_ms=...`を出す。
 |`cage_exec`|Cageへのexec直前。CageやChromiumの起動完了ではない|
 
 TCP待機のtimeout・再試行規則は変更していない。PAM、TTY、seat/logind、NetworkManager設定も
-変更していない。Chromiumの既存loopback remote debugging設定（9222）も維持する。
+変更していない。Chromiumのloopback remote debugging（9222）はDebugまたは明示ON時だけ有効にする。
 
 標準UIは任意の`POST /api/ui-boot`へJSONを送る。再生commandとは独立しており、
 custom UIは送信しなくても従来どおり動作する。共通bootstrap注入やSDKは追加していない。
@@ -363,7 +370,7 @@ ApiServerごとにsteady clockの60秒窓で最大30件を記録し、その窓�
 標準UIは各eventを一度だけ送信し、応答待ち・再試行をしない。送信失敗は描画・再生を止めない。
 AsyncLoggerの容量制限や通信失敗で計測点が欠ける場合がある。
 
-ログは`INFO ui_boot: event=... page_id=... client_ms=...`。
+ログは`INFO ui_boot: event=... page_id=... client_ms=...`（Release系の既定では抑制、計測時はlog levelを明示）。
 daemonログの`+ms`は既存AsyncLoggerのsteady clock基準の受信処理時刻であり、browserの時計とは
 直接減算しない。journal時刻はログ出力・取り込みの遅延を含み、厳密な描画計測ではない。
 

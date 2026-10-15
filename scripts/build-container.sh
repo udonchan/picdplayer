@@ -18,7 +18,16 @@ IMAGE="${PICDPLAYER_BUILD_IMAGE:-picdplayer-build}"
 BUILD_DIR="build-container"
 STAGE_DIR="${REPO_ROOT}/stage"
 PACKAGE_DIR="${REPO_ROOT}/package-container"
+# Invalidate old deployable output even for invalid profile/option input.
+rm -rf "${PACKAGE_DIR}"
+mkdir -p "${PACKAGE_DIR}"
+trap 'if [[ $? != 0 ]]; then rm -f "${PACKAGE_DIR}"/*.deb; fi' EXIT
 ENABLE_PARANOIA="${PICDPLAYER_ENABLE_PARANOIA:-OFF}"
+BUILD_TYPE="${PICDPLAYER_BUILD_TYPE:-Release}"
+case "${BUILD_TYPE}" in
+    Debug|Release|RelWithDebInfo|MinSizeRel) ;;
+    *) echo 'ERROR: invalid PICDPLAYER_BUILD_TYPE' >&2; exit 2 ;;
+esac
 
 case "${ENABLE_PARANOIA}" in
     ON|OFF) ;;
@@ -35,17 +44,12 @@ echo "    build dir  : ${REPO_ROOT}/${BUILD_DIR}"
 echo "    stage dir  : ${STAGE_DIR}"
 echo "    package dir: ${PACKAGE_DIR}"
 echo "    paranoia   : ${ENABLE_PARANOIA}"
+echo "    build type : ${BUILD_TYPE} (application only; WPE SDK unchanged)"
 echo
 
 # ---------------------------------------------------------------------------
 # Preconditions
 # ---------------------------------------------------------------------------
-
-# Invalidate the previous artifact even if configure/build fails. Never leave a
-# partial package available to deploy after a failed packaging/validation step.
-rm -rf "${PACKAGE_DIR}"
-mkdir -p "${PACKAGE_DIR}"
-trap 'if [[ $? != 0 ]]; then rm -f "${PACKAGE_DIR}"/*.deb; fi' EXIT
 
 if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
     echo "ERROR: Docker image '${IMAGE}' does not exist."
@@ -62,7 +66,8 @@ fi
 echo "==> Preparing cached WPE runtime"
 bash "${SCRIPT_DIR}/build-wpe-runtime.sh"
 run_build() {
-    docker run --rm -v "${REPO_ROOT}:/src" \
+    # Keep build/stage/CPack output removable by the caller on Linux hosts.
+    docker run --rm --user "$(id -u):$(id -g)" -v "${REPO_ROOT}:/src" \
         -v "${REPO_ROOT}/build-wpe-runtime/2.54.0:/opt/picdplayer-wpe/2.54.0:ro" \
         -e PKG_CONFIG_PATH=/opt/picdplayer-wpe/2.54.0/lib/pkgconfig \
         -e LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib \
@@ -72,7 +77,7 @@ echo "==> Configuring CMake"
 
 run_build \
     cmake -S . -B "${BUILD_DIR}" \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
         -DENABLE_PARANOIA="${ENABLE_PARANOIA}" \
         -DENABLE_METADATA=ON \
         -DENABLE_API=ON \
@@ -117,6 +122,13 @@ if [[ ! -x "${BINARY}" ]]; then
     exit 1
 fi
 
+IDENTITY=$(run_build /src/stage/usr/local/bin/cdplayerd --build-info)
+if [[ ${IDENTITY%% *} != "build_type=${BUILD_TYPE}" ]]; then
+    echo 'ERROR: staged binary build type mismatch' >&2
+    exit 1
+fi
+echo "==> Staged binary ${IDENTITY}"
+
 echo "==> Installed files"
 find "${STAGE_DIR}" \( -type f -o -type l \) -print
 
@@ -141,6 +153,8 @@ docker run --rm \
     -w /src \
     "${IMAGE}" \
     dpkg-deb --info "/src/${PACKAGE#${REPO_ROOT}/}"
+docker run --rm --network none -v "${REPO_ROOT}:/src:ro" "${IMAGE}" \
+    python3 /src/scripts/package_profile.py "/src/${PACKAGE#${REPO_ROOT}/}" "${BUILD_TYPE}"
 
 echo
 echo "==> Build completed successfully"
@@ -148,4 +162,4 @@ echo "    staged installation: ${STAGE_DIR}"
 echo "    Debian package: ${PACKAGE}"
 echo
 echo "Deploy with:"
-echo "    ./scripts/deploy.sh"
+echo "    PICDPLAYER_BUILD_TYPE=${BUILD_TYPE} ./scripts/deploy.sh"

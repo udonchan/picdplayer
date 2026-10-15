@@ -54,7 +54,19 @@ if name == 'ssh':
         sys.exit(int(os.environ.get('INSTALL_FAILURE', '0')))
     if 'dpkg-query' in command:
         sys.exit(int(os.environ.get('VERIFY_FAILURE', '0')))
+    if 'cat /usr/local/share/picdplayer/build-profile' in command:
+        sys.exit(int(os.environ.get('INSTALLED_PROFILE_FAILURE', '0')))
+    if '--build-info' in command or '--diagnostics' in command:
+        sys.exit(int(os.environ.get('INSTALLED_BINARY_FAILURE', '0')))
 if name == 'docker':
+    if '/src/stage/usr/local/bin/cdplayerd' in args and '--build-info' in args:
+        print('build_type=' + os.environ.get('PICDPLAYER_BUILD_TYPE', 'Release') + ' profile=Release')
+    if '/src/scripts/package_profile.py' in args:
+        if os.environ.get('OLD_PACKAGE') or os.environ.get('PROFILE_FAILURE'):
+            sys.exit(1)
+        build_type = os.environ.get('PACKAGE_BUILD_TYPE', 'Release')
+        print('build_type=' + build_type)
+        print('profile=' + ('Debug' if build_type == 'Debug' else 'Release') + '\\nversion=0.1.0')
     if args and args[0] == 'cp':
         sdk = pathlib.Path(os.environ['TEST_ROOT']) / 'build-wpe-runtime/2.54.0/lib/pkgconfig'
         sdk.mkdir(parents=True, exist_ok=True)
@@ -161,12 +173,47 @@ if name == 'systemctl':
         for env in ({'NO_IMAGE': '1'}, {'CONFIGURE_FAILURE': '1'}, {}):
             with self.subTest(env=env):
                 (self.package / 'old.deb').touch()
-                result, _ = self.run_script('build-container.sh', **env)
+                result, calls = self.run_script('build-container.sh', **env)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertEqual(list(self.package.glob('*.deb')), [])
+                if not env:
+                    self.assertTrue(any('cpack' in args for name, args in calls))
+                    for name, args in calls:
+                        if name == 'docker' and ('-S' in args or 'cpack' in args or '--install' in ' '.join(args)):
+                            self.assertIn('--user', args)
+                            self.assertEqual(args[args.index('--user') + 1], f'{os.getuid()}:{os.getgid()}')
 
     def test_invalid_optional_paranoia_setting_blocks_build(self):
         result, calls = self.run_script('build-container.sh', PICDPLAYER_ENABLE_PARANOIA='invalid')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
+
+    def test_profile_mismatch_and_old_package_block_ssh(self):
+        for env in ({'PACKAGE_BUILD_TYPE': 'Debug'}, {'OLD_PACKAGE': '1'}):
+            result, calls = self.run_script('deploy.sh', **env)
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertFalse(any(name in ('ssh', 'rsync') for name, _ in calls))
+
+    def test_explicit_debug_package(self):
+        result, _ = self.run_script('deploy.sh', PACKAGE_BUILD_TYPE='Debug', PICDPLAYER_BUILD_TYPE='Debug')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_invalid_package_identity_blocks_ssh(self):
+        result, calls = self.run_script('deploy.sh', PROFILE_FAILURE='1')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertFalse(any(name in ('ssh', 'rsync') for name, _ in calls))
+
+    def test_installed_profile_mismatch_is_not_success(self):
+        for setting in ('INSTALLED_PROFILE_FAILURE', 'INSTALLED_BINARY_FAILURE'):
+            result, _ = self.run_script('deploy.sh', **{setting: '1'})
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_invalid_build_type(self):
+        result, calls = self.run_script('build-container.sh', PICDPLAYER_BUILD_TYPE='invalid')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(calls, [])
+        self.assertEqual(list(self.package.glob('*.deb')), [])
+        result, calls = self.run_script('deploy.sh', PICDPLAYER_BUILD_TYPE='invalid')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls, [])
 

@@ -5,6 +5,59 @@
 #include <wpe/wpe-platform.h>
 #include <wpe/webkit.h>
 
+/* Standalone SDK link probes do not configure application diagnostics. */
+#ifndef PICDPLAYER_DEBUG_DIAGNOSTICS
+#define PICDPLAYER_DEBUG_DIAGNOSTICS 0
+#endif
+#ifndef PICDPLAYER_BUILD_TYPE
+#define PICDPLAYER_BUILD_TYPE "Release"
+#endif
+
+static gboolean configure_inspector(void)
+{
+    const char* toggle = g_getenv("PICDPLAYER_INSPECTOR");
+    const char* http = g_getenv("WEBKIT_INSPECTOR_HTTP_SERVER");
+    const char* other = g_getenv("WEBKIT_INSPECTOR_SERVER");
+    if (toggle && strcmp(toggle, "on") && strcmp(toggle, "off")) {
+        g_printerr("WPE kiosk: invalid PICDPLAYER_INSPECTOR\n");
+        return FALSE;
+    }
+    if (toggle && !strcmp(toggle, "off")) {
+        g_unsetenv("WEBKIT_INSPECTOR_HTTP_SERVER");
+        g_unsetenv("WEBKIT_INSPECTOR_SERVER");
+        return TRUE;
+    }
+    if (other && *other) {
+        g_printerr("WPE kiosk: unsupported Inspector protocol\n");
+        return FALSE;
+    }
+    gboolean enable = toggle ? TRUE : (http ? *http != '\0' : PICDPLAYER_DEBUG_DIAGNOSTICS);
+    if (!enable) {
+        g_unsetenv("WEBKIT_INSPECTOR_HTTP_SERVER");
+        g_unsetenv("WEBKIT_INSPECTOR_SERVER");
+        return TRUE;
+    }
+    if (!http || !*http) http = "127.0.0.1:9223";
+    gboolean valid = !strncmp(http, "127.0.0.1:", 10);
+    unsigned port = 0;
+    if (valid) {
+        const char* digits = http + 10;
+        valid = *digits && strlen(digits) <= 5;
+        for (const char* p = digits; valid && *p; ++p) {
+            if (!g_ascii_isdigit(*p)) valid = FALSE;
+            else port = port * 10 + (unsigned)(*p - '0');
+        }
+        valid = valid && port >= 1 && port <= 65535;
+    }
+    if (!valid) {
+        g_printerr("WPE kiosk: Inspector requires 127.0.0.1 and a port in 1..65535\n");
+        return FALSE;
+    }
+    g_setenv("WEBKIT_INSPECTOR_HTTP_SERVER", http, TRUE);
+    g_unsetenv("WEBKIT_INSPECTOR_SERVER");
+    return TRUE;
+}
+
 typedef struct {
     GMainLoop* loop;
     gboolean failed;
@@ -46,9 +99,14 @@ int main(int argc, char** argv)
         return 0;
     }
     if (argc != 2) {
-        g_printerr("usage: picdplayer-wpe URL | --version\n");
+        g_printerr("usage: picdplayer-wpe URL | --version | --diagnostics\n");
         return 2;
     }
+    if (!configure_inspector()) return 2;
+    const char* inspector = g_getenv("WEBKIT_INSPECTOR_HTTP_SERVER");
+    g_print("wpe_profile: build_type=%s profile=%s inspector=%s\n", PICDPLAYER_BUILD_TYPE,
+        PICDPLAYER_DEBUG_DIAGNOSTICS ? "Debug" : "Release", inspector ? inspector : "off");
+    if (!strcmp(argv[1], "--diagnostics")) return 0;
     g_autoptr(WPEDisplay) display = WPE_DISPLAY(wpe_display_drm_new());
     g_autoptr(GError) error = NULL;
     if (!wpe_display_connect(display, &error)) {

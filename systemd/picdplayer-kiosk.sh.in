@@ -11,6 +11,7 @@ kiosk_mark() {
   echo "kiosk_boot: event=$1 wrapper_elapsed_ms=$(( (10#${uptime_now/./} - 10#$wrapper_start_cs) * 10 ))"
 }
 kiosk_mark kiosk_wrapper_start
+echo 'kiosk_profile: build_type=@CMAKE_BUILD_TYPE@ diagnostics=@PICDPLAYER_DEBUG_DIAGNOSTICS@'
 
 : "${PICDPLAYER_KIOSK_URL:=http://127.0.0.1:8080/player}"
 : "${PICDPLAYER_CAGE:=/usr/bin/cage}"
@@ -41,6 +42,13 @@ if (( port < 1 || port > 65535 || wait_seconds < 1 || wait_seconds > 300 )); the
 fi
 case "$PICDPLAYER_KIOSK_RUNTIME" in wpe|chromium) ;; *) echo 'invalid kiosk runtime' >&2; exit 2 ;; esac
 case "$PICDPLAYER_KIOSK_FALLBACK" in chromium|none) ;; *) echo 'invalid kiosk fallback' >&2; exit 2 ;; esac
+case "${PICDPLAYER_INSPECTOR-}" in
+  on|off) ;;
+  '') if [[ -n ${PICDPLAYER_INSPECTOR+x} ]]; then
+        echo 'invalid PICDPLAYER_INSPECTOR' >&2; exit 2
+      fi ;;
+  *) echo 'invalid PICDPLAYER_INSPECTOR' >&2; exit 2 ;;
+esac
 
 effective=$PICDPLAYER_KIOSK_RUNTIME
 reason=explicit
@@ -96,6 +104,11 @@ if [[ $effective == wpe ]]; then
   exec "$PICDPLAYER_WPE" "$PICDPLAYER_KIOSK_URL"
 fi
 kiosk_mark cage_exec
+debug_args=()
+if [[ ${PICDPLAYER_INSPECTOR-} == on ||
+      ( -z ${PICDPLAYER_INSPECTOR+x} && '@PICDPLAYER_DEBUG_DIAGNOSTICS@' == 1 ) ]]; then
+  debug_args=(--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222)
+fi
 exec "$PICDPLAYER_CAGE" -- "$PICDPLAYER_CHROMIUM" \
   --ozone-platform=wayland \
   --kiosk \
@@ -104,7 +117,6 @@ exec "$PICDPLAYER_CAGE" -- "$PICDPLAYER_CHROMIUM" \
   --disable-session-crashed-bubble \
   --disable-features=Translate \
   --noerrdialogs \
-  --remote-debugging-address=127.0.0.1 \
-  --remote-debugging-port=9222 \
+  "${debug_args[@]}" \
   --user-data-dir="$XDG_STATE_HOME/chromium" \
   "$PICDPLAYER_KIOSK_URL"

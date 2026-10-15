@@ -53,7 +53,7 @@ struct Signals {
     }
     ~Signals() { close(fd); sigprocmask(SIG_SETMASK, &previous, nullptr); }
 };
-void print_state(const PlayerController& controller) {
+void print_state(const PlayerController& controller, bool requested = false) {
     const auto state = controller.state();
     const char* name = "NO_DISC";
     switch (state.playback) {
@@ -62,7 +62,8 @@ void print_state(const PlayerController& controller) {
     case PlaybackState::stopped: name = "STOPPED"; break;
     case PlaybackState::no_disc: break;
     }
-    log_info("player") << "state=" << name << " track=" << state.track.value_or(0)
+    (requested ? log_notice("player") : log_info("player"))
+                       << "state=" << name << " track=" << state.track.value_or(0)
                        << " lba=" << state.position_lba.value_or(0);
 }
 
@@ -238,7 +239,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
         }
     } stop_on_exit{controller, worker, *audio};
     CecDevice cec(cec_device, cec_diagnostics);
-    log_info("player") << "backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
+    log_notice("player") << "backend=" << (backend == CddaBackend::direct ? "direct" : "paranoia")
+                       << " build_type=" << PICDPLAYER_BUILD_TYPE
+                       << " profile=" << (PICDPLAYER_DEBUG_DIAGNOSTICS ? "Debug" : "Release")
                        << " audio=" << audio_device << " PCM=44100Hz/stereo/S16_native"
                        << " alsa_latency_ms=" << audio_latency_ms
                        << " buffer_frames=" << buffer_config.capacity_cd_frames
@@ -248,7 +251,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                        << (configured_drive_speed_x ? std::to_string(*configured_drive_speed_x) : "default")
                        << " stdin_commands=" << (interactive ? "enabled" : "disabled");
     if (interactive)
-        log_info("player") << "Commands: play pause stop next previous track N seek SECONDS state quit";
+        log_notice("player") << "Commands: play pause stop next previous track N seek SECONDS state quit";
     print_state(controller);
     MediaStateTracker media_state;
     (void)media_worker.request(MediaWork::probe_drive);
@@ -477,7 +480,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                                              result.contains("disc_map") ? result["disc_map"] : nlohmann::json(nullptr)}}.dump();
                                                   }, [&] { return artist_background_policy.json(); },
                                                   std::move(background_artwork_provider));
-        auto line = log_info("api");
+        auto line = log_notice("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';
         else line << api_listen;
@@ -793,7 +796,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         if (fds[0].revents & POLLIN) {
             signalfd_siginfo info{};
             (void)read(signals.fd, &info, sizeof(info));
-            log_info("player") << "shutdown signal=" << info.ssi_signo;
+            log_notice("player") << "shutdown signal=" << info.ssi_signo;
             break;
         }
         if (fds[2].revents & (POLLERR | POLLHUP | POLLNVAL))
@@ -831,7 +834,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             if (!command.empty() && command.back() == '\r') command.pop_back();
             bool changed = true;
             if (command == "quit") { quitting = true; break; }
-            if (command == "state") { print_state(controller); continue; }
+            if (command == "state") { print_state(controller, true); continue; }
             if (media_state.state() == MediaLifecycleState::ejecting) {
                 log_warning("player") << "command rejected while ejecting";
                 continue;
@@ -861,6 +864,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
     }
     controller.stop();
     engine.synchronize();
-    log_info("player") << "output stopped; waiting for outstanding drive I/O";
+    log_notice("player") << "output stopped; waiting for outstanding drive I/O";
     // worker joins before audio/signals destruction. No detached hardware access.
 }

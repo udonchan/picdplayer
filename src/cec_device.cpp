@@ -31,7 +31,7 @@ CecDevice::CecDevice(std::string path, bool diagnostics)
 CecDevice::~CecDevice() { if (fd_ >= 0) close(fd_); }
 void CecDevice::status(const std::string& message) {
     if (message != last_status_) {
-        log_info("cec") << message;
+        log_notice("cec") << message;
         last_status_ = message;
     }
 }

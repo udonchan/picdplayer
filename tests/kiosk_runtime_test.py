@@ -3,10 +3,14 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+GENERATED = Path(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] else None
+BUILD_TYPE = sys.argv[2] if len(sys.argv) > 2 else 'Release'
+del sys.argv[1:]
 
 
 @unittest.skipUnless(Path('/proc/uptime').exists(), 'Linux kiosk wrapper')
@@ -22,6 +26,7 @@ class RuntimeTest(unittest.TestCase):
                     'PICDPLAYER_API_WAIT_TIMEOUT_SECONDS': '1', 'PICDPLAYER_CAGE': '/bin/echo',
                     'PICDPLAYER_CHROMIUM': '/bin/true', 'PICDPLAYER_KIOSK_RUNTIME': 'wpe',
                     'PICDPLAYER_KIOSK_FALLBACK': 'chromium', 'PICDPLAYER_WPE': str(self.directory / 'wpe')}
+        self.env.pop('PICDPLAYER_INSPECTOR', None)
 
     def tearDown(self):
         self.listener.close()
@@ -32,8 +37,17 @@ class RuntimeTest(unittest.TestCase):
         path.write_text(f'#!/bin/sh\nif [ "$1" = --version ]; then echo {version}; exit 0; fi\necho WPE_EXEC; exit {exit_code}\n')
         path.chmod(0o700)
 
-    def wrapper(self, **changes):
-        return subprocess.run(['bash', str(ROOT / 'systemd/picdplayer-kiosk.sh.in')],
+    def wrapper(self, profile=None, **changes):
+        if profile is None and GENERATED:
+            source = GENERATED.read_text()
+        else:
+            profile = profile or BUILD_TYPE
+            source = (ROOT / 'systemd/picdplayer-kiosk.sh.in').read_text().replace(
+                '@PICDPLAYER_DEBUG_DIAGNOSTICS@', '1' if profile == 'Debug' else '0').replace(
+                '@CMAKE_BUILD_TYPE@', profile)
+        path = self.directory / 'wrapper'
+        path.write_text(source)
+        return subprocess.run(['bash', str(path)],
                               env={**self.env, **changes}, capture_output=True, text=True, timeout=4)
 
     def stopped(self, result):
@@ -89,8 +103,24 @@ class RuntimeTest(unittest.TestCase):
         self.assertFalse((self.directory / 'chromium-fallback').exists())
 
     def test_invalid_configuration(self):
-        for field in ('PICDPLAYER_KIOSK_RUNTIME', 'PICDPLAYER_KIOSK_FALLBACK'):
+        for field in ('PICDPLAYER_KIOSK_RUNTIME', 'PICDPLAYER_KIOSK_FALLBACK', 'PICDPLAYER_INSPECTOR'):
             self.assertEqual(self.wrapper(**{field: 'invalid'}).returncode, 2)
+
+    def test_chromium_profile_and_override(self):
+        for profile in ('Debug', 'Release', 'RelWithDebInfo', 'MinSizeRel'):
+            for toggle in (None, 'on', 'off'):
+                env = {} if toggle is None else {'PICDPLAYER_INSPECTOR': toggle}
+                result = self.wrapper(profile=profile, PICDPLAYER_KIOSK_RUNTIME='chromium', **env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                enabled = toggle == 'on' or (toggle is None and profile == 'Debug')
+                self.assertEqual('--remote-debugging-port=9222' in result.stdout, enabled)
+                self.assertEqual('--remote-debugging-address=127.0.0.1' in result.stdout, enabled)
+
+    def test_build_profile(self):
+        result = self.wrapper(PICDPLAYER_KIOSK_RUNTIME='chromium')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'build_type={BUILD_TYPE}', result.stdout)
+        self.assertEqual('--remote-debugging-port=9222' in result.stdout, BUILD_TYPE == 'Debug')
 
 
 if __name__ == '__main__':

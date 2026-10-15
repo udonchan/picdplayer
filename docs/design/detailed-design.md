@@ -253,17 +253,21 @@ artwork.cover.urlが変わったときだけ画像属性とhandlerを更新し�
 ## daemon logging
 
 [AsyncLogger](../../src/logger.cpp)はwall clock（UTC）、logger初期化後のmonotonic経過時間、level、
-component、messageを一行で出力する。INFO/DEBUGはstdout、WARN/ERRORはstderrへ送るため、systemdでは
+component、messageを一行で出力する。INFO/DEBUG/NOTICEはstdout、WARN/ERRORはstderrへ送るため、systemdでは
 両方をjournaldが収集できる。診断CLIのPCMやJSON等の結果はログではなく、従来どおり直接出力する。
 
 daemonのmain loopは文字列を有界queueへ追加するだけで、terminalやjournaldへのwriteを待たない。
+DebugはDEBUG以上、Release系はNOTICE/WARN/ERRORを既定で出力する。runtimeの
+`PICDPLAYER_LOG_LEVEL=debug|info|warning`は起動時に一度だけ読み、NOTICE/WARN/ERRORは常に保持する。
+不正値は内容を転載せず警告してbuild既定へ戻す。filterはstream insertionとqueue投入前に適用するが、
+呼び出し側の引数評価は省略しない。filter抑制はdropに数えない。logger threadをsignal mask設定前に起動しない。
 専用threadがqueueを順に出力する。queue上限は512件であり、満杯時のDEBUG/INFOは捨てる。
-WARN/ERRORでは可能なら古いDEBUG/INFOを一件押し出す。失った総数は終了時に
+NOTICE/WARN/ERRORでは可能なら古いDEBUG/INFOを一件押し出す。失った総数は終了時に
 `WARN logger: dropped=N`として通知する。logger自身の失敗は再生処理へ例外を伝播させない。
 このthreadはhardwareやauthoritative stateへ触れず、出力遅延をmain/audio pathから隔離するためだけに使う。
 
 現在のAsyncLoggerは、依存を増やさず、Pi 3とBuildrootで扱いやすい小さな非同期出力を実現するための独自実装である。
-将来、出力先、runtime level変更、構造化field、rotation、journald以外のsinkなどを必要とする場合は、
+将来、出力先、実行中のlevel変更、構造化field、rotation、journald以外のsinkなどを必要とする場合は、
 spdlog等の一般的なC++ logging libraryとの比較を行う。比較では、binary size、Buildroot package化、
 非同期queueの満杯時挙動、終了時flush、sinkのthread safety、ライセンス、再生threadを待たせない設定を確認する。
 呼び出し側は`log_info("component") << ...`の境界を維持し、libraryを採用する場合もlogger実装を交換可能にする。

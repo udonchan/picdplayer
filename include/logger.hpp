@@ -14,12 +14,14 @@
 #include <thread>
 #include <utility>
 
-enum class LogLevel { debug, info, warning, error };
+enum class LogLevel { debug, info, notice, warning, error };
+
+bool log_enabled(LogLevel level);
 
 class AsyncLogger {
 public:
     AsyncLogger(std::ostream& normal_sink, std::ostream& error_sink,
-                std::size_t capacity = 512);
+                std::size_t capacity = 512, LogLevel minimum = LogLevel::debug);
     ~AsyncLogger();
     AsyncLogger(const AsyncLogger&) = delete;
     AsyncLogger& operator=(const AsyncLogger&) = delete;
@@ -43,6 +45,7 @@ private:
     std::ostream& normal_sink_;
     std::ostream& error_sink_;
     const std::size_t capacity_;
+    const LogLevel minimum_;
     const std::chrono::steady_clock::time_point started_;
     mutable std::mutex mutex_;
     std::condition_variable ready_;
@@ -62,7 +65,7 @@ public:
 
     template <typename T>
     LogLine& operator<<(T&& value) {
-        stream_ << std::forward<T>(value);
+        if (active_) stream_ << std::forward<T>(value);
         return *this;
     }
 
@@ -77,5 +80,6 @@ AsyncLogger& global_logger();
 void shutdown_logger() noexcept;
 LogLine log_debug(std::string_view component);
 LogLine log_info(std::string_view component);
+LogLine log_notice(std::string_view component);
 LogLine log_warning(std::string_view component);
 LogLine log_error(std::string_view component);

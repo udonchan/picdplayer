@@ -43,3 +43,8 @@ jobs:
           path: release-container/
           if-no-files-found: error
           retention-days: 7
+      - name: Build and test Debug using the same WPE SDK
+        run: |
+          PICDPLAYER_BUILD_TYPE=Debug ./scripts/build-container.sh
+          docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
+          PICDPLAYER_BUILD_TYPE=Debug ./scripts/test-package-lifecycle.sh

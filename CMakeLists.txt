@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(PiCDPlayer VERSION 0.1.0 LANGUAGES CXX)
+include(cmake/BuildProfile.cmake)
+add_compile_definitions(PICDPLAYER_DEBUG_DIAGNOSTICS=${PICDPLAYER_DEBUG_DIAGNOSTICS}
+    PICDPLAYER_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 option(ENABLE_PARANOIA "Enable libcdio-paranoia reader" OFF)
 option(ENABLE_METADATA "Enable MusicBrainz metadata support" OFF)
 option(ENABLE_API "Enable the local control API" OFF)
@@ -99,6 +102,10 @@ target_compile_features(cdplayerd PRIVATE cxx_std_20)
 set_target_properties(cdplayerd PROPERTIES CXX_EXTENSIONS OFF)
 target_compile_options(cdplayerd PRIVATE -Wall -Wextra -Wpedantic)
 install(TARGETS cdplayerd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/build-profile"
+    "build_type=${CMAKE_BUILD_TYPE}\nprofile=${PICDPLAYER_PROFILE}\nversion=${PROJECT_VERSION}\n")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/build-profile"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/picdplayer)
 if(ENABLE_API)
     install(DIRECTORY ui/default/ DESTINATION ${CMAKE_INSTALL_DATADIR}/picdplayer/ui/default)
 endif()
@@ -125,7 +132,7 @@ set(CPACK_PACKAGE_VENDOR "PiCDPlayer")
 set(CPACK_PACKAGE_CONTACT "PiCDPlayer development")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Appliance-style physical audio CD player for Raspberry Pi")
 set(CPACK_DEBIAN_PACKAGE_SECTION "sound")
-set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_FILE_NAME "picdplayer_${PROJECT_VERSION}_${CMAKE_BUILD_TYPE}_${CMAKE_SYSTEM_PROCESSOR}.deb")
 # The deployed system has historically used /usr/local.  Keep package payloads
 # identical to the DESTDIR staging layout instead of CPack's Debian /usr default.
 set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
@@ -497,9 +504,25 @@ if(BUILD_TESTING)
     add_test(NAME wpe_inspector_protocol COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/wpe_inspector_test.py)
     set_tests_properties(wpe_inspector_protocol PROPERTIES TIMEOUT 10)
+    add_test(NAME build_profile COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/build_profile_test.py)
+    add_test(NAME daemon_profile COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/daemon_profile_test.py $<TARGET_FILE:cdplayerd> ${CMAKE_BUILD_TYPE}
+        $<TARGET_FILE:logger_test>)
+    set_tests_properties(daemon_profile PROPERTIES TIMEOUT 30)
+    if(ENABLE_WPE_KIOSK)
+        add_test(NAME wpe_profile COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/wpe_profile_test.py
+            $<TARGET_FILE:picdplayer-wpe> ${CMAKE_BUILD_TYPE})
+        # Ordinary CTest containers mount the repository, not the build-only SDK
+        # prefix. The exported SDK supplies the same libraries without install.
+        set_tests_properties(wpe_profile PROPERTIES TIMEOUT 15 ENVIRONMENT
+            "LD_LIBRARY_PATH=${PICDPLAYER_WPE_RUNTIME_DIR}/lib:${CMAKE_CURRENT_SOURCE_DIR}/build-wpe-runtime/2.54.0/lib")
+    endif()
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(NAME kiosk_runtime_selection COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/kiosk_runtime_test.py)
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/kiosk_runtime_test.py
+            "${CMAKE_CURRENT_BINARY_DIR}/picdplayer-kiosk" ${CMAKE_BUILD_TYPE})
         set_tests_properties(kiosk_runtime_selection PROPERTIES TIMEOUT 15)
     endif()
     if(ENABLE_METADATA)
@@ -534,6 +557,15 @@ if(BUILD_TESTING)
         set_tests_properties(read_policy_persistence PROPERTIES TIMEOUT 25)
     endif()
     add_test(NAME cdda_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/cdda_cli.py $<TARGET_FILE:cdplayerd> ${ENABLE_PARANOIA} ${ENABLE_METADATA} ${ENABLE_API})
-    add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd> $<BOOL:${ENABLE_METADATA}>)
+    add_test(NAME player_daemon COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/player_daemon.py $<TARGET_FILE:cdplayerd> $<BOOL:${ENABLE_METADATA}> $<BOOL:${ENABLE_API}>)
     set_tests_properties(player_daemon PROPERTIES TIMEOUT 10)
+    # These fault tests intentionally exercise INFO traffic and blocked sinks.
+    set_tests_properties(player_daemon PROPERTIES ENVIRONMENT "PICDPLAYER_LOG_LEVEL=info")
+    if(ENABLE_API)
+        set_tests_properties(diagnostic_isolation ui_startup read_policy_persistence
+            PROPERTIES ENVIRONMENT "PICDPLAYER_LOG_LEVEL=info")
+        if(NODE_EXECUTABLE)
+            set_tests_properties(ui_diagnostic_integration PROPERTIES ENVIRONMENT "PICDPLAYER_LOG_LEVEL=info")
+        endif()
+    endif()
 endif()

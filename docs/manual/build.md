@@ -4,13 +4,57 @@
 この文書は別の開発ホストを用意せずLinux上で直接試す場合の補助手順である。
 通常のPiはruntime/hardware検証だけに使用する。
 
+## Application Profile
+
+`CMAKE_BUILD_TYPE`はfresh build treeで未指定、または明示的に空なら`Release`に確定する。
+既存treeで引数を省略した場合はCMake cacheの値を維持する。single-config generatorを使用し、
+未知の値・綴り違い・multi-config generatorはconfigure時に拒否する。
+
+| Build type | 診断profile | WPE Inspector / Chromium debug port既定 | daemonログ既定 |
+|---|---|---|---|
+| `Debug` | Debug | ON、loopback限定 | DEBUG以上 |
+| `Release` | Release | OFF | NOTICE・WARN・ERROR |
+| `RelWithDebInfo` | Release | OFF | NOTICE・WARN・ERROR |
+| `MinSizeRel` | Release | OFF | NOTICE・WARN・ERROR |
+
+最適化とsymbolsはCMakeのbuild typeに従い、診断profileは上表で別途決める。
+HTTP API/WS、technical status、read evidence、metadata・背景取得の可否はprofileで変えない。
+WPE SDKは従来のRelease recipe/cacheを共用し、applicationのDebug選択ではWebKitを再buildしない。
+`scripts/build-wpe-runtime.sh`とSDK workflowのcache keyも変更しない。
+
+標準container build/package/deployは`PICDPLAYER_BUILD_TYPE`（既定Release）で選択する。
+
+```sh
+PICDPLAYER_BUILD_TYPE=Debug ./scripts/build-container.sh
+docker run --rm -v "$PWD:/src" -w /src picdplayer-build ctest --test-dir build-container --output-on-failure
+PICDPLAYER_BUILD_TYPE=Debug ./scripts/test-package-lifecycle.sh
+# 実機deployはservice再起動を伴うため、承認・復元条件の確認後だけ実行する。
+PICDPLAYER_BUILD_TYPE=Debug ./scripts/deploy.sh
+```
+
+`build-container/`・`stage/`・`package-container/`は最新一構成専用で、並列profile buildには使わない。
+切替時は再configure/buildし、stageを再作成する。新規buildは不正入力・失敗時も旧packageを無効化する。
+package名にbuild typeを付け、CMakeが同じ設定から生成する
+`/usr/local/share/picdplayer/build-profile`をstage/packageへinstallする。
+`cdplayerd --build-info`でもbinaryのbuild type/profileを確認できる。
+build/package lifecycle/deploy/candidateは`scripts/package_profile.py`で実archiveのmarker全文と
+package version、daemon・WPE binaryのbuild type/profile、生成wrapperのprofileを照合する。
+旧形式・欠損・重複field・矛盾・binary混在は拒否し、deployはPiへの接続前に検査する。
+この検査はnetworkなしの標準Docker build image内でarchiveを一時展開し、秘密情報や診断overrideを
+引き継がない環境でidentity CLIだけを実行する。maintainer scriptは実行しない。
+信頼するローカルCPack成果物専用であり、未信頼packageの安全性検査ではない。host/Piで直接実行しない。
+インストール後もmarker全文と両binaryのidentityを確認するが、runtime overrideや実機の描画・音声確認の代わりではない。
+既存packageの作成日やcheckoutとの新旧を自動判定する機能ではないため、必ず対象sourceから再buildする。
+`prepare-release.sh`のcandidate検証はRelease限定であり、Debug packageは公開候補へ混入させない。
+運用overrideの優先順位は[操作・診断](operations.md#診断profileとoverride)を参照する。
+
 ## 必要環境
 
 Linux、C++20コンパイラ、CMake 3.20以上、ALSAとLinux CEC/CD-ROMの開発ヘッダーが必要。
 Raspberry Pi OSでは次のパッケージを使用する。Pythonは開発用試験のみ。
 
 ```sh
-sudo apt install build-essential cmake libasound2-dev linux-libc-dev python3
+sudo apt install build-essential cmake ninja-build libasound2-dev linux-libc-dev python3
 cmake -S . -B build-direct
 cmake --build build-direct -j1
 ctest --test-dir build-direct --output-on-failure
@@ -124,6 +168,7 @@ API有効buildでは`ui/default/`のHTML/CSS/JSからbuilt-in UIを生成し、�
 `share/picdplayer/ui/default/`へinstallする。UI assetの生成にはNode.jsは不要。試験ではNode.jsがあると標準UIとwrapperの2件を追加し、
 Python 3があるとCLI・daemon試験（API有効時はUI起動試験も）を追加する。
 全試験の実行にはNode.jsとPython 3の両方を用意する。
+profile試験は実`Ninja Multi-Config`の拒否を確認するためNinjaも必要である。
 ユーザー編集版の指定と復旧方法は[Custom UI](custom-ui.md)を参照する。
 paranoiaを使用する場合は `ENABLE_PARANOIA=ON` でconfigureし、`--cdda-reader paranoia` を指定する。
 この設定は実験・検証用で、現時点の公式releaseには採用しない。対応containerのDebian

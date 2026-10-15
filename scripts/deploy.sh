@@ -19,6 +19,11 @@ LOCAL_PACKAGE_DIR="${REPO_ROOT}/package-container"
 REMOTE_PACKAGE_DIR="picdplayer-package"
 REMOTE_PACKAGE_NAME="picdplayer.deb"
 EXPECTED_RUNTIME="${PICDPLAYER_EXPECT_KIOSK_RUNTIME:-wpe}"
+BUILD_TYPE="${PICDPLAYER_BUILD_TYPE:-Release}"
+case "${BUILD_TYPE}" in
+    Debug|Release|RelWithDebInfo|MinSizeRel) ;;
+    *) echo 'ERROR: invalid PICDPLAYER_BUILD_TYPE' >&2; exit 2 ;;
+esac
 case "${EXPECTED_RUNTIME}" in
     wpe|chromium) ;;
     *) echo 'ERROR: PICDPLAYER_EXPECT_KIOSK_RUNTIME must be wpe or chromium' >&2; exit 2 ;;
@@ -48,6 +53,20 @@ if [[ "${PACKAGE_COUNT}" != 1 ]]; then
     exit 1
 fi
 LOCAL_PACKAGE="$(find "${LOCAL_PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -print)"
+
+# Read the CMake-installed identity from the actual archive, never a sidecar or
+# the current CMake cache (which may describe a newer, failed build).
+PACKAGE_PROFILE=$(docker run --rm --network none -v "${REPO_ROOT}:/src:ro" \
+    "${PICDPLAYER_BUILD_IMAGE:-picdplayer-build}" python3 /src/scripts/package_profile.py \
+    "/src/${LOCAL_PACKAGE#${REPO_ROOT}/}" "${BUILD_TYPE}") || {
+    echo 'ERROR: package has no valid build profile; rebuild it before deploying' >&2
+    exit 1
+}
+if [[ ${PACKAGE_PROFILE%%$'\n'*} != "build_type=${BUILD_TYPE}" ]]; then
+    echo 'ERROR: package build type differs from PICDPLAYER_BUILD_TYPE; rebuild/select explicitly' >&2
+    exit 1
+fi
+echo "    build type : ${BUILD_TYPE} (verified from package)"
 
 echo "==> Checking SSH connection"
 ssh "${TARGET}" true
@@ -115,6 +134,11 @@ if [[ "${DAEMON_STATE_AFTER}" != "${DAEMON_STATE_BEFORE}" ||
     exit 1
 fi
 ssh "${TARGET}" "test \"\$(dpkg-query -W -f='\${Status}' picdplayer)\" = 'install ok installed' && test -x /usr/local/bin/cdplayerd && test -x /usr/local/libexec/picdplayer-kiosk"
+ssh "${TARGET}" "test \"\$(cat /usr/local/share/picdplayer/build-profile)\" = '${PACKAGE_PROFILE}'"
+DIAGNOSTIC_PROFILE=Release
+if [[ ${BUILD_TYPE} == Debug ]]; then DIAGNOSTIC_PROFILE=Debug; fi
+ssh "${TARGET}" "test \"\$(/usr/local/bin/cdplayerd --build-info)\" = 'build_type=${BUILD_TYPE} profile=${DIAGNOSTIC_PROFILE}'"
+ssh "${TARGET}" "test \"\$(env LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib PICDPLAYER_INSPECTOR=off /usr/local/libexec/picdplayer-wpe --diagnostics)\" = 'wpe_profile: build_type=${BUILD_TYPE} profile=${DIAGNOSTIC_PROFILE} inspector=off'"
 ssh "${TARGET}" 'test "$(env LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib /usr/local/libexec/picdplayer-wpe --version)" = 2.54.0'
 if [[ "${KIOSK_STATE_AFTER}" == active ]]; then
     # Type=simple can still be in the API-wait wrapper after try-restart returns.
