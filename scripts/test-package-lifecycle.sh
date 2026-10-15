@@ -27,6 +27,10 @@ if [[ "${PACKAGE_COUNT}" != 1 ]]; then
 fi
 PACKAGE="$(find "${PACKAGE_DIR}" -maxdepth 1 -type f -name '*.deb' -print)"
 
+docker run --rm --network none -v "${REPO_ROOT}:/src:ro" "${IMAGE}" \
+    python3 /src/scripts/package_profile.py "/src/${PACKAGE#${REPO_ROOT}/}" \
+    "${PICDPLAYER_BUILD_TYPE:-Release}"
+
 echo "==> Testing Debian package lifecycle in a disposable container"
 
 docker run --rm \
@@ -61,11 +65,16 @@ EOF
         test ! -e /usr/local/share/picdplayer/obsolete-owned-file
         test -f /usr/local/share/picdplayer/unrelated-test-file
         test -x /usr/local/bin/cdplayerd
+        identity=$(/usr/local/bin/cdplayerd --build-info)
+        IFS= read -r marker < /usr/local/share/picdplayer/build-profile
+        test "${identity%% *}" = "$marker"
         test -x /usr/local/libexec/picdplayer-kiosk
         test "$(cat /etc/default/picdplayer-kiosk)" = custom-setting
         test -x /usr/local/libexec/picdplayer-wpe
         test -f /opt/picdplayer-wpe/2.54.0/share/wpe-webkit-2.0/inspector.gresource
         test "$(env LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib /usr/local/libexec/picdplayer-wpe --version)" = 2.54.0
+        diagnostics=$(env LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib /usr/local/libexec/picdplayer-wpe --diagnostics)
+        case "$diagnostics" in *"$marker"*) ;; *) exit 1 ;; esac
         test ! -d /opt/picdplayer-wpe/2.54.0/include
         test ! -d /opt/picdplayer-wpe/2.54.0/lib/pkgconfig
         for process in WPEWebProcess WPENetworkProcess WPEGPUProcess; do

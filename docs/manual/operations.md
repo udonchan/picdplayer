@@ -230,6 +230,35 @@ GET stateで現在値を復元して再接続する。ここから再生操作�
 
 ## WPEのInspector診断とスクリーンショット
 
+### 診断profileとoverride
+
+applicationのDebugはInspectorを既定ON（`127.0.0.1:9223`）、Release系は既定OFFにする。
+packageに記録されたbuild typeと実効Inspectorは別である。launcherの
+`picdplayer-wpe --diagnostics`はDRMへ接続せずbuild type/profileと実効Inspector設定を表示する。
+private SDKを使う手動実行では`LD_LIBRARY_PATH=/opt/picdplayer-wpe/2.54.0/lib`が必要となる。
+通常起動でも同じ識別情報をjournalへ残す。portが実際にlistenできた証明ではない。
+
+| 設定 | 効果 |
+|---|---|
+| `PICDPLAYER_INSPECTOR=off` | 最優先でWPEの両Inspector環境変数を消去。Chromium debug portもOFF |
+| `PICDPLAYER_INSPECTOR=on` | Debug/Releaseとも明示ON。HTTP address未指定なら`127.0.0.1:9223` |
+| toggle未指定 + `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:PORT` | 既存drop-inとの互換性を維持して明示ON |
+| toggle未指定 + 空のHTTP変数 | WPE Inspectorを明示OFF |
+| いずれも未指定 | buildの既定に従う |
+
+toggleの未知値、非loopback・不正port（1〜65535以外）、別protocolの非空
+`WEBKIT_INSPECTOR_SERVER`はWPE起動前に拒否する。値そのものはerrorに転載しない。
+DebugでもLAN/`0.0.0.0`へ公開できない。Chromiumはtoggle/build既定だけを使用し、
+有効時は既存の`127.0.0.1:9222`を使う。WPEのHTTP変数でChromiumを有効化しない。
+
+`/etc/default/picdplayer-kiosk`や専用drop-inへtoggleを指定できる。systemdでは
+`EnvironmentFile=`の値は`Environment=`より優先し、複数fileでは後で指定したfileが優先する。
+既存の`90-wpe-source.conf`等が別のEnvironmentFileを追加している場合はそちらも確認する。
+package更新はこれらを削除しないため、Releaseへ戻しただけでは明示ONは解除されない。
+復元は今回追加した専用設定だけを戻すか、実効EnvironmentFileで`PICDPLAYER_INSPECTOR=off`を指定する。
+service変更・再起動には実機状態の確認と具体的な承認が必要で、daemonを診断目的で再起動しない。
+秘密情報が混ざり得る全環境・EnvironmentFileの内容をそのままlogや成果物へ保存しない。
+
 WPE主runtimeには`scripts/inspect-wpe.py`を用意している。これはChromium CDPとは
 別のWebKit target routingを使い、pageのtitle・readyState・viewport・接続表示を読み取る。
 `--screenshot PATH`を指定すると、実WPEの現在のviewportを`Page.snapshotRect`でPNGへ保存する。
@@ -242,7 +271,7 @@ WPE主runtimeには`scripts/inspect-wpe.py`を用意している。これはChro
 serviceの停止・起動やsudoers変更を行わない。InspectorはWPEの起動時に
 `WEBKIT_INSPECTOR_HTTP_SERVER=127.0.0.1:9223`でloopback限定にする。
 `WEBKIT_INSPECTOR_SERVER`は別protocolなので、このHTTP/WebSocket toolの設定として代用しない。
-通常のkioskで一時的に有効化する場合は、Pi上で専用runtime drop-inを作る。既存の同名fileがある場合は
+Release系のkioskで一時的に有効化する場合は、Pi上で専用runtime drop-inを作る。既存の同名fileがある場合は
 上書きせず、別名を選ぶ。ほかのdrop-inや`/etc/default/picdplayer-kiosk`を置換しない。
 
 ```sh
@@ -251,6 +280,12 @@ sudoedit /run/systemd/system/picdplayer-kiosk.service.d/90-wpe-screenshot.conf
 ```
 
 この新規fileには次の設定だけを記載する。API keyは記載しない。
+
+以下は実効設定に`PICDPLAYER_INSPECTOR=off`や空のHTTP変数がない場合の例である。
+明示OFFがある場合、このHTTP設定だけでは有効にならない。所有者と元の値を確認し、承認を得て
+専用の設定箇所だけを一時的に`PICDPLAYER_INSPECTOR=on`へ変更する。
+EnvironmentFileの値はdrop-inのEnvironmentより優先するため、上書き関係を確認する。
+撮影後は今回変更した値だけを元へ戻し、既存file全体を削除しない。
 
 ```ini
 [Service]
@@ -301,7 +336,8 @@ sudo systemctl daemon-reload
 sudo systemctl restart picdplayer-kiosk.service
 ```
 
-Inspector portが閉じたことと通常WPEの稼働を確認し、Mac側のSSH転送も終了する。
+Release系でほかに明示ONがなければInspector portが閉じる。Debugでは既定ONへ戻るので、
+閉じる場合は明示OFFを使う。実効portと通常WPEの稼働を確認し、Mac側のSSH転送も終了する。
 
 ## ログの読み方
 
@@ -312,14 +348,25 @@ wall clock補正が起きても処理間隔の比較に使える。
 2026-09-18T09:30:12.345Z +1234ms INFO player: state=PLAYING track=1 lba=0
 ```
 
-DEBUG/INFOはstdout、WARN/ERRORはstderrへ出す。systemd運用では両方を次で確認できる。
+DEBUG/INFO/NOTICEはstdout、WARN/ERRORはstderrへ出す。Debugでは全level、Release系では
+DEBUG/INFOを既定で抑制し、起動profile・backendと終了のNOTICE、WARN/ERRORを保持する。
+明示的なinteractive `state`応答とcommand案内もNOTICEとしてReleaseで維持する。
+重複抑制済みのCEC待機・登録状態もNOTICEで残し、CEC入力ごとのINFO/DEBUGとは区別する。
+`PICDPLAYER_LOG_LEVEL=debug|info|warning`で起動時のfilterを明示指定できる。NOTICEとWARN/ERRORは
+どの指定でも抑制しない。未知値・空値は値を転載せず警告してbuild既定へ戻す。
+常駐daemonでは`/etc/default/picdplayer`に設定する。kioskのtoggleとは独立している。
+`--cec-diagnostics`やui_boot等のDEBUG/INFOを観測する場合は必要なlevelも明示する。
+streamのformattingはfilter判定後に行うが、`<< expensive_function()`等の引数評価そのものは省略しない。
+systemd運用では両方を次で確認できる。
 
 ```sh
 journalctl -u picdplayer.service -f -o cat
 ```
 
 出力先が長時間停止しても再生loopを待たせないためqueueは有界である。終了時の
-`WARN logger: dropped=N`はN件を保存できなかったことを示す。診断CLIの結果はこの形式に変換しない。
+`WARN logger: dropped=N`はN件を保存できなかったことを示す。filterで抑制した件数は含めない。
+NOTICEもWARN/ERROR同様にqueue内のDEBUG/INFOを優先して押し出すが、飽和・sink障害時の無損失保証はない。
+診断CLIの結果はこの形式に変換せず、Releaseでも維持する。
 
 | ログ | 意味 |
 |---|---|

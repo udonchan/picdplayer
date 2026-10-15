@@ -12,6 +12,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+from package_profile import validate as validate_package_profile
 
 
 def digest(data):
@@ -86,6 +87,8 @@ def prepare(root, commit, ref, dirty=False):
         cache = (root / 'build-container/CMakeCache.txt').read_text()
         if not re.search(r'^ENABLE_PARANOIA:BOOL=OFF$', cache, re.M):
             raise ValueError('release validation requires ENABLE_PARANOIA=OFF')
+        if not re.search(r'^CMAKE_BUILD_TYPE:STRING=Release$', cache, re.M):
+            raise ValueError('release candidate requires application CMAKE_BUILD_TYPE=Release')
         if not re.search(r'^CMAKE_PROJECT_VERSION:STATIC=' + re.escape(version) + r'$', cache, re.M):
             raise ValueError('configured/source version mismatch')
         if ref.startswith('refs/tags/') and ref != f'refs/tags/v{version}':
@@ -105,12 +108,19 @@ def prepare(root, commit, ref, dirty=False):
         payload = package_inventory(package)
         if payload != stage_inventory(root / 'stage'):
             raise ValueError('package payload does not match CMake stage')
+        identity = f'build_type=Release\nprofile=Release\nversion={version}\n'.encode()
+        marker = payload.get('usr/local/share/picdplayer/build-profile', {})
+        if marker.get('type') != 'file' or marker.get('sha256') != digest(identity):
+            raise ValueError('missing or mismatched package build profile')
+        validate_package_profile(package, 'Release')
         metadata = {'schema_version': 1, 'version': version, 'architecture': fields['Architecture'],
                     'package': fields['Package'], 'depends': fields['Depends'], 'source_commit': commit,
                     'runtime_depends': [group.strip() for group in fields['Depends'].split(',')],
                     'source_ref': ref, 'source_dirty': dirty, 'artifact': package.name,
                     'sha256': digest(package.read_bytes()), 'payload': payload,
-                    'validation': ['package_metadata', 'stage_payload_and_modes'],
+                    'build_type': 'Release', 'profile': 'Release',
+                    'validation': ['package_metadata', 'stage_payload_and_modes', 'build_profile',
+                                   'packaged_binary_profiles'],
                     'publication': 'not-approved', 'hardware_verified': False}
         with tempfile.TemporaryDirectory(prefix='.release-', dir=root) as temporary:
             pending = Path(temporary)

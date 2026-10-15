@@ -1,6 +1,70 @@
 # 検証状況と残課題
 
-更新日: 2026-10-14。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-15。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## Debug/Release profile分離（2026-10-15）
+
+開始commitは`3194660f007e9df8da6027b8d7fe74bec47e910e`。作業branchでapplicationの
+build type、Inspector既定、daemon log filterと運用NOTICE、package識別・deploy事前検査を実装した。
+対応表とoverrideは[build](../manual/build.md#application-profile)・[操作](../manual/operations.md#診断profileとoverride)参照。
+WPE SDKのRelease recipe/cacheは変更せず、既存`picdplayer-wpe221-build`のstageとimage identity一致を確認して
+標準export scriptで再利用した。WebKitのconfigure/build/stageは再実行していない。
+
+初回実装は標準Linux/aarch64 containerでDebug/Release各65/65とpackage lifecycleを記録した。
+その後の単独レビューで、生成wrapper試験が未定義CMake変数によりtemplate試験へfallbackしていた点、
+multi-config試験が実generatorを使わず前の不正cacheを保持していた点、archive identity検査不足を修正した。
+以下は修正後にsourceを再buildして取得した結果であり、初回記録を代用していない。
+
+元workspaceのstage/package/candidateを保持するため、sourceと既存SDKを新規一時directoryへコピーした。
+検証場所は`/var/folders/np/xlf6yym55bx3_tsbgtl5znhw0000gn/T/kilo/profile-review-8c8bQy`。
+Ninja追加後のrepository Dockerfileから`docker build -t picdplayer-profile-review-build .`（exit 0）で
+Linux/aarch64 imageを作成した。image IDは`sha256:e8373978b57232d61c7d3bb56ffc77a8a5a039908c94a7f13a298644472cb2a2`。
+このimage名を`PICDPLAYER_BUILD_IMAGE`へ指定し、同じtreeをRelease → Debug → Release →
+RelWithDebInfo → MinSizeRel → Releaseの順に切り替えた。各回の実commandは以下で、全てexit 0。
+
+```sh
+PICDPLAYER_BUILD_TYPE="$profile" bash scripts/build-container.sh
+docker run --rm --network none -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD:/src" -w /src \
+  picdplayer-profile-review-build ctest --test-dir build-container --output-on-failure
+PICDPLAYER_BUILD_TYPE="$profile" bash scripts/test-package-lifecycle.sh
+```
+
+`review-matrix.sh`に実行順と最小構成のconfigure/build/test command、`review-results.txt`にexit code、
+`review-{1..6}-*-{build,tests,package}.log`に各実行結果を保持する。buildは既存SDKを再利用し、WebKitは再compileしていない。
+
+| 対象 | 観測結果 |
+|---|---|
+| Debug | build/stage/CPack成功、CTest 65/65、package install・再install・purge成功 |
+| Release | 同じbuild treeのDebugから切替、build/stage/CPack成功、CTest 65/65、package lifecycle成功 |
+| RelWithDebInfo / MinSizeRel | application全体build/stage/CPack成功、各CTest 65/65、package lifecycle成功。診断profileはRelease |
+| profile mapping | fresh tree未指定・空をReleaseへ確定、4 build typeと双方向切替、不正値（`OFF`・`0`含む）は独立fixtureで検査。実Ninja Multi-Configの拒否理由を確認 |
+| log | 実global loggerのprofile既定・override、invalid/empty値の非転載、NOTICE/WARN/ERROR保持、無効levelのformatting抑制、drop除外、優先eviction、既存92件drop・sink障害を試験 |
+| Inspector | 実launcherの`--diagnostics`で既定・on/off・既存HTTP override・空値・非loopback・不正port・別protocol拒否を試験。実portのlisten確認ではない |
+| kiosk wrapper | CMake生成wrapperの既定と4 build typeのChromium on/off、既存WPE/fallback/restart marker、TCP待受・timeout試験成功 |
+| package/deploy | marker全文/versionとdaemon・WPE・wrapperを共通validatorで照合。旧形式・期待値違い・validator失敗の転送前拒否、install後不整合、失敗時の旧package無効化をmockで試験。実機deployではない |
+| Release candidate | 隔離コピーにGit metadataがないため、networkなしcontainerで`python3 scripts/release-artifact.py --commit 3194660f007e9df8da6027b8d7fe74bec47e910e --ref refs/heads/feature/debug-release-profiles --dirty`を実行（exit 0）。stage/payload/mode/markerと実binaryが一致。manifestは`Release`、`source_dirty=true`、`publication=not-approved`、`hardware_verified=false` |
+
+INFO出力で故障注入・readinessを確認する既存試験はCTestから明示的に`PICDPLAYER_LOG_LEVEL=info`を指定し、
+元の試験経路を維持した。Release既定の抑制は別のdaemon/global logger試験で確認する。
+同じSDKを使用するRelease/Debugのbuild/test/package lifecycleをCIにも追加したが、GitHub上のCI実行は未確認。
+Release最小構成（metadata/API/systemd/WPEをOFF）もconfigure/build成功、CTest 37/37（exit 0）。
+初回の36/37失敗は`player_daemon`がAPI無効でも`--api-port`を渡すfixtureの問題だった。
+`git show 3194660:tests/player_daemon.py`で同じ経路を確認し、今回の回帰ではないと判定した。
+API flagを試験へ渡してAPI専用部分だけを条件化し、daemonのstdin EOF無視・SIGTERM終了・interactive終了は
+API無効でも検証する。試験全体のskip/削除は行っていない。
+package単体試験26件は実deb内のshell fixtureを使い、正常4 profile・marker欠損/矛盾/重複・
+stageと一致する古いbinary/wrapperの拒否を確認した。shell fixtureと実application binaryの照合は別の証拠である。
+実binaryの混在は別treeのNinjaでDebugをbuildし、Releaseへconfigureだけ切り替えてCPackすると再現した。
+共通validatorはこの実archiveをexit 1で拒否した（`review-mixed-ninja.log`、検証driverはexit 0）。
+さらに同じ実archiveをread-only mountしたnetworkなしcontainerからvalidatorを呼び、例外理由が
+`package binary build profile mismatch`であることをassertしてexit 0を確認した。単なる起動失敗を成功扱いにしていない。
+先にUnix Makefilesで同じ操作を試した際はCPackのpreinstallが再buildし混在せず、validatorが正常受理した。
+この初回再現driverは「拒否される」という仮定と異なりexit 1だった（`review-mixed.log`）。
+標準build scriptの正常経路で混在したという意味ではなく、レビュー時の発生条件をgenerator別に訂正する。
+従来sourceのmissing-field-initializers warningは残り、今回対象外の修正は行っていない。
+
+実機操作・deploy・service再起動は行っていない。Debug/Release切替後の実port、Inspector接続/PNG、
+HDMI/DRM、音声、CEC、metadata・背景の実表示、長期再生は未確認であり、#219の完了根拠にしない。
 
 ## WPEスクリーンショットCLIと表示確認（2026-10-14 23:04 UTC）
 
@@ -15,8 +79,8 @@ MacのSSH port19223は待受中だが、Piの9223は接続拒否・専用runtime
 agentは読み取りだけで原因を確認し、Inspectorの有効化手順を提示した。23:37 UTCに利用者から
 「一旦動作確認はできました」と報告を得た。これは新CLIの基本動作の利用者確認であり、
 agent自身が新しいPNG・寸法・復元状態を再取得した結果とは区別する。
-Debug/Release profile分離とDebugでの標準remote debug、Releaseでのlog抑制は次セッションへ延期し、
-今回の変更ではbuild profile・logger既定・Inspectorの標準起動設定を変更しない。
+このスクリーンショットCLI変更時点ではDebug/Release profile分離を延期し、
+build profile・logger既定・Inspectorの標準起動設定は変更していなかった。後続実装は上節を参照する。
 macOSで`python3 tests/wpe_inspector_test.py`の16件と`python3 tests/measure_kiosk_cdp_test.py`の12件、
 合計28件が成功した。同じ2本をnetworkなしLinux/aarch64 containerで実行して28件成功した。
 新規PNG/0600、既存file・symlinkの非上書き、不正data URL/base64/PNG/viewport、8 MiB上限、

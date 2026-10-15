@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <ctime>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
@@ -12,6 +13,7 @@ const char* level_name(LogLevel level) {
     switch (level) {
     case LogLevel::debug: return "DEBUG";
     case LogLevel::info: return "INFO";
+    case LogLevel::notice: return "NOTICE";
     case LogLevel::warning: return "WARN";
     case LogLevel::error: return "ERROR";
     }
@@ -22,6 +24,33 @@ bool low_priority(LogLevel level) {
     return level == LogLevel::debug || level == LogLevel::info;
 }
 
+struct LogConfig {
+    LogLevel minimum;
+    bool invalid;
+};
+
+const LogConfig& log_config() {
+    static const LogConfig config = [] {
+#if PICDPLAYER_DEBUG_DIAGNOSTICS
+        const auto fallback = LogLevel::debug;
+#else
+        const auto fallback = LogLevel::warning;
+#endif
+        const char* value = std::getenv("PICDPLAYER_LOG_LEVEL");
+        if (!value) return LogConfig{fallback, false};
+        const std::string_view text(value);
+        if (text == "debug") return LogConfig{LogLevel::debug, false};
+        if (text == "info") return LogConfig{LogLevel::info, false};
+        if (text == "warning") return LogConfig{LogLevel::warning, false};
+        return LogConfig{fallback, true};
+    }();
+    return config;
+}
+
+bool enabled(LogLevel level, LogLevel minimum) {
+    return !low_priority(level) || level >= minimum;
+}
+
 std::size_t checked_capacity(std::size_t capacity) {
     if (capacity == 0) throw std::invalid_argument("logger capacity must be positive");
     return capacity;
@@ -29,13 +58,15 @@ std::size_t checked_capacity(std::size_t capacity) {
 }
 
 AsyncLogger::AsyncLogger(std::ostream& normal_sink, std::ostream& error_sink,
-                         std::size_t capacity)
+                         std::size_t capacity, LogLevel minimum)
     : normal_sink_(normal_sink), error_sink_(error_sink), capacity_(checked_capacity(capacity)),
+      minimum_(minimum),
       started_(std::chrono::steady_clock::now()), thread_([this] { run(); }) {}
 
 AsyncLogger::~AsyncLogger() { shutdown(); }
 
 void AsyncLogger::submit(LogLevel level, std::string component, std::string message) noexcept {
+    if (!enabled(level, minimum_)) return;
     try {
         Record record{std::chrono::system_clock::now(), std::chrono::steady_clock::now(),
                       level, std::move(component), std::move(message)};
@@ -114,7 +145,8 @@ void AsyncLogger::write(const Record& record) noexcept {
         gmtime_r(&time, &utc);
         const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             record.monotonic_time - started_).count();
-        auto& sink = low_priority(record.level) ? normal_sink_ : error_sink_;
+        auto& sink = record.level == LogLevel::warning || record.level == LogLevel::error
+            ? error_sink_ : normal_sink_;
         sink << std::put_time(&utc, "%Y-%m-%dT%H:%M:%S") << '.'
              << std::setfill('0') << std::setw(3) << milliseconds.count()
              << "Z +" << elapsed_ms << "ms " << level_name(record.level) << ' '
@@ -125,7 +157,7 @@ void AsyncLogger::write(const Record& record) noexcept {
 }
 
 LogLine::LogLine(LogLevel level, std::string_view component)
-    : level_(level), component_(component) {}
+    : level_(level), component_(component), active_(log_enabled(level)) {}
 
 LogLine::LogLine(LogLine&& other) noexcept
     : level_(other.level_), component_(std::move(other.component_)),
@@ -140,12 +172,20 @@ LogLine::~LogLine() noexcept {
 }
 
 AsyncLogger& global_logger() {
-    static AsyncLogger logger(std::cout, std::cerr);
+    static AsyncLogger logger(std::cout, std::cerr, 512, log_config().minimum);
+    static const bool reported = [&] {
+        if (log_config().invalid)
+            logger.submit(LogLevel::warning, "logger", "invalid PICDPLAYER_LOG_LEVEL; using build default");
+        return true;
+    }();
+    (void)reported;
     return logger;
 }
 
+bool log_enabled(LogLevel level) { return enabled(level, log_config().minimum); }
 void shutdown_logger() noexcept { global_logger().shutdown(); }
 LogLine log_debug(std::string_view component) { return {LogLevel::debug, component}; }
 LogLine log_info(std::string_view component) { return {LogLevel::info, component}; }
+LogLine log_notice(std::string_view component) { return {LogLevel::notice, component}; }
 LogLine log_warning(std::string_view component) { return {LogLevel::warning, component}; }
 LogLine log_error(std::string_view component) { return {LogLevel::error, component}; }

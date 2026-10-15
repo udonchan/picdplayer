@@ -4,11 +4,12 @@ const net = require('node:net');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const wrapper = path.join(__dirname, '../systemd/picdplayer-kiosk.sh.in');
-const run = (port) => new Promise((resolve, reject) => {
+const run = (port, inspector = 'on') => new Promise((resolve, reject) => {
   const child = spawn('/bin/bash', [wrapper], {
     env: { ...process.env, XDG_RUNTIME_DIR: '/tmp', XDG_STATE_HOME: '/tmp',
       PICDPLAYER_CAGE: '/bin/echo', PICDPLAYER_CHROMIUM: '/bin/true',
       PICDPLAYER_KIOSK_RUNTIME: 'chromium',
+      PICDPLAYER_INSPECTOR: inspector,
       PICDPLAYER_API_WAIT_HOST: '127.0.0.1', PICDPLAYER_API_WAIT_PORT: String(port),
       PICDPLAYER_API_WAIT_TIMEOUT_SECONDS: '1' },
   });
@@ -23,7 +24,12 @@ const run = (port) => new Promise((resolve, reject) => {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
   let success;
-  try { success = await run(port); }
+  try {
+    success = await run(port);
+    const disabled = await run(port, 'off');
+    assert.equal(disabled.code, 0, disabled.output);
+    assert(!disabled.output.includes('--remote-debugging-'));
+  }
   finally { await new Promise((resolve) => server.close(resolve)); }
   assert.equal(success.code, 0, success.output);
   const markers = [...success.output.matchAll(/event=(\w+) wrapper_elapsed_ms=(\d+)/g)];

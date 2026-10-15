@@ -7,9 +7,11 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 spec = importlib.util.spec_from_file_location(
     'release_artifact', Path(__file__).resolve().parents[1] / 'scripts/release-artifact.py')
 release = importlib.util.module_from_spec(spec)
@@ -25,13 +27,23 @@ class ReleaseArtifactTest(unittest.TestCase):
         (self.root / 'CMakeLists.txt').write_text('project(PiCDPlayer VERSION 0.1.0 LANGUAGES CXX)\n')
         (self.root / 'build-container').mkdir()
         (self.root / 'build-container/CMakeCache.txt').write_text(
-            'CMAKE_PROJECT_VERSION:STATIC=0.1.0\nENABLE_PARANOIA:BOOL=OFF\n')
+            'CMAKE_PROJECT_VERSION:STATIC=0.1.0\nENABLE_PARANOIA:BOOL=OFF\nCMAKE_BUILD_TYPE:STRING=Release\n')
         self.stage = self.root / 'stage'
         (self.stage / 'usr/local/bin').mkdir(parents=True)
         self.binary = self.stage / 'usr/local/bin/cdplayerd'
-        self.binary.write_bytes(b'fixture executable')
+        self.binary.write_text('#!/bin/sh\nprintf "build_type=Release profile=Release\\n"\n')
         self.binary.chmod(0o755)
         (self.stage / 'usr/local/bin/player').symlink_to('cdplayerd')
+        (self.stage / 'usr/local/share/picdplayer').mkdir(parents=True)
+        (self.stage / 'usr/local/share/picdplayer/build-profile').write_text(
+            'build_type=Release\nprofile=Release\nversion=0.1.0\n')
+        libexec = self.stage / 'usr/local/libexec'
+        libexec.mkdir()
+        self.wpe = libexec / 'picdplayer-wpe'
+        self.wpe.write_text('#!/bin/sh\nprintf "wpe_profile: build_type=Release profile=Release inspector=off\\n"\n')
+        self.wpe.chmod(0o755)
+        self.wrapper = libexec / 'picdplayer-kiosk'
+        self.wrapper.write_text("#!/bin/sh\necho 'kiosk_profile: build_type=Release diagnostics=0'\n")
         self.packages = self.root / 'package-container'
         self.packages.mkdir()
         self.package = self.packages / 'picdplayer_0.1.0_arm64.deb'
@@ -80,6 +92,21 @@ class ReleaseArtifactTest(unittest.TestCase):
     def test_tag_mismatch(self):
         self.reject(ref='refs/tags/v0.2.0')
 
+    def test_debug_configuration_rejected(self):
+        path = self.root / 'build-container/CMakeCache.txt'
+        path.write_text(path.read_text().replace('CMAKE_BUILD_TYPE:STRING=Release',
+                                                'CMAKE_BUILD_TYPE:STRING=Debug'))
+        self.reject()
+
+    def test_old_or_mixed_profile_rejected(self):
+        marker = self.stage / 'usr/local/share/picdplayer/build-profile'
+        marker.unlink()
+        self.make_package()
+        self.reject()
+        marker.write_text('build_type=Debug\nprofile=Debug\nversion=0.1.0\n')
+        self.make_package()
+        self.reject()
+
     def test_runtime_depends_preserves_alternative_groups(self):
         depends = 'libc6 (>= 2.38) | musl, libgcc-s1 (>= 3.0)'
         self.make_package(depends=depends)
@@ -87,6 +114,51 @@ class ReleaseArtifactTest(unittest.TestCase):
         self.assertEqual(metadata['depends'], depends)
         self.assertEqual(metadata['runtime_depends'],
                          ['libc6 (>= 2.38) | musl', 'libgcc-s1 (>= 3.0)'])
+
+    def test_package_marker_requires_complete_consistent_identity(self):
+        marker = self.stage / 'usr/local/share/picdplayer/build-profile'
+        valid = marker.read_text()
+        for invalid in ('build_type=Release\n',
+                        valid.replace('profile=Release', 'profile=Debug'),
+                        valid.replace('version=0.1.0', 'version=0.2.0'),
+                        valid + 'profile=Release\n', valid + 'unknown=value\n'):
+            with self.subTest(marker=invalid):
+                marker.write_text(invalid)
+                self.make_package()
+                with self.assertRaisesRegex(ValueError, 'package build profile'):
+                    release.validate_package_profile(self.package, 'Release')
+        marker.write_text(valid)
+        self.make_package()
+        self.assertEqual(release.validate_package_profile(self.package, 'Release'), valid)
+
+    def test_stale_binary_and_wrapper_rejected_even_when_stage_matches(self):
+        for path in (self.binary, self.wpe, self.wrapper):
+            original = path.read_text()
+            with self.subTest(path=path.name):
+                path.write_text(original.replace('Release', 'Debug'))
+                self.make_package()
+                with self.assertRaisesRegex(ValueError, 'package (binary|wrapper) build profile mismatch'):
+                    release.prepare(self.root, COMMIT, 'refs/heads/test')
+            path.write_text(original)
+        self.make_package()
+        release.prepare(self.root, COMMIT, 'refs/heads/test')
+
+    def test_packaged_identity_all_build_types(self):
+        paths = (self.binary, self.wpe, self.wrapper,
+                 self.stage / 'usr/local/share/picdplayer/build-profile')
+        originals = [path.read_text() for path in paths]
+        for build_type in ('Debug', 'Release', 'RelWithDebInfo', 'MinSizeRel'):
+            for path, text in zip(paths, originals):
+                text = text.replace('build_type=Release', f'build_type={build_type}')
+                if build_type == 'Debug':
+                    text = text.replace('profile=Release', 'profile=Debug').replace('diagnostics=0', 'diagnostics=1')
+                path.write_text(text)
+            self.make_package()
+            self.assertIn(f'build_type={build_type}\n',
+                          release.validate_package_profile(self.package, build_type))
+        for path, text in zip(paths, originals):
+            path.write_text(text)
+
 
     def test_invalid_tag(self):
         self.reject(ref='refs/tags/0.1.0')

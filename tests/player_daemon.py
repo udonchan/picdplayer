@@ -15,6 +15,7 @@ import urllib.request
 
 binary = sys.argv[1]
 metadata_enabled = sys.argv[2] == "1"
+api_enabled = sys.argv[3] == "1"
 os.environ.pop("FANART_TV_API_KEY", None)
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -78,7 +79,7 @@ base = [
 
 port = free_port()
 persistent = subprocess.Popen(
-    [*base, "--api-port", str(port)],
+    [*base, *(["--api-port", str(port)] if api_enabled else [])],
     stdin=subprocess.DEVNULL,
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE,
@@ -91,7 +92,8 @@ try:
     assert ready, "player did not report startup"
     startup = persistent.stdout.readline() + persistent.stdout.readline()
     assert "stdin_commands=disabled" in startup, startup
-    verify_background_api(port)
+    if api_enabled:
+        verify_background_api(port)
     time.sleep(0.3)
     assert persistent.poll() is None, persistent.communicate(timeout=1)
     persistent.send_signal(signal.SIGTERM)
@@ -105,7 +107,7 @@ finally:
         persistent.kill()
         persistent.wait()
 
-if metadata_enabled:
+if metadata_enabled and api_enabled:
     # Only the native daemon receives the fixture secret; public responses and
     # assets must never contain it, even when a malformed key disables fetching.
     for secret, available in [("fixture-environment-secret-229", True),

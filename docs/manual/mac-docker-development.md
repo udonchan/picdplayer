@@ -48,13 +48,14 @@ Dockerを利用できる状態でrepository rootから次を実行します。
 docker build -t picdplayer-build .
 ```
 
-`picdplayer-build` imageには、CMake、C++ compiler、ALSAやmetadata/API機能、任意の
+`picdplayer-build` imageには、CMake、Ninja、C++ compiler、ALSAやmetadata/API機能、任意の
 libcdio-paranoia readerに必要なdevelopment packageが含まれています。`BUILD_TESTING=ON`（既定）の自動試験用に
 Node.jsとPython 3も含みます。`BUILD_TESTING=ON`ではPython 3が必須で、見つからない場合は
 CMake configure時に失敗します。どちらもPiのdaemon/kiosk実行時には不要で、
 ハードウェアを使わないJavaScript・Python試験のために使用します。
 
-Dockerfileを変更した場合は、build imageを再作成してください。
+Dockerfileを変更した場合は、build imageを再作成してください。profile試験の実multi-config拒否確認に
+Ninjaを追加したため、既存imageも更新が必要です。WPE SDK image/recipeの更新ではありません。
 
 現在この手順を確認しているのはApple Silicon Macです。Intel Macやx86-64 Linux hostを含む
 異なるarchitectureからのcross buildは、現時点では標準の開発手順として検証していません。
@@ -77,8 +78,14 @@ Dockerfileを変更した場合は、build imageを再作成してください�
 
 主なCMake設定は次の通りです。
 
+applicationのbuild typeは`PICDPLAYER_BUILD_TYPE`（既定`Release`）で選択する。
+`Debug` / `RelWithDebInfo` / `MinSizeRel`も選択できる。診断profile・Inspector・ログの対応と
+旧artifactを拒否するdeploy手順は[Application Profile](build.md#application-profile)参照。
+WPE SDKのRelease recipe/cacheは共用し、applicationのDebug選択ではWebKitを再compileしない。
+CIは同じSDKでReleaseとDebugのbuild/test/package lifecycleを順に実行し、候補artifactはReleaseだけ保持する。
+
 ```text
-CMAKE_BUILD_TYPE=Release
+CMAKE_BUILD_TYPE=Release (PICDPLAYER_BUILD_TYPEで変更可能)
 ENABLE_METADATA=ON
 ENABLE_API=ON
 INSTALL_SYSTEMD_UNIT=ON
@@ -316,6 +323,9 @@ packageを生成した後、次で同じDebian arm64 build imageの使い捨てc
 ./scripts/test-package-lifecycle.sh
 ```
 
+Debug等のpackageを検証するときは、build時と同じ`PICDPLAYER_BUILD_TYPE`を指定する（既定Release）。
+先にarchiveのmarkerと実binary/wrapperのprofileをnetworkなしcontainerで照合する。
+
 この検証は旧package所有fileが更新時に削除されること、packageが所有しないfileが保持されること、
 purge後にpackage所有fileが残らないことを確認する。Piへ接続せず、host filesystemも変更しない。
 CIも`build-container.sh`の後に同じscriptを実行する。
@@ -388,6 +398,8 @@ tagのpushや公開処理は追加していない。PRではcheckoutされたmer
 
 検査はpackageが一つのregular fileであること、`Package=picdplayer`、`Architecture=arm64`、
 非空のruntime `Depends`、stageとpayloadのfile一覧・内容・mode・symlink先の一致を要求する。
+加えてRelease marker全文と実archive内daemon/WPE binary・wrapperのprofileを照合する。
+identity CLIは秘密情報を引き継がない環境で実行する。信頼するローカル成果物だけが対象である。
 install一覧はCMake、runtime依存はCPack/shlibdepsを正本とし、workflowに一覧を複製しない。
 manifestには版、commit、ref、dirty状態、package名、Depends、SHA256、payloadを記録する。
 `depends`はDebian fieldの原文、`runtime_depends`は同じ値から導出した依存groupの配列である。

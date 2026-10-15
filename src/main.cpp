@@ -23,6 +23,11 @@
 #include <unistd.h>
 
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string_view(argv[1]) == "--build-info") {
+        std::cout << "build_type=" << PICDPLAYER_BUILD_TYPE
+                  << " profile=" << (PICDPLAYER_DEBUG_DIAGNOSTICS ? "Debug" : "Release") << '\n';
+        return 0;
+    }
     bool cec_enabled = true;
     bool cec_diagnostics = false;
     bool interactive = false;
@@ -334,7 +339,8 @@ int main(int argc, char** argv) {
             throw std::system_error(errno, std::generic_category(), "sigprocmask");
         const int fd = signalfd(-1, &mask, SFD_CLOEXEC);
         if (fd < 0) throw std::system_error(errno, std::generic_category(), "signalfd");
-        log_info("cdplayerd") << "started";
+        log_notice("cdplayerd") << "started build_type=" << PICDPLAYER_BUILD_TYPE
+                               << " profile=" << (PICDPLAYER_DEBUG_DIAGNOSTICS ? "Debug" : "Release");
         CecDevice cec(device, cec_diagnostics);
         pollfd polls[]{{fd, POLLIN, 0}, {-1, POLLIN, 0}};
         while (true) {
@@ -358,7 +364,7 @@ int main(int argc, char** argv) {
         const int error = errno;
         close(fd);
         if (count != sizeof(info)) throw std::system_error(error, std::generic_category(), "read signal");
-        log_info("cdplayerd") << "shutdown signal=" << info.ssi_signo;
+        log_notice("cdplayerd") << "shutdown signal=" << info.ssi_signo;
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "cdplayerd: " << error.what() << '\n';

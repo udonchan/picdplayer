@@ -6,6 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         cmake \
+        ninja-build \
         pkg-config \
         libasound2-dev \
         libdiscid-dev \
