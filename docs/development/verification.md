@@ -76,8 +76,53 @@ stageと一致する古いbinary/wrapperの拒否を確認した。shell fixture
 標準build scriptの正常経路で混在したという意味ではなく、レビュー時の発生条件をgenerator別に訂正する。
 従来sourceのmissing-field-initializers warningは残り、今回対象外の修正は行っていない。
 
-実機操作・deploy・service再起動は行っていない。Debug/Release切替後の実port、Inspector接続/PNG、
-HDMI/DRM、音声、CEC、metadata・背景の実表示、長期再生は未確認であり、#219の完了根拠にしない。
+上記ローカル/CI検証時点では実機操作は行っていなかった。後続の承認済み実機確認は次節に分離する。
+
+### 実機DebugからReleaseへの切替（2026-10-15 UTC）
+
+利用者が`picdplayer-pi`へのDebug→Release deploy、再生中断、稼働中daemon/kioskの再起動を明示承認した。
+sourceは`git archive 3aa4a48c7cffda8f00a6a6b1104a3d9a6c945e97`から新規隔離directoryへ展開し、
+元workspaceのstage/package/candidateは保持した。検証場所は
+`/var/folders/np/xlf6yym55bx3_tsbgtl5znhw0000gn/T/kilo/profile-hardware-y1rFx4`。
+`PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build`で標準build script、CTest、package lifecycleを
+Debug/Release各回に実行し、両build/stage/CPack・各65/65・lifecycleは全てexit 0。
+実commandは同directoryの`build-verify.sh`、logは`hardware-{Debug,Release}-{build,tests,package}.log`。
+
+接続先はhostname `raspberrypi`、aarch64。開始時両serviceはactive、kiosk MainPIDはWPE、
+playerはdisc track 1のSTOPPEDで、背景はsession ONだった。既存remote packageはMacの隔離directoryへ
+`predeploy-package.deb`として保全してから、標準deploy scriptの固定remote packageを更新した。
+各profileの実deploy commandは以下で、どちらもexit 0。両serviceはactive→active、
+実install marker全文・両binary identity検査とMainPIDのWPE確認に成功した。
+
+```sh
+PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build PICDPLAYER_BUILD_TYPE=Debug \
+  PICDPLAYER_TARGET=picdplayer-pi bash scripts/deploy.sh
+PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build PICDPLAYER_BUILD_TYPE=Release \
+  PICDPLAYER_TARGET=picdplayer-pi bash scripts/deploy.sh
+```
+
+| 実機観測 | 結果 |
+|---|---|
+| Debug | marker/binaryがDebug。`ss -ltnH`で`127.0.0.1:9223`のみInspector待受。daemon current invocationのjournalはNOTICE 4・INFO 16件 |
+| Debug Inspector | 専用loopback SSH転送を通じて`inspect-wpe.py --port 39223 --target-url http://127.0.0.1:8080/player --screenshot PATH`がexit 0。title PiCDPlayer、ready complete、connection connected、1920×1080 PNG 362512 bytes取得 |
+| Release | marker/binaryがRelease。APIは`127.0.0.1:8080`待受、9222/9223待受なし。稼働中WPEはMainPID 110101、daemonは110076 |
+| Release Inspector拒否 | 同じ専用転送経由のInspector toolはexit 1（connection reset）、SSH側はremote connection refused。直接のport一覧でも待受なしを確認 |
+| Release log | current invocationのdaemon journalはNOTICE 4件、DEBUG/INFO 0件。起動profile、API待受、CEC opened・existing registration reusedを固定event抽出で確認。WARN/ERRORの新規障害注入は行っていない |
+| API/WS | Debug/ReleaseともGET state成功、STOPPED・track 1。Releaseの`/api/events`は101 handshake/accept検証と5104 bytesのJSON snapshot受信成功、read objectあり。metadataの新規lookup成功を意味しない |
+| 背景 | restart後は既存仕様どおりsession既定OFF。requested/effective=false、available=trueを両profileで確認。keyは取得・表示せず、背景ONへの変更は行わなかった |
+
+PNGは隔離directoryの`debug-viewport.png`（0600）だけに保持し、Git/PR/配布物へ追加していない。
+snapshotはWebKitのrendered pageであり、TV/DRM scanout・物理表示を確認した証拠ではない。
+確認可能な既存EnvironmentFile/drop-inからInspector/log levelだけを抽出し、明示overrideは検出しなかった。
+`/proc/PID/environ`は権限不足で読めず昇格していない。全環境・key・raw journalを成果物へ保存していない。
+kiosk invocationで読めたjournalは1件だけでprofile行を取得できなかったため、実port/Inspectorとinstalled identityを
+観測根拠とし、kiosk logの全量確認済みとは扱わない。
+最初のSSH転送は既存ControlMasterへ追加されてprocessが終了したため専用ControlPathなしの転送へ切り替え、
+最後に今回追加した29223転送だけを`ssh -O cancel`で解除し、専用39223のtracked processも停止した。
+既存SSH masterや設定は終了・削除していない。既存drop-in/EnvironmentFileは一切変更していない。
+
+最終状態はReleaseで両service active、WPE主runtime、Inspector待受なし。音声試聴、実CD読出し・再生、
+物理CEC入力、metadata再取得、背景ONの実表示、cold boot、長期再生は今回未検証であり、#219はOpenを維持する。
 
 ## WPEスクリーンショットCLIと表示確認（2026-10-14 23:04 UTC）
 
