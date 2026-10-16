@@ -582,6 +582,141 @@ track末尾で結果が出てもよい。seek/skipや未解決・代替PCMによ
 NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始しない。
 外部照合失敗でも再生を止めず、履歴のlocal evidenceを上書きしない。
 
+### Complete PCM Input
+
+2026-10-16、#160は設計だけを進めるものとして、PCM非保存のincremental方式、明示開始、
+通常再生との同時取得なし、全域coverageの厳密判定を利用者が承認した。
+以下は未実装の取得契約であり、current snapshot、通常起動、reader、providerを変更するものではない。
+COMPLETE等の語もこの将来jobの概念で、既存`read.activity=COMPLETE`の意味を変更しない。
+#13はClosedだがprovider/checksum/transportは未実装である。PR #161は制約整理であり、機能完成の根拠にしない。
+
+#### 対象と完全性
+
+取得jobは有効なaudio-only TOCの全track番号・開始LBA・leadoutと、session、disc generation、
+専用job識別子、capture readerのopen incarnation、read policy revision、offset値/source、
+canonical profileとconsumerのalgorithm/versionを開始前に固定する。再生workerのstreamとは別の識別範囲であり、
+reader-open incarnationを物理deviceの交換/reset検出と同一視しない。
+
+最初のaudio track開始を`B`、leadoutを`E`（CD frame座標）とし、全域は半開区間`[B,E)`とする。
+first trackが1でない場合もTOCどおりに扱い、`B`より前のpregap/lead-inやleadout以降、mixed-modeは対象にしない。
+各trackはTOCの連続した区間であり、全域の長さは`(E-B)*588` stereo sample frame、byte数は`(E-B)*2352`である。
+
+COMPLETEは以下をすべて満たしてmain ownerが確定した場合だけ成立する。
+
+- 専用jobのreaderが、固定した全論理範囲を順番に取得し、完全な採用PCMだけをconsumerへ渡した。
+- 各blockの開始位置が直前の確定末尾に一致し、各trackとdiscの確定末尾が正確にTOC末尾へ達した。
+  retry/overlap/offset用guard sectorを重複計上せず、byte総数だけの一致をcoverageの証明にしない。
+- 全blockのconsumer処理と最後のfinalizeが成功し、取消・失敗・期限切れ・容量超過がない。
+  consumer失敗後は部分的なdigestを捨て、同じstateへ再送や続きを継ぎ足さない。
+- 完了通知の適用時にも開始時の有効条件が一致し、取消要求が先に処理されていない。
+  最後のI/O後にもTOCを再検証し、reader解放まで確認してから確定する。
+
+連続prefixとtrack末尾の台帳を専用jobで保持し、再生の128件履歴やdisc mapから再構成しない。
+欠落・重複・順序逆転・位置不一致は失敗として打ち切り、seekで穴を埋めて同じjobを再開しない。
+既存のread policy内で回復して完全採用に至ったblockは扱えるが、retryやUNCERTAIN等の根拠を消さない。
+COMPLETEは取得範囲とconsumer処理の完全性だけで、全PCMがCLEAN、物理再読、校正済み、原盤一致という意味ではない。
+
+未完了は同じ有効条件のjobが取消・read失敗・期限等で完走しなかったこと、無効は世代やprofile等が変わり
+当該結果を現在の入力へ適用できないことをいう。未完了では最後に確定した全blockのprefixだけを下限として示し、
+部分digestを全域checksumとして公開しない。開始拒否はjobの完走失敗と分け、drive I/Oを発行しない。
+過去の完了記録を保持する場合も、条件変更後の現物discへ再関連付けしてはならない。
+
+#### Offsetとcanonical PCM
+
+初期のcanonical profileは44.1 kHz、signed 16-bit、stereo、L/R交互、2の補数、little-endian、
+headerなしのbyte列とする。1 stereo sample frameは4 bytesで、host native memoryをそのままhashしない。
+gain、resample、de-emphasis、補間、zero padding、track間の追加無音は行わない。
+例えばL=`0x1234`、R=`-2`は`34 12 FE FF`、L=`-32768`、R=`32767`は`00 80 FF 7F`となる。
+track境界を跨いでも同じ論理順序で処理し、consumerが必要とするtrack別stateを境界で切り替える。
+
+正規化は#10の`logical p <- physical p + o`に従う。初期profileは全`[B,E)`を要求し、
+offset未指定を0とは推定しない。明示0は全域を取得できても、物理校正済みとは扱わない。
+非0 offsetでは現行の安全なaudio範囲外のsampleが必要になるため、端不足を検出して開始前に拒否する。
+#10の再生windowだけを最後まで読んでもCOMPLETEにせず、alignment除外・不能区間は全域不足として扱う。
+providerが別の端除外やoffset探索を要求する場合も、暗黙にtargetを短縮せず別profileの設計承認を必要とする。
+
+consumerは入力profile、algorithm/version、必要state量、処理単位・上限、既知vectorを持つ既知の実装だけを使う。
+consumerはcapture worker上の有界なCPU処理とし、network/disk I/Oを行わない。chunkの正常復帰で
+全byteの消費を確認し、block全chunkの成功後にだけcoverageを進める。例外後のconsumer stateは再利用しない。
+providerやchecksum algorithmは今回採用しない。未確定/非対応consumerでfull-disc readだけを先に始めない。
+canonical byte列のprofile一致とprovider protocolの適合性は別で、例えばこのbyte列をCTDBへそのまま送れるとは主張しない。
+AccurateRipへの無許可アクセス、submission、修復、PCM uploadは行わない。
+
+#### 取得・取消とI/O排他
+
+初期版は一つの明示jobだけを受け付け、PLAYING/PAUSED中は開始しない。STOPPED、ALSA出力停止、
+playback queueの取消とreader解放、audio-ready TOC、有効なprofile/consumer、全域適格性を開始前に確認する。
+通常起動、disc挿入、通常再生、外部照合失敗から自動開始・再取得しない。
+専用workerがreaderのopen/seek/read/closeを所有し、既存DriveAccessCoordinatorでmedia/probeも含め直列化する。
+単なるmutexは公平性や優先割込みを提供しないため、main ownerが新規capture I/Oの発行を明示的に止める。
+
+| 事象 | 初期版の動作 |
+|---|---|
+| 通常再生中/出力未解放で開始要求 | 開始拒否。通常再生をreset・pause・中断してcaptureを開始しない |
+| stop/取得取消 | jobを即座に取消扱いにし、新規capture I/Oとconsumer入力を止める。reader解放は別途待つ |
+| play/seek/track/eject要求と競合 | captureを取消し、解放前の操作は未実行として理由を返す。main loopで待たず、自動予約もしない。解放後の再操作で通常経路へ進む |
+| read/consumerの失敗・timeout | jobを未完了として打ち切り、checksum候補を捨てる。既存STOP方針以外のPCMを生成しない |
+| disc/reader/policy/profileの変更 | jobを無効化。古いjobの完了通知や部分consumer stateを新条件へ適用しない |
+| USB消失/reset/電源異常を観測 | jobを無効化して追加readを止める。自動再試行せず、物理系の確認へ分離する |
+| 最後のblock完了と取消が競合 | main ownerの確定順で判定し、取消が先ならCOMPLETEを確定しない |
+
+取消・期限は進行中kernel ioctlを強制中断しない。main loopは取消済み/解放待ちを区別し、
+readerが戻らない間に「解放済み」として再open・再生・ejectを発行しない。遅延結果はjob tokenで捨てる。
+取消でtokenを失効させても解放待ちは占有枠を維持し、旧readerを残したまま新jobを開始しない。
+正常なcapture終端はreaderとconsumerの終了であり、ALSA再生やdrain完了を意味しない。
+通常再生への非干渉とは、job不在では取得経路が動かず、競合時もmain loopをblocking waitさせないことをいう。
+明示取得中に即時再生できる保証ではない。物理I/Oの解放待ちと再操作の必要性を隠さない。
+
+#### Memory・期限・結果の有効条件
+
+全disc PCMのvector/file、内部spool、WAV、disk cache、途中再開checkpointは作らない。
+consumerへ順次渡したPCMは不要になり次第破棄し、再起動時はjob・部分digest・完了manifestも失効させる。
+次は初期設計の上限であり、現在のCLI/APIの値ではない。将来拡張する場合は別途レビューする。
+
+| 対象 | 初期設計上限と拒否条件 |
+|---|---|
+| 同時取得/結果 | active job 1件、直近terminal manifest 1件。manifestのエンコード済み表現は最大64 KiB、永続化なし。native保持量も別途合計memoryへ含める |
+| 新規所有memory | PCM候補・scratch・consumer state・台帳・manifestを合計8 MiB以内。実装時にallocation/high-waterを検証。thread stackと既存backend/library内部は別見積りで、process RSSの上限とは呼ばない |
+| consumer state/canonical scratch | stateは宣言量1 MiB以内、canonical変換は最大16 KiB chunk。上限・処理量を宣言できないconsumerは開始拒否 |
+| read構成 | singleは15 CD frame、repeatはregion最大75、先行overlap最大75、候補最大8。固定した有効policyが上限外なら開始拒否し、黙ってpolicyを書き換えない |
+| job deadline | 操作者が有限時間を明示し、最大3時間。monotonic clockで全取得・finalizeを含め、再試行ごとにresetしない。既定の自動実行時間は設けない |
+| call deadline | 既存effective read予算と残job時間の短い方を監視。超過時はjobを失効させ、ioctlは返るまで解放待ちとする |
+
+候補8・region75・overlap75の物理入力は1回最大151 CD frameである。候補8+scratch2のPCM、
+16 KiB変換chunk、1 MiB consumer、128 KiB台帳/結果を数える例は4,747,552 bytesで、8 MiB内に収まる。
+これは実装のheap測定ではない。vector capacity/一時copyを含め上限内に保つ責任は実装側にあり、
+不明なlibrary内部のmemoryまで有界と推測しない。diskを使わないことを理由にallocation failureを無視しない。
+
+結果は同じsession/job/TOC/観測世代/profileに対してだけ有効。新jobや条件変更では古いmanifestを適用せず、
+破損・不正長・不明version・consumer失敗は無効とする。完了結果にも範囲・offsetの根拠・異常観測を残す。
+同じTOCやvendor/modelだけで物理同一性を保証しない。未観測の交換/resetは現行generationでは検出できない。
+本契約の完了は観測された有効条件に対する入力完全性であり、現物discの同一性証明ではない。
+production統合では#88の消失/reset/同一path再接続の失効成果と結び付け、古いcapture結果の自動再関連付けを禁止する。
+
+#### 後続の独立実装単位
+
+| 単位 | 単独の完了条件と依存 |
+|---|---|
+| A: 完全性・canonical/incremental core | pure fake consumerでTOC全域、連続prefix、track境界、byte order、上限、取消/finalize競合を検証。provider通信・drive I/O・公開APIなしで完了できる |
+| B: 排他的取得worker | Aに依存。専用reader、coordinator、call/job予算、main-loop非blocking、release待ち、世代失効をgate付きfakeで検証。通常起動や再生経路から自動起動しない |
+| C: checksum profile/consumer adapter | #13側の公式protocol・利用条件・algorithm選定に依存。既知vector・state上限・incremental適合を確認。通信/外部結果の実装とは分離し、A/Bと並行調査できる |
+| D: 明示jobのproduction統合と公開 | A/B/Cと#88の物理失効統合を前提に、開始拒否/取消/release待ち/再操作、manifestの契約と別承認の実機評価を実装。最終UI再設計やprovider通信は含めない |
+
+設計整理後、利用者は文書の統合、A/B/C/Dの実Issue作成と、Aだけの実装・自動検証・統合を承認した。
+B/C/Dの実装、providerアクセス、実機操作、Issue closeは含めない。この設計文書をまとめた時点では表は分割案である。
+#13が必要とする完全取得入力はA/Bだけでは成立せず、
+profile適合とDの受入まで必要である。providerの調査は並行できるが、全域coverageがない入力を外部照合へ渡さない。
+#13のClosedを機能完成や依存充足に読み替えず、再openもしない。
+
+#### 将来の受入試験
+
+正常な全域、非1始まりTOC、分割境界、gap/duplicate/out-of-order、partial/zero/error、
+overlap/guardの二重計上、offset未指定/0/正負、consumer例外、容量超過、deadline、seek/stop/eject、
+disc/reader/policy交換、遅延旧結果、再起動、最終blockと取消競合をfakeで検証する。
+完全readがUNCERTAINの場合と、未解決で非採用の場合を区別し、前者も原盤一致とは表示しない。
+実機では別承認の開始/取消・通常再生への復帰・電源/USB安定性・音声/操作影響を確認する。
+今回は設計だけで、checksum計算・capture・provider・自動ripping・PCM保持・実機操作は実装/実行していない。
+
 ## 12. 移行phaseと完了条件
 
 | Phase | 小さな実装単位 | 現状と未完了部分の受入条件 |
