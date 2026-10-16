@@ -587,8 +587,8 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 2026-10-16、#160は設計だけを進めるものとして、PCM非保存のincremental方式、明示開始、
 通常再生との同時取得なし、全域coverageの厳密判定を利用者が承認した。
 以下はproduction取得の未実装契約であり、current snapshot、通常起動、reader、providerを変更するものではない。
-#236では下記のpure input coreだけを追加した。drive取得・worker・provider・production公開は未接続であり、
-coreの入力完全性をfull-disc captureの実装完了とは扱わない。
+#236でpure input core、#237で注入readerを所有する内部workerを追加した。どちらもtest-onlyで、
+実drive factory・provider・production公開は未接続。入力完全性やfake取得を実機full-disc captureの完成とは扱わない。
 COMPLETE等の語もこの将来jobの概念で、既存`read.activity=COMPLETE`の意味を変更しない。
 #13はClosedだがprovider/checksum/transportは未実装である。PR #161は制約整理であり、機能完成の根拠にしない。
 
@@ -700,13 +700,14 @@ production統合では#88の消失/reset/同一path再接続の失効成果と�
 | 単位 | 単独の完了条件と依存 |
 |---|---|
 | [A: 完全性・canonical/incremental core (#236)](https://github.com/udonchan/picdplayer/issues/236) | pure input coreとtest-only対象を追加。TOC全域、連続prefix、track境界、byte order、宣言上限、取消/finalize競合を自動検証済み。provider通信・drive I/O・公開APIなし |
-| [B: 排他的取得worker (#237)](https://github.com/udonchan/picdplayer/issues/237) | Aに依存。専用reader、coordinator、call/job予算、main-loop非blocking、release待ち、世代失効をgate付きfakeで検証。通常起動や再生経路から自動起動しない。未実装 |
+| [B: 排他的取得worker (#237)](https://github.com/udonchan/picdplayer/issues/237) | Aに依存。注入reader所有・coordinator排他・call/job予算・取消とrelease待ち・旧結果拒否を内部workerへ実装。gate付きfakeで検証し、runtime/実driveへは未接続 |
 | [C: checksum profile/consumer adapter (#238)](https://github.com/udonchan/picdplayer/issues/238) | #13側の公式protocol・利用条件・algorithm選定に依存。既知vector・state上限・incremental適合を確認。通信/外部結果の実装とは分離し、A/Bと並行調査できる。未実装 |
 | [D: 明示jobのproduction統合と公開 (#239)](https://github.com/udonchan/picdplayer/issues/239) | A/B/Cと#88の物理失効統合を前提に、開始拒否/取消/release待ち/再操作、manifestの契約と別承認の実機評価を実装。最終UI再設計やprovider通信は含めない。未実装 |
 
-設計整理後、利用者は文書の統合、A/B/C/Dの実Issue作成と、Aだけの実装・自動検証・統合を承認した。
-B/C/Dの実装、providerアクセス、実機操作、Issue closeは含めない。この設計文書をまとめた時点では表は分割案である。
+設計PR #235段階では、利用者の承認は文書の統合、A/B/C/Dの実Issue作成とAだけの実装・自動検証・統合だった。
+その時点ではB/C/Dの実装、providerアクセス、実機操作、Issue closeは対象外で、表は分割案だった。
 PR #235の設計統合後に上記4 Issueを作成し、#160のsub-issue、BのA依存、DのA/B/C/#88依存を記録した。
+その後#237だけも実装・自動検証・commit/push/統合まで追加承認された。C/D、provider、実機操作、Issue closeは対象外のまま。
 #13が必要とする完全取得入力はA/Bだけでは成立せず、
 profile適合とDの受入まで必要である。providerの調査は並行できるが、全域coverageがない入力を外部照合へ渡さない。
 #13のClosedを機能完成や依存充足に読み替えず、再openもしない。
@@ -744,9 +745,60 @@ repeatのoverlap意味は既存verifierを正とする。先頭STREAM_BOUNDARY�
 
 上限判定はcore所有scratch・有界なTOC/identityとconsumerの宣言量・結果spanに対するもので、
 任意callbackの隠れたallocationやI/Oをsandbox化してはいない。consumer resultは最大64 KiB以下だが、
-将来manifest全体のencoding/容量判定、globalなactive slot、I/O監視・release待ち、provider採用はB/C/Dに残る。
+core単独ではmanifest全体のencoding/容量、globalなactive slot、実I/O監視や物理releaseを判定しない。
+内部I/O監視・release待ちは下記B、production admission/公開とprovider採用はC/Dに分離する。
 coreの`call_budget`は残予算計算と期限判定であり、ioctl/CPUを中断するwatchdogではない。
 millisecond未満の残予算は切り捨てて0とし、新しいreadに残job時間を超える予算を与えない。
+
+#### Acquisition Worker Implementation
+
+#237の[CompletePcmWorker](../../include/complete_pcm_worker.hpp)は明示使用の内部componentで、
+`complete_pcm_worker_test`だけにlinkする。daemonのmain/session、既存PcmWorker、CLI/API/UI/JSONへ接続しない。
+constructorはowner threadを作るだけで、job受理までreader factory/TOC probeは呼ばない。
+callerはraw reader factory、TOC probe、共有DriveAccessCoordinator、thread-safeで非blockingなmonotonic clockを渡す。
+factory/probeはcoordinatorを再入せず、consumerはfreshなjob専用のbounded CPU実装でなければならない。
+
+`start`のSTOPPED/出力停止/queue取消/reader解放/audio-ready gateはcallerの申告であり、
+このcomponentが実runtimeを自動観測した根拠ではない。pure coreの適格性検査はI/O前に済ませ、
+busy/not-ready/再使用job IDは拒否する。job IDはinstance寿命内で増加させ、同じpathやTOCで結果を再利用しない。
+一つのdriveのcapture admissionはDが一つのworker instanceへ集約する必要があり、coordinator自体はglobal job leaseではない。
+
+| 段階 | 所有・判定 |
+|---|---|
+| 受付/preflight | boundedなCPU検査だけをcaller上で行う。取消/条件変更と競合した未確定admissionはepochで拒否する |
+| 初期TOC/open/seek/read/最終TOC/close | owner threadだけがcoordinator内で呼ぶ。状態mutexをcoordinator待ち・I/O中に保持しない |
+| raw readとrepeat | workerが明示0 offsetと既存repeat policyを包む。raw seek/read境界にもadmission checkを置き、取消後の次のwrapper試行を止める |
+| consumer | owner threadでA coreへ渡す。chunk/finalize前後に取消/期限を確認し、mainからthread-confined coreを同時操作しない |
+| 解放/後処理 | 取消後もcleanup closeだけはownerがcoordinator内で行う。consumer cleanupまで終わる前にslotを再利用しない |
+| prepared/confirm | 最終TOCとreader破棄を確認してresultをprivate stagingへコピー。callerのconfirmで現identity/gate/期限を再検証して初めて公開可能な内部receiptにする |
+
+callの開始許可はcoordinator取得後の短い状態lock内をlinearization pointとする。
+許可済みcallは取消後もin-flightとして戻るまで待つ。coordinator待ち中の取消は取得後の再checkでI/O発行を止める。
+raw reader/libraryの一回のcall内部やkernel ioctlは強制中断せず、次の制御可能な境界で止める。
+coordinatorは公平性を保証しない。取得全体を長時間mutexで占有せず、各callごとに解放する。
+
+`poll(current, gate)`は条件変更を失効へ反映し、call/job期限を監視するcontrol操作である。
+workerがI/Oで止まっていても呼び手はpoll/cancelできるが、実runtime側で定期的に呼ぶ接続はDに残る。
+取消・timeoutはbusyをすぐfalseにせず、旧I/Oとcleanupの終了まで新jobを拒否する。
+`reader_released`は旧jobのcallback/reader/consumerがquiescentで今後I/Oを発行しないことを示す。
+fdがまだ開いていることの直接測定でも、物理device交換/reset/同一性の証明でもない。
+
+正常時もpreparedではslotを保持し、callerのconfirmまたはcancelを必要とする。
+cancelとconfirmは一つの状態lockで順序付け、cancelが先ならresultを公開しない。
+context変更後のreceiptや遅延readは適用せず、破棄したjobを自動再開・予約しない。
+結果は最大64 KiBのconsumer payloadだけで、manifest全体のencodingはDに残る。
+snapshotや明示result copyを呼び手が無制限に保持することまでframeworkのmemory上限は保証しない。
+
+正規化PCM bufferはsingleで15 CD frame（35,280 bytes）、repeatで最大75 CD frame（176,400 bytes）。
+内部snapshotの`accepted_frames`はconsumer確定prefixのCD frame数、`accepted_bytes`はそのPCM byte数である。
+`read_observations`はAが受理した正規化readの集計であり、取消・不完全read等で受理しなかった物理callを含む総I/O回数ではない。
+その0を、device I/Oがなかった、または失敗しなかった根拠にしない。
+`pcm_capacity_bytes`は現存buffer容量、`peak_pcm_bytes`はそのjobで観測した最大容量で、reader/backend内部のheapやRSSではない。
+coreのreservation、consumer宣言量、wrapperの有界候補数とは区別する。全域PCMを蓄積・file保存しない。
+
+cancel/pollはreaderやconsumerを待たないが、destructorはownerをjoinするため進行中callが戻らなければ待つ。
+detach、別threadからの強制close、ejectの先行を導入しない。Dはrelease待ち中にmain loopで破棄/joinしないことが必要である。
+fake試験の成功を実driveの故障・中断・物理releaseが確認済みという根拠にはしない。
 
 ## 12. 移行phaseと完了条件
 
