@@ -91,18 +91,21 @@ bool same_toc(const DiscToc& left, const DiscToc& right) {
     return true;
 }
 
-bool apply_cec_command(PlayerController& controller, CecCommand command) {
+bool apply_cec_command(PlayerController& controller, CecCommand command, bool* accepted = nullptr) {
     constexpr auto cec_seek_frames = 10 * cd_frames_per_second;
     const auto before = controller.state();
+    bool applicable = true;
     switch (command) {
-    case CecCommand::play: controller.play(); break;
+    case CecCommand::play: applicable = controller.play(); break;
     case CecCommand::pause: controller.pause(); break;
     case CecCommand::stop: controller.stop(); break;
-    case CecCommand::next: controller.next(); break;
-    case CecCommand::previous: controller.previous(); break;
-    case CecCommand::seek_forward: controller.seek_relative(cec_seek_frames); break;
-    case CecCommand::seek_backward: controller.seek_relative(-cec_seek_frames); break;
+    case CecCommand::next: applicable = controller.next(); break;
+    case CecCommand::previous: applicable = controller.previous(); break;
+    case CecCommand::seek_forward: applicable = controller.seek_relative(cec_seek_frames); break;
+    case CecCommand::seek_backward: applicable = controller.seek_relative(-cec_seek_frames); break;
     }
+    if (accepted) *accepted = applicable;
+    if (!applicable) log_warning("player") << "command rejected: no applicable playback range";
     const auto after = controller.state();
     return before.playback != after.playback || before.track != after.track ||
            before.position_lba != after.position_lba;
@@ -117,7 +120,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         int api_port, PcmBufferConfig buffer_config,
                         ReadPolicy initial_read_policy, const std::string& custom_ui,
                         std::optional<unsigned> configured_drive_speed_x,
-                        bool direct_c2_pointers, const std::string& settings_file) {
+                        bool direct_c2_pointers, const std::string& settings_file,
+                        std::optional<std::int32_t> configured_read_offset) {
 #ifndef ENABLE_METADATA
     (void)metadata_enabled; (void)metadata_cache; (void)artist_background_key_file;
 #endif
@@ -144,24 +148,30 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
     auto reader_policy = std::make_shared<ReadPolicy>(initial_read_policy);
     auto reader_policy_mutex = std::make_shared<std::mutex>();
+    auto offset_window = std::make_shared<std::optional<ReadOffsetWindow>>();
     auto direct_options = std::make_shared<DirectOptions>();
     auto direct_options_mutex = std::make_shared<std::mutex>();
     DriveCapabilities drive_capabilities;
     drive_capabilities.device = device;
+    drive_capabilities.read_offset_samples = configured_read_offset;
     bool drive_probe_complete = false;
     auto applied_strategy = select_read_strategy(initial_read_policy, backend, direct_c2_pointers,
                                                  drive_probe_complete,
                                                  drive_capabilities.c2_supported.value);
     auto reader_factory = [=] {
-                         ReadPolicy policy;
-                         { std::lock_guard lock(*reader_policy_mutex); policy = *reader_policy; }
-                         DirectOptions options;
-                         { std::lock_guard lock(*direct_options_mutex); options = *direct_options; }
-                         auto reader = make_cdda_reader(backend, device, options);
-                         return policy.mode == ReadVerificationMode::repeat
-                             ? make_repeated_read_verifier(std::move(reader), repeated_read_policy(policy))
-                             : std::move(reader);
-                     };
+        ReadPolicy policy;
+        std::optional<ReadOffsetWindow> window;
+        { std::lock_guard lock(*reader_policy_mutex); policy = *reader_policy; window = *offset_window; }
+        DirectOptions options;
+        { std::lock_guard lock(*direct_options_mutex); options = *direct_options; }
+        auto reader = make_cdda_reader(backend, device, options);
+        if (configured_read_offset) {
+            if (!window) throw std::runtime_error("offset audio range unavailable");
+            reader = make_offset_reader(std::move(reader), *window);
+        }
+        return policy.mode == ReadVerificationMode::repeat
+            ? make_repeated_read_verifier(std::move(reader), repeated_read_policy(policy)) : std::move(reader);
+    };
     const auto initial_block_frames = initial_read_policy.mode == ReadVerificationMode::repeat
         ? initial_read_policy.region_frames : pcm_block_cd_frames;
     PcmWorker worker(std::move(reader_factory), applied_strategy.effective,
@@ -249,6 +259,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                        << " verification=" << applied_strategy.effective
                        << " requested_drive_speed_x="
                        << (configured_drive_speed_x ? std::to_string(*configured_drive_speed_x) : "default")
+                       << " read_offset_samples="
+                       << (configured_read_offset ? std::to_string(*configured_read_offset) : "unknown")
                        << " stdin_commands=" << (interactive ? "enabled" : "disabled");
     if (interactive)
         log_notice("player") << "Commands: play pause stop next previous track N seek SECONDS state quit";
@@ -299,6 +311,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
         read.requested_strategy = applied_strategy.requested;
         read.strategy_downgrade = applied_strategy.downgrade;
         read.strategy_pending = applied_strategy.pending;
+        if (!toc_needs_refresh && loaded_toc && media_state.state() == MediaLifecycleState::audio_ready) {
+            std::lock_guard lock(*reader_policy_mutex);
+            read.offset_window = *offset_window;
+        }
         bool has_cover_asset = false;
         std::optional<std::string> background_url;
         std::vector<std::string> background_urls;
@@ -428,7 +444,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 case ApiCommandType::next: player_command = CecCommand::next; break;
                 case ApiCommandType::previous: player_command = CecCommand::previous; break;
                 case ApiCommandType::seek_relative:
-                    controller.seek_relative(std::int64_t(command.value) * cd_frames_per_second);
+                    if (!controller.seek_relative(std::int64_t(command.value) * cd_frames_per_second)) return false;
                     engine.synchronize(); print_state(controller); return true;
                 case ApiCommandType::select_track:
                     if (!controller.select_track(command.value)) return false;
@@ -439,11 +455,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 case ApiCommandType::decline_metadata_candidates: return false; // handled above
                 case ApiCommandType::eject: break;
                 }
-                if (apply_cec_command(controller, player_command)) {
+                bool accepted = true;
+                if (apply_cec_command(controller, player_command, &accepted)) {
                     engine.synchronize();
                     print_state(controller);
                 }
-                return true;
+                return accepted;
             };
         auto ui = UiBundle::load(custom_ui);
         if (!ui.error().empty()) log_warning("ui") << "custom_disabled reason=" << ui.error();
@@ -604,6 +621,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             if (media_result.work == MediaWork::probe_drive) {
                 if (media_result.drive) {
                     drive_capabilities = std::move(*media_result.drive);
+                    drive_capabilities.read_offset_samples = configured_read_offset;
                     drive_probe_complete = true;
                     if (direct_c2_pointers && backend == CddaBackend::direct) {
                         std::lock_guard lock(*direct_options_mutex);
@@ -658,6 +676,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
                     toc_pending = false;
                     toc_needs_refresh = true;
+                    if (configured_read_offset) {
+                        controller.remove_disc();
+                        engine.synchronize();
+                        worker.discard_reader();
+                    }
                 } else if (after == MediaLifecycleState::no_disc ||
                            after == MediaLifecycleState::unsupported) {
                     next_drive_stop = std::chrono::steady_clock::time_point::max();
@@ -690,12 +713,30 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.synchronize();
                     worker.set_disc_generation(++disc_generation);
                     loaded_toc = *media_result.toc;
+                    if (configured_read_offset) {
+                        auto window = make_read_offset_window(loaded_toc->tracks.front().start_lba,
+                                                               loaded_toc->leadout_lba, *configured_read_offset);
+                        window.disc_generation = disc_generation;
+                        {
+                            std::lock_guard lock(*reader_policy_mutex);
+                            *offset_window = window;
+                        }
+                        worker.discard_reader();
+                        const auto begin = loaded_toc->tracks.front().start_lba;
+                        controller.set_playback_range(window.playable() ? window.playable_begin_lba : begin,
+                                                      window.playable() ? window.playable_end_lba : begin);
+                        if (window.playable()) engine.set_disc_end(window.playable_end_lba);
+                        log_notice("player") << "offset_window begin_lba=" << window.playable_begin_lba
+                                             << " end_lba=" << window.playable_end_lba
+                                             << " playable=" << window.playable();
+                    }
                     log_info("media") << "audio_disc tracks=" << loaded_toc->tracks.size()
                                       << " leadout_lba=" << loaded_toc->leadout_lba;
                     if (media_state.take_audio_insertion()) {
-                        controller.play();
+                        const bool started = controller.play();
                         engine.synchronize();
-                        log_info("media") << "auto_play=inserted_audio_disc disc_generation=" << disc_generation;
+                        log_info("media") << "auto_play=" << (started ? "inserted_audio_disc" : "rejected_playback_range")
+                                           << " disc_generation=" << disc_generation;
                     }
                     print_state(controller);
                 }
@@ -841,13 +882,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
             }
             if (command == "play") {
                 if (controller.state().playback == PlaybackState::playing) changed = false;
-                else controller.play();
+                else changed = controller.play();
             } else if (command == "pause") {
                 if (controller.state().playback != PlaybackState::playing) changed = false;
                 else controller.pause();
             } else if (command == "stop") controller.stop();
-            else if (command == "next") controller.next();
-            else if (command == "previous") controller.previous();
+            else if (command == "next") changed = controller.next();
+            else if (command == "previous") changed = controller.previous();
             else if (command.starts_with("track ") || command.starts_with("seek ")) {
                 const auto space = command.find(' ');
                 const auto value = std::string_view(command).substr(space + 1);
@@ -855,7 +896,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), number);
                 if (error != std::errc{} || end != value.data() + value.size()) changed = false;
                 else if (command.starts_with("track ")) changed = controller.select_track(number);
-                else controller.seek_relative(std::int64_t(number) * cd_frames_per_second);
+                else changed = controller.seek_relative(std::int64_t(number) * cd_frames_per_second);
                 if (!changed) log_warning("player") << "invalid argument";
             } else { changed = false; log_warning("player") << "unknown command"; }
             if (changed) engine.synchronize();

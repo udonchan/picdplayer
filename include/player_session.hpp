@@ -13,4 +13,5 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         ReadPolicy read_policy = {}, const std::string& custom_ui = {},
                         std::optional<unsigned> drive_speed_x = std::nullopt,
                         bool direct_c2_pointers = false,
-                        const std::string& settings_file = {});
+                        const std::string& settings_file = {},
+                        std::optional<std::int32_t> read_offset_samples = std::nullopt);

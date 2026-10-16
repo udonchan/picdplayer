@@ -2,6 +2,7 @@
 #include "pcm_worker.hpp"
 
 #include <cerrno>
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <iostream>
@@ -140,6 +141,38 @@ int main() {
             check(diagnostics.history_evicted == 172 && diagnostics.dropped_events == 44);
             check(diagnostics.recent_reads.front().read_sequence == 173);
             check(diagnostics.coverage.accepted_unique_frames == 4500);
+        }
+        for (bool reopen : {false, true}) {
+            auto first = step(0, 15, 15), second = step(15, 15, 15);
+            first.result.offset = OffsetReadEvidence{1, PhysicalReadEvidence{0, 16, 0, 16, 0}};
+            second.result.offset = OffsetReadEvidence{1, PhysicalReadEvidence{15, 16, 15, 16, 0}};
+            auto opens = std::make_shared<std::atomic<unsigned>>(0);
+            PcmWorker worker([=] {
+                const auto count = (*opens)++;
+                return std::make_unique<ScriptedCddaReader>(
+                    count ? std::vector<ScriptedRead>{second} : std::vector<ScriptedRead>{first, second},
+                    std::chrono::milliseconds(50));
+            }, "offset-fixture", {15, 15});
+            worker.set_disc_generation(1);
+            worker.start(0, 15);
+            wait_for([&] { return worker.status().read_inflight_us > 0; });
+            worker.cancel();
+            if (reopen) worker.discard_reader();
+            worker.set_disc_generation(2);
+            const auto generation = worker.start(15, 30);
+            wait_for([&] { return worker.status().done; });
+            PcmBlock block;
+            check(worker.pop(block) && block.lba == 15 && block.generation == generation);
+            check(block.evidence.disc_generation == 2 && block.evidence.offset_status == OffsetStatus::corrected);
+            check(block.evidence.device_generation == (reopen ? 2 : 1));
+            check(block.evidence.offset && block.evidence.offset->samples == 1);
+            check(!worker.pop(block));
+            const auto diagnostics = worker.status(true).diagnostics;
+            check(diagnostics.stats.read_calls == 1 && diagnostics.recent_reads.size() == 1);
+            check(diagnostics.recent_reads[0].start_lba == 15);
+            check(diagnostics.coverage.accepted_unique_frames == 15);
+            PlayerEvent event;
+            check(worker.pop_event(event) && event.read.start_lba == 15 && !worker.pop_event(event));
         }
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

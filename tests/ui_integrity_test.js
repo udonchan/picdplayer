@@ -107,6 +107,22 @@ async function main() {
     read: { ...snapshot.read, activity: 'FAILED' } }) });
   assert.equal(node('read-activity').textContent, 'READING');
 
+  const offsetSnapshot = structuredClone(stopped);
+  offsetSnapshot.revision = 5;
+  offsetSnapshot.drive.read_offset_samples = 1;
+  offsetSnapshot.read.offset_window = { disc_generation: 2, offset_samples: 1, reason: 'BOUNDARY_CLIPPED',
+    unavailable: [{ start_sample: 58799, end_sample: 58800 }],
+    alignment_excluded: [{ start_sample: 58212, end_sample: 58799 }] };
+  sockets[0].onmessage({ data: JSON.stringify(offsetSnapshot) });
+  assert.equal(node('drive-offset-window').hidden, false);
+  assert.match(node('drive-offset-window').textContent, /unavailable 1 · alignment excluded 587/);
+  assert.match(node('drive-offset-window').textContent, /calibration unverified/);
+  offsetSnapshot.revision = 6;
+  offsetSnapshot.disc.layout.disc_generation = 3;
+  sockets[0].onmessage({ data: JSON.stringify(offsetSnapshot) });
+  assert.equal(node('drive-offset-window').hidden, true);
+  assert.equal(node('drive-offset-window').textContent, '—');
+
   const nextSession = structuredClone(snapshot);
   nextSession.revision = 1;
   nextSession.read.session_id = 'session-b';

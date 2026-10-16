@@ -56,6 +56,7 @@ int main(int argc, char** argv) {
     bool verification_option = false;
     std::optional<unsigned> drive_speed_x;
     bool drive_speed_option = false;
+    std::optional<std::int32_t> read_offset_samples;
     ReadPolicy read_policy;
     std::string api_listen = "127.0.0.1";
     bool api_listen_option = false;
@@ -124,6 +125,18 @@ int main(int argc, char** argv) {
                 return 2;
             }
         }
+        else if (arg == "--read-offset-samples" && i + 1 < argc) {
+            std::string_view value(argv[++i]);
+            if (value.starts_with('+')) value.remove_prefix(1);
+            std::int32_t parsed = 0;
+            const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+            if (read_offset_samples || value.empty() || (argv[i][0] == '+' && value.starts_with('-')) ||
+                error != std::errc{} || end != value.data() + value.size()) {
+                std::cerr << "Invalid --read-offset-samples: expected one signed 32-bit integer\n";
+                return 2;
+            }
+            read_offset_samples = parsed;
+        }
         else if (arg == "--drive-speed-x" && i + 1 < argc) {
             const std::string_view value(argv[++i]);
             unsigned parsed = 0;
@@ -182,6 +195,7 @@ int main(int argc, char** argv) {
         else if (arg == "--cec-device" && i + 1 < argc) device = argv[++i];
         else {
             std::cerr << "Usage: cdplayerd [--probe-drive-start PATH | --probe-disc-id PATH | --probe-metadata PATH | --lookup-disc ID | --player PATH ... [--metadata off|musicbrainz] [--metadata-cache PATH] [--artist-background-key-file PATH] [--api-listen IP --api-port 1..65535] [--custom-ui PATH] | other modes]\n";
+            std::cerr << "Player offset: --read-offset-samples SIGNED_INTEGER (stereo sample frames; explicit calibration input)\n";
             return arg == "--help" ? 0 : 2;
         }
     }
@@ -247,6 +261,9 @@ int main(int argc, char** argv) {
     if (drive_speed_option && player_device.empty()) {
         std::cerr << "--drive-speed-x requires --player\n"; return 2;
     }
+    if (read_offset_samples && player_device.empty()) {
+        std::cerr << "--read-offset-samples requires --player\n"; return 2;
+    }
     try {
         validate_pcm_buffer_config(buffer_config);
         validate_read_policy(read_policy, buffer_config.capacity_cd_frames);
@@ -303,7 +320,7 @@ int main(int argc, char** argv) {
                                cec_diagnostics, interactive, metadata_mode == "musicbrainz",
                                metadata_cache, artist_background_key_file, api_listen, api_port, buffer_config,
                                read_policy, custom_ui, drive_speed_x, direct_c2_pointers,
-                               settings_file);
+                               settings_file, read_offset_samples);
             return 0;
         }
         if (!cdda_device.empty()) {

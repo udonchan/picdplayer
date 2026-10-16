@@ -127,6 +127,23 @@ function render(state) {
   set('drive-offset', drive.read_offset_samples == null
     ? 'UNKNOWN'
     : `${drive.read_offset_samples} samples`);
+  const offsetWindow = read.offset_window;
+  const offsetNote = byId('drive-offset-window');
+  const validOffsetWindow = offsetWindow && state.disc?.layout
+    && offsetWindow.disc_generation === state.disc.layout.disc_generation
+    && Number.isInteger(offsetWindow.offset_samples) && offsetWindow.offset_samples === drive.read_offset_samples;
+  if (offsetNote.hidden !== !validOffsetWindow) offsetNote.hidden = !validOffsetWindow;
+  let offsetText = '';
+  if (validOffsetWindow) {
+    const count = (ranges) => Array.isArray(ranges) && ranges.length <= 2 && ranges.every((range) =>
+      Number.isSafeInteger(range.start_sample) && Number.isSafeInteger(range.end_sample)
+      && range.end_sample > range.start_sample)
+      ? ranges.reduce((sum, range) => sum + range.end_sample - range.start_sample, 0) : 'NOT AVAILABLE';
+    offsetText = `${offsetWindow.reason} · unavailable ${count(offsetWindow.unavailable)}`
+      + ` · alignment excluded ${count(offsetWindow.alignment_excluded)} stereo sample frames`
+      + ' · no substitute PCM · calibration unverified';
+  }
+  set('drive-offset-window', offsetText);
 
   const probe = byId('probe-error');
   probe.hidden = !drive.probe_error;

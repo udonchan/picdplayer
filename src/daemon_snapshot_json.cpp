@@ -84,7 +84,9 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                      {"requested_speed_x", optional(drive.requested_speed_x)},
                      {"speed_request_error", drive.speed_request_error},
                      {"current_speed_x", optional(drive.current_speed_x)},
-                     {"read_offset_samples", optional(drive.read_offset_samples)}};
+                     {"read_offset_samples", optional(drive.read_offset_samples)},
+                     {"read_offset_source", drive.read_offset_samples ? "USER_CONFIGURED" : "NONE"},
+                     {"read_offset_detail", drive.read_offset_samples ? read_offset_detail : ""}};
     const auto read_evidence = [](const std::optional<ReadEvidence>& source) -> Json {
         if (!source) return nullptr;
         const auto& evidence = *source;
@@ -98,7 +100,19 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                                {"candidate", optional(attempt.candidate)},
                                {"physical_start_lba", attempt.physical_start_lba},
                                {"observed_start_lba", attempt.observed_start_lba},
-                               {"physical_frames_requested", attempt.physical_frames_requested}});
+                               {"physical_frames_requested", attempt.physical_frames_requested},
+                               {"logical_start_lba", attempt.logical_start_lba},
+                               {"logical_frames_requested", attempt.logical_frames_requested}});
+        }
+        Json offset = nullptr;
+        if (evidence.offset) {
+            offset = {{"samples", evidence.offset->samples}, {"source", "USER_CONFIGURED"},
+                      {"detail", read_offset_detail}, {"single_physical_read", nullptr}};
+            if (const auto& raw = evidence.offset->single_physical_read) {
+                offset["single_physical_read"] = {{"start_lba", raw->start_lba},
+                    {"frames_requested", raw->frames_requested}, {"observed_start_lba", raw->observed_start_lba},
+                    {"frames_read", raw->frames_read}, {"native_error", raw->native_error}};
+            }
         }
         return {{"device_generation", evidence.device_generation},
                   {"disc_generation", evidence.disc_generation},
@@ -114,6 +128,7 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                   {"read_independence", read_independence_name(evidence.read_independence)},
                   {"c2_status", c2_status_name(evidence.c2_status)},
                   {"offset_status", offset_status_name(evidence.offset_status)},
+                  {"offset", std::move(offset)},
                   {"direct_retries", evidence.direct_retries},
                   {"verification", {{"attempts", evidence.verification.attempts},
                                     {"attempt_details", std::move(attempts)},
@@ -212,6 +227,31 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
             {"regions", std::move(regions)}};
     }
     if (!read.history_included) root["read"]["history"].erase("regions");
+    root["read"]["offset_window"] = nullptr;
+    if (read.offset_window) {
+        const auto& window = *read.offset_window;
+        const auto range = [](std::int64_t begin, std::int64_t end) -> Json {
+            return begin < end ? Json{{"start_sample", begin}, {"end_sample", end}} : Json(nullptr);
+        };
+        Json unavailable = Json::array(), alignment = Json::array();
+        const auto append = [&](Json& intervals, std::int64_t begin, std::int64_t end) {
+            if (begin < end) intervals.push_back(range(begin, end));
+        };
+        append(unavailable, window.disc_begin_sample, window.correctable_begin_sample);
+        append(unavailable, window.correctable_end_sample, window.disc_end_sample);
+        if (window.playable()) {
+            append(alignment, window.correctable_begin_sample, std::int64_t(window.playable_begin_lba) * 588);
+            append(alignment, std::int64_t(window.playable_end_lba) * 588, window.correctable_end_sample);
+        } else append(alignment, window.correctable_begin_sample, window.correctable_end_sample);
+        const auto limited = !unavailable.empty() || !alignment.empty();
+        root["read"]["offset_window"] = {{"disc_generation", window.disc_generation},
+            {"offset_samples", window.offset_samples},
+            {"correctable", range(window.correctable_begin_sample, window.correctable_end_sample)},
+            {"playable", window.playable() ? Json{{"start_lba", window.playable_begin_lba},
+                                                {"end_lba", window.playable_end_lba}} : Json(nullptr)},
+            {"unavailable", std::move(unavailable)}, {"alignment_excluded", std::move(alignment)},
+            {"reason", !window.playable() ? "NO_PLAYABLE_RANGE" : limited ? "BOUNDARY_CLIPPED" : "NONE"}};
+    }
     Json events = Json::array();
     for (const auto& event : recent_events) {
         if (event.stream_generation != read.stream_generation) continue;

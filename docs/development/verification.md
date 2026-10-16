@@ -1,6 +1,164 @@
 # 検証状況と残課題
 
-更新日: 2026-10-15。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-16。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## #10 read offsetの実装と限定実機確認（2026-10-16）
+
+基準はmaster `86d1054a31178ef0967f3a32a9fee52f2fa86fb9`。専用branch `docs/10-offset-contract`の
+作業差分として実装した。#162はPR #161による入力契約の文書化でClosedとなったが、補正コードは含まない。
+今回、仕様整理、Dと追加wire契約の採用、実装・自動検証・Debug配備・限定実機試験を順に承認して進めた。
+[採用仕様](../design/integrity-design.md#10の採用仕様と実装)と[公開契約](../design/message-contract.md#read-offset)を参照する。
+Issue #10の状態は変更していない。過去のprofile試験を今回のsourceの検証には代用していない。
+
+### 実装と自動検証
+
+`--player`限定の起動時明示値、signed stereo sample frameで`logical p <- physical p + o`となるreader、
+完全CD frameに内側整列したwindow、不能区間と整列除外、source/detailと物理/論理read根拠、
+既存2列構図の最小表示を実装した。未指定は従来経路とUNKNOWN/nullを維持し、0も明示値として扱う。
+失敗・不完全PCMの代替出力、外部database、外部照合、full-disc capture、hotplug検出は追加していない。
+
+| 構成/検証 | 実行場所 | 結果 |
+|---|---|---|
+| Debug、API/metadata ON、WPE OFF | `build-offset-check`、Linux/aarch64 Docker | 65/65 |
+| Debug、API/metadata OFF、WPE OFF | `build-offset-minimal`、同Docker | 38/38 |
+| 標準Debug、API/metadata/WPE ON | `build-container`、同Docker | 66/66 |
+| Debug package lifecycle | disposable同Docker | install/upgrade/reinstall/purge成功 |
+| offset専用試験 | 上記CTest内の`read_offset` | 正負1/587/588/589/5000と0、開始LBA 0/150、全sample/channel比較、短いdisc、partial/wrong-start非採用、repeat overlap、終端drain |
+| 世代と公開/操作 | integrity_fixture/controller/model/JSON/CLI/player_daemon/UI試験 | 遅延旧read・再open・disc世代、window失効、操作拒否、32-bit境界/不正値、source、8 attempt/128 history容量、DOM差分更新を検証 |
+
+標準buildは`PICDPLAYER_BUILD_TYPE=Debug PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build
+PICDPLAYER_WPE_VOLUME=picdplayer-wpe221-build ./scripts/build-container.sh`で実施した。
+既存SDKのimage identityを照合して再利用し、WebKit自体を再buildしていない。
+CTestは同imageへsourceをmountし`ctest --test-dir build-container --output-on-failure`を実行した。
+最小構成は`cmake -S . -B build-offset-minimal -DCMAKE_BUILD_TYPE=Debug -DENABLE_API=OFF
+-DENABLE_METADATA=OFF -DENABLE_WPE_KIOSK=OFF`、`cmake --build ... -j6`、同directoryのCTestである。
+packageは`PICDPLAYER_BUILD_TYPE=Debug PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build
+./scripts/test-package-lifecycle.sh`で確認した。各最終commandはexit 0。
+
+標準構成の初回CTestでは既存`metadata_worker`が単発失敗した。同じbinaryで
+`ctest --test-dir build-container -R '^metadata_worker$' --repeat until-fail:10 --output-on-failure`は10回成功し、
+その後の全件再実行は66/66成功した。原因は未解明であり、今回修正済みとは扱わない。
+初期buildの型不整合とUIの不要DOM更新は修正後に再build・回帰した。
+仕様式のNode assert検算211,779ケースも成功したが、これは実装reader試験とは別の算術検算である。
+
+### Piの限定試験と復帰
+
+標準`PICDPLAYER_BUILD_TYPE=Debug ./scripts/deploy.sh`で配備し、daemon/kiosk activeとWPE実processを確認した。
+対象は`/dev/sr0`、drive reportはASUS SDRW-08D2S-U / F601、direct reader、既存通常CD（14 track、
+LBA範囲`[0,242334)`）、既存HDMI ALSA device `plughw:CARD=vc4hdmi,DEV=0`である。
+vendor/modelは今回の観測対象の記述であり、物理同一性や校正値の証明ではない。
+
+serviceを一時停止し、SSH利用者の診断daemonへoffsetを起動引数で渡した。
+CECとmetadata外部取得は無効、設定保存先は指定せず、既存EnvironmentFile/drop-in/Settingsは変更していない。
+各条件でRESTとWSのwindow一致、通常短時間read/current根拠、pause・両端seek、旧current根拠の失効、
+終端151 CD frameの連続coverage、2秒強の出力時間とSTOPPED復帰を検査した。
+終端streamのplay後はcontrollerへ明示stopせず、既存drain経路で停止したことを状態・時間・エラー不在と照合した。
+drain成功専用ログは存在しないため、そのようなログを成功根拠には使っていない。
+
+| 起動値 / mode | 再生window（LBA半開区間） | 終端read region数 | 終端再生からSTOPPEDまで |
+|---|---|---|---|
+| 未指定 / single | `[0,242334)`、offset根拠UNKNOWN/null | 11 | 2.629 s |
+| 0 / single | `[0,242334)`、除外なし | 11 | 2.869 s |
+| +1 / single | `[0,242333)`、末尾不能1 + 整列除外587 sample frame | 11 | 2.794 s |
+| -1 / single | `[1,242334)`、先頭不能1 + 整列除外587 sample frame | 11 | 2.804 s |
+| +1 / repeat | `[0,242333)`、上と同じ除外 | 3 | 3.022 s |
+| -1 / repeat | `[1,242334)`、上と同じ除外 | 3 | 2.805 s |
+
+この表は最初のpackage（SHA-256 `406a2acc643e01e8dd6036ea92730494cc1c35f14c99c94264b732a7d23fc4ae`）の結果であり、
+6条件とも成功した。明示値の採用evidenceはCORRECTED/USER_CONFIGURED、singleの実物理readは論理要求より
+1 sector多い（±1の場合）、repeatは試行の物理/論理座標・2回以上の一致を確認した。
+各終端streamの採用read数の和は151 CD frame、最後のreadがwindow終端で終わり、除外区間を採用していない。
+read failure、underrun、stall、出力write/reset/drain例外は当該診断ログに認めなかった。
+この結果は音声の試聴やbit一致の実測ではない。未指定と0で読み取り根拠が区別できることも確認した。
+
+最終確認で、空windowの1-track discに対するNextも拒否するようcontrollerと単体試験を修正した。
+その後sourceを3構成で再buildし、65/65・38/38・66/66とpackage lifecycleがすべて成功した。
+この最終packageを再配備し、同じ実機条件を最初から再試験したが、結果は上の成功表と区別する。
+
+| 最終packageの試験（利用者確認前の停止履歴） | 結果 |
+|---|---|
+| 既定開始buffer 45、未指定 / single | 成功。終端11 region、3.711 sでSTOPPED |
+| 既定開始buffer 45、0 / single | 成功。終端11 region、3.108 sでSTOPPED |
+| 既定開始buffer 45、+1 / single | 通常再生・pause/seek後、端でALSA underrun復旧1回。stream変更により151 frameの同stream完走assertが停止 |
+| 診断開始buffer 150、未指定 / single | 端でread error（errno 5）、出力提出前にfail-closed STOP。その後USB消失と再列挙を観測 |
+| 最終packageの-1 / single、±1 / repeat | このrunは上記異常で中断。後述の再確認結果と区別する |
+
+既定45の+1試験では、2026-10-16 07:55:50 UTCにALSA delayのunderrunが発生し、
+提出済み70560 stereo sample frameからLBA 242302で復旧した。read blockの実時間が供給余裕を超えた可能性はあるが、
+原因を確定せず、既定bufferでの安定性を確認済みとは扱わない。
+余裕を分離する比較として、設定を書き換えず診断daemonへ`--startup-buffer-frames 150`を追加した。
+この比較の最初の未指定offset試験で、07:58:08 UTCにCDDA read errorが発生した。
+kernel journalには07:58:07 UTCの`usb 1-1-port2: over-current change #5`、
+07:58:08 UTCの光学drive側`usb 1-1.5: USB disconnect`、07:58:12〜13 UTCの再接続と
+`Power-on or device reset occurred`が記録された。過電流イベントとdrive消失の直接の因果関係は断定しない。
+電源・USB経路の確認なしで再読出しを続けず、以降の試験を停止した。
+この観測はoffset未指定でも発生しており、offset補正の欠陥とも実機安定性の問題解消とも断定しない。
+#88の物理hotplug/reset検出や#146の異常条件評価を、この試験で実装・完了したとは扱わない。
+
+### 利用者確認後の最終package再試験
+
+利用者が電源・USB経路を確認済みと回答し、限定試験の再開を承認した後、同じ最終Debug packageと
+同じ通常CDで6条件を最初から実行した。binary/package hashは上記最終buildから変更していない。
+開始bufferは診断比較の150ではなく、通常serviceの既定値と同じ45 CD frameを明示した。
+CEC/metadata外部取得は無効、設定保存先なし、その他の試験条件・採用判定は前回と同じである。
+
+各waitではdaemonログのread error/underrunを監視し、kernelは開始cursor以降を約1秒間隔で観測した。
+新規over-current/USB disconnect/reset、read errorの検出でrunを中止しfinally復帰する。
+今回はその中止条件に達せず、全6条件のPCM根拠・REST/WS・pause/seek・終端coverage・STOPPEDを確認した。
+各終端streamは151 CD frameを連続採用し、singleは11 region、repeatは3 regionだった。
+
+| 起動値 / mode、開始buffer 45 | 終端read region数 | 終端再生からSTOPPEDまで | 結果 |
+|---|---|---|---|
+| 未指定 / single | 11 | 2.619 s | 成功、offset UNKNOWN/null |
+| 0 / single | 11 | 2.813 s | 成功、USER_CONFIGURED/CORRECTED、除外なし |
+| +1 / single | 11 | 2.942 s | 成功、末尾不能1 + 整列除外587 sample frame |
+| -1 / single | 11 | 2.927 s | 成功、先頭不能1 + 整列除外587 sample frame |
+| +1 / repeat | 3 | 2.881 s | 成功、物理/論理試行範囲・一致根拠を確認 |
+| -1 / repeat | 3 | 2.870 s | 成功、物理/論理試行範囲・一致根拠を確認 |
+
+`kernel-during-test.json`は空配列で、新しいkernelイベントを観測しなかった。
+復帰後まで同じ開始cursorから照会し、`kernel-post-restore.json`にも新規USB/電源異常がないことを確認した。
+daemonログにもread failure、underrun、stall、出力例外を認めなかった。
+再試験前後でアプリsourceと配備binaryは変更せず、再試験後のrepository更新は検証文書だけである。
+これは短時間の再確認であり、以前の過電流・切断・underrunの原因を特定・解消したという保証ではない。
+利用者による具体的な物理変更の内容は記録しておらず、今回の成功から推測しない。
+
+試験helperの初期試行はbody付きPOST、read-historyのroot shape、非同期snapshot、track相対位置、
+存在しない成功ログへの期待で停止した。いずれもhelperを現行契約へ修正し、アプリ側の受入条件は緩めず、
+最後の6条件を最初から通して実行した。失敗時もfinallyでserviceを再開し、設定hashとoffset未指定を確認した。
+
+保全preflightの当初globは非参照の0600 backupまで含めたため停止した。systemdのEnvironmentFilesと
+DropInPathsを読み取り専用で照合し、現行3ファイルだけを保全した。参照されない
+`/etc/default/picdplayer.fanart-poc-backup-20261014T124854Z`は内容を読まず、metadata不変を確認した。
+権限変更・sudo読み取り・設定書換えは行っていない。
+旧packageと設定・証跡は新規の保護領域に保持した。ローカルは
+`/var/folders/np/xlf6yym55bx3_tsbgtl5znhw0000gn/T/kilo/offset10-hardware-JJvSzU`、
+Pi側は`/tmp/picdplayer-offset10-DxVDQc`。非公開設定を含むためGit追加・公開・添付しない。
+`verify.py`と、初回6条件成功の`evidence/`、最終packageの失敗を含む`evidence-final-default45/`、
+buffer比較を含む`evidence-final-prefill150/`のJSON・daemonログを保全した。
+同directoryの`kernel-observation.json`には上記UTC区間のkernel journalを保持した（非公開）。
+利用者確認後の再試験はPiの`/tmp/picdplayer-offset10-recheck-GKJeZV`と、ローカルの
+`evidence-recheck-power-confirmed45/`へ独立して保全した。baseline.jsonは既存保全記録のコピーであり、
+既存の失敗証跡・旧package・設定backupを上書きしていない。
+各directoryのresults.jsonはそのrunで最後まで成功した条件だけであり、残った別条件の旧ファイルを
+そのrunの成功証拠にしない。最終buffer比較runのresults.jsonは空である。
+
+最終配備packageのSHA-256は`4d2011c3342d2d8abdde4a325b0a28bf6148614b4aa3052bac348572a120c80f`で
+Pi側test-build.jsonと一致。実行binaryのSHA-256は`6f5997b0fc7e202d576cb7aba43ae5afe2ac8ad930a5b64e96ae363e74f98b03`。
+旧Debug packageは`f6f29bb5c3d49b8972cf1160a03cb0638a3e70d1d0cb3c3120f09b2684dbae72`で保全した。
+最終状態は新Debug、offset未指定、STOPPED/track 1、両service active、WPE主runtime、
+API 127.0.0.1:8080とInspector 127.0.0.1:9223待受を最初の復帰時に確認した。
+失敗後と利用者確認後の成功runの両方でfinallyによりserviceを再開し、元のdaemon引数、
+現行設定3ファイルのhash、非参照backupのmetadata不変、Debug・offset未指定・STOPPEDを確認した。
+開始bufferは通常serviceの既定45に戻っている。成功run後もAPI8080/Inspector9223のloopback待受を確認した。
+
+過電流/消失が再発した場合は再生を止め、利用者の物理系確認なしに自動retryや抜き差しを行わない。
+未確認: 物理校正値の正しさ、原盤/外部PCMとの一致、音声試聴、TVの実表示・可読性、物理CEC、
+disc入替/自動再生、別drive/異常媒体、paranoia実機、全disc完走・cold boot・長期再生。
+利用者の試聴では通常CDの先頭・seek後・末尾の音切れ/異音とTV上の端除外表示を確認する必要がある。
+物理校正にはdrive/firmwareに対応した独立の根拠が必要で、試験値±1を保存値として採用しない。
+これらを残したまま#10や#146/#184/#164をcloseしない。
+実装・検証完了後、利用者からcommit・push・master統合を別途承認された。Issueの状態変更は行わない。
 
 ## Debug/Release profile分離（2026-10-15）
 
@@ -121,7 +279,9 @@ kiosk invocationで読めたjournalは1件だけでprofile行を取得できな�
 最後に今回追加した29223転送だけを`ssh -O cancel`で解除し、専用39223のtracked processも停止した。
 既存SSH masterや設定は終了・削除していない。既存drop-in/EnvironmentFileは一切変更していない。
 
-最終状態はReleaseで両service active、WPE主runtime、Inspector待受なし。音声試聴、実CD読出し・再生、
+このprofile比較を終えた時点ではReleaseで両service active、WPE主runtime、Inspector待受なしだった。
+その後、利用者指示でPR #232 headのDebugを再配備している。さらに上記#10試験後は新Debug・offset未指定に復帰した。
+以下はprofile比較そのものの未検証範囲であり、後続試験と区別する。音声試聴、実CD読出し・再生、
 物理CEC入力、metadata再取得、背景ONの実表示、cold boot、長期再生は今回未検証であり、#219はOpenを維持する。
 
 ## WPEスクリーンショットCLIと表示確認（2026-10-14 23:04 UTC）

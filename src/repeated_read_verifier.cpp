@@ -87,6 +87,18 @@ public:
             detail.physical_start_lba = physical_start;
             detail.observed_start_lba = result.start_lba;
             detail.physical_frames_requested = physical_frames;
+            detail.logical_start_lba = physical_start;
+            detail.logical_frames_requested = physical_frames;
+            if (result.offset) {
+                combined.offset = OffsetReadEvidence{result.offset->samples, std::nullopt};
+                if (result.offset->single_physical_read) {
+                    const auto& raw = *result.offset->single_physical_read;
+                    detail.physical_start_lba = raw.start_lba;
+                    detail.physical_frames_requested = raw.frames_requested;
+                    detail.observed_start_lba = raw.observed_start_lba;
+                    detail.frames_read = raw.frames_read;
+                }
+            }
             combined.retries += result.retries;
             add(combined.paranoia, result.paranoia);
             if (result.native_error) combined.native_error = result.native_error;

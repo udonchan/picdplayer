@@ -108,7 +108,7 @@ metadata/artworkの到着は再生開始とは独立し、再生状態だけか�
 | requested_speed_x | number? | ioctlが成功した要求CD倍速。実測値ではない |
 | speed_request_error | string | 明示された速度要求を適用しなかった最後の理由（ioctl失敗または能力非対応/不明）。未指定・成功時は空 |
 | current_speed_x | number? | drive速度の観測値。継続実測は未実装 |
-| read_offset_samples | int? | sample単位offset。現行は未取得 |
+| read_offset_samples | int? | stereo sample frame単位の明示起動値。未指定はnull、明示0とは区別。source/detailは[Read Offset](#read-offset)参照 |
 
 能力はdrive直下。`drive.capabilities`という階層はない。No Discでも利用可能なprobe情報を表示できる。
 `c2_supported`はMMC CD Read Featureが不在、またはC2 Flagsが取得できた場合だけDRIVE_REPORTEDのYES/NOとなる。
@@ -184,7 +184,7 @@ latest/current_playback/active_warning/history.regions[]は同一形式。
 | local_verification | string | NONE / SINGLE_READ / BACKEND_REPORTED / MULTIPLE_MATCH |
 | read_independence | string | UNKNOWN / CACHE_POSSIBLE / CACHE_MITIGATED。現行repeatはCACHE_POSSIBLEで、物理再読込は保証しない |
 | c2_status | string | UNKNOWN / NOT_AVAILABLE / NOT_CHECKED / CLEAN / REPORTED。既定はNOT_CHECKED。`--direct-c2-pointers`を指定し、probeがC2 support=YESならC2 pointerを要求する。support=NOはNOT_AVAILABLE、packet failure後の通常read fallbackはUNKNOWN。 |
-| offset_status | string | UNKNOWN / UNCORRECTED / CORRECTED。現行readerはUNKNOWN |
+| offset_status | string | UNKNOWN / UNCORRECTED / CORRECTED。未指定はUNKNOWN。適用と非採用の区別は[Read Offset](#read-offset)参照 |
 | direct_retries | uint | 当該readの直接retry回数 |
 | backend_events | object | reads/verifies/fixups/skips/read_errors/cache_errors/other、すべてuint |
 | verification | object | 以下 |
@@ -334,3 +334,90 @@ drain中または全PCM提出後のunderrunはエラー停止とし、最終sect
 ### Overlap evidenceの未観測と拒否（#115）
 
 NOT_REQUESTEDはoverlap無効、STREAM_BOUNDARYは直前の採用PCM不在、NOT_CHECKEDは比較対象はあるが候補一致に至らず比較未実施を示す。overlap_frames_comparedは実比較時だけ非0となる。accepted_candidate/accepted_attemptはoverlapを含む採用条件を満たした場合だけ設定し、拒否時はnull。matching_readsは候補同士の一致回数であり、overlap成功や採用を意味しない。
+
+## Read Offset
+
+2026-10-16、[integrity仕様](integrity-design.md#10の採用仕様と実装)のD、
+「補正可能な完全CD frameだけを再生する」に従って実装したschema_version=1の追加fieldである。
+旧payloadで欠けていれば未取得と扱い、旧clientは未知fieldを無視できる。
+
+### 起動設定と再生可能範囲
+
+既存`drive.read_offset_samples`のint?/nullは維持し、次を追加する。
+
+| JSON path | 型・値 | 意味 |
+|---|---|---|
+| drive.read_offset_source | string: NONE / USER_CONFIGURED | 未指定はNONE、明示値（0を含む）はUSER_CONFIGURED。TESTED/DATABASEの自動取得は実装しない |
+| drive.read_offset_detail | string | 未指定は空。明示入力は最大128 bytesの固定説明で、物理校正未検証を示す。任意CLI文字列や内部pathを転載しない |
+| read.offset_window | object? | offset未指定、layout無効、TOC不在ならnull。明示値と有効layoutがある場合だけ以下を計算する |
+| read.offset_window.disc_generation | uint | 同じsnapshotのdisc.layoutの世代。rootのread.session_idも照合する |
+| read.offset_window.offset_samples | int | このwindow計算に使用したsigned 32-bit stereo sample frame数 |
+| read.offset_window.correctable | sample range? | 数学的に補正可能な論理sample範囲。空ならnull。取得成功を意味しない |
+| read.offset_window.playable | LBA range? | Dで許可する完全CD frameの範囲。空ならnull。取得成功を意味しない |
+| read.offset_window.unavailable | array of sample range | 物理的に補正できない論理区間、昇順・重複なし・最大2件。空は除外なし |
+| read.offset_window.alignment_excluded | array of sample range | 補正可能だがDのframe整列のため除外する区間、昇順・重複なし・最大2件。空windowならcorrectable全体を1区間で表す |
+| read.offset_window.reason | string: NONE / BOUNDARY_CLIPPED / NO_PLAYABLE_RANGE | 再生範囲を制限しなければNONE、制限ありかつ再生可ならBOUNDARY_CLIPPED、playable=nullならNO_PLAYABLE_RANGE |
+
+sample rangeは`{start_sample:int,end_sample:int}`、LBA rangeは`{start_lba:int,end_lba:int}`で半開区間とする。
+いずれも空区間をobjectにしない。sample位置は`LBA * 588`の絶対座標で、channel別sampleの個数ではない。
+内部ではsigned 64-bitで検証するが、有効TOCのint32 LBAとsigned 32-bit offsetから算出するため、
+公開する位置はJavaScriptの安全整数範囲内に収まる。計算不能を0や空配列へ変換しない。
+無効TOCは既存layout無効化の規則に従い、このwindowもnullにする。
+
+windowはmain ownerがTOCと起動設定から計算する値で、stream coverageとは寿命も意味も異なる。
+stop/seek/policy変更で消さず、layout=null・disc世代変更・session変更時は旧windowを破棄する。
+TOC再受理後に同じ値になる場合も新disc_generationで再計算する。No Discでも起動設定値は残るが、windowはnullである。
+probe結果でユーザー設定を消さず、vendor/modelと物理同一性・校正の正しさを結び付けない。
+物理交換を未検出の場合まで有効性を保証するものではない（#88）。
+
+### Read evidenceと試行
+
+`latest/current_playback/active_warning/history.regions[]`へ`offset`（object?）を追加する。
+未指定時はnull。明示0を含む設定があるreadではobjectとし、現行のoffset_statusと区別して設定根拠を保持する。
+
+| offset配下 | 型・値 | 意味 |
+|---|---|---|
+| samples | int | 当該readのimmutableな設定値。現時点のdrive表示から旧履歴の値を補完しない |
+| source, detail | string | 明示入力由来のUSER_CONFIGUREDと固定説明。現時点のdrive表示から旧履歴を補完しない |
+| single_physical_read | object? | singleの実backend要求/結果。repeatは複数試行なのでnull。範囲検証でI/O未発行の場合もnull |
+
+`single_physical_read`は`start_lba:int`、`frames_requested:uint`、`observed_start_lba:int`、
+`frames_read:uint`、`native_error:int`を持つ。位置とframe数は補正用の余分なsectorを含む
+実backendのCD frame座標/個数であり、native_errorはbackendの診断値である。
+backend callbackが戻らず観測できない結果を生成しない。backend内部の個別ioctlや物理再読回数を表す値ではない。
+top-levelの`start_lba/frames_requested/frames_read`は引き続き出力論理CD frame範囲であり、
+singleの物理read結果をそのまま代入しない。必要な物理要求全量が得られなければ論理PCMは非採用としframes_read=0とする。
+
+repeatの既存`verification.attempt_details[]`ではphysical_start_lba、observed_start_lba、
+physical_frames_requested、frames_readに実backendの物理CD frame値を入れる。
+新たに`logical_start_lba:int`、`logical_frames_requested:uint`を追加し、
+比較した補正後の論理範囲（先行overlapを含む）を表す。completeは必要な物理入力と補正後候補の
+両方が完全なときだけtrueとなる。比較・overlap_frames_comparedは従来どおり論理CD frame数である。
+singleを架空のrepeat試行として配列に追加せず、attempt上限8と既存履歴上限128を維持する。
+
+offset_statusは未指定ならUNKNOWN、完全な補正PCMを採用した場合（明示0を含む）はCORRECTEDとする。
+既知でも失敗・非採用のreadはUNCORRECTEDとし、read status、single物理readのnative_error/取得数、
+repeatの試行・時間予算の根拠と併せて判別する。
+これは未補正PCMを代替採用した意味ではない。補正と反復一致・C2 trust・原盤一致を別に表示する。
+physical readのC2/retry/backend観測はguard sectorやoverlapを含む。その範囲の異常を、
+補正出力内の特定sampleの異常と断定しない。既存の保守的なC2集約とstatus優先順位を維持する。
+
+### 互換性とcoverage
+
+追加情報はschema_version=1のoptional fieldとし、旧payloadで欠けていたら未取得と扱う。
+CORRECTEDだけがありoffset objectがないpayloadから値や物理範囲を推定しない。
+REST/WSのPresentation Modelとread-historyのevidenceは同じserializerを使用する。
+`GET /api/read-history`のroot shapeは従来どおりschema_version/session_id/stream_generation/history/disc_mapであり、
+read objectやwindowを新たにrootへ追加しない。windowはstate/WSで取得する。
+既存stateの1 MiB制限とdisc_map objectの64 KiB未満の試験を維持し、
+最大8 attempt・128 evidenceとoffset追加情報を含む実serializer出力で容量・型を検証する。
+履歴は従来どおりsession/stream、windowはsession/discで照合し、旧非同期応答を新世代へ適用しない。
+offset情報は各evidenceに値で保持し、history eviction後もcurrent_playbackの根拠を維持する。
+
+採用coverage、stats、disc mapの単位と観測規則は変えない。Dでは採用PCMが完全CD frame単位なので、
+accepted_unique_framesに588を掛けるとそのstreamの採用sample frame数の下限を得られる。
+guard/overlapを二重加算せず、unavailableとalignment_excludedをacceptedとして塗らない。
+単位の違う値を合算せず、window全体が取得済みとも表示しない。
+offset_windowはSTOP後も端除外の理由を表示できるが、完走記録や外部checksum入力の完成証明ではない。
+read.activity=COMPLETEは指定したstream範囲のread完了であり、drain完了・全disc再生完了の宣言にしない。
+物理read faultの代替出力や完全取得PCM基盤を、この追加fieldで実装した扱いにしない。
