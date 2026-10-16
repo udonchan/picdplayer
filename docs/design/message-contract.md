@@ -202,6 +202,29 @@ accepted_attemptは一致閾値とoverlap条件を満たし採用された試行
 backend fixup（skipなし）や一致確認に至るmismatchはRECOVEREDの根拠となり、この判定が前記anomalyより優先する。
 CLEANはこのreadに観測された異常がない分類であり、原盤一致・cache独立性・全disc健全性を保証しない。
 
+## Unresolved PCM Policy
+
+#156でSTOPを唯一の実装済み方針として維持し、BEST_AVAILABLE/SILENCE/WAIT_WITH_BUDGETは
+現時点で採用しないと判断した。[比較・見送り理由・再検討条件](integrity-design.md#unresolved-pcm-policy)を参照する。
+この判断に伴うfield、enum、event、CLI/APIの選択肢の追加はない。
+`unresolved_data_policy`と`sample_origin`は現行ReadPolicy/JSONのfieldではなく、
+将来の要求モデルにある方針・由来の概念である。production payloadやfixtureへ先取りしない。
+
+現行の表示・復元は次の区別を維持する。
+
+- UNCERTAINはreadの根拠分類であり、代替出力の発生や不採用そのものを示す値ではない。
+  完全readがretry等でUNCERTAINでも現行policyに採用されることがある。逆にrepeatの一致回数だけで採用を判断しない。
+- `latest`/historyやREAD_OBSERVEDは観測したreadを示す。PCMのqueue採用・出力提出・消費は別であり、
+  `current_playback`は既存の提出区間とALSA delayに対応する根拠である。
+- 未解決readはPCMをqueueへ入れずSTOPする。workerのFAILEDはmainでの停止/cancelによりresetされ得る。
+  STREAMのhistory/active_warningは永続的な停止理由台帳ではなく、STOP後の空窓を正常だった証拠にしない。
+- `read_stall`、ALSA underrun復旧、backendのC2 fallback、offsetのwindow制限を、
+  未実装の追加PCM方針やSILENCE出力として表示しない。
+
+将来採用する場合には、実動作・理由・区間・sample origin・欠損/採用量・期限を表す契約と、
+旧client/欠損値の扱いを別途決定する。既存statusやcoverageへ新しい意味を黙って追加しない。
+Custom UIが新fieldを仮定する必要はなく、現在の公開契約の互換性は変えない。
+
 ## 保持窓と世代
 
 | object | fieldと型 | 意味 |

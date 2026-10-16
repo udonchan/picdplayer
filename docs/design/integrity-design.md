@@ -161,11 +161,91 @@ c2_policy、cache_policy、allow_playback_stall、unresolved_data_policyとす�
 desired_confidenceは手順への要求であり、根拠のない確率値では表さない。
 retry回数・比較回数・library内部retryを分け、二重retryで予算が膨張しないようbackend別に計上する。
 
-未解決時はSTOP / BEST_AVAILABLE / SILENCE / WAIT_WITH_BUDGETを明示的に選ぶ。
+未解決時の設計候補はSTOP / BEST_AVAILABLE / SILENCE / WAIT_WITH_BUDGETだが、
+現行に選択肢が4つあるわけではない。#156の判断と境界は[Unresolved PCM Policy](#unresolved-pcm-policy)を参照する。
 
-現行single/repeatの`unresolved_data_policy`はSTOPである。read error、短いread、またはrepeatの候補不成立では、当該PCMをqueueへ入れず、workerをFAILEDにしてPlaybackEngineがSTOPへ遷移する。古いblock、未初期化buffer、推測したPCM、無音を代替として出力しない。seek、stop、eject、disc世代変更はworker generationを切り替え、以前のstreamのPCMやpolicyを次のstreamへ混在させない。このSTOPはC2 trustや原盤一致の判定ではなく、未解決PCMを成功として再生しないための現在の安全境界である。
+現行single/repeatの未解決時方針はSTOPである。read error、短いread、またはrepeatの候補不成立では、当該PCMをqueueへ入れず、workerをFAILEDにしてPlaybackEngineがSTOPへ遷移する。古いblock、未初期化buffer、推測したPCM、無音を代替として出力しない。seek、stop、eject、disc世代変更はworker generationを切り替え、以前のstreamのPCMやpolicyを次のstreamへ混在させない。このSTOPはC2 trustや原盤一致の判定ではなく、未解決PCMを成功として再生しないための現在の安全境界である。
 
-BEST_AVAILABLE、SILENCE、WAIT_WITH_BUDGETは未実装であり、現行CLI/APIは受け付けない。導入する場合はmodeごとの適用条件、上限、diagnostic field、sample origin、音声・操作への影響を別途確定する。有効な候補がないBEST_AVAILABLEでは未初期化/古いPCMを使わずSTOPへ移る。無音を使う場合もUNCERTAINかつsample_origin=SILENCEとする。複雑な補間は初期実装の対象外。waitにも期限と最終動作を持ち、無期限retry・stallを避ける。ただし進行中kernel ioctlは強制中断できない。
+BEST_AVAILABLE、SILENCE、WAIT_WITH_BUDGETは今回採用しない。現行CLI/APIは受け付けず、
+代替PCM・追加WAIT・新modeを実装しない。将来再検討する場合も、以下の採用前条件を満たす必要がある。
+
+### Unresolved PCM Policy
+
+2026-10-16、#156の設計判断としてSTOPを既定かつ唯一の実装済み方針のまま維持し、
+他3候補は現時点で採用しないことを利用者が承認した。永久禁止ではなく、採用理由と安全性を
+再評価できる条件を残す。#11のSTOP実装とPR #154、移管を記録したPR #157を変更する判断ではない。
+
+#### 現行STOPの適用境界
+
+- 未解決とは、read error、短いread、repeatの必要一致数未達、overlap不一致等により、
+  現行readerが当該要求の完全な採用PCMを返せないことをいう。workerは当該blockをqueueへ入れず停止する。
+- read evidenceのUNCERTAINは根拠の分類であり、採用失敗と同義ではない。完全なreadがretry等でUNCERTAINに
+  分類されても、現行policyが採用する経路は変えない。これをBEST_AVAILABLEの実装済みと扱わない。
+- STOPでは未解決区間へ新たに採用するPCMがなく、そのsample originを原音・無音・推測PCMとして発明しない。
+  失敗時は先読みqueue・保持block・出力待ちPCMも破棄し得る。欠損の直前まで必ず聴ける保証や、
+  HDMI/ARC/アンプまで瞬時に無音になる保証ではない。
+- 反復・時間予算は既存ReadPolicyのまま（既定2一致、最大3試行、10秒）。新しい外側retry予算を追加しない。
+  進行中kernel ioctlは強制中断せず、main loopでの停止とreader所有threadによる後からの解放を区別する。
+- session、reader-open device generation、disc/stream generation、policy revisionの有効条件を維持する。
+  seek/stop/eject/世代変更後の遅延PCMを採用せず、前streamのblockを失敗区間の代用品にしない。
+  STREAM根拠の失効と同disc世代のDISC観測は別scopeであり、stream切替だけでdisc観測を破棄する意味ではない。
+
+#### 候補比較と不採用理由
+
+以下の条件は将来の採用前要件であり、現行機能・利用可能な設定値ではない。
+未採用案の数値上限や新field名を既定値として追加せず、採用を再検討する時に確定する。
+
+| 候補 | 想定するPCMの由来・適用前提 | 試行/時間上限と最終動作 | 今回の判断理由 |
+|---|---|---|---|
+| STOP | 採用不能な要求には代替PCMを提出しない | 現行reader予算内で解決しなければSTOP。ioctl中断成功は主張しない | 継続。未解決PCMを成功として出力しない境界を既存実装・試験で説明できる |
+| BEST_AVAILABLE | 同一世代・論理区間・offset条件で実際に取得した完全初期化済み候補だけ。検証条件未達を明示し、候補なしはSTOP | 現行read予算を超える試行を暗黙に足さない。候補の保持数・bytes・選択規則を固定し、不適格ならSTOP | 「最良」を選ぶ根拠と、検証不足PCMを出力する製品要求が未確定。click/異音等の評価もない。一致閾値未達の最多票やC2 reportだけで品質最良としない |
+| SILENCE | 新規に合成したzero PCM。実CDに記録された無音と区別し、未取得区間を取得済みにしない | 置換可能な区間長・連続回数・合計時間を有限に定め、上限または位置不明ならSTOP | 原音を欠いたまま進捗が進む。sample origin・欠損量・再生位置・復帰時の連続性を利用者へ伝える契約と聴感評価がない |
+| WAIT_WITH_BUDGET | 待機そのものはPCMの由来ではない。成功後に採用する実read PCM以外を出力せず、待機を無音挿入として扱わない | 同一未解決区間の単一deadlineと残attemptを共有し、再開ごとに予算をresetしない。期限切れはSTOP、停止/世代変更は旧待機を無効化して遅延結果を捨てる | 既存repeat/read-stall予算との二重化、buffer枯渇時の出力・進捗停止の仕様が未確定。ioctlを中断できず、単なる待機追加で連続再生を保証できない |
+
+BEST_AVAILABLEが実際に読んだ候補であっても、原盤一致・cache独立性・現行policyの検証成功は別である。
+候補の一部を古いPCMで埋めたり、未初期化bufferを採用したり、根拠のない補間で「原音」を推測しない。
+SILENCEを将来採用するなら、合成区間はUNCERTAINかつ合成由来と明示し、取得済み/検証済みの集計へ入れない。
+いずれも全track/disc取得、checksum完成、外部MATCHへ読み替えない。完全取得入力の適格性は#160で別途定義する。
+
+#### メッセージと表示の境界
+
+現行ReadPolicyのC++型と公開JSONに`unresolved_data_policy`や`sample_origin`というfieldはない。
+本節の語は仕様上の方針・由来の概念であり、新しいenum、event、REST/WS field、Settings選択肢や
+fixture値を導入しない。[現行メッセージ契約](message-contract.md#unresolved-pcm-policy)の範囲で表示する。
+失敗readのUNCERTAINや候補間の一致回数だけから、PCMが採用・提出されたと推定してはならない。
+
+将来の代替出力には、要求した方針/実際の動作、理由、論理区間、実際に読んだ/合成したPCMの由来、
+採用量と欠損量、検証不足をsnapshot・event・詳細履歴・Custom UIで一貫して説明する契約が必要である。
+WAITでは待機中と再生中を区別し、期限・残予算・最終動作・進捗の扱いを定義する。
+既存のCLEAN/RECOVERED/UNCERTAINやstrategy降格理由だけに新しい意味を押し込まない。
+field名・型・単位・欠損時・世代・有界保持・旧client互換性は採用前に確定し、今回の公開表へ先取りしない。
+
+#### 他の停止・復旧との区別
+
+#10の端で取得不能な区間とalignment除外は再生前に計算するwindow制限であり、代替PCMや
+read failureからのfallbackではない。予定window終端の正常drainと、未解決時のエラー停止を区別する。
+#34のread-stall監視とALSA underrun復旧も本Issueでは変更しない。後者は出力経路の再bufferであり、
+未解決PCMへの代替やintegrityのRECOVEREDを意味しない。C2 packet failure後の通常readも、
+実CDのPCMを再取得するbackend経路であり、SILENCE等の追加出力方針とは別である。
+物理USB消失・resetの検出は#88、異常媒体や別driveの実証は#146に残す。
+
+#### 再検討と独立実装の条件
+
+連続再生のために検証不足PCM・合成・待機のどれを許容するのか、利用者の製品上の要求が生じた時だけ
+候補を再検討する。具体的な方針、上記の有限上限・最終STOP、公開契約、聴感/操作の受入条件を
+別途承認してから、採用する候補に限定した独立実装Issueを作る。今回は採用候補がなく、後続実装Issueを作らない。
+
+| 将来の検証条件 | 最低限確認すること |
+|---|---|
+| read error/partial/候補なし/一致不足/overlap不一致 | STOPとの出力差、採用/非採用の区間・根拠、初期化済みbufferだけを使うこと |
+| retry・repeat・deadline | backend内部retryと方針のattemptを区別し、単一予算、上限でのSTOP、戻らないioctl時のmain-loop応答を確認 |
+| stop/seek/eject/disc・reader・policy世代変更 | 待機/候補/出力途中の取消、旧PCM・旧結果の拒否、root sessionとの照合 |
+| 出力とcoverage | 有効PCM、検証不足候補、合成、無出力を区別し、提出/消費位置と取得/検証coverageを混同しない |
+| REST/WS/history/Custom UI | 欠損・unknown・履歴eviction・再接続でも、表示から原音一致や採用成功を推測しない |
+| 構成/実機 | API無効を含む再build・回帰、test-only fakeでの全sampleと有界性、別承認の実機音声/操作評価。fake成功を物理傷やC2 trustの保証にしない |
+
+この設計判断は代替PCM機能の実装・自動試験・実機確認の完了ではない。現行STOPの実装を変えない。
+文書整理後、利用者からcommit・push・master統合を別途承認された。Issue状態変更・配備は含めない。
 
 ## 7. NO DISCでの能力probe
 
