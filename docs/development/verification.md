@@ -2,6 +2,39 @@
 
 更新日: 2026-10-16。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## #160 完全取得PCMの設計整理（2026-10-16）
+
+基準はmaster `2e821685eb9ed0fc2c9ba84586d1e2e5dae64573`。#160はOpen、Hard dependencyなしの設計Issueとして
+最新本文と#13を照合した。#13はClosedだが、PR #161は文書2ファイルだけでprovider/capture実装を含まず、
+PR本文も#13をcloseしないと記す。timelineは直後のclose操作を示すだけで、機能実装を証明しない。
+Closedと残条件の不一致を明示し、再openやprovider実装は行っていない。
+
+最初の承認範囲は、[完全取得入力](../design/integrity-design.md#complete-pcm-input)の設計整理である。
+PCM非保存incremental方式、明示開始・通常再生と同時取得なし、全audio coverage、canonical byte列、
+offset端不足の開始拒否、取消と物理releaseの区別、memory/deadline上限、再起動時の破棄、4実装単位を記録した。
+新しい公開field/enumを追加せず、[現行公開契約との境界](../design/message-contract.md#complete-pcm-input)を補足した。
+8 MiB/3時間等は未実装の初期設計上限であり、現在のdaemonの動作・実測値ではない。
+
+| 照合した根拠 | 設計との対応 |
+|---|---|
+| `include/pcm_worker.hpp`、`src/pcm_worker.cpp` | bounded再生queue/128件履歴とSTREAM世代は全disc PCMの保持・完全性証明ではない |
+| `include/drive_access.hpp`、詳細設計のreader/engine | mutexは公平性・ioctl中断を提供しない。main ownerによる発行抑止とreader解放確認が別途必要 |
+| `include/disc_toc.hpp`、`src/disc_toc.cpp` | audio-only、非負で増加するLBA、非1始まりtrackを許す。全域は最初のaudio開始からleadoutまで |
+| `include/read_offset.hpp`、offset設計/試験 | 非0 offsetの不能/整列除外を全域取得へ昇格しない。未指定を0と推定しない |
+| `src/cdda_probe.cpp`、`src/pcm_file.cpp` | 既存診断は最大750 CD frameの部分PCM保存。full-discのjob/世代/consumer契約ではない。S16_LEの明示byte化はcanonical検討の根拠 |
+| #156の採用判断・read policy | 未解決時はSTOP、代替PCMなし。完全readのUNCERTAIN分類と、不完全/非採用を区別 |
+
+変更はintegrity-design、message-contract、backlog、本記録の4文書だけ。source・tests・fixture・
+CLI/API・build設定・実機設定は変更していない。Node.jsのassertでcanonical byte順、連続prefix、
+gap/重複/順序/partial/zero/範囲外の拒否例、offset可否、byte数、memory/deadline換算を19ケース検算して成功した。
+これは設計のworksheetであり、capture/consumer実装の単体試験ではない。
+追加ローカルMarkdownリンク/anchor 6件、全diff、`git diff --check`を検査し成功（exit 0）。
+`git diff --exit-code -- src include tests ui scripts CMakeLists.txt`もexit 0で実装不変を確認した。
+今回はbuild/CTest、capture/checksum実行、通常起動のfull-disc read、ripping、配備・物理操作は未実施。
+既存の#10/#156の検証を、完全取得機能や外部照合の検証に流用しない。
+設計整理後、文書のcommit/push/master統合、後続A/B/C/DのIssue作成と、Aだけの実装・自動検証・統合を
+利用者から承認された。実Issueは文書統合後に作成し、B/C/D実装、providerアクセス、実機操作、Issue closeは行わない。
+
 ## #156 unresolved PCMの設計判断（2026-10-16）
 
 基準はmaster `554055d0a02d7ab77d26d211e42c7a74a8ec81aa`。#156はOpen、Hard dependencyなしの
