@@ -2,6 +2,37 @@
 
 更新日: 2026-10-16。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## #156 unresolved PCMの設計判断（2026-10-16）
+
+基準はmaster `554055d0a02d7ab77d26d211e42c7a74a8ec81aa`。#156はOpen、Hard dependencyなしの
+設計Issueとして本文・コメント・関連#11とPR #157を照合した。#11のコメントはPR #154でSTOPを確定し、
+残る採否判断を#156へ移管したことを示す。PR #157自体はbacklogだけの変更であり、追加fallbackの実装ではない。
+
+利用者はSTOPを継続し、BEST_AVAILABLE/SILENCE/WAIT_WITH_BUDGETを現時点では採用しない方針を承認した。
+[設計判断](../design/integrity-design.md#unresolved-pcm-policy)に候補比較、由来、有限予算・最終STOP、
+見送り理由、再検討条件、将来の独立実装と試験条件を記録した。
+[message contract](../design/message-contract.md#unresolved-pcm-policy)は既存公開fieldの意味を補足するだけで、
+新field・enum・event・選択肢を追加していない。候補を採用しないため実装Issueの作成も行っていない。
+
+照合した実装・試験は次のとおり。これは今回これらの試験を実行したという意味ではない。
+
+| 根拠 | 確認した境界 |
+|---|---|
+| `include/read_policy.hpp`、`src/daemon_snapshot_json.cpp` | 現行policyのfieldにunresolved_data_policy/sample_originがない。single/repeatと既存予算を維持 |
+| `src/pcm_worker.cpp`、`tests/integrity_fixture_test.cpp` | 完全readのqueue採用、失敗時のqueue破棄、旧stream PCM/STREAM観測の拒否を確認。同discのDISC観測は別scope |
+| `src/repeated_read_verifier.cpp`、`tests/repeated_read_verifier_test.cpp` | 一致・overlap条件を満たさない候補を呼び手bufferへコピーせず、試行・時間予算で打ち切る |
+| `src/integrity_state.cpp` | 完全性と根拠分類は別。UNCERTAINとSTOPを同義にせず、実際の採用条件を変えない |
+| `src/playback_engine.cpp`、`tests/playback_engine_test.cpp` | STOP・read stall・ALSA underrun復旧・正常drainの境界を分離。kernel ioctlの強制中断は保証しない |
+
+変更は設計・message contract・backlog・本記録の4文書だけで、source・test・fixture・build設定・
+公開schema・実機設定は変更していない。今回のbuild/CTest・Pi配備・再生・物理操作は未実施。
+既存の#10等の試験結果を、未採用候補の自動試験・実機確認へ流用しない。
+文書と実装/既存試験を照合し、全diffを確認した。追加したローカルMarkdownリンク/anchorの8件を
+Node.jsのassertで検査して成功（exit 0）、`git diff --check`も成功した。
+`git diff --exit-code -- src include tests ui scripts CMakeLists.txt`はexit 0で、実装・試験・toolingの不変を確認した。
+将来の採用判断には別承認と実装・自動/実機試験が必要。文書整理後、利用者からcommit・push・master統合を
+別途承認された。#156のIssue状態変更や追加の実機操作は行わない。
+
 ## #10 read offsetの実装と限定実機確認（2026-10-16）
 
 基準はmaster `86d1054a31178ef0967f3a32a9fee52f2fa86fb9`。専用branch `docs/10-offset-contract`の
