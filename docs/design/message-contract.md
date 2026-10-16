@@ -228,6 +228,8 @@ Custom UIが新fieldを仮定する必要はなく、現在の公開契約の互
 ## Complete PCM Input
 
 #160の[完全取得入力契約](integrity-design.md#complete-pcm-input)は未実装の設計である。
+#236でpure coreは追加したがtest-onlyで、runtimeやproviderへ接続していない。
+coreの型・complete receipt・consumerのresult spanは内部C++契約であり、公開JSONの追加fieldではない。
 capture job、consumer、COMPLETE/未完了/無効といった語を現行REST/WSの新しいfieldやenumとして追加しない。
 `read.activity=COMPLETE`はstreamのread終了、`coverage.observations_complete`やdisc mapのcompleteは
 観測台帳の欠落有無であり、専用取得jobの全域完了を意味しない。
@@ -242,6 +244,8 @@ consumerのalgorithm/version、完了/未完了/無効、拒否/取消理由・�
 完全性はcanonical入力の範囲とconsumer処理の属性であり、原盤一致・drive trust・物理同一性・外部MATCHとは別である。
 通常再生のhistory、MusicBrainz Disc ID、metadata、診断用の部分PCM fileから完全取得manifestを生成しない。
 source/fixtureやCustom UIが未実装のfieldを仮定する必要はなく、この設計段階の公開schema変更はない。
+#236による公開field/enum/eventの追加もない。coreのprefixとread観測、reader解放の申告gateを
+実機の全域取得やrelease確認済みとして描画しない。
 
 ## 保持窓と世代
 

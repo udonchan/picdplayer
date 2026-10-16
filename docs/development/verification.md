@@ -2,6 +2,59 @@
 
 更新日: 2026-10-16。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## #236 完全取得入力core（2026-10-16）
+
+基準は#160設計PR #235統合後のmaster `1b656834259b0eab9f1fcbbf11fee6418cdb4667`。
+利用者承認に従い後続4 Issueを作成し、A=#236/B=#237/C=#238/D=#239を#160のsub-issueへ設定した。
+BはA、DはA/B/C/#88にblocked byを設定。今回のsource実装はAだけで、全IssueをOpenのまま保持する。
+
+`CompletePcmInput`、job/profile/consumerの内部C++契約と`complete_pcm_input_test`を追加した。
+連続prefixとtrack境界、S16LE、完全read/offset 0、consumer chunk/finalize、取消/世代/期限、
+最終TOC・release申告の二段階gateを検証する。CMakeのdaemon targetは変更せず、新coreはtest-onlyでcompile/linkする。
+profileはtest-byte-recorderというfakeだけで、実checksum algorithmの採用や外部通信はない。
+
+| 検証 | 結果 |
+|---|---|
+| macOS Apple clang 15、ASan/UBSan、core再compile | 71ケース、82,707 checks成功、exit 0 |
+| Linux/aarch64 Debug、API/metadata ON、WPE OFF | `build-core-check`で最終source再build後66/66成功 |
+| Linux/aarch64 Debug、API/metadata OFF、WPE OFF | `build-core-minimal`で再build後39/39成功 |
+| Linux/aarch64標準WPE Debug（paranoia OFF） | `build-container`で再build後67/67成功 |
+| Debug Debian package lifecycle | disposable containerでinstall/upgrade/reinstall/purge成功 |
+
+nativeの実行は`clang++ -std=c++20 -Wall -Wextra -Wpedantic -fsanitize=address,undefined
+-fno-omit-frame-pointer -g -Iinclude tests/complete_pcm_input_test.cpp src/complete_pcm_input.cpp
+src/disc_toc.cpp src/integrity_state.cpp src/repeated_read_policy.cpp src/repeated_read_verifier.cpp
+-o build-core-native/complete_pcm_input_sanitized`後に同binaryを実行する。
+Linuxは既存`picdplayer-profile-review-build`へsourceをmountし、各構成をconfigure/buildしてからCTestを実行する。
+最小構成は`-DCMAKE_BUILD_TYPE=Debug -DENABLE_API=OFF -DENABLE_METADATA=OFF -DENABLE_WPE_KIOSK=OFF`、
+API有効構成はAPI/metadataをONにした。両構成とも`cmake --build <dir> -j6`と
+`ctest --test-dir <dir> --output-on-failure`が成功した。
+標準構成は`PICDPLAYER_BUILD_TYPE=Debug PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build
+PICDPLAYER_WPE_VOLUME=picdplayer-wpe221-build ./scripts/build-container.sh`と同imageでのCTestを実行した。
+既存SDKのruntime-image identityをread-onlyで事前照合し、cacheを再利用してWebKit自体を再compileしていない。
+packageは同Debug/imageで`./scripts/test-package-lifecycle.sh`を実行し成功した。
+生成した`cdplayerd`を`nm -C`で照合してCompletePcmInput symbolがなく、
+`dpkg-deb --contents`にもcore/test/headerが含まれないことをassertした（exit 0）。
+既存main/session/worker/verifier/JSON/UI/policyのsource差分もexit 0で不変を確認した。
+
+試験は全sample/channelとbyte order、track跨ぎ、非1始まりTOC、128件を超える小block列、
+gap/duplicate/順序/partial/zero/error/過剰block、明示0/未知/正負offset、宣言容量、
+consumer例外/結果超過/再入、単一予算・期限/時計逆行、全identity変更、final TOC/解放申告、
+cancel/finalize競合を含む。fake PCMに実repeat wrapperを接続して、guard/overlapを二重計上しないことも検証した。
+read予算のms丸めは切捨てとし、残り1ms未満を上向きに増やさない条件を追加してから全構成を再検証した。
+
+開発中、実repeat wrapperをfake PCMへ接続した試験が先頭overlapの扱いで失敗した。
+実契約はSTREAM_BOUNDARYでもrequested=15/compared=0であり、短い先行blockでは比較量が小さくなる。
+core検証と新fakeをその意味へ合わせた。既存verifierや既存試験の意味・既定値は変更していない。
+SINGLEにrepeat証拠が混在する場合も、固定したpolicyと異なるものとして拒否する。
+
+memoryは宣言上限・reservation・core scratch/result境界を検証するもので、任意consumerの隠れたheapや
+process RSS全体を8 MiBに抑える実測/保証ではない。manifest serializer、global slot、read watchdog、
+reader解放の実測、production capture、provider adapterはB/C/Dに残る。
+本作業では配備・実CD・試聴・TV・物理操作を実行しておらず、過去の#10実機結果を流用しない。
+全diffと設計/公開契約/backlogを照合し、今回の実行結果を記録した。
+追加したローカルMarkdownリンク/anchor 6件のassert検査と`git diff --check`も成功した。
+
 ## #160 完全取得PCMの設計整理（2026-10-16）
 
 基準はmaster `2e821685eb9ed0fc2c9ba84586d1e2e5dae64573`。#160はOpen、Hard dependencyなしの設計Issueとして
