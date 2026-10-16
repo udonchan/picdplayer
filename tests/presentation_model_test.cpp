@@ -199,6 +199,23 @@ int main() {
         check(nlohmann::json::parse(serialize_presentation_model(make_presentation_model(
             11, player, MediaLifecycleState::no_disc, std::nullopt, ambiguous,
             {}, {}, {}, false, 2, 8)))["enrichment"]["selection"].is_null());
-        std::cout << "PASS: provider-neutral presentation model\n";
+        ReadDiagnostics offset_read;
+        offset_read.session_id = "offset-session";
+        offset_read.offset_window = make_read_offset_window(150, 2400, -1);
+        offset_read.offset_window->disc_generation = 2;
+        DriveCapabilities offset_drive; offset_drive.read_offset_samples = -1;
+        const auto offset_model = [&](MediaLifecycleState state, std::optional<DiscToc> disc,
+                                       std::optional<std::uint64_t> generation) {
+            return make_presentation_model(12, player, state, disc, metadata, offset_drive,
+                                            offset_read, {}, false, generation);
+        };
+        check(offset_model(MediaLifecycleState::audio_ready, toc, 2).read.offset_window.has_value());
+        check(!offset_model(MediaLifecycleState::loading, toc, 2).read.offset_window);
+        check(!offset_model(MediaLifecycleState::audio_ready, toc, 3).read.offset_window);
+        check(!offset_model(MediaLifecycleState::audio_ready, toc, std::nullopt).read.offset_window);
+        check(!offset_model(MediaLifecycleState::no_disc, std::nullopt, 2).read.offset_window);
+        offset_drive.read_offset_samples = 0;
+        check(!offset_model(MediaLifecycleState::audio_ready, toc, 2).read.offset_window);
+        std::cout << "PASS: provider-neutral presentation model and offset window invalidation\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

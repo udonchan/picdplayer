@@ -1,8 +1,11 @@
 # 機能設計
 
-この文書は現行機能を記す。QUIET/BALANCED/SECURE、C2、cache対策、offset、外部照合の未実装要求は
+この文書は現行機能を記す。QUIET/BALANCED/SECURE、C2 trust実測、cache独立性、外部照合の未実装要求は
 [読み取り信頼性の仕様](integrity-design.md)を参照する。現行direct/paranoiaの選択や正常再生は、
 原盤PCMとの一致やdrive cacheから独立した読み取りを保証しない。
+起動時の明示offsetはsigned stereo sample frame単位で補正する。未指定と明示0を区別し、
+補正可能な完全CD frameだけを再生して端の不能区間と整列除外を公開する。
+符号・端動作・操作制約は[採用仕様](integrity-design.md#10の採用仕様と実装)を参照する。
 Phase 1aではread回数を変えず、既存ReadResultの観測、read-only drive能力probe、bounded event、
 ALSA再生headに対応する根拠の推定をsnapshotへ公開するところまで実装した。
 公開するCLEANは検証済みの意味ではなく、local verificationをSINGLE_READ等で別に示す。

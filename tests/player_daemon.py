@@ -201,3 +201,37 @@ assert "stdin_commands=enabled" in interactive.stdout, interactive.stdout
 assert "output stopped" in interactive.stdout, interactive.stdout
 
 print("PASS: daemon ignores stdin EOF; interactive mode exits on EOF")
+
+for offset in [0, 1, -1, 2147483647, -2147483648]:
+    port = free_port()
+    configured = subprocess.Popen(
+        [*base, '--read-offset-samples', str(offset),
+         *(['--api-port', str(port)] if api_enabled else [])],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    try:
+        ready, _, _ = select.select([configured.stdout], [], [], 3)
+        assert ready, 'offset player did not start without a disc'
+        if api_enabled:
+            deadline = time.monotonic() + 3
+            while True:
+                try:
+                    with opener.open(f'http://127.0.0.1:{port}/api/state', timeout=1) as response:
+                        state = json.load(response)
+                    break
+                except OSError:
+                    assert time.monotonic() < deadline, 'offset API did not start'
+                    time.sleep(0.01)
+            assert state['drive']['read_offset_samples'] == offset, state['drive']
+            assert state['drive']['read_offset_source'] == 'USER_CONFIGURED', state['drive']
+            assert 'not verified' in state['drive']['read_offset_detail']
+            assert state['read']['offset_window'] is None, state['read']
+        configured.send_signal(signal.SIGTERM)
+        out, err = configured.communicate(timeout=3)
+        assert configured.returncode == 0, (out, err)
+        assert f'read_offset_samples={offset}' in out, out
+    finally:
+        if configured.poll() is None:
+            configured.kill()
+            configured.wait()
+print('PASS: explicit offsets survive no-disc startup and capability probe without false window')

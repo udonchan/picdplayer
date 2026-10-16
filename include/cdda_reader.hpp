@@ -39,6 +39,8 @@ struct ReadAttemptEvidence {
     std::int32_t physical_start_lba = 0;
     std::int32_t observed_start_lba = 0;
     std::size_t physical_frames_requested = 0;
+    std::int32_t logical_start_lba = 0;
+    std::size_t logical_frames_requested = 0;
 };
 struct LocalReadVerification {
     unsigned attempts = 0;
@@ -54,6 +56,18 @@ struct LocalReadVerification {
     unsigned overlap_frames_compared = 0;
     OverlapVerification overlap = OverlapVerification::not_requested;
 };
+struct PhysicalReadEvidence {
+    std::int32_t start_lba = 0;
+    std::size_t frames_requested = 0;
+    std::int32_t observed_start_lba = 0;
+    std::size_t frames_read = 0;
+    int native_error = 0;
+};
+struct OffsetReadEvidence {
+    std::int32_t samples = 0;
+    std::optional<PhysicalReadEvidence> single_physical_read;
+};
+inline constexpr const char* read_offset_detail = "Explicit startup offset; physical calibration not verified.";
 struct ReadResult {
     std::int32_t start_lba;
     std::size_t frames_requested;
@@ -65,6 +79,7 @@ struct ReadResult {
     LocalReadVerification verification{};
     ReadIndependence read_independence = ReadIndependence::unknown;
     C2Status c2_status = C2Status::not_checked;
+    std::optional<OffsetReadEvidence> offset{};
 };
 
 struct RepeatedReadPolicy {

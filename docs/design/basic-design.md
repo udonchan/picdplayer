@@ -13,7 +13,10 @@ Raspberry Pi OS Liteはruntime/hardware検証環境である。将来Buildroot�
 優先順位は正確性、事実に忠実な説明、根拠の追跡、driveへの依存の抑制、能力不足時の明示的な扱い、
 再生の連続性、静音性、拡張性、UIの単純さとする。
 読み取り信頼性の要求と目標構成を[横断仕様](integrity-design.md)へ統合する。
-C2の実測trust評価、cache/offset、能力に応じたstrategy、区間provenance、外部照合は未実装の要求として扱う。C2 supportのdrive reportだけは初期probeで公開するが、読み取り時のC2観測や信頼性を意味しない。
+C2の実測trust評価、cache独立性の保証、詳細provenance拡張、外部照合は未実装の要求として扱う。
+現行はsingle/repeat・capabilityに基づくstrategyと降格理由、有界なread根拠、明示offset補正を実装する。
+C2 supportのdrive reportと、明示opt-in時のC2 pointer観測は、いずれも実測trustや原盤一致を保証しない。
+offset未指定はUNKNOWN、明示値はUSER_CONFIGUREDであり、物理校正済みとは扱わない。
 各拡張は既存のmain/worker所有権を維持し、診断の遅延をaudioへ伝播させず、能力不足と降格理由を公開する。
 対象drive・方式・試験条件が確定するまで、実装済みのsingle/repeatの保証を広げない。
 

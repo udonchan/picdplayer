@@ -76,7 +76,7 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
         if (!metadata->album_title.empty()) result.disc.title = metadata->album_title;
         if (!metadata->album_artist.empty()) result.disc.artist = metadata->album_artist;
     }
-    if (!disc) return result;
+    if (!disc) { result.read.offset_window.reset(); return result; }
     // Only a currently accepted audio TOC can anchor a map.
     // 再取得中や世代不明のTOCを現在の読み取りに結び付けない。
     if (media == MediaLifecycleState::audio_ready && disc_generation && *disc_generation > 0
@@ -90,6 +90,11 @@ PresentationModel make_presentation_model(std::uint64_t revision, const PlayerSt
         }
         if (valid) result.disc.layout = PresentationDiscLayout{*disc, result.read.session_id, *disc_generation};
     }
+    if (result.read.offset_window &&
+        (!result.disc.layout || result.read.offset_window->disc_generation != *disc_generation ||
+         !result.drive.read_offset_samples ||
+         result.read.offset_window->offset_samples != *result.drive.read_offset_samples))
+        result.read.offset_window.reset();
     result.tracks.reserve(disc->tracks.size());
     for (const auto& track : disc->tracks) {
         PresentationTrack item;

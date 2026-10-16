@@ -66,7 +66,11 @@ seek後には古い世代のPCMと根拠を無効化する。現在の診断画�
 
 現在の判定と公開値は[機能設計](../design/functional-design.md)と
 [詳細設計](../design/detailed-design.md)を正とする。
-C2、offset、cache対策、外部照合などの[未実装の要求](../design/integrity-design.md)は、
+明示offsetを指定すると、論理位置に対して指定sample数だけずらしたPCMを採用する。
+CORRECTEDはその適用を示すだけで、入力値の物理校正や原盤との一致は保証しない。
+端は取得不能区間に加え、完全CD frameへ揃えるため最大587 stereo sample frameを除外する。
+その範囲を明示し、ゼロ埋め・未補正PCMで補わない。未指定は従来どおりUNKNOWNである。
+C2 trust実測、cache独立性、外部照合などの[未実装の要求](../design/integrity-design.md)は、
 現在の保証に含めない。実機で言える範囲は[検証状況](../development/verification.md)を参照する。
 
 前：[CD-DAが音になるまで](playback.md) / 次：[TOCから曲名と画像へ](metadata.md)

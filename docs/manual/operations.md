@@ -23,6 +23,7 @@ curl --fail --show-error http://127.0.0.1:8080/api/state | python3 -m json.tool
 ```
 
 204は要求を受け付けたことだけを示す。現在の状態と同じ操作ではsnapshotが変わらないこともある。
+直後のGETがまだ操作前のsnapshotを返すこともあるため、期限を決めて期待する状態更新を待つ。
 discなし/EJECTING時などは409、bodyを付けた基本操作は400、GET等の誤methodは405である。
 外部peerからの操作POSTは本文の有無に関係なく403となる。通信失敗後に自動でPOSTを再送せず、
 stateを再取得してから次の操作を判断する。再生状態の正本はdaemonのsnapshotである。
@@ -43,6 +44,33 @@ stateを再取得してから次の操作を判断する。再生状態の正本
 /usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct \
   --read-verification repeat
 ```
+
+### 明示read offset
+
+`--player`限定で起動時に`--read-offset-samples SIGNED_INTEGER`を指定できる。
+単位はstereo sample frame（左右を合わせた一つの時点）であり、CD frameやchannel別sample数ではない。
+符号規約は`logical p <- physical p + offset`。次は構文例であって、このdriveの校正値ではない。
+
+```sh
+/usr/local/bin/cdplayerd --player /dev/sr0 --cdda-reader direct --read-offset-samples +1
+```
+
+符号付き32-bit十進整数を受け付け、不正値・重複指定・player以外への指定は拒否する。
+未指定はnull/UNKNOWNで従来のread経路を維持し、明示0はUSER_CONFIGUREDとして区別する。
+運用設定から渡す場合は既存`PICDPLAYER_EXTRA_ARGS`を使い、既存値を上書きしない。
+Settings/保存schemaやruntime変更APIはなく、変更にはdaemon再起動が必要である。
+
+補正可能な完全CD frame範囲だけを再生し、範囲の終端はqueue出力・drain後に停止する。
+物理的に取得不能な区間と、frame整列で追加除外する最大587 sample frame（約13.31 ms）を別々に示す。
+負offsetでは最初の一部を飛ばし、正offsetでは元の曲長より前に終わる場合がある。
+TOC/曲長は変えない。再生可能範囲が空なら操作を拒否し、ゼロ埋めや未補正PCMへの自動切替は行わない。
+
+`drive.read_offset_samples`、`drive.read_offset_source`、`drive.read_offset_detail`、
+`read.offset_window`、各evidenceの`offset`と`offset_status`で
+入力根拠・除外区間・適用結果を確認する。windowは計算上の範囲であり取得済みcoverageではない。
+標準Player/technical statusのdrive付近にも端除外を表示する。
+設定値の根拠が不明なら推測して入力せず、vendor/modelや試験値±1を校正済みと扱わない。
+CORRECTEDは補正処理の適用であり、物理校正、原盤一致、外部照合成功、bit-perfectの保証ではない。
 
 ### C2 error pointerの明示的な確認
 

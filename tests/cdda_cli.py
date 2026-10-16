@@ -69,6 +69,19 @@ for args, expected in [
     assert result.returncode == 2 and expected in result.stderr, result
 print('PASS: CDDA CLI validation')
 
+for value in ['', '+', '-', '+-1', '++1', '1.0', '1x', ' 1', '2147483648', '-2147483649']:
+    result = subprocess.run([sys.argv[1], '--read-offset-samples', value],
+                            capture_output=True, text=True, timeout=3)
+    assert result.returncode == 2 and 'Invalid --read-offset-samples' in result.stderr, result
+for value in ['0', '+0', '-0', '+1', '-1', '2147483647', '-2147483648']:
+    result = subprocess.run([sys.argv[1], '--read-offset-samples', value],
+                            capture_output=True, text=True, timeout=3)
+    assert result.returncode == 2 and 'requires --player' in result.stderr, result
+result = subprocess.run([sys.argv[1], '--read-offset-samples', '0', '--read-offset-samples', '1'],
+                        capture_output=True, text=True, timeout=3)
+assert result.returncode == 2 and 'Invalid --read-offset-samples' in result.stderr, result
+print('PASS: signed offset syntax, overflow, player-only and duplicate rejection')
+
 result = subprocess.run([sys.argv[1], '--probe-drive-start', '/nonexistent'],
                         capture_output=True, text=True, timeout=3)
 assert result.returncode == 1 and 'open /nonexistent' in result.stderr, result

@@ -5,7 +5,7 @@ private helperを全件転記する代わりに、機能境界と不具合に関
 
 ReadResult、PcmBlock、DaemonSnapshotにはread evidence、集計、DriveCapabilities、bounded event、
 ALSA再生headの根拠推定を持たせる。反復一致検証とtechnical statusも実装済みである。
-専用diagnostic event stream、C2/cache/offsetなどの未実装要求は
+専用diagnostic event stream、C2 trust実測/cache対策などの未実装要求は
 [読み取り信頼性の仕様](integrity-design.md)を参照する。区間と世代の対応、試行・memory上限、
 失効した結果の破棄、診断によるaudio backpressureの防止を拡張時も維持する。
 新しい型・公開field・protocolは実装時に確定し、既存snapshot互換性を検証する。
@@ -131,7 +131,9 @@ stream開始後の集計を値コピーで返す。世代が変わったread完�
 その他retry/skip/read error/cache error→UNCERTAIN、残り→CLEANである。
 local_verificationはmatching_readsが2以上ならMULTIPLE_MATCH、次にparanoia verify/fixupが
 あればBACKEND_REPORTED、残りはSINGLE_READ。これは観測の分類で、全policy条件の充足や
-原盤一致の保証ではない。offsetは現行backendでUNKNOWNである。C2は既定でNOT_CHECKEDだが、direct backendの
+原盤一致の保証ではない。offset未指定はUNKNOWN、明示値を適用して全要求PCMを採用したreadはCORRECTED、
+既知値でも非採用のreadはUNCORRECTEDとなる。これは未補正PCMへfallbackした意味ではない。
+C2は既定でNOT_CHECKEDだが、direct backendの
 `--direct-c2-pointers` opt-inではcapability probeの結果によりNOT_AVAILABLE、UNKNOWN、CLEAN、REPORTEDを返し得る。
 frames_acceptedは要求全量を成功取得した場合だけ加算する。verified_callsは2回以上一致の
 read数であり、policyの必要一致数を満たした採用read数と同一とは限らない。
@@ -153,6 +155,13 @@ main loopを止めない。実行中ioctlのcancelや公平性は提供せず、
 read bufferはCD frameの整数倍で、ReadResult.frames_read部分だけが有効。
 最初とread_error後にseekが必要。EOF判定は呼び手がTOCで行う。
 [direct](../../src/cdda_reader.cpp)と[paranoia](../../src/paranoia_reader.cpp)は同じPCM形式を返す。
+明示offsetがある場合だけ[OffsetReader](../../src/read_offset.cpp)でbackendを包み、その外側へrepeatを置く。
+TOCと起動値から補正可能な完全CD frame範囲を事前計算し、controllerの操作位置とengineのread終端へ反映する。
+各readでは必要な物理sectorを最大1つ追加して取得し、stereo sample frame単位で前後を除去する。
+物理入力が完全でなければ呼び手bufferへ一部PCMもコピーせず、read_error/frames_read=0を返す。
+結果のoffset根拠とsingle物理read、repeatの物理/論理試行範囲を保持し、追加sectorを採用coverageへ二重加算しない。
+予定window終端は既存のqueue出力・drainを使い、read errorとしてqueueを捨てない。
+TOC/曲長は変更せず、source/detail・不能/整列除外範囲は[wire契約](message-contract.md#read-offset)に従う。
 [RepeatedReadVerifier](../../src/repeated_read_verifier.cpp)はreaderを包み、各試行前に同じ物理範囲へseekする。
 候補をPCM全sampleで比較し、policyの必要一致数で採用する（既定2一致、最大3試行）。最初の論理block以外は
 直前に採用した15 CD frameを先行overlapとして候補に含め、直前PCMとの一致も確認する。overlapは出力PCMから除くため
@@ -217,7 +226,8 @@ block sizeとreaderを使う。この順序によりread途中の比較条件や
 CDROM_GET_CAPABILITY、およびMMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）を調べる。
 CD Read Featureが存在しC2 Flagsが返った場合、またはFeatureが不在の場合だけ、`c2_supported`を
 DRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを報告できるというdrive宣言であり、read時にC2を取得したこと、reportが正しいこと、原PCMを検証したことを
-意味しない。DAE、C2 trust、cache、accurate stream、offsetはUNKNOWNを維持する。probeはMediaWorkerで
+意味しない。DAE、C2 trust、cache、accurate streamはUNKNOWNを維持し、offset値もprobeでは取得しない。
+明示起動offsetはsession側で保持し、probe完了後の公開値にも再適用する。probeはMediaWorkerで
 非同期に実行し、probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
 probeの遅延は後続のmedia観測を遅らせ得る。現在は起動時一回のprobeであり、hotplug/reset時の能力失効と
 再probeは#88で扱い、未実装である。

@@ -60,6 +60,27 @@ int main() {
                 check(p.state().playback == mode);
             }
         }
-        std::cout << "PASS: commands, boundaries, snapshots, media replacement\n";
+        p.load_disc(toc);
+        p.set_playback_range(151, 2999);
+        check(p.play() && p.state().position_lba == 151);
+        check(p.seek_relative(std::numeric_limits<std::int64_t>::max()) && p.state().position_lba == 2998);
+        p.pause();
+        check(p.select_track(3) && p.state().position_lba == 151 && p.state().playback == PlaybackState::paused);
+        p.stop(); check(p.state().position_lba == 150);
+        check(p.play() && p.state().position_lba == 151);
+        p.stop(); p.set_playback_range(900, 1800);
+        check(!p.play() && p.state().position_lba == 150 && p.state().playback == PlaybackState::stopped);
+        check(!p.select_track(5) && p.state().track == 3);
+        check(p.select_track(4) && p.play());
+        check(!p.next() && p.state().track == 4 && p.state().position_lba == 900);
+        check(!p.previous() && p.state().track == 4);
+        check(p.seek_relative(std::numeric_limits<std::int64_t>::min()) && p.state().position_lba == 900);
+        p.stop(); p.set_playback_range(150, 150);
+        check(!p.play() && !p.select_track(3) && !p.seek_relative(10) && !p.next() && !p.previous());
+        p.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 1));
+        p.set_playback_range(0, 0);
+        check(!p.next() && p.state().playback == PlaybackState::stopped);
+        p.load_disc(toc); check(p.play() && p.state().position_lba == 150);
+        std::cout << "PASS: commands, boundaries, snapshots, media replacement, offset windows\n";
     } catch (const std::exception& e) { std::cerr << e.what() << '\n'; return 1; }
 }

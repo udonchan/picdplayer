@@ -2,6 +2,7 @@
 
 #include "cdda_reader.hpp"
 #include "read_policy.hpp"
+#include "read_offset.hpp"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -31,6 +32,7 @@ struct ReadEvidence {
     unsigned direct_retries = 0;
     ParanoiaEvents backend_events{};
     LocalReadVerification verification{};
+    std::optional<OffsetReadEvidence> offset;
 };
 
 struct IntegrityStats {
@@ -80,6 +82,7 @@ struct DiscReadMap {
 
 inline constexpr std::size_t read_history_capacity = 128;
 struct ReadDiagnostics {
+    std::optional<ReadOffsetWindow> offset_window;
     std::string session_id;
     std::optional<DiscReadMap> disc_map; // on-demand only; independent of stream history
     bool history_included = false;

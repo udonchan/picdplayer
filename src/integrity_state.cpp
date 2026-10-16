@@ -30,7 +30,9 @@ ReadEvidence make_read_evidence(const ReadResult& result) {
     else evidence.local_verification = LocalVerification::single_read;
     evidence.read_independence = result.read_independence;
     evidence.c2_status = result.c2_status;
-    evidence.offset_status = OffsetStatus::unknown;
+    evidence.offset = result.offset;
+    evidence.offset_status = !result.offset ? OffsetStatus::unknown
+        : complete ? OffsetStatus::corrected : OffsetStatus::uncorrected;
     evidence.direct_retries = result.retries;
     evidence.backend_events = result.paranoia;
     evidence.verification = result.verification;

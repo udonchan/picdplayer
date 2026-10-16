@@ -15,18 +15,20 @@ public:
     PlayerState state() const { return state_; } // snapshot, never mutable ownership
     void load_disc(const DiscToc& toc);
     void remove_disc();
-    void play();
+    bool play();
     void pause();
     void stop();
     bool select_track(int number);
-    void next();
-    void previous();
+    bool next();
+    bool previous();
     void playback_position(std::int32_t lba);
     void finished();
-    void seek_relative(std::int64_t frames);
+    bool seek_relative(std::int64_t frames);
+    void set_playback_range(std::int32_t begin, std::int32_t end);
 private:
     std::optional<DiscToc> toc_;
     PlayerState state_;
     std::size_t index_ = 0;
-    void select_index(std::size_t index);
+    std::int32_t begin_ = 0, end_ = 0;
+    bool select_index(std::size_t index, bool constrain = true);
 };
