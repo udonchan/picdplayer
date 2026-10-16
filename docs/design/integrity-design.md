@@ -586,7 +586,9 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 
 2026-10-16、#160は設計だけを進めるものとして、PCM非保存のincremental方式、明示開始、
 通常再生との同時取得なし、全域coverageの厳密判定を利用者が承認した。
-以下は未実装の取得契約であり、current snapshot、通常起動、reader、providerを変更するものではない。
+以下はproduction取得の未実装契約であり、current snapshot、通常起動、reader、providerを変更するものではない。
+#236では下記のpure input coreだけを追加した。drive取得・worker・provider・production公開は未接続であり、
+coreの入力完全性をfull-disc captureの実装完了とは扱わない。
 COMPLETE等の語もこの将来jobの概念で、既存`read.activity=COMPLETE`の意味を変更しない。
 #13はClosedだがprovider/checksum/transportは未実装である。PR #161は制約整理であり、機能完成の根拠にしない。
 
@@ -697,13 +699,14 @@ production統合では#88の消失/reset/同一path再接続の失効成果と�
 
 | 単位 | 単独の完了条件と依存 |
 |---|---|
-| A: 完全性・canonical/incremental core | pure fake consumerでTOC全域、連続prefix、track境界、byte order、上限、取消/finalize競合を検証。provider通信・drive I/O・公開APIなしで完了できる |
-| B: 排他的取得worker | Aに依存。専用reader、coordinator、call/job予算、main-loop非blocking、release待ち、世代失効をgate付きfakeで検証。通常起動や再生経路から自動起動しない |
-| C: checksum profile/consumer adapter | #13側の公式protocol・利用条件・algorithm選定に依存。既知vector・state上限・incremental適合を確認。通信/外部結果の実装とは分離し、A/Bと並行調査できる |
-| D: 明示jobのproduction統合と公開 | A/B/Cと#88の物理失効統合を前提に、開始拒否/取消/release待ち/再操作、manifestの契約と別承認の実機評価を実装。最終UI再設計やprovider通信は含めない |
+| [A: 完全性・canonical/incremental core (#236)](https://github.com/udonchan/picdplayer/issues/236) | pure input coreとtest-only対象を追加。TOC全域、連続prefix、track境界、byte order、宣言上限、取消/finalize競合を自動検証済み。provider通信・drive I/O・公開APIなし |
+| [B: 排他的取得worker (#237)](https://github.com/udonchan/picdplayer/issues/237) | Aに依存。専用reader、coordinator、call/job予算、main-loop非blocking、release待ち、世代失効をgate付きfakeで検証。通常起動や再生経路から自動起動しない。未実装 |
+| [C: checksum profile/consumer adapter (#238)](https://github.com/udonchan/picdplayer/issues/238) | #13側の公式protocol・利用条件・algorithm選定に依存。既知vector・state上限・incremental適合を確認。通信/外部結果の実装とは分離し、A/Bと並行調査できる。未実装 |
+| [D: 明示jobのproduction統合と公開 (#239)](https://github.com/udonchan/picdplayer/issues/239) | A/B/Cと#88の物理失効統合を前提に、開始拒否/取消/release待ち/再操作、manifestの契約と別承認の実機評価を実装。最終UI再設計やprovider通信は含めない。未実装 |
 
 設計整理後、利用者は文書の統合、A/B/C/Dの実Issue作成と、Aだけの実装・自動検証・統合を承認した。
 B/C/Dの実装、providerアクセス、実機操作、Issue closeは含めない。この設計文書をまとめた時点では表は分割案である。
+PR #235の設計統合後に上記4 Issueを作成し、#160のsub-issue、BのA依存、DのA/B/C/#88依存を記録した。
 #13が必要とする完全取得入力はA/Bだけでは成立せず、
 profile適合とDの受入まで必要である。providerの調査は並行できるが、全域coverageがない入力を外部照合へ渡さない。
 #13のClosedを機能完成や依存充足に読み替えず、再openもしない。
@@ -715,7 +718,35 @@ overlap/guardの二重計上、offset未指定/0/正負、consumer例外、容�
 disc/reader/policy交換、遅延旧結果、再起動、最終blockと取消競合をfakeで検証する。
 完全readがUNCERTAINの場合と、未解決で非採用の場合を区別し、前者も原盤一致とは表示しない。
 実機では別承認の開始/取消・通常再生への復帰・電源/USB安定性・音声/操作影響を確認する。
-今回は設計だけで、checksum計算・capture・provider・自動ripping・PCM保持・実機操作は実装/実行していない。
+PR #235では設計だけを整理し、checksum計算・capture・provider・自動ripping・PCM保持・実機操作は実装/実行していない。
+
+#### Pure Core Implementation
+
+#236の[CompletePcmInput](../../include/complete_pcm_input.hpp)はthread-confinedな入力モデルであり、
+CMakeの`complete_pcm_input_test`だけがcompile/linkする。daemon target、既存reader、CLI/REST/WS/fixtureへ接続しない。
+呼び手はjob専用のtrusted consumer、固定identity/profile/TOC/policy、有限durationとmonotonic clockを渡す。
+初期版のoffsetは明示0だけであり、原盤一致・校正済みを示す値ではない。
+
+`append`は正規化後のReadResultと完全なPCM spanだけを受け、全blockのconsumer処理成功後にprefixを進める。
+trackを跨ぐspanも境界で分け、最大16 KiBのscratchでS16LEを順次生成する。全域PCMは保持しない。
+`read_observations`は受理したread結果の観測であり、consumer確定prefixとは別である。
+consumer途中失敗時にread観測が残っても`accepted_frames/accepted_bytes`は進めない。
+
+`prepare`は全域とconsumer finalizeの成功を確認するだけで、resultをまだ公開しない。
+`confirm`で同じidentityと最終TOC、reader解放の申告を確認して初めてcoreのreceiptをcompleteにする。
+これはpureなgateであり、実TOC読出しや物理releaseの検出はB/Dの責任である。
+取消が先ならreceiptを作らず、callback内の取消/失効はcallbackから戻ってからconsumerをdiscardする。
+完了済みでもcontext変更の確認や明示invalidateでresultを非公開にする。新jobへ自動移植しない。
+
+repeatのoverlap意味は既存verifierを正とする。先頭STREAM_BOUNDARYでも要求量は15、実比較は0であり、
+次の比較量は直前block長と要求量の小さい方になる。SINGLEへrepeat証拠を渡す設定不一致は拒否する。
+入力のUNCERTAIN分類だけでは非採用にせず、現行readerが採用した完全性と既存policyの成立を検査する。
+
+上限判定はcore所有scratch・有界なTOC/identityとconsumerの宣言量・結果spanに対するもので、
+任意callbackの隠れたallocationやI/Oをsandbox化してはいない。consumer resultは最大64 KiB以下だが、
+将来manifest全体のencoding/容量判定、globalなactive slot、I/O監視・release待ち、provider採用はB/C/Dに残る。
+coreの`call_budget`は残予算計算と期限判定であり、ioctl/CPUを中断するwatchdogではない。
+millisecond未満の残予算は切り捨てて0とし、新しいreadに残job時間を超える予算を与えない。
 
 ## 12. 移行phaseと完了条件
 
