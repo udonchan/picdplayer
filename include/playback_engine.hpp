@@ -25,6 +25,7 @@ public:
     // Call once after a position/state command; invalidates all old PCM.
     void synchronize();
     void tick();
+    bool take_reader_failure() noexcept;
     ReadDiagnostics read_diagnostics(bool include_history = false);
 private:
     PlayerController& controller_;
@@ -42,6 +43,7 @@ private:
     std::chrono::milliseconds read_stall_timeout_;
     std::optional<std::int64_t> last_read_stall_ms_;
     unsigned underrun_recoveries_ = 0;
+    bool reader_failure_ = false;
     std::chrono::steady_clock::time_point last_tick_{};
     struct SubmittedEvidence {
         std::int64_t begin_stereo_frame;

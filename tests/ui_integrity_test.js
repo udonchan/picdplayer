@@ -26,7 +26,7 @@ async function main() {
     tracks: [{ number: 1, title: 'Track', duration_frames: 4500 }],
     enrichment: { status: 'AVAILABLE' }, artwork: { cover: null },
     drive: { vendor: 'Drive', model: 'Model', digital_audio_extraction: { value: 'UNKNOWN', source: 'NONE' },
-      c2_supported: { value: 'NOT_CHECKED', source: 'NONE' }, read_cache: { value: 'UNKNOWN', source: 'NONE' },
+      c2_supported: { value: 'UNKNOWN', source: 'NONE' }, read_cache: { value: 'UNKNOWN', source: 'NONE' },
       speed_control: { value: 'YES', source: 'KERNEL_REPORTED' }, requested_speed_x: 4,
       speed_request_error: '', current_speed_x: null, read_offset_samples: null },
     read: { session_id: 'session-a', stream_generation: 4, activity: 'READING', effective_strategy: 'direct-single-read',
@@ -123,6 +123,26 @@ async function main() {
   assert.equal(node('drive-offset-window').hidden, true);
   assert.equal(node('drive-offset-window').textContent, '—');
 
+  const observing = structuredClone(stopped);
+  observing.revision = 7;
+  observing.player = { state: 'NO_DISC', track_number: null, position_frames: null, track_duration_frames: null };
+  observing.disc = { state: 'NO_DISC', layout: null };
+  observing.tracks = [];
+  observing.enrichment = { status: 'NOT_REQUESTED' };
+  observing.artwork = { cover: null };
+  for (const key of ['digital_audio_extraction', 'c2_supported', 'c2_trustworthy', 'read_cache', 'accurate_stream', 'speed_control']) {
+    observing.drive[key] = { value: 'UNKNOWN', source: 'NONE', detail: '' };
+  }
+  Object.assign(observing.drive, { vendor: '', model: '', firmware: '', requested_speed_x: null, current_speed_x: null });
+  // Sparse v1 telemetry must not resurrect observations from the old context.
+  observing.read = { session_id: 'session-a', stream_generation: 5, activity: 'IDLE', queued_blocks: 0,
+    latest: null, current_playback: null, active_warning: null };
+  observing.drive.observation = { generation: 2, presence: 'UNKNOWN', reason: 'STATE_CHANGED',
+    sampled: true, method: 'NODE_SYSFS_POLL', error: 'METADATA_UNAVAILABLE', revalidating: true, retiring_io: true };
+  sockets[0].onmessage({ data: JSON.stringify(observing) });
+  assert.match(node('drive-observation').textContent, /NODE UNKNOWN · observed context 2/);
+  assert.match(node('drive-observation').textContent, /revalidating · retiring old I\/O · physical identity unverified/);
+
   const nextSession = structuredClone(snapshot);
   nextSession.revision = 1;
   nextSession.read.session_id = 'session-b';
@@ -136,6 +156,7 @@ async function main() {
   assert.equal(node('map-latest').hidden, true);
   assert.equal(node('map-marker-label').textContent, 'LATEST OBSERVED READ · NOT AVAILABLE');
   assert.equal(node('map-marker-label').dataset.marker, 'unavailable');
+  assert.equal(node('drive-observation').textContent, 'Device observation UNKNOWN');
   sockets[0].onclose();
   assert.equal(node('connection').textContent, 'DAEMON · RECONNECTING');
   assert.equal(node('connection').dataset.state, 'reconnecting');

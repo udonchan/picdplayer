@@ -127,6 +127,13 @@ function render(state) {
   set('drive-offset', drive.read_offset_samples == null
     ? 'UNKNOWN'
     : `${drive.read_offset_samples} samples`);
+  const deviceObservation = drive.observation;
+  set('drive-observation', deviceObservation && Number.isSafeInteger(deviceObservation.generation)
+    && deviceObservation.generation >= 0 && ['UNKNOWN', 'ABSENT', 'PRESENT'].includes(deviceObservation.presence)
+    ? `NODE ${deviceObservation.presence} · observed context ${deviceObservation.generation} · ${deviceObservation.reason ?? 'UNKNOWN'}`
+      + (deviceObservation.revalidating === true ? ' · revalidating' : '')
+      + (deviceObservation.retiring_io === true ? ' · retiring old I/O' : '') + ' · physical identity unverified'
+    : 'Device observation UNKNOWN');
   const offsetWindow = read.offset_window;
   const offsetNote = byId('drive-offset-window');
   const validOffsetWindow = offsetWindow && state.disc?.layout

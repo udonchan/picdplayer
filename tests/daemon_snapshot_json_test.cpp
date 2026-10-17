@@ -166,6 +166,19 @@ int main() {
         check(projection["read"]["latest"]["offset"]["single_physical_read"].is_null());
         check(projection["read"]["latest"]["verification"]["attempt_details"][0]["logical_frames_requested"] == 15);
         check(projection["read"]["latest"]["verification"]["attempt_details"][0]["frames_read"] == 16);
-        std::cout << "PASS: stable daemon snapshot JSON schema and bounded offset projection\n";
+        const DeviceObservationSnapshot observation_change{2,DevicePresence::unknown,DeviceChangeReason::state_changed,"METADATA_UNAVAILABLE",true};
+        auto lost=make_daemon_snapshot(99,PlayerState{},MediaLifecycleState::no_disc,std::nullopt,MetadataResult{});
+        lost.drive=invalidated_drive_capabilities("/fake",0,observation_change);
+        lost.drive.observation_revalidating=true;lost.drive.observation_retiring_io=true;
+        const auto observed=nlohmann::json::parse(serialize_daemon_snapshot(lost));
+        check(observed["drive"]["observation"]["generation"]==2);
+        check(observed["drive"]["observation"]["presence"]=="UNKNOWN");
+        check(observed["drive"]["observation"]["reason"]=="STATE_CHANGED");
+        check(observed["drive"]["observation"]["retiring_io"]==true);
+        check(observed["drive"]["observation"]["method"]=="NODE_SYSFS_POLL");
+        check(observed["drive"]["read_offset_samples"]==0);
+        check(observed["drive"]["c2_supported"]["value"]=="UNKNOWN");
+        check(json["drive"]["observation"].is_null());
+        std::cout << "PASS: stable daemon snapshot JSON schema and bounded offset/device projection\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

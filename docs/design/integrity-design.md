@@ -275,7 +275,70 @@ UNKNOWNとして扱う。generic packet対応だけで全MMC機能が使える�
 
 probeはMediaWorkerで逐次実行し、drive I/OはPCM readerと直列化する。
 待機中はUNKNOWNを公開する。hotplug/reset時の能力snapshot無効化・再取得、driveなしとdiscなしの
-lifecycle分離は#88の責務であり、#7の初回probeへ含めない。現在はdevice generationによる失効・再probeを実装していない。
+lifecycle分離は#88の責務であり、#7の初回probeへ含めない。
+#88の今回差分では以下の観測世代と失効を実装し、物理試験と検出不能範囲を別に残す。
+
+### Device Lifecycle Observation
+
+`DeviceLifecycleObserver`はowner threadでdevice nodeとread-only sysfs metadataをsamplingし、
+main/readerは有界なcacheだけを読む。optical read、journal、root権限、udev triggerには依存しない。
+Linuxではblock nodeのmajor/minor/inode、`/sys/dev/block/<major>:<minor>`のresolved pathと、
+USB祖先がある場合のbusnum/devnumを内部signatureに使う。vendor/model/TOC/serialの推測はしない。
+signatureはOS観測値であって物理同一性ではなく、公開IDとして送らない。
+
+| 観測 | 公開/失効の意味 |
+|---|---|
+| PRESENT | block nodeと必要metadataを観測した。媒体あり・音声正常・物理同一性を意味しない |
+| ABSENT | nodeのstatがENOENT/ENXIO。物理的に抜かれた原因やtrayの空を断定しない |
+| UNKNOWN | 初回待ち、unsupported platform、非block path、権限/metadata/format/取得失敗等。ABSENT/NOへ変換しない |
+| 初回/状態変化/PRESENTのsignature変化 | 観測context generationをadvanceする。安定したUNKNOWN/ABSENTや同じsignatureではadvanceしない |
+| reader failure/stallのmain観測 | 安全側の失効としてadvanceしREADER_FAILUREとする。USB交換/reset確定という意味ではない |
+
+既定sampling間隔は250 msで、初回probeは待ち時間なしでownerが開始する。これは最大検出latencyの保証ではない。
+sampling中にmainがreader failureを通知した場合、その前に開始した古いsampleは適用しない。
+metadata待ち中もmain用mutexを保持しない。初回観測が返らない場合も500 msの猶予後はUNKNOWN contextで
+通常のmedia確認とlegacy single playbackを許すが、未bindのprobe reportでC2 packetを有効にしない。
+観測が後から変わればそのcontextも失効させる。
+
+`drive.observation.generation`は同process/session内の失効counterで、既存read evidenceの
+`device_generation`（成功したreader openのcounter）や`disc_generation`、`stream_generation`とは別である。
+数値が同じでも同一の名前空間ではなく、再起動や同じpath/vendor/modelから物理同一と推定しない。
+
+main ownerはcontext変更時に次を一つの失効処理として行う。
+
+- controllerのvalidated TOCを外してstreamをcancelし、worker自身へreader discardを要求する。
+  進行中ioctlを中断・別thread closeせず、retiring I/Oが終わるまで新contextのprobe/controlを発行しない。
+- disc世代・disc map・stream履歴・現在PCM・旧event/metadata/artwork/offset windowを失効させる。
+  旧probe/TOC/speed/control結果を新deviceへ適用せず、新deviceで旧streamを自動再開しない。
+- measured/reportされたcapability・vendor/model/firmware・speed request receiptを消す。
+  operatorのrequested policy、設定保存値、configured speed/明示offsetは保持する。USER_CONFIGURED offsetは校正証明ではない。
+- fresh probe/media/TOCを新contextで確認してから操作を再開する。UNKNOWN観測ではcapabilityをUNKNOWNのまま扱い、
+  legacy playbackを不必要に禁止しない。未知C2をNOにせず、requested/effective/pending/downgradeを区別する。
+
+device再接続でMediaStateTrackerの空tray履歴をresetするため、再接続そのものはdisc挿入autoplayの根拠ではない。
+同じdevice contextで実際にempty trayを観測した後のaudio disc挿入は従来どおり扱う。
+player/legacy disc statusのNO_DISCはvalidated audio TOCがない場合にも使い、物理drive不在の証拠にしない。
+既存controllerが操作可能な間のStop/Pauseはlocal audio制御として扱い、観測contextの再検証だけを理由に拒否しない。
+
+MediaWorkerは共有coordinatorを一箇所で所有し、request選択時の観測generationを保持する。
+coordinator取得前後のadmission checkと結果の世代checkを行い、取消された待機中の旧start/stop/speed/ejectを発行しない。
+callbackを実際に呼んだ場合だけ結果を作り、skipした操作を成功ackとして公開しない。
+許可済みopaque callは中断できず、終了後の旧結果を捨てる。callbackはcoordinatorを再入してはならない。
+PcmWorkerもcoordinator取得後にstream世代を再検証し、意図的な取消をread errorにしない。
+factory/seek/readと同様、discard・error・shutdownのcloseもowner/coordinator内で行い、queue mutexをI/O中に保持しない。
+
+実readerにはepoch guardを付け、mainが変更を適用する前でも新しい観測世代と異なるseek/readを拒否し、
+戻った旧readをqueueへ入れない。すでにALSAへ提出済みのPCMやsampling前のphysical変化まで瞬時に撤回する保証ではない。
+`retiring_io`中のinflight metricは旧ownerの解放待ちを含み、新deviceのread成功/失敗へ読み替えない。
+destructorのjoinはI/O/metadata probeが戻るまで待つ場合があり、通常main loopでのnonblocking処理とは分ける。
+
+#### Observation Limits
+
+同じnode/signatureのままのreset、sample間に完結して識別情報も戻る交換、libraryが吸収して外へ出ないI/O障害は
+検出を保証しない。250 ms間隔は物理連続性の証明でもudev event全件の取得でもない。
+reader failure通知は原因を確定せず、曖昧なEIOやread stallをreset/物理交換と断言しない。
+新たなUSB/power異常では追加の読出しを止め、原因/物理系の確認と、別承認の抜き差し・故障試験へ分離する。
+fakeでの失効検証や正常CD再生だけでphysical hotplug/resetの実機受入を完了したとは扱わず、#88はOpenのまま残す。
 速度変更・cache対策の追加前にdevice I/Oの調停を整え、ejectを優先する。
 現行probeに能動的cache/C2精度試験やトレイ操作は含めない。
 

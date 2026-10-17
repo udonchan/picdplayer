@@ -1,6 +1,7 @@
 #include "playback_engine.hpp"
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
@@ -15,6 +16,10 @@ template<class F> void wait_for(F condition) {
     }
 }
 struct Gate { std::mutex mutex; std::condition_variable cv; bool entered=false, release=false; };
+struct ReleaseReaderGate {
+    std::shared_ptr<Gate> gate;
+    ~ReleaseReaderGate() { {std::lock_guard lock(gate->mutex);gate->release=true;} gate->cv.notify_all(); }
+};
 class FakeReader : public CddaReader {
     std::int32_t position_ = 0;
     std::shared_ptr<Gate> gate_;
@@ -82,10 +87,24 @@ int main() {
             bool failed = false;
             try { engine.tick(); } catch (const std::runtime_error&) { failed = true; }
             check(failed);
+            check(!engine.take_reader_failure());
             if (engine.read_diagnostics().current_playback)
                 throw std::runtime_error("stale current_playback after output failure");
         }
         const PcmBufferConfig defaults;
+        {
+            struct ErrorReader : FakeReader {
+                ReadResult read(std::span<std::int16_t> pcm) override {
+                    return {0,pcm.size()/cdda_samples_per_frame,0,ReadStatus::read_error,EIO,0};
+                }
+            };
+            PcmWorker worker([]{return std::make_unique<ErrorReader>();});
+            PlayerController controller;controller.load_disc(make_audio_toc(1,std::vector<std::int32_t>{0},300));
+            FakeOutput output;PlaybackEngine engine(controller,worker,output,300);
+            controller.play();engine.synchronize();wait_for([&]{return !worker.status().error.empty();});
+            bool failed=false;try{engine.tick();}catch(const std::runtime_error&){failed=true;}
+            check(failed&&engine.take_reader_failure()&&!engine.take_reader_failure());
+        }
         check(defaults.capacity_cd_frames == 750 && defaults.startup_cd_frames == 45);
         // An uninterruptible reader must not block the main loop indefinitely.
         // The engine stops the stream and lets the worker release the reader
@@ -93,6 +112,7 @@ int main() {
         {
             auto gate = std::make_shared<Gate>();
             PcmWorker worker([gate] { return std::make_unique<FakeReader>(gate); });
+            ReleaseReaderGate release{gate};
             PlayerController controller;
             controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 300));
             FakeOutput output;
@@ -104,7 +124,8 @@ int main() {
             const auto diagnostics = engine.read_diagnostics();
             check(controller.state().playback == PlaybackState::stopped &&
                   diagnostics.last_read_stall_ms && *diagnostics.last_read_stall_ms >= 10 &&
-                  diagnostics.read_stall_timeout_ms == 10 && !diagnostics.current_playback);
+                   diagnostics.read_stall_timeout_ms == 10 && !diagnostics.current_playback);
+            check(engine.take_reader_failure()&&!engine.take_reader_failure());
             { std::lock_guard lock(gate->mutex); gate->release = true; }
             gate->cv.notify_all();
         }
