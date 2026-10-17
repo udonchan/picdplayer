@@ -25,6 +25,16 @@ int main() {
         check(history_calls == 0);
         check(route_api_request("GET", "/api/read-history", provider, {}, {}, {}, nullptr, {}, {}, history).body == R"({"history":{"regions":[]}})");
         check(history_calls == 1);
+        const ApiStateProvider pending = [] { return std::string{}; };
+        check(route_api_request("GET", "/api/read-history", provider, {}, {}, {}, nullptr, {}, {}, pending).status == 503);
+        const auto map_route = [&](std::string_view method, const ApiStateProvider& map = {}) {
+            return route_api_request(method, "/api/disc-map", provider, {}, {}, {}, nullptr, {}, {}, {}, {}, {}, map);
+        };
+        check(map_route("GET").status == 503);
+        check(map_route("GET", pending).status == 503);
+        check(map_route("POST", history).status == 405 && history_calls == 1);
+        check(map_route("GET", [] { return std::string(R"({"disc_map":null})"); }).body == R"({"disc_map":null})");
+        check(map_route("GET", [] { return std::string(1024 * 1024 + 1, 'x'); }).status == 500);
         auto response = route_api_request("GET", "/api/state", provider);
         check(response.status == 200 && response.content_type == "application/json");
         check(response.body == R"({"revision":7})" && calls == 1);

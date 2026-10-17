@@ -5,3 +5,4 @@
 // Shared diagnostic projection; no provider metadata or artwork URLs.
 nlohmann::json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& read,
                                  const std::vector<PlayerEvent>& recent_events);
+nlohmann::json diagnostic_disc_map(const std::optional<DiscReadMap>& map);

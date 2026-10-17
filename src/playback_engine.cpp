@@ -198,9 +198,9 @@ bool PlaybackEngine::take_reader_failure() noexcept {
     return value;
 }
 
-ReadDiagnostics PlaybackEngine::read_diagnostics(bool include_history) {
-    const auto status = worker_.status(include_history);
-    auto result = status.diagnostics;
+ReadDiagnostics PlaybackEngine::read_diagnostics(bool include_history, bool include_disc_map) {
+    auto status = worker_.status(include_history, include_disc_map);
+    auto result = std::move(status.diagnostics);
     result.current_playback = current_evidence_;
     result.queued_blocks = status.queued;
     result.prebuffer_target_frames = prebuffer_blocks_ * worker_.read_block_cd_frames();

@@ -94,7 +94,7 @@ if(ENABLE_METADATA)
     target_link_libraries(cdplayerd PRIVATE PkgConfig::DISCID CURL::libcurl nlohmann_json::nlohmann_json)
 endif()
 if(ENABLE_API)
-    target_sources(cdplayerd PRIVATE src/daemon_snapshot_json.cpp src/presentation_json.cpp src/api_server.cpp src/read_policy_store.cpp
+    target_sources(cdplayerd PRIVATE src/daemon_snapshot_json.cpp src/presentation_json.cpp src/api_server.cpp src/read_policy_store.cpp src/read_diagnostics_publisher.cpp
         src/ui_bundle.cpp)
     target_include_directories(cdplayerd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
     target_compile_definitions(cdplayerd PRIVATE ENABLE_API=1)
@@ -310,6 +310,18 @@ if(BUILD_TESTING)
             nlohmann_json::nlohmann_json)
         add_test(NAME diagnostic_isolation COMMAND diagnostic_isolation_test)
         set_tests_properties(diagnostic_isolation PROPERTIES TIMEOUT 10)
+        add_executable(read_diagnostics_publisher_test tests/read_diagnostics_publisher_test.cpp
+            src/read_diagnostics_publisher.cpp src/api_server.cpp src/logger.cpp src/ui_bundle.cpp
+            src/cec_input.cpp src/repeated_read_policy.cpp src/repeated_read_verifier.cpp
+            src/pcm_worker.cpp src/integrity_state.cpp src/playback_engine.cpp src/player_controller.cpp
+            src/disc_toc.cpp src/daemon_snapshot_json.cpp src/drive_capabilities.cpp src/player_event.cpp)
+        target_include_directories(read_diagnostics_publisher_test PRIVATE include src ${CMAKE_CURRENT_BINARY_DIR})
+        target_compile_features(read_diagnostics_publisher_test PRIVATE cxx_std_20)
+        target_compile_options(read_diagnostics_publisher_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(read_diagnostics_publisher_test PRIVATE PkgConfig::WEBSOCKETS
+            nlohmann_json::nlohmann_json Threads::Threads)
+        add_test(NAME read_diagnostics_publisher COMMAND read_diagnostics_publisher_test)
+        set_tests_properties(read_diagnostics_publisher PROPERTIES TIMEOUT 20)
         if(NODE_EXECUTABLE)
             add_test(NAME ui_diagnostic_integration COMMAND ${NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_status_test.js $<TARGET_FILE:diagnostic_isolation_test>)

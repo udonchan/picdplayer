@@ -7,6 +7,10 @@
 以下の未commit/未push/未配備/文書未統合という記述は各作業時点の履歴で、現在の保存状態はGitのbranch/履歴を参照する。
 未実施の音声/CEC/長期・物理受入は、この保存操作でも完了へ変更しない。
 
+本branchでは整理文書commit `7b8d099`を土台に、配備用worktreeの差分を3-wayで照合した。
+重複したbacklog/verificationは記録を保持して整合し、以下に詳細な音声候補の再現・回帰・配備記録を併記する。
+commit対象の実装・test・CMakeは配備sourceとbyte一致であり、この保存のための再配備やPi操作は行わない。
+
 ## #121 retry修正版の実機配備（2026-10-17 UTC）
 
 後続の明示依頼で`fix/audio-first-review`から標準WPE Debug packageを作成・配備した。
@@ -108,6 +112,186 @@ GitHubの本文・後続コメント・merge履歴を照合し、次の4件を�
 文書は最新masterから分離した`docs/issue-cleanup-a1-a2` worktreeの未commit差分として保持し、
 今回commit・push・PR作成は行わない。GitHubのClose時点で、この整理文書はmaster未統合であることも明記する。
 音声優先診断の未commit修正は別worktreeへ保持し、本整理へ混在させない。
+## retry修正版Debugの配備と読み取り確認（2026-10-17 UTC）
+
+利用者の実機deploy・可能な確認を進める依頼により、`fix/audio-first-review`の未commit sourceから
+標準WPE Debug packageを作成・配備した。元の`feature/audio-first-diagnostics`と旧packageは変更しない。
+元SDK exportを新worktreeへ非破壊コピーしrecipe一致を確認したため、WebKit再buildは行わなかった。
+
+標準`build-container.sh`のpackage生成・profile検査は成功した。既存の`picdplayer-build` imageには
+現Dockerfileで要求するNinjaがなく、初回CTestはbuild_profileだけ失敗した（69/70）。製品不具合や実機失敗ではない。
+source/packageを変えず、Ninjaのある既存`picdplayer-profile-review-build`と同じSDKで全70試験を再実行し成功
+（37.35秒）。`PICDPLAYER_BUILD_TYPE=Debug`の標準package lifecycleも同image指定で成功した。
+失敗した試験を除外したり、過去70/70を今回結果へ代用したりしていない。
+
+配備直前はSTOPPED/AUDIO_READY、両service active、`get_throttled=0x0`を再確認した。
+旧package（`1bee8096…`）・実効設定3ファイル・起動引数hash・policy/背景API・boot IDを
+target側の新規mode 0700 directoryへ保全し、設定とraw記録は0600で保存した。
+未存在のoptional kiosk EnvironmentFileは作成せず、実際のEnvironmentFiles/drop-inをsystemdから照合した。
+今回の保存内容・key・raw journal・画像はGit/GitHubへ含めない。
+
+標準`PICDPLAYER_BUILD_TYPE=Debug ./scripts/deploy.sh`で同版更新し、両service active→activeと
+WPE main process/2.54.0/Debug identityを確認した。service再起動は配備に伴うものだけで、Pi rebootはしていない。
+
+| 配備同一性 | SHA256 |
+|---|---|
+| package | `0333ffbb321583f20a7c915f0edc646608faeabf46fcd15fe111c5c9aebe4616` |
+| daemon | `dcd958f8a9f6e1e8c1638e622fee8b845e927f317f443fdf1f2a8b2ff532dda2` |
+| source/stage/target/HTTP Player JS | `353e58fbd4203669ee9ce3986f9e4db8c00fa43363663380c886566f8a13fb38` |
+
+設定3ファイルとoptional file不在、起動引数、policy全体、背景requested/effective/availableは配備前後で一致した。
+同boot、STOPPED、低電圧flag 0、service自動再起動回数0を確認した。offset/背景保存等の設定を追加していない。
+`/api/disc-map`はhistoryなし200、`/api/read-history`は503→2.1秒後200で、session/stream/disc世代と
+正のcapture sequence/時刻を照合した。503を音声失敗や最新観測の保証へ読み替えない。
+
+既存Debug Inspectorへ専用loopback tunnelを張り、実WPEでready=complete/connected・修正helper読込み・
+同discのmap取得完了・UTC capture表示・未処理retryなしを読み取った。resource記録はmap GETが
+開始937 ms/3100 msの2回、詳細history GETは0回だった。初回map GETのHTTP statusまではこの記録で確定しない。
+STOPPEDの1920×1080 rendered-page PNGをprivateに保存して目視し、この条件ではdocument overflowなし。
+画像はGit/GitHubへ含めず、PNGを物理TV/DRM scanout確認とは扱わない。今回のtunnelだけを終了した。
+
+23:07:40 UTCまでの新service invocationではdaemon 30 entry/kiosk 1 entry、underrun/main_loop_stall/read_stall/
+WARN/ERRORは検索上0件、保全開始後のkernel追加entryは0件、`get_throttled=0x0`だった。
+停止中の短い確認であり、音声継続や低電圧問題全体の解消ではない。
+play/pause/stop/seek・CEC・tray・hotplug・負荷/長期試験は実行せず、#121/#184等を受入完了としてCloseしない。
+commit/push/PRは未実施、Issue整理文書との一括統合もまだ行っていない。
+
+## 音声優先診断の独立レビュー（2026-10-17 UTC）
+
+Issue整理後の別作業単位として、基準master `55263c4`に対する未commit候補を2担当で読み取りレビューした。
+publisherの所有権・active/pending上限・旧context拒否・解放と狭いengine統合には具体的な新規不具合を認めなかった。
+これはhard real-timeや物理audioの保証ではなく、shutdown join・同期state/WS・他APIの残る境界は維持する。
+
+Playerの503 retryでは2件を実source/既存Node harnessのメモリ内実行で再現した。
+
+- P2: STOPPEDのAが503でtimerを持ったまま新session/disc Bへ移り、Bも503になるとBのretryが予約されない。
+  Aのtimerが旧contextとして終了した後、Bに追加snapshotがなければ10秒経っても`Map not obtained`のまま。
+  同discのstream変更だけでは停止中の自動取得は直ちに発生せず、明示Refreshが503になる場合に同じ欠落を確認した。
+- P3: 503が100 msで返り2100 msのretryを予約した後、2000 msの通常取得が成功しても古いtimerが残る。
+  自動要求時刻`[0, 2000, 2100]`をassertし、100 ms間隔の冗長要求を確認した。
+
+最初の再現driverはP2新session/discを確認後、同disc stream変更の自動取得に関するhelperの誤った期待で失敗した。
+期待を修正した2回目のdriverは成功し、明示Refreshを伴う同disc条件とP3を確認した。helperの失敗を製品不具合に数えない。
+
+元の`feature/audio-first-diagnostics`を変更せず、tracked差分19ファイルと指定済みuntracked 3ファイルだけを
+`fix/audio-first-review` worktreeへ複製し、22ファイルのbyte一致を確認してから修正を開始した。
+この複製段階ではbuild/package/SDK/private証跡は複製・削除・上書きしていない。
+この時点のUI修正は旧配備package（`1bee8096…`）に含まれず、上記の後続承認で新packageを配備した。
+旧package SHA256とPlayer JS SHA256が下記配備記録に一致することをローカルで再確認したが、Piへは接続していない。
+
+修正前候補を既存Linux/aarch64 image `e8373978b572`へread-only mountし、networkなし・tmpfs buildで
+API/metadata ON・WPE OFFのDebugを再configure/buildしてCTest 69/69成功（36.23秒）を確認した。
+既存試験が緑でも上記timer競合は残っていたため、独立した回帰を追加した。
+既存の標準scriptはpackage/stageを作り直すため、この保全レビューでは補助CMake手順を同じcontainer内で使う。
+
+### retry修正とNode回帰
+
+UIの要求owner世代を内部で管理し、旧返答によるretry予約・map採用・新要求のloading解除を拒否する。
+session/disc変更と新しい取得では不要timerを破棄する。同discのstream変更では保持済みmapを消さず、
+未取得なら既存timerまたは進行中だった要求の残る2秒間隔を最新streamの取得へ引き継ぐ。
+新streamの100 ms時点では要求せず、追加snapshot/手動Refreshなしでも2000 msで再取得する。
+PCM選択/STOP/API/JSON ownerのC++実装は保全元とbyte一致のまま変更しない。
+
+最初に追加した4回帰は修正前にすべて失敗し、修正後に成功した。親の再確認で同disc/無操作の2経路が
+最初の修正では残ると分かり、1回の限定修正を追加した。既存503 timerあり/旧fetch進行中の両経路で
+要求が`[0]`のままになるREDを確認し、最終的に`[0, 2000]`となるGREENを確認した。
+scenario RESTのsnapshotを実JSON同様にcloneして、fixtureの変更が保持snapshotへ伝播しないようにした。
+元のtest defaultは変更していない。これはhelperの共有参照を直したもので製品API仕様変更ではない。
+
+`node tests/ui_integrity_test.js`は元の1 caseと、新session/disc、明示Refreshを伴う同disc stream、
+手動操作なし同disc stream（timerあり/旧fetch進行中）、成功後の冗長retry抑止、遅れた旧503の6回帰、計7 caseが成功した。
+`ui_controls_test.js`、`ui_render_test.js`、`ui_boot_test.js`、`ui_status_test.js`も成功した。
+fake時間/HTTP/DOMの結果であり、browser/WPE/実CD/音声/CECや長期受入ではない。
+
+親担当も最終testへ保全元Playerを渡して、元の1 caseだけ成功・追加6 caseすべて失敗することを再確認した。
+同じtestを修正版Playerで実行すると7 case成功する。前者のexit 1は意図したnegative controlである。
+
+```sh
+node tests/ui_integrity_test.js ../audio-first-diagnostics/ui/default/player.js
+node tests/ui_integrity_test.js
+```
+
+### 修正後sourceのLinux再検証
+
+修正後の`audio-first-review`をread-only mountし、同じnetworkなしimage・tmpfsに新規buildを作った。
+WPE OFFのDebugでAPI/metadata ONはbuild/CTest 69/69（37.63秒）、続けてAPI/metadata OFFは
+別build/CTest 41/41（10.20秒）で成功した。diagnostic isolation/publisher/UI integrationを含み、
+既存build binaryや配備packageの実行結果を代用していない。保全元とbyte一致のC++/header/CMake/testは14ファイル。
+通常Debugのfake/loopback試験であり、今回ASan/UBSan/TSan・標準WPE build・実hardwareは再実行していない。
+UI 7 caseとこの構成回帰を、Piの音声/TV/CEC・長期受入の成功へ読み替えない。
+
+Custom UI手順の標準map endpointと世代/取得時刻/503説明、message contractの追加snapshot fieldを整合した。
+Issue整理文書は別の`docs/issue-cleanup-a1-a2` worktreeに未commitで保持され、このworktreeへ一括統合していない。
+commit前には両方の文書差分を照合する必要がある。独立レビュー段階では配備/Pi操作を行わず、
+上記配備は後続の明示承認で実施した。commit/push/PR・総合実機受入は未実施。
+
+## 音声優先の診断投影（2026-10-17）
+
+基準masterは`55263c458dda1adabf61d206aa05ec1bcc2e4958`。音声を優先し、integrity JSONは必須だが
+生成/配信待ちで音声を止めない方針を利用者と合意してローカル実装した。commit/pushは未実施。
+後述の別承認で修正版DebugをPiへ配備したが、音切れ解消の受入は未完了。
+
+修正前のPiでは独立給電・cold boot後にboot IDの変更と`get_throttled=0x0`を確認した。
+承認された短時間play/pause/resume中、13:20:32.787 UTCにALSA write underrunを再現した。
+直前のapi_serviceは155,485 us、engine tick gapは166,090 us、queued_blocks=50、last_read_us=4,958、
+read_inflight_us=0だった。観測contextはgeneration1/PRESENT/INITIALのまま、試験前後と監視中の低電圧フラグは0。
+開始以降のkernel journalに追加entryはなく、13:20:33.380 UTCにstop、STOPPED/IDLEを確認した。設定変更は行っていない。
+最初の監視helperはjournal no-matchのexit1とAPI snapshot反映待ちを扱えていなかったため、前者は再生前に中断、
+後者はplay直後にstopした。監視helperを修正してから上記の有界試験を行い、アプリの異常とhelper都合を混同しない。
+この結果は電圧実測・電源全般の解消やUSB異常の原因確定ではない。抜き差し時刻不明の過去bootのUSB/低電圧記録とは分ける。
+
+修正前sourceの履歴providerを合成データで分解計測した。ローカルLinux/aarch64 container、Debug相当、
+各60回の中央値は16件1.45 ms/約12 KB、64件4.86 ms/約48 KB、128件9.42 ms/約95 KB。
+128件の構造体copy平均約0.005 msに対しJSON構築平均約5.08 msで、JSON copy/破棄とdumpも加わる。
+copyをmoveへ置換するだけの試作は同一文字列で6.96 ms。最適化ありの現行経路は1.71 msだった。
+これらはPiの処理時間・speedup予測ではなく、履歴件数と負荷の対応、不要copyだけでは同期境界が残る根拠である。
+実機api_service全体の内部時間分解はしていない。
+
+候補実装は履歴/map JSONの構築・破棄を専用ownerへ分離し、最大1 active/1 pending・2秒refreshで集約する。
+通常mapは履歴を含めず、詳細履歴の契約とeviction/未知値を維持する。初回/世代変更後は503、
+完成済み同context snapshotは取得時刻付きで返し、更新中でも音声を待たせない。
+HTTPは4096-byte writeable callbackと最大8診断応答で有界にする。通常state/WSや他APIまで非同期化したものではない。
+
+追加回帰は最大128件/各8 attempt detailと256 map regionの投影一致、map-only取得、capture時点、
+1000重複要求の集約、世代変更・contextの往復時の旧結果拒否、生成例外/byte上限を扱う。
+deadline付きfake出力は100 msの供給遅れをunderrunと判定し、意図的120 ms停止を検出するnegative controlを持つ。
+同じthreadで実APIとengineを進め、JSON ownerを350 ms止めてもdeadline missがなく、slow HTTP受信側と
+最大履歴JSONの分割送信中も音声が進むことを確認する。既存の無期限に受理するfake sinkだけの試験とは区別する。
+UIは軽量endpoint、503時の有界retry、取得時点表示、旧stream返答拒否を検証する。
+最終sourceのLinux/aarch64 DebugはAPI/metadata ON・WPE OFFのbuild/CTest 69/69、API/metadata OFF・WPE OFFの
+build/CTest 41/41成功。追加publisher回帰はAPI ON/metadata OFFの別buildでもASan/UBSan（leak検出あり）とTSanを各実行し成功した。
+deadline付きpublisher回帰は通常Debugで10回反復して成功した。UIは経過秒ではなくUTC capture時刻を表示し、
+停止中に画面更新がなくても「数秒前」の表示が固定されて鮮度を誤認しない。
+実行は既存`picdplayer-profile-review-build` imageのnetworkなしcontainerで、実device I/Oはない。
+対象は`build-audio-check`/`build-audio-minimal`、sanitizerは`build-audio-asan`/`build-audio-tsan`の
+`read_diagnostics_publisher`試験。続いて下記の標準WPE Debug packageを作成・配備した。
+Piの修正版音切れ解消、聴感、長期再生、実電圧は未確認であり、
+#121/#83/#184や#88の受入完了・Issue closeには使わない。
+
+### 修正版Debugの配備確認
+
+利用者の明示的な配備依頼により、同じworktreeから`PICDPLAYER_BUILD_TYPE=Debug`で標準
+`scripts/build-container.sh`/`scripts/deploy.sh`を実行した。既存WPE SDKのrecipe一致を確認して再利用し、WebKitを再compileしていない。
+標準WPE構成のCTestは70/70成功。配備直前はSTOPPED/IDLE、低電圧フラグ0。
+旧packageと有効設定はprivateなtarget側directoryへ保全し、既存の証跡・backupを上書きしていない。
+
+- package SHA256: `1bee80965622e593613791a6fbab0e1bce19cf4e56842a270ef44e462429430f`
+- daemon SHA256: `1da554efcf299aa2cf1bfe2e68556f1df97c25fc10b2d9321bcdb3401b182044`
+- Player JS SHA256: `9e93ecf51ae79d95ec7281c326d17d2dde106e1fe34e6e3f3efd3f8a9de62fc2`
+
+target package/daemonとHTTP配信Player JSのhash一致、daemon/WPEのDebug identity、両service activeを確認した。
+有効設定3ファイルのhash、起動引数、requested policy/artist設定、offset未指定、非参照backup metadataは配備前と一致。
+配備後にSTOPPED/IDLEを確認しており、こちらから再生・seek・設定変更は行っていない。
+Inspectorで新Playerのconnected、mapのUTC capture時刻表示、観測context1/PRESENTを確認した。
+map endpointはhistoryなしの200、history endpointは初回/世代変更後503を経て200、同session/streamと履歴128件を確認した。
+
+13:56:00.954 UTCのCEC playは利用者操作としてログに記録され、こちらから停止・再開していない。
+読み取り確認時はPLAYING、queued_blocks=50、get_throttled=0x0。13:56:28 UTCまで取得したdaemonログには
+配備後のunderrun記録がなく、baseline以降のkernelログにも追加entryはなかった。
+これは短い観測範囲の記録であり、利用者の実機試験完了・長期安定性・聴感の合格とは扱わない。
+13:57 UTCに利用者から「無事に再生できている」と報告を受けた。通常再生の利用者確認として記録し、
+時間・操作列・背景ON時の負荷等が未指定のため長期試験や全条件の受入完了とはしない。
+同時に背景ONの永続化を要望されたが、現行はdaemon session内の設定のみで、保存・復元は#177の残課題として扱う。
 
 ## #88 Device lifecycle（2026-10-17 JST）
 

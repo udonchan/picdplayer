@@ -12,7 +12,8 @@
 | GET /api/state | 最後に公開したPresentation Model全体 |
 | WS /api/events | 接続時と状態変更時の同じ全体snapshot。差分event protocolではない |
 | WS /api/navigation | CECの短命なView入力。snapshotとは独立し、接続前・切断中の入力は復元しない |
-| GET /api/read-history | 要求時のSTREAM履歴とDISC集計。stateとは独立した取得 |
+| GET /api/read-history | 非同期に生成した有界STREAM履歴とDISC集計。取得時点はsnapshotで明示し、stateとは独立 |
+| GET /api/disc-map | 詳細履歴を含まないDISC集計。標準Playerの周期更新用 |
 | GET /api/read-policy | requested/effective/pending、`requested_source`/`effective_source`（`startup`/`restored`/`saved`/`session`）、`persistence_configured`（boolean、保存先指定の有無）。出所は要求と実効値それぞれに対応し、pending中は異なり得る。保存先指定だけでは保存成功を保証しない。設定操作の契約は機能設計参照 |
 | POST /api/metadata-selection | loopback限定。候補番号を選択、またはnullで全候補を明示的に採用しない。受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
 | GET /api/artist-background | main ownerのrequested/effective/available（bool）とunavailable_reason（stringまたはnull）。利用可能なら理由はnull、metadata無効・非compileはmetadata_disabled、key不在・不正はkey_missing、runtime非対応providerはruntime_unavailable。provider未提供の場合は503 |
@@ -39,7 +40,8 @@ WSは最新snapshotを保持し、各中間revisionや全readの受信を保証�
 このchannelは操作commandではない。Viewが入力を解釈し、状態変更が必要ならloopback POSTを使う。
 既定はlistenなし。有効時の既定listenは127.0.0.1。読み取りGET/WSは外部listen時にも利用可能で、
 操作POST/telemetryのloopback制限とは区別する。認証/TLSは実装されていない。
-stateサイズ上限は1 MiB。read-historyのprovider未提供は503。コマンドの204/202受理は音声/物理操作完了の通知ではない。
+stateサイズ上限は1 MiB。read-history/disc-mapのprovider未提供・生成待ち・診断送信枠満杯は503。
+コマンドの204/202受理は音声/物理操作完了の通知ではない。
 
 ## 表記・互換性
 
@@ -302,6 +304,31 @@ rootにはrevisionを持たず、disc_mapは独自revisionを持つ。STREAM his
 DISC集計はsession/disc世代を照合する。stream変更だけでDISC集計を破棄しない。
 詳細HTTPとWSは同時点保証なし。常時詳細pollingを前提としない。
 
+### 音声優先の非同期診断
+
+read-history/disc-mapはmain ownerが有界な観測値だけをcaptureし、専用workerでJSONを生成する。
+音声供給は生成完了を待たない。実行中1件・置換可能pending1件を上限とし、同じcontext/種類の要求は集約する。
+種類ごとの再capture間隔は既定2秒以上で、要求数に比例して生成jobを積まない。map取得は128件の履歴をcopy/JSON化しない。
+この集約はJSON更新機会の集約であり、読取り観測を採用成功へ書き換えたり、履歴evictionを隠したりしない。
+
+両応答はrootに`snapshot:{sequence:uint,captured_at_unix_ms:int}`を追加する。
+sequenceは同じdaemon内のcapture順であり、read_sequence・state revisionとは別のcounter。
+captured_at_unix_msはcapture時のUnix epoch millisecondsで、応答時刻や音声再生headではない。
+wall clock補正やclientとの時計差により鮮度の推定に誤差があり得る。2秒は鮮度の上限保証ではない。
+同contextの完成済みJSONがあれば、更新中・生成失敗時にもその取得時点の結果を返す。古さを正常/最新と推定しない。
+
+contextはstream世代とvalidated disc世代（なしを含む）で照合し、変更後は旧cache/pending/完了結果を適用しない。
+初回や変更直後に完成済み結果がない場合は503 `diagnostics_pending`。provider未提供時のread-historyは従来どおり
+`read_history_unavailable`、disc-mapは`disc_map_unavailable`。生成失敗も未取得として扱い、成功JSONを捏造しない。
+両endpointのJSON上限は各1 MiB（超過をrouteが検出した場合500 `diagnostics_too_large`）。
+JSON本文の送信はwriteable callbackごとに最大4096 bytes、保持中の診断応答は最大8件。
+送信枠満杯は503 `diagnostics_busy`。slow clientのために新しい履歴を保持し続けず、生成済み文字列だけを有界に保持する。
+GET以外は405。503時のclient再取得も有界間隔にし、busy loopや操作POSTの再送で代用しない。
+
+disc-map応答はschema_version/session_id/stream_generation/snapshot/disc_mapを持ち、historyは持たない。
+標準Playerは返答のsession/stream/disc世代を最新snapshotと照合し、旧返答を採用しない。
+同discで既に保持したDISC集計そのものはstream変更だけでは消さず、次の有効な返答まで取得時点付きで表示できる。
+
 ## Eventsと復元
 
 recent_events[]のfieldはsequence:uint（daemon内配信順）、read_sequence:uint（stream内read順）、
@@ -481,7 +508,8 @@ physical readのC2/retry/backend観測はguard sectorやoverlapを含む。そ�
 追加情報はschema_version=1のoptional fieldとし、旧payloadで欠けていたら未取得と扱う。
 CORRECTEDだけがありoffset objectがないpayloadから値や物理範囲を推定しない。
 REST/WSのPresentation Modelとread-historyのevidenceは同じserializerを使用する。
-`GET /api/read-history`のroot shapeは従来どおりschema_version/session_id/stream_generation/history/disc_mapであり、
+`GET /api/read-history`の既存root fieldはschema_version/session_id/stream_generation/history/disc_mapを維持し、
+非同期診断では取得時点を示すoptionalなsnapshotも持つ（[非同期診断](#音声優先の非同期診断)参照）。
 read objectやwindowを新たにrootへ追加しない。windowはstate/WSで取得する。
 既存stateの1 MiB制限とdisc_map objectの64 KiB未満の試験を維持し、
 最大8 attempt・128 evidenceとoffset追加情報を含む実serializer出力で容量・型を検証する。

@@ -264,6 +264,20 @@ artwork.cover.urlが変わったときだけ画像属性とhandlerを更新し�
 再試行しない。表示値の比較は標準Player内部の処理であり、APIのrevisionや配信頻度を変更しない。
 このpageはdaemonへの操作・metadata候補選択・画像cacheを実装しない。
 
+## 音声優先の診断投影
+
+`ReadDiagnosticsPublisher`はmain ownerからのcaptureとJSON投影の境界を持つ。
+mainはworker/engineの値だけを有界にcopyし、publisher ownerはsnapshotだけを使ってJSONの構築・破棄を行う。
+workerからcontroller/engine/ALSAやmedia ownerを呼ばない。map-only captureではdisc mapだけを追加取得し、128件の履歴をcopyしない。
+pendingは最新1件に置換し、full-history jobは同contextのmap要求も満たせる。実行中のJSON処理は中断せず、context変更後の結果を捨てる。
+stream/discの値が一度戻る場合もcontext revisionで旧jobを拒否する。mainはJSON処理中のmutexを待たない。
+取得時点付き完成結果を保持し、未完成なら503で戻る。保持・refresh・wire契約は[メッセージ契約](message-contract.md#音声優先の非同期診断)を正とする。
+
+診断HTTP本文はwriteable callbackへ渡して4096 bytesずつ送る。API service内で大きな履歴JSONを一括生成・一括送信しない。
+遅い受信側がいる間もPCM供給を進める。通常state/WSの250 ms snapshot生成や他APIまで非同期化したものではなく、
+OS scheduling、通常snapshot、他componentを含むhard real-time保証ではない。
+shutdown時のpublisher joinは進行中の有界なJSON生成終了を待つことがある。
+
 ## daemon logging
 
 [AsyncLogger](../../src/logger.cpp)はwall clock（UTC）、logger初期化後のmonotonic経過時間、level、

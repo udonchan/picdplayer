@@ -32,7 +32,8 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiArtworkProvider& artwork_provider,
                               const ApiStateProvider& read_history_provider,
                               const ApiStateProvider& artist_background_provider,
-                              const ApiBackgroundArtworkProvider& background_artwork_provider) {
+                              const ApiBackgroundArtworkProvider& background_artwork_provider,
+                              const ApiStateProvider& disc_map_provider) {
     if (path.starts_with("/api/presentation/artwork/background/")) {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (background_artwork_provider) {
@@ -48,10 +49,15 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
             return {500, "application/json", R"({"error":"status_too_large"})"};
         return {200, "application/json", std::move(status)};
     }
-    if (path == "/api/read-history") {
+    if (path == "/api/read-history" || path == "/api/disc-map") {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
-        if (!read_history_provider) return {503, "application/json", R"({"error":"read_history_unavailable"})"};
-        return {200, "application/json", read_history_provider()};
+        const auto& provider = path == "/api/read-history" ? read_history_provider : disc_map_provider;
+        if (!provider) return {503, "application/json", path == "/api/read-history"
+            ? R"({"error":"read_history_unavailable"})" : R"({"error":"disc_map_unavailable"})"};
+        auto result = provider();
+        if (result.empty()) return {503, "application/json", R"({"error":"diagnostics_pending"})"};
+        if (result.size() > 1024 * 1024) return {500, "application/json", R"({"error":"diagnostics_too_large"})"};
+        return {200, "application/json", std::move(result)};
     }
     if (path == "/api/presentation/artwork/cover") {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
@@ -266,6 +272,7 @@ struct ApiServer::Implementation {
     int port;
     ApiStateProvider state_provider;
     ApiStateProvider read_history_provider;
+    ApiStateProvider disc_map_provider;
     ApiStateProvider artist_background_provider;
     ApiBackgroundArtworkProvider background_artwork_provider;
     ApiCommandHandler command_handler;
@@ -279,6 +286,8 @@ struct ApiServer::Implementation {
     lws_context* context = nullptr;
     struct PendingRequest { std::string method; std::string path; std::string body; };
     std::unordered_map<lws*, PendingRequest> pending_requests;
+    struct DiagnosticBody { std::string bytes; std::size_t offset = 0; };
+    std::unordered_map<lws*, DiagnosticBody> diagnostic_bodies;
 
     static bool peer_is_loopback(lws* wsi) {
         std::array<char, 64> address{};
@@ -311,10 +320,13 @@ struct ApiServer::Implementation {
         };
         return route_api_request(method, path, state_provider,
             local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry,
-            artwork_provider, read_history_provider, artist_background_provider, background_artwork_provider);
+            artwork_provider, read_history_provider, artist_background_provider, background_artwork_provider, disc_map_provider);
     }
 
-    static int send_response(lws* wsi, const ApiResponse& response) {
+    static int send_response(lws* wsi, ApiResponse response, bool diagnostic = false) {
+        auto* self = static_cast<Implementation*>(lws_context_user(lws_get_context(wsi)));
+        if (diagnostic && response.status == 200 && self->diagnostic_bodies.size() >= 8)
+            response = {503, "application/json", R"({"error":"diagnostics_busy"})"};
         std::array<unsigned char, LWS_PRE + 1024> headers{};
         auto* start = headers.data() + LWS_PRE;
         auto* cursor = start;
@@ -333,6 +345,11 @@ struct ApiServer::Implementation {
             add_header("referrer-policy:", "no-referrer") ||
             add_header("x-frame-options:", "DENY") ||
             lws_finalize_write_http_header(wsi, start, &cursor, end)) return -1;
+        if (diagnostic && response.status == 200 && !response.body.empty()) {
+            self->diagnostic_bodies[wsi] = {std::move(response.body), 0};
+            lws_callback_on_writable(wsi);
+            return 0;
+        }
         if (!response.body.empty() &&
             lws_write_http(wsi, response.body.data(), response.body.size()) < 0) return -1;
         return lws_http_transaction_completed(wsi) ? -1 : 0;
@@ -342,6 +359,23 @@ struct ApiServer::Implementation {
         try {
             auto* self = static_cast<Implementation*>(lws_context_user(lws_get_context(wsi)));
             if (!self) return -1;
+            if (reason == LWS_CALLBACK_HTTP_WRITEABLE) {
+                auto found = self->diagnostic_bodies.find(wsi);
+                if (found == self->diagnostic_bodies.end()) return 0;
+                auto& body = found->second;
+                constexpr std::size_t chunk_bytes = 4096;
+                const auto count = std::min(chunk_bytes, body.bytes.size() - body.offset);
+                std::array<unsigned char, LWS_PRE + chunk_bytes> buffer{};
+                std::memcpy(buffer.data() + LWS_PRE, body.bytes.data() + body.offset, count);
+                const bool final = body.offset + count == body.bytes.size();
+                const auto written = lws_write(wsi, buffer.data() + LWS_PRE, count,
+                    final ? LWS_WRITE_HTTP_FINAL : LWS_WRITE_HTTP);
+                if (written < 0 || static_cast<std::size_t>(written) != count) return -1;
+                body.offset += count;
+                if (!final) { lws_callback_on_writable(wsi); return 0; }
+                self->diagnostic_bodies.erase(found);
+                return lws_http_transaction_completed(wsi) ? -1 : 0;
+            }
             if (reason == LWS_CALLBACK_FILTER_PROTOCOL_CONNECTION) {
                 std::array<char, 128> uri{};
                 const auto count = lws_hdr_copy(wsi, uri.data(), uri.size(), WSI_TOKEN_GET_URI);
@@ -413,6 +447,7 @@ struct ApiServer::Implementation {
             }
             if (reason == LWS_CALLBACK_CLOSED_HTTP) {
                 self->pending_requests.erase(wsi);
+                self->diagnostic_bodies.erase(wsi);
                 return 0;
             }
             if (reason != LWS_CALLBACK_HTTP) return 0;
@@ -438,7 +473,8 @@ struct ApiServer::Implementation {
                 self->pending_requests[wsi] = {std::string(method_name), std::string(path), {}};
                 return 0;
             }
-            return send_response(wsi, self->route(wsi, method_name, path, {}));
+            return send_response(wsi, self->route(wsi, method_name, path, {}),
+                path == "/api/read-history" || path == "/api/disc-map");
         } catch (...) {
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;
@@ -448,11 +484,13 @@ struct ApiServer::Implementation {
     Implementation(std::string listen_address, int listen_port, ApiStateProvider provider,
                    ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle,
                    ApiArtworkProvider artwork, ApiStateProvider history_provider,
-                   ApiStateProvider background_provider, ApiBackgroundArtworkProvider background_artwork)
+                   ApiStateProvider background_provider, ApiBackgroundArtworkProvider background_artwork,
+                   ApiStateProvider map_provider)
         : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
           command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)),
           artwork_provider(std::move(artwork)) {
         read_history_provider = std::move(history_provider);
+        disc_map_provider = std::move(map_provider);
         artist_background_provider = std::move(background_provider);
         background_artwork_provider = std::move(background_artwork);
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
@@ -481,12 +519,13 @@ struct ApiServer::Implementation {
 ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
                      ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui,
                       ApiArtworkProvider artwork_provider, ApiStateProvider read_history_provider,
-                      ApiStateProvider artist_background_provider, ApiBackgroundArtworkProvider background_artwork_provider)
+                      ApiStateProvider artist_background_provider, ApiBackgroundArtworkProvider background_artwork_provider,
+                      ApiStateProvider disc_map_provider)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
                                                         std::move(handler), std::move(policy_provider), std::move(ui),
                                                         std::move(artwork_provider), std::move(read_history_provider),
                                                         std::move(artist_background_provider),
-                                                        std::move(background_artwork_provider))) {}
+                                                        std::move(background_artwork_provider), std::move(disc_map_provider))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

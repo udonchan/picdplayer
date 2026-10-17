@@ -41,7 +41,8 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiArtworkProvider& artwork_provider = {},
                               const ApiStateProvider& read_history_provider = {},
                               const ApiStateProvider& artist_background_provider = {},
-                              const ApiBackgroundArtworkProvider& background_artwork_provider = {});
+                              const ApiBackgroundArtworkProvider& background_artwork_provider = {},
+                              const ApiStateProvider& disc_map_provider = {});
 
 class ApiServer {
 public:
@@ -49,7 +50,8 @@ public:
               ApiCommandHandler command_handler = {}, ApiReadPolicyProvider read_policy_provider = {},
               UiBundle ui = {}, ApiArtworkProvider artwork_provider = {},
               ApiStateProvider read_history_provider = {}, ApiStateProvider artist_background_provider = {},
-              ApiBackgroundArtworkProvider background_artwork_provider = {});
+              ApiBackgroundArtworkProvider background_artwork_provider = {},
+              ApiStateProvider disc_map_provider = {});
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;

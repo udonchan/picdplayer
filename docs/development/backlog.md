@@ -21,7 +21,8 @@ AGENTS.md §11に英語の追加規約を記載し、限定試行は初回と修
 
 ## 当面の作業列と保留
 
-2026-10-17の整理はIssue・文書だけを変更し、新規実装・試験・Pi操作・配備を開始しない。
+2026-10-17のIssue整理単位では文書だけを変更し、実装・試験・Pi操作を行わなかった。
+後続依頼による#121の修正・配備は別単位で記録し、本branchでは整理済み文書と配備済みコードを照合した。
 Issue整理は`docs/issue-cleanup-a1-a2`、診断修正の保存先はそのcommitを土台にする`fix/audio-first-diagnostics`とする。
 2026-10-17のcommit/push承認はmaster直接更新・PR作成を含まず、作業中の未commit等は検証記録に履歴として残す。
 元の未commit候補は`feature/audio-first-diagnostics`、配備用候補は`fix/audio-first-review`のworktreeに保持し、
@@ -55,7 +56,7 @@ physical hotplugは#88、runtime復旧matrixは#219に一本化する。同じru
 | [#184 Validate normal kiosk lifecycle and extended playback on Raspberry Pi](https://github.com/udonchan/picdplayer/issues/184) | 最新構成の通常CDで、標準Playerと代表Custom UIの状態遷移、TV表示・試聴、CEC/API操作、継続運転、journal・memory・温度を条件と時間を定めて実機評価する。#4の通常系に加え、#8の速度要求あり/なしの継続再生・聴感を引き継いだ。物理read faultや詳細性能比較は担当しない。 |
 | [#27 Investigate and reduce kiosk CPU and thermal load](https://github.com/udonchan/picdplayer/issues/27) | クローズ済みの親Issue。[#52](https://github.com/udonchan/picdplayer/issues/52)の基線測定・完了判定の根拠は[測定記録](reports/2026-09-25-kiosk-baseline/README.md)へ反映済み。[#53](https://github.com/udonchan/picdplayer/issues/53)の描画改善、[#61](https://github.com/udonchan/picdplayer/issues/61)の残余負荷測定、[#62](https://github.com/udonchan/picdplayer/issues/62)のCustom UI向け注意事項は完了済み。最新構成の追加測定は[#83](https://github.com/udonchan/picdplayer/issues/83)、通常系の継続運転は[#184](https://github.com/udonchan/picdplayer/issues/184)へ移管した。条件と限界は[検証状況](verification.md)を参照する。 |
 | [#83 Complete outstanding kiosk performance measurements](https://github.com/udonchan/picdplayer/issues/83) | Open。旧Chromiumの[5分記録](reports/2026-09-28-post-websocket-dedup-playing/README.md)は保全するが、現行WPEの比較値ではない。固定したWPE/背景/診断構成でSTOPPED/PLAYING・計測器負荷の反復基線を残す。Cage単独/旧CDP追加測定は比較需要がある時だけ、速度要求A/Bは本Issueの保留中の拡張比較。#25 blocked-byは解除、Closed #150は充足済み前提。通常運転・TV/聴感は#184。 |
-| [#121 Investigate player main-loop stalls across stages](https://github.com/udonchan/picdplayer/issues/121) | Open、直近。低電圧flag 0でもapi_service約155 ms直後のunderrunを観測、先読み50 blocksは残っていた。元候補を保持し、別の`fix/audio-first-review`で503 map retryを修正。Node 7 case、Linux Debug 69/69・最小41/41、標準WPE 70/70/package lifecycle成功。後続承認で新package（`0333ffbb…`）を配備し、hash/設定/引数/API/実WPEの停止中表示を確認。未commit/未統合で、音声/CEC/長期/全操作・過去control/CEC原因の受入は未完了。private rawは公開しない。 |
+| [#121 Investigate player main-loop stalls across stages](https://github.com/udonchan/picdplayer/issues/121) | Open、直近。低電圧flag 0でもapi_service約155 ms直後のunderrunを観測、先読み50 blocksは残っていた。元候補を保持し、`fix/audio-first-review`で503 retryを修正。Node 7 case、Linux Debug 69/69・最小41/41、標準WPE 70/70/package lifecycle成功。新package（`0333ffbb…`）の配備後にhash/設定/引数/API/実WPEの停止中表示を確認し、コードは`fix/audio-first-diagnostics`へ保存。[配備記録](verification.md#retry修正版debugの配備と読み取り確認2026-10-17-utc)参照。master未統合、音声/CEC/長期/全操作・過去control/CEC原因の受入は未完了。private rawは公開しない。 |
 | [#122 Prevent duplicate WebSocket state delivery](https://github.com/udonchan/picdplayer/issues/122) | STOPPED中に同一snapshotを繰り返し送るAPI serverの不具合を#83のCDP測定で検出した。PR #123で接続ごとの送信済みgeneration追跡を追加し、当時のDocker 38/38とPiのSTOPPED 0 frame / PLAYING 40 frame確認を記録した。 |
 | [#134 Eliminate timing flake in diagnostic isolation test](https://github.com/udonchan/picdplayer/issues/134) | クローズ済み。client切断後のPCM progressを固定20 tickではなくdeadline内で待つ試験へ修正し、Dockerで10回反復と全CTestを確認した。productionの再生・diagnosticsは変更していない。 |
 | [#5 Evaluate read stalls and bound playback recovery](https://github.com/udonchan/picdplayer/issues/5) | クローズ済みの旧tracking Issue。子Issue #33はdeterministicな確認と物理試験の#146への移管を記録して終了し、#34は有界なread stall復旧を実装して終了した。傷・劣化媒体や別driveでの効果・音声影響は[#146](https://github.com/udonchan/picdplayer/issues/146)で未確認。未解決PCMの追加fallback方針は[#156](https://github.com/udonchan/picdplayer/issues/156)で検討する。旧親Issueの終了を実機異常系の検証完了とは扱わない。 |
