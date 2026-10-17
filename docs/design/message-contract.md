@@ -229,6 +229,7 @@ Custom UIが新fieldを仮定する必要はなく、現在の公開契約の互
 
 #160の[完全取得入力契約](integrity-design.md#complete-pcm-input)は未実装の設計である。
 #236でpure coreは追加したがtest-onlyで、runtimeやproviderへ接続していない。
+#237の取得workerも内部C++ interface/test-onlyであり、factory・gate・phase・busy/release・resultを現行JSONへ追加しない。
 coreの型・complete receipt・consumerのresult spanは内部C++契約であり、公開JSONの追加fieldではない。
 capture job、consumer、COMPLETE/未完了/無効といった語を現行REST/WSの新しいfieldやenumとして追加しない。
 `read.activity=COMPLETE`はstreamのread終了、`coverage.observations_complete`やdisc mapのcompleteは
@@ -246,6 +247,10 @@ consumerのalgorithm/version、完了/未完了/無効、拒否/取消理由・�
 source/fixtureやCustom UIが未実装のfieldを仮定する必要はなく、この設計段階の公開schema変更はない。
 #236による公開field/enum/eventの追加もない。coreのprefixとread観測、reader解放の申告gateを
 実機の全域取得やrelease確認済みとして描画しない。
+workerのcaller-supplied開始gate、取消と解放待ち、preparedとcaller確定の区別は
+[内部worker契約](integrity-design.md#acquisition-worker-implementation)を参照する。
+このsnapshotは実runtimeのSTOPPED/ALSA/mediaの自動観測ではなく、workerがIO内部でstuckでもpollで期限失効できる。
+一方、destructorのjoinまで非blockingとする保証ではない。将来公開する際はこの区別を維持する。
 
 ## 保持窓と世代
 

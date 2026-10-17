@@ -1,6 +1,63 @@
 # 検証状況と残課題
 
-更新日: 2026-10-16。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-17。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## #237 排他的取得worker（2026-10-17 JST）
+
+基準masterは`5c266debe954efcbab53bb06dbf6ee6e8935b04d`。利用者からBだけの実装・自動検証・
+commit/push/PR/master統合を追加承認された。#237本文の作成当時の未承認記録には最新scopeをcommentで追記し、
+受入条件やOpen状態は変えていない。C/D/#88実装、providerアクセス、実機操作、Issue closeは対象外である。
+
+[CompletePcmWorker](../../include/complete_pcm_worker.hpp)とgate付きfake試験をtest-only CMake対象として追加した。
+raw factory/初期と最終TOC probe、offset 0/repeat、reader closeをowner threadとcoordinatorへ閉じ込め、
+raw seek/read境界とconsumer前後にもadmission checkを置いた。
+mainはcoreを同時操作せず、取消・条件変更・期限と、実際のI/O/cleanup終了・caller確定を分離する。
+内部snapshotは実runtimeの開始条件を自動検出するものではなく、公開JSON・CLI/UIは変更しない。
+
+| 検証 | 結果 |
+|---|---|
+| macOS clang ASan/UBSan再compileとfake試験 | 57ケース・367 checks成功、exit 0 |
+| macOS clang ThreadSanitizer再compileとfake試験 | 57ケース・367 checks成功、exit 0。race reportなし |
+| Linux/aarch64 Debug、API/metadata ON、WPE OFF | 再build後67/67成功 |
+| Linux/aarch64 Debug、API/metadata OFF、WPE OFF | 最終source再build後40/40成功 |
+| Linux/aarch64標準WPE Debug（paranoia OFF） | 最終source再build後68/68成功 |
+| Debug package lifecycle | disposable containerのinstall/upgrade/reinstall/purge成功 |
+
+native試験は`clang++ -std=c++20 -Wall -Wextra -Wpedantic -pthread -g -Iinclude`に、
+`-fsanitize=address,undefined -fno-omit-frame-pointer`または別binaryの`-fsanitize=thread`を指定し、
+worker/input/offset/TOC/integrity/repeat各sourceをcompileしてから実行した。
+Linuxは既存build imageへsourceをmountし、`build-worker-check`をAPI/metadata ON・WPE OFFのDebugとして
+configure/buildしCTestを実行した。A coreの既存回帰も含め、以前のbuild結果を代用していない。
+最小構成は`build-worker-minimal`へ`-DCMAKE_BUILD_TYPE=Debug -DENABLE_API=OFF -DENABLE_METADATA=OFF
+-DENABLE_WPE_KIOSK=OFF`でconfigureした。標準構成は`PICDPLAYER_BUILD_TYPE=Debug
+PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build PICDPLAYER_WPE_VOLUME=picdplayer-wpe221-build
+./scripts/build-container.sh`と同imageでのCTestを実行した。
+SDKのruntime-image/RootFS identityをread-onlyで事前照合してcacheを再利用し、WebKit自体は再compileしていない。
+同Debug/imageの`./scripts/test-package-lifecycle.sh`も成功した。
+最終daemonの`nm -C`にCompletePcmWorker/CompletePcmInput symbolがなく、package inventoryにも
+worker/core/test/headerが含まれないことをassertした（exit 0）。main/session/既存worker/verifier/JSON/UI/policy/core sourceの差分もなく、
+runtimeや公開schemaを変更していないことを機械確認した。
+
+fakeはfactory・seek・read・initial/final probe・consume/finalize・close/discardをgateで止め、
+取消とpollが閉じたgateを待たず返ること、busy/release待ちを保持して新jobを拒否することをassertした。
+正常single/repeatで全35 CD frame・track別canonical byteを照合し、thread IDと同時I/O数1、
+coordinator待ち取消後のcallback非発行、次のphysical repeat試行の抑止、全identity変更・遅延旧read、
+factory/probe/reader/consumer例外、partial/zero/wrong-position、TOC不一致、call/job期限・時計逆行/例外、
+取消/confirmの両順序、解放前のdestructor待ち、prepared期限とreadiness失効を検証した。
+各gateはtimeoutとscope releaseを持ち、実kernel ioctlの無期限待ちを試験したわけではない。
+取消されたreadの後に同じ注入factoryで新jobを始めるcaseも検証した。fakeの初期/最終TOC区別を
+globalな最初の1回ではなくreaderの生存状態へ合わせてから、全構成を再実行した。
+これはfixtureの意味の修正であり、既存assertを弱めたり現物driveの同一性を確認したものではない。
+fake consumerは`test-worker-byte-check`であり、実checksum algorithmやproviderは採用していない。
+
+正規化PCMのcapacity/high-waterはsingle/region15で35,280 bytes、region75で176,400 bytesを確認し、
+終了後capacity=0を確認した。core reservationとconsumerの宣言量、reader/library内部、stack、process RSSは別で、
+すべてのheapを実測して8 MiB以下と保証する結果ではない。
+destructor joinはcallが戻らなければ待つ。callerはI/Oとconsumerがquiescentになる前にmain loopで破棄しない必要がある。
+factory/probeのopaque call内部は強制中断せず、Bが制御できる次の境界で止める。
+今回のfake成功は物理driveの中断/解放、USB reset/同一path再接続、実CD取得、音声やTVの実機確認ではない。
+daemonへのlink/公開登録・配備は行わず、C/D/#88に残るproduction有効性と混同しない。
+設計/公開契約/backlogと全diffを照合し、追加ローカルMarkdownリンク/anchor 8件と`git diff --check`も成功した。
 
 ## #236 完全取得入力core（2026-10-16）
 
