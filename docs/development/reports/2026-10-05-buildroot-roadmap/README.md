@@ -3,8 +3,11 @@
 現在の判断（2026-10-12）: 検討は有益だったが時期尚早のため、Buildroot採用・追加実装は保留する。
 以下の候補構成と実施順は当時の判断材料であり、現在の着手指示ではない。
 元の成果は[PR #201](https://github.com/udonchan/picdplayer/pull/201)、head `97d834b`。
-image・更新/復旧・browser要件が固まり方式比較が必要になった時点で、[#74](https://github.com/udonchan/picdplayer/issues/74)
-から再開する。現行Debian/container/.deb経路を維持する。
+2026-10-17の整理で[#74](https://github.com/udonchan/picdplayer/issues/74)は調査・作業分解の限定scopeとして
+Completedで終了した。image・更新/復旧・browser要件が#46で固まり方式比較が必要になった時点で、
+このreportと#74の固定SHA索引を参照し、保留中の#198（Pi周辺機器）、#199（package供給）、
+#200（WPE直接DRM供給）から再開する。追加研究の未検証・試作コード・元branch/worktreeは保持し、
+方式採用や製品imageの完成とはしない。現行Debian/container/.deb経路を維持する。
 
 調査日: 2026-10-05。根拠は[公式構成調査（#75）](https://github.com/udonchan/picdplayer/pull/195)、
 [採用OSS比較（#76）](https://github.com/udonchan/picdplayer/pull/196)、

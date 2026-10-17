@@ -312,6 +312,11 @@ closingフラグだけに連動する。交換時の安全性は中断ではな�
 LOADINGへ遷移した時にmetadata世代を無効化し、TOC再取得後のbegin_if_neededで
 同一TOCでもmetadataを再要求する。同じLOADING状態の反復観測では世代を増やさない。
 交換を観測できなかった同一TOCの別discまでは識別しない。
+2026-10-17、#40はこの識別限界・LOADING遷移/反復・世代不一致の契約と、
+既存MetadataSessionの同一TOC再要求/旧結果拒否fakeを受入条件へ対応付け、設計完了としてCloseした。
+同一TOC物理discによる対象Pi試験は未実施で、物理同一性や未観測交換の検出を保証しない。
+必要時のdevice観測は#88、通常再挿入の実機受入は#184を参照する。新規識別機能を追加したものではない。
+
 MusicBrainzのmedium内positionは物理track番号と同一視せず、positionの連続性と曲数一致を検証してから
 TOC順の物理track番号へ対応付ける。したがって先頭trackが1以外でも、対応不能な候補を別trackへ割り当てない。
 

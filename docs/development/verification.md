@@ -2,6 +2,113 @@
 
 更新日: 2026-10-17。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+2026-10-17、利用者がここまでのcommit・pushを承認した。Issue整理は`docs/issue-cleanup-a1-a2`、
+診断修正の保存先はそのcommitを土台にする`fix/audio-first-diagnostics`とし、master直接更新・PR作成は含めない。
+以下の未commit/未push/未配備/文書未統合という記述は各作業時点の履歴で、現在の保存状態はGitのbranch/履歴を参照する。
+未実施の音声/CEC/長期・物理受入は、この保存操作でも完了へ変更しない。
+
+## #121 retry修正版の実機配備（2026-10-17 UTC）
+
+後続の明示依頼で`fix/audio-first-review`から標準WPE Debug packageを作成・配備した。
+元worktree・旧packageは保持し、旧package/実効設定3ファイル/起動引数/runtime状態をtarget側private directoryへ保全した。
+SDKはrecipe一致の非破壊コピーを再利用。既存標準imageのNinja不足で初回profile試験だけ失敗したため、
+source/packageを変えず既存review imageで全70/70を再実行し、package lifecycleも成功してから配備した。
+
+配備package SHA256は`0333ffbb321583f20a7c915f0edc646608faeabf46fcd15fe111c5c9aebe4616`。
+package/daemon/HTTP Player JSのhash・Debug/WPE identity、設定3ファイル・optional file不在・起動引数・policy・
+背景requested/effective/availableの維持、同boot・STOPPED・低電圧flag 0を確認した。
+map 200/history 503→200のcapture/世代整合、実WPEのconnected/新helper/取得済みmap/取得時刻を読み取り、
+1920×1080 rendered-page snapshotをprivateに保存・目視した。今回のSTOPPED条件ではoverflowなし。
+23:07:40 UTCまでの新service invocationにstall/underrun/WARN/ERROR検索該当なし、自動再起動0、kernel追加entry0。
+
+play/pause/stop/seek/CEC/tray/hotplug・音声/試聴・負荷/長期試験は行っていない。PNGは物理TV/DRM scanoutではない。
+写真/key/設定/raw journalはGit/GitHubへ公開しない。#121と#184等はOpenを維持し、総合受入に読み替えない。
+詳細は修正用worktreeの`docs/development/verification.md`へ保持した。commit/push/PR・文書の一括統合は未実施。
+
+## 整理後の#121独立レビュー進捗（2026-10-17 UTC）
+
+後続のコード作業はIssue整理とは別単位で実施した。元の音声優先診断worktree・配備済みpackageを保全し、
+基準master `55263c4`から作った`fix/audio-first-review`へ候補22ファイルをbyte一致で複製した。
+2担当の読み取りレビューでpublisher/狭いengine統合には具体的指摘がなく、UIの503 retryで2不具合を再現・修正した。
+旧contextにretryを奪われる停止中の未取得と、成功後も旧timerが残って100 ms間隔になる冗長取得を扱う。
+同disc/stream変更でも追加snapshotや手動Refreshなしに有界間隔で新streamを取得する。
+旧返答によるmap採用・retry予約・新要求のloading解除を拒否する。
+
+最終Node testを保全元Playerで実行すると元の1 caseは成功・追加6回帰は失敗、修正版は7 case成功。
+修正版をread-only mountした既存Linux/aarch64 imageの新規tmpfs buildで、WPE OFFのDebugは
+API/metadata ON 69/69、OFF 41/41成功。既存package/buildの結果を新sourceの証拠に代用していない。
+この独立レビュー段階では実機・標準WPE build・sanitizerを再実行せず、配備/音声/CEC/長期受入完了とはしなかった。
+後続配備は上記の別承認・別検証記録で扱い、#121はOpenを維持する。
+
+詳細な再現・red/green・補助CMake手順とCustom UI/API手順の整合差分は、`fix/audio-first-review`の
+`docs/development/verification.md`等に未commitで保持する。Issue整理6文書との差分はまだ一括統合しておらず、
+commit前に双方を照合する必要がある。独立レビュー段階では配備/Pi操作を行わず、commit/push/PRは引き続き未実施。
+
+## Issue整理 B/C/D/Eと残課題（2026-10-17）
+
+A1/A2に続けて整理を進める利用者承認に基づき、同じmaster `55263c4`の既存実装・PR・コメント・
+設計と検証記録だけを照合した。以下のClosedは今回新たにhardware検証したという意味ではない。
+過去節のOpen・未統合・承認境界は当時の記録として保持し、現在の所有先は本節とbacklogを参照する。
+
+| 単位・Issue | 結果・根拠 | 残る条件と所有先 |
+|---|---|---|
+| B: #214/#215/#216 | 各限定scopeでCompleted。元コメントのPi Chromium合成fixture/decode/DOM/実HTTP-WS/cleanup、label mutation 1→0とNode回帰を確認。旧Draft #217からPR #223へ継承済み | 元の固定SHA・artifact・失敗・hidden/headlessの限界を保全。通常daemon/光学/ALSA/WPE写真/TV/音声/CEC/長期の完成ではない |
+| B: #50 | Completed。PR #175/#223/#230のmetadata先行・artwork/背景独立status・世代照合、実HTTP/WSの1→2→3枚と失効回帰 | 取得安全性#49、写真受入#51、通常長期#184、性能#83 |
+| C1: #17/#18/#21 | Not planned/superseded。古い親trackingを終了し、元本文/リンクを保全 | #40の設計判定、#42/#177/#178、#45/#46/#47/#66〜#68/#147をそれぞれ所有先にし、親のCloseを全機能成功にしない |
+| C2: #25/#229 | Not planned/superseded。PR #230の実API・WPE写真・基本再生報告と未確認を保全し、重複tracking終了 | 取得/decoded資源#49、実写真切替・時間条件・TV可読性・音声/代表CEC#51、保存#177、Settings#178、通常長期#184、性能#83 |
+| D2: #188 | Not planned/superseded。WPE採用で解決したとはしない | 初回document取得失敗、generic browser error残留/復帰、有界retry・非退行を#219へactive checklistで移管。追加復旧検討は必要時まで保留 |
+| #40 | 設計Completed。詳細設計の同一TOC非識別、player_sessionのLOADING遷移時だけ失効、MetadataSessionの世代拒否と同一TOC再要求fakeを元の2受入条件へ対応付け | 同一TOCの実物別discを対象Piで確認していない。未観測交換/物理同一性を保証せず、必要時の観測#88・通常再挿入#184を参照 |
+| E: #74 | 調査Completed。#75〜#78・PR #218の保全と#198〜#200への分割で元scope完了。Open索引維持を文書/固定SHA索引へ置換 | #198/#199/#200は追加研究保留。製品採用/最終build/Pi周辺機器未検証を維持。元branch/worktree/試作は削除しない |
+
+GitHubの#83/#124/#164から旧親#25のblocked-byを削除した。背景runtime/UIはPR #223/#230で利用可能で、
+disk cache・設定保存・長期受入を開始条件に積み増さない。#51の#49全体待ちも解除し、実装済み供給部分と
+未完了の資源安全性を本文で分けた。Closed #150/#50等は充足済み前提として関係を保持する。
+#47→#46と#239→#238/#88、充足済みA/Bの関係、親子リンクは保持した。
+
+#49/#51/#177/#178の古い包括的許諾gateは、現行の利用者判断・製品無保証・既定OFF・明示ON・写真非同梱へ
+明示的に訂正し、旧本文を履歴欄に保持した。APIアクセス制約と写真の許諾は別で、未確認を確認済みにしない。
+背景保存/次回起動復元は#177で未実装、decoded寸法/memoryは#49で未保証として残す。
+
+#10は補正実装/限定Pi成功と試聴/TV端表示待ち、#88はsoftware統合と物理hotplug受入待ち、
+#121は未commit診断修正と過去control/CEC未解明、#184は通常継続受入未完了としてOpenを維持した。
+直近は#121→#184、独立tooling #226、次順位#164に絞る。外部照合#238/#239、quiet boot/read-only root、
+Custom UI更新、image/compliance、正式WPE供給とBuildrootは必要性/供給段階/安全環境待ちの保留条件を明記した。
+全Open Issueに非空本文があること、終了16件（Completed 10件・superseded 6件）のreasonと移管先、
+残る34件の集合/状態/依存とmaster不変をGitHubから機械確認した。変更6文書のローカルリンク/anchor 20件、
+Issueの現行説明に追加した固定commit sourceリンク/anchor 22件の検査と`git diff --check`が成功した。
+source/include/tests/UI/build/systemd/CIの差分が空であることも確認した。
+
+作業中、保留13件（#19/#20/#42/#46/#47/#68/#69/#147/#198/#199/#200/#238/#239）の本文生成で
+`gh --jq`へ非対応の引数を渡し、空本文を送信してしまった。直ちに編集履歴から更新前本文を取得し、
+末尾改行を含む全文一致を13件すべてで機械確認して復元した。その後は本文非空・元本文保持・更新後全文一致を
+検査して位置付けを追記した。状態・コメント・元の受入条件は消去せず、編集履歴にも経緯が残る。
+
+今回はbuild/CTest/sanitizerや物理試験を再実行せず、実装・公開schema・Pi・key・画像/private rawを変更しない。
+新規Issue・commit・push・PRは作らず、文書を前回と同じ専用worktreeの未commit差分へ集約した。
+音声優先診断worktreeの未commit差分と元repositoryの保護refs/stash/untrackedは別に保持する。
+
+## Issue整理 A1/A2（2026-10-17）
+
+利用者が根拠付き整理案を承認したため、最新master `55263c458dda1adabf61d206aa05ec1bcc2e4958`と
+GitHubの本文・後続コメント・merge履歴を照合し、次の4件を限定scopeの完了としてCloseした。
+以下の元の設計・実装記録にあるOpenやIssue close対象外は、当時の状態・承認境界として保持する。
+
+| Issue | 完了判定の根拠 | Closeに含めないもの |
+|---|---|---|
+| [#156](https://github.com/udonchan/picdplayer/issues/156) | [PR #234](https://github.com/udonchan/picdplayer/pull/234)、merge `2e82168`。STOP継続、他3案の不採用理由・由来・有限予算・最終STOP・再検討条件を設計とmessage contractへ統合 | 追加fallbackの実装・実機確認。採用候補がないため新しい実装Issueは作らない |
+| [#160](https://github.com/udonchan/picdplayer/issues/160) | [PR #235](https://github.com/udonchan/picdplayer/pull/235)、merge `1b65683`。完全取得入力・canonical・I/O調停・取消/解放・容量/期限・再起動破棄の設計と#236〜#239への分割 | production capture、checksum/provider、実機全域取得。子の未実装を親設計の未完了にしない |
+| [#236](https://github.com/udonchan/picdplayer/issues/236) | [PR #240](https://github.com/udonchan/picdplayer/pull/240)、merge `5c266de`。pure input coreのfake・ASan/UBSan 71ケース、標準Linux 67/67・最小39/39等の当時の成功記録 | 実reader・thread・runtime/API・provider。memoryの宣言/予約検査をprocess RSSの保証にしない |
+| [#237](https://github.com/udonchan/picdplayer/issues/237) | [PR #241](https://github.com/udonchan/picdplayer/pull/241)、merge `5a80077`。owner/coordinator・取消と解放待ち・旧結果拒否のgate付きfake、ASan/UBSan・TSan各57ケース、標準Linux 68/68・最小40/40等の当時の成功記録 | production factory/API/providerと実drive/Pi。開始gateはcallerの申告、ioctl強制中断や物理同一性の保証ではない |
+
+今回の整理ではbuild/CTest/sanitizerを再実行せず、上記を新しい実行結果として扱わない。
+新しいsource・test・公開fieldを追加せず、#238/#239の未実装、#88の物理hotplug/reset受入待ち、
+#13がClosedでも外部照合未実装という境界を維持する。親子・blocked-by関係は削除せず、A/Bの限定実装が
+完了したことをIssue状態で表す。Pi操作・providerアクセス・配備も行っていない。
+
+文書は最新masterから分離した`docs/issue-cleanup-a1-a2` worktreeの未commit差分として保持し、
+今回commit・push・PR作成は行わない。GitHubのClose時点で、この整理文書はmaster未統合であることも明記する。
+音声優先診断の未commit修正は別worktreeへ保持し、本整理へ混在させない。
+
 ## #88 Device lifecycle（2026-10-17 JST）
 
 基準masterは`5a8007703f3745fec4d099f0d786ac125439e3a5`。利用者承認は#88の契約整理・実装・自動検証・
