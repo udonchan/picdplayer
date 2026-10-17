@@ -24,11 +24,16 @@ Read PolicyのSettings画面があり、状態変更の正本はdaemon側に置�
 
 ### PlayerのIntegrity表示
 
-標準Playerは有効な`disc.layout`を受信したときに`GET /api/read-history`をdisc世代につき一回取得する。
+標準Playerは有効な`disc.layout`を受信したときに`GET /api/disc-map`をdisc世代につき取得する。
 さらに新しいstreamでcurrent PCM根拠が初めて得られた時に更新する。`PLAYING`中はdisc mapを進行表示するため、
 2秒に一回を上限として再取得する。WebSocket更新ごとには取得せず、停止中はこの周期取得を行わない。利用者は
-Refresh mapで明示再取得できる。取得失敗は表示を停止せず、次の有界な取得機会まで待つ。
-responseは到着時の最新snapshotとroot `session_id`、`disc_map.disc_generation`を照合する。
+Refresh mapで明示再取得できる。生成待ち503では最大一つの2秒後retryを保持し、未取得でもsnapshotごとに再要求しない。
+そのretryは停止中の初回取得も完了できるが、常時詳細履歴pollingは行わない。取得失敗で音声操作を止めない。
+session/disc/stream変更や別の取得機会で不要になったretryは失効させ、旧返答が新世代のretryを占有しない。
+同discの未取得mapはstream変更でretry機会を失わず、進行中要求を無効化した場合も残る間隔後に最新streamを取得する。
+自動retryは通常の自動取得間隔を短縮せず、Refresh mapの明示再取得とは区別する。
+responseは到着時の最新snapshotとroot `session_id`/`stream_generation`、`disc_map.disc_generation`を照合する。
+mapにはcapture時刻（UTC）を表示し、表示更新が遅れた結果を現在の全観測とは扱わない。
 layoutがnull、sessionまたはdisc世代が変わった場合は、保持したmapを破棄する。同一discの古いmap revisionも採用しない。
 
 標準target viewportではartwork、曲名、artist、album、再生状態、進捗/時刻を一次情報とする。
@@ -248,6 +253,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 |---|---|
 | GET /api/state | provider非依存のPresentation Model JSON |
 | GET /api/read-history | STREAM詳細履歴とDISC領域集計。通常snapshotとは別取得 |
+| GET /api/disc-map | STREAM詳細履歴を含まないDISC集計。非同期capture時点を明示 |
 | GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
 | GET/POST /api/artist-background | 利用可否・要求値・実効値とsession限りの明示ON/OFF。画像到着・保存とは別。本文・公開field・statusは[メッセージ契約](message-contract.md#公開経路と生成元)参照 |
@@ -475,7 +481,9 @@ discはTOC refreshを含めて更新し、同一TOCの再挿入を同じ観測�
 全backend試行を観測済みという意味ではない。返されない過去領域の詳細は取得不能とする。
 start/cancel/discardで履歴とevictedをリセットする。通常のengine tickは履歴コピーをせず、
 詳細履歴のHTTP取得時だけ同一lock内で統計と履歴を取得する。slow clientによる履歴保持延長や同期disk書込みはない。
-JSONサイズ・Pi負荷は実機未検証。完全なdisc履歴やevent replayは提供しない。
+履歴JSON生成の同期負荷は2026-10-17にPiで音切れとの時間的対応を確認した。
+音声優先の非同期化候補はローカル自動検証済み・Debug配備済み・実機受入未完了として[検証状況](../development/verification.md)へ分離する。
+完全なdisc履歴やevent replayは提供しない。
 
 ### 詳細履歴のオンデマンド取得（#35/#36、PR #87）
 
@@ -484,7 +492,8 @@ JSONサイズ・Pi負荷は実機未検証。完全なdisc履歴やevent replay�
 `GET /api/read-history`で行い、`schema_version=1`、`session_id`、`stream_generation`、
 `history`（included=true、regionsを含む）と`disc_map`（下記DISC集計、null可能）を返す。
 historyは最大128件でpagination/replayは提供しない。
-GET以外は405、providerがない場合は503。読み取り専用で既存state GETと同じlisten境界を使う。
+GET以外は405、providerなし・非同期生成待ち・送信枠満杯は503。読み取り専用で既存state GETと同じlisten境界を使う。
+`snapshot`の取得時点、生成中のcache、送信上限は[音声優先の非同期診断](message-contract.md#音声優先の非同期診断)を参照する。
 
 session IDはdaemon起動時に生成する不透明な識別子で、通常snapshotでは`read.session_id`に置く。
 ID不一致時は旧履歴を破棄する。STREAM historyは同sessionでもstream_generationが異なれば併合せずstateを再取得する。

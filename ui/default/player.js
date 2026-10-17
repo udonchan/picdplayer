@@ -700,6 +700,7 @@ let observationGap = false;
 let currentSnapshot = null;
 let mapKey = null;
 let mapLoadingKey = null;
+let mapRequestGeneration = 0;
 let mapLastRequestedAt = Number.NEGATIVE_INFINITY;
 let discMap = null;
 let renderedMapIdentity = null;
@@ -731,6 +732,17 @@ function acceptSnapshot(snapshot) {
     if (safeNonNegative(window.worker_dropped)) eventDropped = window.worker_dropped;
   }
   const key = discLayoutKey(snapshot);
+  if (key !== mapKey || stream !== currentSnapshot?.read?.stream_generation) {
+    // A same-disc retry fetches the latest stream even if stopped snapshots go quiet.
+    if (key !== mapKey) {
+      clearTimeout(mapRetryTimer);
+      mapRetryTimer = null;
+    } else if (key && !discMap && mapLoadingKey === key) {
+      scheduleDiscMapRetry(key, Math.max(0, mapLastRequestedAt + discMapRefreshIntervalMs - performance.now()));
+    }
+    mapLoadingKey = null;
+    ++mapRequestGeneration;
+  }
   if (key !== mapKey) {
     mapKey = key;
     discMap = null;
@@ -747,15 +759,25 @@ function mapMatchesSnapshot(snapshot, detail) {
   const key = discLayoutKey(snapshot);
   const map = detail?.disc_map;
   if (!key || detail?.schema_version !== 1 || detail?.session_id !== snapshot.read?.session_id
+      || detail?.stream_generation !== snapshot.read?.stream_generation
       || !map || map.scope !== 'DISC' || map.disc_generation !== snapshot.disc.layout?.disc_generation
       || !safeNonNegative(map.revision) || !safeNonNegative(map.capacity) || map.capacity > 256
       || typeof map.observations_complete !== 'boolean' || !Array.isArray(map.regions)
       || map.regions.length > map.capacity) return null;
   if (discMap && discMap.key === key && safeNonNegative(discMap.revision) && map.revision < discMap.revision) return null;
-  return { key, ...map };
+  return { key, ...map, capturedAtUnixMs: detail.snapshot?.captured_at_unix_ms };
 }
 
 const discMapRefreshIntervalMs = 2000;
+let mapRetryTimer = null;
+
+function scheduleDiscMapRetry(key, delay = discMapRefreshIntervalMs) {
+  if (mapRetryTimer !== null) return;
+  mapRetryTimer = setTimeout(() => {
+    mapRetryTimer = null;
+    if (discLayoutKey(currentSnapshot) === key) requestDiscMap(currentSnapshot, true);
+  }, delay);
+}
 
 function requestDiscMap(snapshot, force = false) {
   const key = discLayoutKey(snapshot);
@@ -763,18 +785,23 @@ function requestDiscMap(snapshot, force = false) {
   const now = performance.now();
   const due = now - mapLastRequestedAt >= discMapRefreshIntervalMs;
   if (!key || mapLoadingKey === key
-      || (!force && discMap?.key === key && (!playing || !due))) return;
+      || (!force && (!due || (discMap?.key === key && !playing)))) return;
+  clearTimeout(mapRetryTimer);
+  mapRetryTimer = null;
+  const requestGeneration = ++mapRequestGeneration;
   mapLastRequestedAt = now;
   mapLoadingKey = key;
   renderDiscMap(snapshot);
   try {
-    Promise.resolve(fetch('/api/read-history', { cache: 'no-store' })).then(async (response) => {
+    Promise.resolve(fetch('/api/disc-map', { cache: 'no-store' })).then(async (response) => {
+      if (requestGeneration !== mapRequestGeneration) return;
+      if (response.status === 503) scheduleDiscMapRetry(key);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const detail = await response.json();
       const accepted = mapMatchesSnapshot(currentSnapshot, detail);
-      if (accepted) discMap = accepted;
+      if (accepted && requestGeneration === mapRequestGeneration) discMap = accepted;
     }).catch(() => {}).finally(() => {
-      if (mapLoadingKey === key) mapLoadingKey = null;
+      if (requestGeneration === mapRequestGeneration) mapLoadingKey = null;
       renderDiscMap(currentSnapshot);
     });
   } catch {
@@ -851,7 +878,9 @@ function renderDiscMap(snapshot) {
     const regionLabel = validRegions === discMap.regions.length
       ? `${validRegions} regions`
       : `${validRegions} valid regions / ${discMap.regions.length} reported`;
-    set('read-map-state', `${regionLabel} · ${completeness} · revision ${discMap.revision}`);
+    const captured = safeNonNegative(discMap.capturedAtUnixMs) ? new Date(discMap.capturedAtUnixMs) : null;
+    const captureTime = captured && Number.isFinite(captured.getTime()) ? ` · captured ${captured.toISOString()}` : '';
+    set('read-map-state', `${regionLabel} · ${completeness} · revision ${discMap.revision}${captureTime}`);
   }
   const latest = snapshot?.read?.latest;
   const hasLatest = setMarker('map-latest', layout, latest);

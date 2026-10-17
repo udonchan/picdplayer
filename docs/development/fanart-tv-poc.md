@@ -7,6 +7,12 @@ MusicBrainz Artist MBIDから取得した写真を標準Playerへ表示するPoC
 fanart.tvの正式採用、公開バイナリ・bootable imageへのkey同梱、認証基盤の完成を意味しない。
 中央proxy、Personal API Key、追加provider、key入力UIは実装しない。外部写真も配布物へ同梱しない。
 
+2026-10-17のIssue整理で#229と旧親#25のtrackingをNot planned/supersededとして終了した。
+PoCの全条件を合格にしたのではない。実写真切替・時間条件・TV可読性・取得切替中の音声/代表CECは
+[#51](https://github.com/udonchan/picdplayer/issues/51)、通常継続運転は#184、定量性能は#83、
+decoded資源安全性は#49、背景保存/次回復元の未実装は#177、Settings画面受入は#178へ一本化する。
+以下の過去の検証・未確認・権利条件は保持し、基本再生報告を全条件の検証へ読み替えない。
+
 WPEを主系とし、最新masterで採用済みのWPE 2.54専用WPEPlatform/DRM launcherを使う。
 これはCog経由ではない。Cogへの移行作業を追加せず、HTML/CSS/JavaScriptのWeb標準機能と
 既存HTTP/WebSocketを使用する。Chromiumは既存の復旧・バックアップ経路だけとする。

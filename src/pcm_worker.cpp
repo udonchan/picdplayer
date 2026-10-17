@@ -142,15 +142,15 @@ void PcmWorker::set_disc_generation(std::uint64_t generation) {
     disc_map_ = {};
     disc_map_.disc_generation = generation;
 }
-WorkerStatus PcmWorker::status(bool include_history) {
+WorkerStatus PcmWorker::status(bool include_history, bool include_disc_map) {
     std::lock_guard lock(mutex_);
     const auto inflight = reading_ ? std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - read_started_).count() : 0;
     diagnostics_.dropped_events = dropped_events_;
     auto diagnostics = diagnostics_;
     diagnostics.history_included = include_history;
+    if ((include_history || include_disc_map) && disc_map_.disc_generation) diagnostics.disc_map = disc_map_;
     if (include_history) {
-        if (disc_map_.disc_generation) diagnostics.disc_map = disc_map_;
         diagnostics.recent_reads.reserve(history_size_);
         for (std::size_t i = 0; i < history_size_; ++i)
             diagnostics.recent_reads.push_back(history_[(history_begin_ + i) % read_history_capacity]);

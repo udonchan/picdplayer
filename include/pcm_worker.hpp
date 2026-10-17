@@ -68,7 +68,7 @@ public:
     bool device_released();
     bool pop(PcmBlock& block);
     bool pop_event(PlayerEvent& event);
-    WorkerStatus status(bool include_history = false);
+    WorkerStatus status(bool include_history = false, bool include_disc_map = false);
     void set_disc_generation(std::uint64_t generation);
     std::size_t buffer_capacity_blocks() const;
     std::size_t startup_buffer_blocks() const;

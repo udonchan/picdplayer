@@ -11,12 +11,14 @@ async function settle() {
   for (let i = 0; i < 20; ++i) await Promise.resolve();
 }
 
-async function main() {
+async function main(scenario = null) {
   const nodes = new Map();
   const listeners = new Map();
   const sockets = [];
   const frames = [];
   let historyRequests = 0;
+  let pendingMap = false;
+  const timers = [];
   let now = 0;
   const snapshot = {
     schema_version: 1, revision: 1,
@@ -43,6 +45,18 @@ async function main() {
   const detail = { schema_version: 1, session_id: 'session-a', stream_generation: 4,
     disc_map: { scope: 'DISC', disc_generation: 2, revision: 3, observations_complete: true, capacity: 256,
       regions: [{ start_lba: 0, end_lba: 15, flags: 3 }, { start_lba: 45, end_lba: 60, flags: 36 }] } };
+  const mapRequests = [];
+  let mapResponse = null;
+  let resolveDelayed;
+  if (scenario) {
+    snapshot.player.state = scenario === 'cadence' ? 'PLAYING' : 'STOPPED';
+    if (snapshot.player.state === 'STOPPED') snapshot.read.current_playback = null;
+    mapResponse = () => ({ ok: false, status: 503 });
+    if (scenario === 'cadence' || scenario === 'delayed' || scenario === 'stream-delayed') {
+      const delayed = new Promise(resolve => { resolveDelayed = resolve; });
+      mapResponse = () => delayed;
+    }
+  }
   function node(id) {
     if (nodes.has(id)) return nodes.get(id);
     const value = { textContent: '', hidden: false, dataset: {}, style: {}, complete: false, naturalWidth: 0,
@@ -54,13 +68,113 @@ async function main() {
     performance: { now: () => now }, document: { readyState: 'complete', getElementById: node, addEventListener() {} },
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url) => {
-      if (url === '/api/read-history') ++historyRequests;
-      return { ok: true, json: async () => url === '/api/read-history' ? detail : snapshot };
+      assert.notEqual(url, '/api/read-history', 'map refresh must not fetch full history');
+      if (url === '/api/disc-map') {
+        ++historyRequests;
+        mapRequests.push(now);
+        if (mapResponse) return mapResponse();
+      }
+      if (url === '/api/disc-map' && pendingMap) return { ok: false, status: 503 };
+      return { ok: true, json: async () => url === '/api/disc-map' ? detail : scenario ? structuredClone(snapshot) : snapshot };
     },
     WebSocket: class { constructor() { sockets.push(this); } }, requestAnimationFrame: (fn) => frames.push(fn),
-    setTimeout() {}, clearTimeout() {}, Promise,
+    setTimeout(fn, ms) { timers.push({ fn, ms, due: now + ms, active: true }); return timers.length; },
+    clearTimeout(id) { if (timers[id - 1]) timers[id - 1].active = false; }, Promise,
   });
   await settle();
+  if (scenario) {
+    const advance = async (time) => {
+      now = time;
+      for (const timer of [...timers]) {
+        if (timer.active && timer.due <= now) {
+          timer.active = false;
+          timer.fn();
+          await settle();
+        }
+      }
+    };
+    const pendingTimers = () => timers.filter(timer => timer.active && timer.ms === 2000);
+    const success = () => ({ ok: true, status: 200, json: async () => structuredClone(detail) });
+    assert.deepEqual(mapRequests, [0]);
+    if (scenario === 'cadence') {
+      now = 100;
+      resolveDelayed({ ok: false, status: 503 });
+      await settle();
+      assert.equal(pendingTimers().length, 1);
+      mapResponse = success;
+      now = 2000;
+      sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 2 }) });
+      await settle();
+      assert.deepEqual(mapRequests, [0, 2000]);
+      assert.match(node('read-map-state').textContent, /revision 3/);
+      await advance(2100);
+      assert.deepEqual(mapRequests, [0, 2000], 'successful periodic fetch retires the obsolete forced retry');
+    } else {
+      now = 100;
+      snapshot.revision = 2;
+      if (scenario === 'stream' || scenario === 'stream-auto' || scenario === 'stream-delayed') {
+        snapshot.read.stream_generation = detail.stream_generation = 5;
+      } else {
+        snapshot.read.session_id = snapshot.disc.layout.session_id = detail.session_id = 'session-b';
+        snapshot.disc.layout.disc_generation = detail.disc_map.disc_generation = 3;
+      }
+      let resolveCurrent;
+      if (scenario === 'delayed') {
+        const current = new Promise(resolve => { resolveCurrent = resolve; });
+        mapResponse = () => current;
+      } else {
+        mapResponse = () => ({ ok: false, status: 503 });
+      }
+      sockets[0].onmessage({ data: JSON.stringify(snapshot) });
+      await settle();
+      if (scenario === 'stream-auto' || scenario === 'stream-delayed') {
+        assert.deepEqual(mapRequests, [0], 'stopped stream change must not fetch before the cadence is due');
+        if (scenario === 'stream-delayed') {
+          now = 200;
+          resolveDelayed({ ok: false, status: 503 });
+          await settle();
+          assert.equal(timers.filter(timer => timer.active && timer.due === 2000).length, 1,
+            'obsolete response must leave exactly one current-stream acquisition retry');
+        }
+        mapResponse = () => {
+          assert.equal(snapshot.read.stream_generation, 5);
+          return success();
+        };
+        await advance(1999);
+        assert.deepEqual(mapRequests, [0]);
+        await advance(2000);
+        assert.deepEqual(mapRequests, [0, 2000], 'stopped new stream retries without manual refresh or another snapshot');
+        assert.match(node('read-map-state').textContent, /revision 3/);
+        assert.equal(pendingTimers().length, 0);
+        console.log(`PASS: map retry ${scenario} at 2000 ms without manual refresh`);
+        return;
+      }
+      if (scenario === 'stream') {
+        assert.deepEqual(mapRequests, [0], 'same-disc stopped stream change preserves the fetch cadence');
+        listeners.get('refresh-read-map:click')();
+        await settle();
+      }
+      assert.deepEqual(mapRequests, [0, 100]);
+      if (scenario === 'delayed') {
+        resolveDelayed({ ok: false, status: 503 });
+        await settle();
+        assert.equal(pendingTimers().length, 0, 'delayed obsolete503 must not arm a retry');
+        resolveCurrent({ ok: false, status: 503 });
+        await settle();
+      }
+      assert.equal(pendingTimers().length, 1, 'only the current context owns a retry');
+      assert.equal(pendingTimers()[0].due, 2100, 'old context cannot retain or replace the current retry');
+      mapResponse = success;
+      await advance(2000);
+      assert.deepEqual(mapRequests, [0, 100], 'retry waits two seconds after the current503');
+      await advance(2100);
+      assert.deepEqual(mapRequests, [0, 100, 2100], 'stopped current context retries without another snapshot');
+      assert.match(node('read-map-state').textContent, /revision 3/);
+      assert.equal(pendingTimers().length, 0);
+    }
+    console.log(`PASS: map retry ${scenario}`);
+    return;
+  }
   while (frames.length) frames.shift()();
   sockets[0].onopen();
   assert.equal(node('connection').textContent, 'DAEMON · CONNECTED');
@@ -84,7 +198,7 @@ async function main() {
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 2,
     player: { ...snapshot.player, position_frames: 90 } }) });
   await settle();
-  assert.equal(historyRequests, 1, 'read-history must not be fetched for every snapshot');
+  assert.equal(historyRequests, 1, 'disc-map must not be fetched for every snapshot');
 
   now = 2000;
   sockets[0].onmessage({ data: JSON.stringify({ ...snapshot, revision: 3,
@@ -157,10 +271,48 @@ async function main() {
   assert.equal(node('map-marker-label').textContent, 'LATEST OBSERVED READ · NOT AVAILABLE');
   assert.equal(node('map-marker-label').dataset.marker, 'unavailable');
   assert.equal(node('drive-observation').textContent, 'Device observation UNKNOWN');
+  await settle();
+  const requestsBeforePending = historyRequests;
+  const restored = structuredClone(snapshot);
+  restored.revision = 2;
+  restored.read.session_id = restored.disc.layout.session_id = 'session-b';
+  restored.disc.layout.disc_generation = 3;
+  restored.read.current_playback.disc_generation = restored.read.latest.disc_generation = 3;
+  pendingMap = true;
+  sockets[0].onmessage({ data: JSON.stringify(restored) });
+  await settle();
+  assert.equal(historyRequests, requestsBeforePending + 1);
+  sockets[0].onmessage({ data: JSON.stringify({ ...restored, revision: 3 }) });
+  await settle();
+  assert.equal(historyRequests, requestsBeforePending + 1, 'pending map must not cause per-snapshot retries');
+  const mapTimers = timers.filter(timer => timer.ms === 2000);
+  assert.equal(mapTimers.length, 1, 'pending map has one bounded retry');
+  pendingMap = false;
+  detail.session_id = 'session-b';
+  detail.disc_map.disc_generation = 3;
+  detail.disc_map.revision = 4;
+  detail.snapshot = { sequence: 8, captured_at_unix_ms: Date.now() - 5000 };
+  now += 2000;
+  mapTimers[0].fn();
+  await settle();
+  assert.equal(historyRequests, requestsBeforePending + 2);
+  assert.match(node('read-map-state').textContent, /revision 4.*captured /);
+  assert.ok(node('read-map-state').textContent.endsWith(new Date(detail.snapshot.captured_at_unix_ms).toISOString()));
+  detail.stream_generation = 3;
+  detail.disc_map.revision = 999;
+  listeners.get('refresh-read-map:click')();
+  await settle();
+  assert.match(node('read-map-state').textContent, /revision 4/);
+  assert.doesNotMatch(node('read-map-state').textContent, /revision 999/);
   sockets[0].onclose();
   assert.equal(node('connection').textContent, 'DAEMON · RECONNECTING');
   assert.equal(node('connection').dataset.state, 'reconnecting');
   console.log('PASS: Integrity summary, bounded map, revision and session handling');
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+(async () => {
+  for (const scenario of [null, 'context', 'stream', 'stream-auto', 'stream-delayed', 'cadence', 'delayed']) {
+    try { await main(scenario); }
+    catch (error) { console.error(`FAIL: ${scenario || 'integrity'}`, error); process.exitCode = 1; }
+  }
+})();

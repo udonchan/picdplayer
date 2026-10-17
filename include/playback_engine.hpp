@@ -26,7 +26,7 @@ public:
     void synchronize();
     void tick();
     bool take_reader_failure() noexcept;
-    ReadDiagnostics read_diagnostics(bool include_history = false);
+    ReadDiagnostics read_diagnostics(bool include_history = false, bool include_disc_map = false);
 private:
     PlayerController& controller_;
     PcmWorker& worker_;

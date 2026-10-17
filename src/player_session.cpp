@@ -10,6 +10,9 @@
 #include "media_worker.hpp"
 #include "drive_capabilities.hpp"
 #include "device_lifecycle.hpp"
+#ifdef ENABLE_API
+#include "read_diagnostics_publisher.hpp"
+#endif
 #include "read_policy.hpp"
 #include "logger.hpp"
 #ifdef ENABLE_METADATA
@@ -20,7 +23,6 @@
 #include "read_policy_store.hpp"
 #include "presentation_model.hpp"
 #include "presentation_json.hpp"
-#include "diagnostics_json.hpp"
 #include <random>
 #endif
 #include <charconv>
@@ -358,8 +360,21 @@ void run_player_session(const std::string& device, CddaBackend backend,
         return true;
     };
     publish_api_snapshot();
+    std::unique_ptr<ReadDiagnosticsPublisher> diagnostic_publisher;
+    const auto diagnostic_response = [&](bool detail) {
+        const bool valid_disc = !toc_needs_refresh && loaded_toc &&
+            media_state.state() == MediaLifecycleState::audio_ready;
+        const DiagnosticContext context{worker.status().diagnostics.stream_generation,
+                                        valid_disc ? disc_generation : 0};
+        return diagnostic_publisher->request(context, detail, [&](bool include_history) {
+            auto read = engine.read_diagnostics(include_history, true);
+            read.session_id = diagnostic_session_id;
+            return read;
+        });
+    };
     std::unique_ptr<ApiServer> api_server;
     if (api_port) {
+        diagnostic_publisher = std::make_unique<ReadDiagnosticsPublisher>();
         const auto serialize_read_policy = [&] {
             const auto policy_json = [](const ReadPolicy& value) {
                 std::ostringstream output;
@@ -510,19 +525,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
         api_server = std::make_unique<ApiServer>(api_listen, api_port,
                                                  [&] { return api_state_json; },
                                                  std::move(command_handler), serialize_read_policy, std::move(ui),
-                                                 std::move(artwork_provider), [&] {
-                                                     auto read = engine.read_diagnostics(true);
-                                                     read.session_id = diagnostic_session_id;
-                                                     auto result = diagnostic_fields({}, read, {})["read"];
-                                                     return nlohmann::json{{"schema_version", 1},
-                                                         {"session_id", diagnostic_session_id},
-                                                         {"stream_generation", read.stream_generation},
-                                                         {"history", result["history"]},
-                                                         {"disc_map", !toc_needs_refresh && loaded_toc &&
-                                                             media_state.state() == MediaLifecycleState::audio_ready &&
-                                                             result.contains("disc_map") ? result["disc_map"] : nlohmann::json(nullptr)}}.dump();
-                                                  }, [&] { return artist_background_policy.json(); },
-                                                  std::move(background_artwork_provider));
+                                                 std::move(artwork_provider), [&] { return diagnostic_response(true); },
+                                                 [&] { return artist_background_policy.json(); },
+                                                 std::move(background_artwork_provider), [&] { return diagnostic_response(false); });
         auto line = log_notice("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';

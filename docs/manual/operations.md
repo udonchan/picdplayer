@@ -66,6 +66,15 @@ USB切断/reset/over-currentやread errorを新しく観測した場合は追加
 物理抜き差し、電源操作、強制reset、sysfs unbind/udev triggerは別の手順・承認で行い、正常再生の試験と混ぜない。
 観測の表示や短時間正常再生だけで実機hotplug/resetを確認済みとは扱わない。
 
+### 診断更新と音声優先
+
+標準Playerのdisc mapは`GET /api/disc-map`を使い、詳細履歴128件の周期生成を要求しない。
+詳細が必要なclientは従来の`GET /api/read-history`を使える。両者は非同期capture時点の結果であり、初回や世代変更後は503になり得る。
+503を再生失敗と読み替えず、短い間隔で連続再送しない。標準Playerは生成待ちを2秒後に再取得する。
+同contextでは完成済みの古いJSONが返り得るため、`snapshot.captured_at_unix_ms`とsession/stream/disc世代を確認する。
+mapのcaptured時刻（UTC）は診断の取得時点であり、drive health・read完了や音声位置の証明ではない。
+履歴eviction・未知の能力・欠落の意味は変えず、JSONの更新を遅らせても音声を優先する。
+
 ### 明示read offset
 
 `--player`限定で起動時に`--read-offset-samples SIGNED_INTEGER`を指定できる。

@@ -245,7 +245,9 @@ read failureからのfallbackではない。予定window終端の正常drainと�
 | 構成/実機 | API無効を含む再build・回帰、test-only fakeでの全sampleと有界性、別承認の実機音声/操作評価。fake成功を物理傷やC2 trustの保証にしない |
 
 この設計判断は代替PCM機能の実装・自動試験・実機確認の完了ではない。現行STOPの実装を変えない。
-文書整理後、利用者からcommit・push・master統合を別途承認された。Issue状態変更・配備は含めない。
+当時の文書整理後、利用者からcommit・push・master統合を別途承認されたが、Issue状態変更・配備は対象外だった。
+2026-10-17のIssue整理承認により、PR #234の採否判断を設計成果として#156をCloseした。
+追加fallbackは採用せず、実装・配備・実機試験を追加したものではない。
 
 ## 7. NO DISCでの能力probe
 
@@ -770,7 +772,10 @@ production統合では#88の消失/reset/同一path再接続の失効成果と�
 設計PR #235段階では、利用者の承認は文書の統合、A/B/C/Dの実Issue作成とAだけの実装・自動検証・統合だった。
 その時点ではB/C/Dの実装、providerアクセス、実機操作、Issue closeは対象外で、表は分割案だった。
 PR #235の設計統合後に上記4 Issueを作成し、#160のsub-issue、BのA依存、DのA/B/C/#88依存を記録した。
-その後#237だけも実装・自動検証・commit/push/統合まで追加承認された。C/D、provider、実機操作、Issue closeは対象外のまま。
+その後#237だけも実装・自動検証・commit/push/統合まで追加承認された。当時はC/D、provider、実機操作、Issue closeは対象外だった。
+2026-10-17のIssue整理承認により、#160は設計・作業分解、#236/#237はPR #240/#241のtest-only実装を
+それぞれの限定scopeの完了としてCloseした。親の設計完了を子のproduction完成まで待たせず、
+C/Dの未実装と#88の物理受入未完了は維持する。実装・公開契約・実機挙動はこの整理で変更しない。
 #13が必要とする完全取得入力はA/Bだけでは成立せず、
 profile適合とDの受入まで必要である。providerの調査は並行できるが、全域coverageがない入力を外部照合へ渡さない。
 #13のClosedを機能完成や依存充足に読み替えず、再openもしない。

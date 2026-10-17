@@ -132,10 +132,17 @@ API/WebSocketの内容や配信頻度、再接続、任意の起動telemetryは�
 CSS transitionやbrowserの合成処理は別に発生し得るため、DOM write削減をpaintやCPUの削減量と同一視しない。
 
 標準PlayerのIntegrity表示は通常snapshotにある`read`、`drive`、`disc.layout`と、
-オンデマンドの`GET /api/read-history`にある`disc_map`を使う。Custom UIはこれを実装する義務を負わない。
-実装する場合は、map responseのroot `session_id`と最新snapshot、`disc_map.disc_generation`と
-`disc.layout.disc_generation`を照合し、layout/session/disc世代の変更時は旧mapを捨てる。
+詳細履歴を含まない`GET /api/disc-map`にある`disc_map`を使う。Custom UIはこれを実装する義務を負わない。
+実装する場合は、返答到着時の最新snapshotとroot `session_id`/`stream_generation`、
+`disc_map.disc_generation`と`disc.layout.disc_generation`を照合する。layout/session/disc世代の変更時は
+旧mapを捨て、同じdiscでstreamだけ変わった場合は保持済みmapを取得時点付きで表示してよいが、旧stream返答は採用しない。
 標準Playerは`PLAYING`中に2秒に一回を上限としてdisc mapを更新するが、WS更新ごとには詳細履歴を取得しない。
+初回/世代変更直後の生成待ち等の503では、停止中でも最大一つの2秒後retryで再取得する。完了期限の保証ではない。
+世代変更や別の取得機会で古いretryを失効させ、旧返答で新世代のretryを妨げたり、自動取得の間隔を短縮したりしない。
+同じdiscで未取得のままstreamが変わった場合は、残る取得機会を最新streamへ引き継ぎ、追加snapshotを必須にしない。
+完成済み同contextの結果でも古い場合があるため、`snapshot.captured_at_unix_ms`を取得時点として表示する。
+欠落した取得時刻を応答時刻や現在時刻で埋めない。非同期生成/503と公開上限は
+[メッセージ契約](../design/message-contract.md#音声優先の非同期診断)を参照する。
 Custom UIは同じcadenceを実装する義務を負わず、利用者の明示操作など有界な取得機会を選ぶ。
 region flagsはbit集合で重なり得る。未観測、`observations_complete=false`、UNKNOWN、NOT_CHECKEDを
 正常値へ変換しない。bufferのblock比率は可聴秒数でもqueued frame数でもない。
@@ -277,8 +284,10 @@ TOC座標は`disc.layout`で取得する。fieldとnull条件は[メッセージ
 
 ### Disc単位の読み取り区間（#99）
 
-GET /api/read-historyのdisc_mapはDISC scope。STREAM historyと照合条件を分け、
+GET /api/read-historyとGET /api/disc-mapのdisc_mapはDISC scope。STREAM historyと照合条件を分け、
 root session_idと最新layoutのdisc_generationを照合する。最大256区間、容量超過時は不完全な下限として凍結。
+診断返答自体のstream_generationは到着時の最新snapshotと照合し、旧返答を捨てる。
+既に保持した同discの集計をstream変更だけで捨てる必要はない。
 詳細fieldとflagsはメッセージ契約を参照。stop/seekでは保持、TOC再受理・daemon再起動ではresetする。
 
 `verification.overlap=NOT_CHECKED`は比較未実施であり、MISMATCHEDとは区別する。候補同士が一致してもoverlap不一致なら採用識別子はnullとなる。欠損・未知enumを正常値へ変換しない（#115）。
