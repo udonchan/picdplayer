@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <limits>
+namespace { struct RetiredPcmOperation {}; }
 
 void validate_pcm_buffer_config(const PcmBufferConfig& config) {
     if (config.capacity_cd_frames < pcm_block_cd_frames ||
@@ -158,17 +159,21 @@ WorkerStatus PcmWorker::status(bool include_history) {
 }
 void PcmWorker::run() {
     std::unique_ptr<CddaReader> reader;
+    const auto close_reader = [&] {
+        if (!reader) return;
+        if (drive_access_) drive_access_->invoke([&] { reader.reset(); });
+        else reader.reset();
+    };
     for (;;) {
         std::unique_lock lock(mutex_);
         changed_.wait(lock, [&] { return closing_ || active_ || discard_reader_; });
-        if (closing_) return;
+        if (closing_) { lock.unlock(); close_reader(); return; }
         if (discard_reader_) {
             discard_reader_ = false;
             drive_call_inflight_ = true;
             lock.unlock();
             // Never close a device while holding the queue mutex.
-            if (drive_access_) drive_access_->invoke([&] { reader.reset(); });
-            else reader.reset();
+            close_reader();
             lock.lock();
             drive_call_inflight_ = false;
             reader_open_ = false;
@@ -187,11 +192,23 @@ void PcmWorker::run() {
         const auto capacity_blocks = capacity_blocks_;
         const auto read_block_cd_frames = read_block_cd_frames_;
         lock.unlock();
+        const auto invoke_current = [&](auto&& operation) -> decltype(auto) {
+            const auto admitted = [&]() -> decltype(auto) {
+                {
+                    std::lock_guard current(mutex_);
+                    if (closing_ || generation != generation_ || !active_ || discard_reader_)
+                        throw RetiredPcmOperation{};
+                }
+                return operation();
+            };
+            if (drive_access_) return drive_access_->invoke(admitted);
+            return admitted();
+        };
         bool unobserved_read = false;
         try {
             if (!reader) {
                 lock.lock(); drive_call_inflight_ = true; lock.unlock();
-                reader = drive_access_ ? drive_access_->invoke(factory_) : factory_();
+                reader = invoke_current(factory_);
                 lock.lock();
                 drive_call_inflight_ = false;
                 reader_open_ = static_cast<bool>(reader);
@@ -201,12 +218,11 @@ void PcmWorker::run() {
             if (!reader) throw std::runtime_error("reader factory returned null");
             // A slow open may have been superseded by Stop/Seek.
             lock.lock();
-            if (closing_) return;
+            if (closing_) { lock.unlock(); close_reader(); return; }
             if (generation != generation_) continue;
             lock.unlock();
             lock.lock(); drive_call_inflight_ = true; lock.unlock();
-            if (drive_access_) drive_access_->invoke([&] { reader->seek(position); });
-            else reader->seek(position);
+            invoke_current([&] { reader->seek(position); });
             lock.lock(); drive_call_inflight_ = false; lock.unlock();
             while (position < end) {
                 lock.lock();
@@ -214,7 +230,7 @@ void PcmWorker::run() {
                     return closing_ || generation != generation_ ||
                            queue_.size() < capacity_blocks;
                 });
-                if (closing_) return;
+                if (closing_) { lock.unlock(); close_reader(); return; }
                 if (generation != generation_) break;
                 reading_ = true;
                 drive_call_inflight_ = true;
@@ -225,10 +241,10 @@ void PcmWorker::run() {
                     static_cast<std::int32_t>(read_block_cd_frames), end - position);
                 PcmBlock block{generation, position,
                                std::vector<std::int16_t>(frames * cdda_samples_per_frame), {}};
-                unobserved_read = true;
-                const auto result = drive_access_
-                    ? drive_access_->invoke([&] { return reader->read(block.samples); })
-                    : reader->read(block.samples);
+                const auto result = invoke_current([&] {
+                    unobserved_read = true;
+                    return reader->read(block.samples);
+                });
                 lock.lock();
                 last_read_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() - read_started_).count();
@@ -276,7 +292,7 @@ void PcmWorker::run() {
                     throw std::runtime_error("CDDA read failed lba=" + std::to_string(position) +
                                              " errno=" + std::to_string(result.native_error));
                 lock.lock();
-                if (closing_) return;
+                if (closing_) { lock.unlock(); close_reader(); return; }
                 if (generation != generation_) break;
                 queue_.push_back(std::move(block));
                 position += frames;
@@ -287,10 +303,14 @@ void PcmWorker::run() {
                 active_ = false; done_ = true;
                 diagnostics_.activity = ReadActivity::complete;
             }
+        } catch (const RetiredPcmOperation&) {
+            if (!lock.owns_lock()) lock.lock();
+            reading_ = false;
+            drive_call_inflight_ = false;
         } catch (const std::exception& error) {
             // Release the reader on this thread, never from a Stop handler.
-            if (drive_access_) drive_access_->invoke([&] { reader.reset(); });
-            else reader.reset();
+            if (lock.owns_lock()) lock.unlock();
+            close_reader();
             if (!lock.owns_lock()) lock.lock();
             if (unobserved_read && disc_generation == disc_generation_ && disc_map_.complete) {
                 disc_map_.complete = false;

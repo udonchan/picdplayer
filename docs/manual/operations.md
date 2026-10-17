@@ -45,6 +45,27 @@ stateを再取得してから次の操作を判断する。再生状態の正本
   --read-verification repeat
 ```
 
+### Device観測と再接続
+
+標準Playerとtechnical statusはdrive付近にnodeの観測contextを表示する。
+`drive.observation`のgenerationは同じsession内の失効counterで、物理同一性IDではない。
+PRESENTはnode/必要metadataを観測したこと、ABSENTはnodeがないこと、UNKNOWNは未取得/失敗/非対応等を示す。
+discやtray状態は別であり、playerのNO_DISCだけからphysical driveが抜かれたと判断しない。
+
+状態/signatureが変わると再生・validated TOC・旧capability/metadata/診断を失効し、ownerのI/O/close終了後に再probeする。
+表示のrevalidating/retiring old I/O中は、新contextに対する操作を受け付けない場合がある。
+再接続だけでは旧streamを自動再開しない。freshなmedia/TOCを確認してからPlay等を再操作する。
+read policy/requested speed/明示offset等の設定は保持するが、以前のsupportやrequest receiptは現状として流用しない。
+
+観測は既定250 ms samplingで、同じsignatureのresetやsample間の交換等は検出を保証しない。
+UNKNOWNをNOに変換せず、観測不明でもfreshなmedia確認に基づくlegacy single再生を不必要に禁止しない。
+一方、current contextにbindできないC2 reportでC2 pointer packetを有効にしない。
+取消は進行中ioctlを中断するものではなく、service終了はownerのjoinを待つ場合がある。
+
+USB切断/reset/over-currentやread errorを新しく観測した場合は追加読出しを止め、状態・時刻・ログと設定を保全する。
+物理抜き差し、電源操作、強制reset、sysfs unbind/udev triggerは別の手順・承認で行い、正常再生の試験と混ぜない。
+観測の表示や短時間正常再生だけで実機hotplug/resetを確認済みとは扱わない。
+
 ### 明示read offset
 
 `--player`限定で起動時に`--read-offset-samples SIGNED_INTEGER`を指定できる。

@@ -86,7 +86,17 @@ Json diagnostic_fields(const DriveCapabilities& drive, const ReadDiagnostics& re
                      {"current_speed_x", optional(drive.current_speed_x)},
                      {"read_offset_samples", optional(drive.read_offset_samples)},
                      {"read_offset_source", drive.read_offset_samples ? "USER_CONFIGURED" : "NONE"},
-                     {"read_offset_detail", drive.read_offset_samples ? read_offset_detail : ""}};
+                     {"read_offset_detail", drive.read_offset_samples ? read_offset_detail : ""},
+                     {"observation", nullptr}};
+    if (drive.observation) {
+        const auto& observation = *drive.observation;
+        root["drive"]["observation"] = {{"generation", observation.generation},
+            {"presence", device_presence_name(observation.presence)},
+            {"reason", device_change_reason_name(observation.reason)},
+            {"sampled", observation.sampled}, {"method", "NODE_SYSFS_POLL"},
+            {"error", observation.error}, {"revalidating", drive.observation_revalidating},
+            {"retiring_io", drive.observation_retiring_io}};
+    }
     const auto read_evidence = [](const std::optional<ReadEvidence>& source) -> Json {
         if (!source) return nullptr;
         const auto& evidence = *source;

@@ -51,8 +51,12 @@ void PlaybackEngine::tick() {
     last_tick_ = now;
     try {
         const auto status = worker_.status();
-        if (!status.error.empty()) throw std::runtime_error(status.error);
+        if (!status.error.empty()) {
+            reader_failure_ = true;
+            throw std::runtime_error(status.error);
+        }
         if (status.read_inflight_us >= read_stall_timeout_.count() * 1000) {
+            reader_failure_ = true;
             last_read_stall_ms_ = status.read_inflight_us / 1000;
             log_warning("player") << "read_stall timeout_ms=" << read_stall_timeout_.count()
                                   << " inflight_ms=" << *last_read_stall_ms_
@@ -186,6 +190,12 @@ void PlaybackEngine::tick() {
         output_.reset();
         throw;
     }
+}
+
+bool PlaybackEngine::take_reader_failure() noexcept {
+    const bool value = reader_failure_;
+    reader_failure_ = false;
+    return value;
 }
 
 ReadDiagnostics PlaybackEngine::read_diagnostics(bool include_history) {

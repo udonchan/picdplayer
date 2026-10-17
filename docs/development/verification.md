@@ -2,6 +2,82 @@
 
 更新日: 2026-10-17。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## #88 Device lifecycle（2026-10-17 JST）
+
+基準masterは`5a8007703f3745fec4d099f0d786ac125439e3a5`。利用者承認は#88の契約整理・実装・自動検証・
+必要なDebug配備/非破壊Pi確認・commit/push/CI/master統合までで、物理抜き差し/reset・provider/C/D・Issue closeを含まない。
+[観測と失効](../design/integrity-design.md#device-lifecycle-observation)と[公開契約](../design/message-contract.md#device-lifecycle-observation)を追加し、
+既存reader open counterと別の観測contextを使う。node/sysfsをread-onlyでowner threadがsampleし、
+旧reader/probe/TOC/capability/diagnosticの失効・admission・再probeを実装する。
+metadata観測不能をABSENT/NOにせず、same vendor/model/TOC/pathだけで物理同一と主張しない。
+
+| 検証 | 結果 |
+|---|---|
+| native ASan/UBSan・TSan | device lifecycle各9ケース・59 checks成功。MediaWorker両sanitizer成功、engine ASan/UBSan成功 |
+| Linux/aarch64 Debug API/metadata ON WPE OFF | 最終source再build後68/68成功 |
+| 最小API/metadata OFF、WPE OFF | 最終source再build後41/41成功 |
+| 標準WPE Debug（paranoia OFF） | 最終source再build後69/69成功 |
+| Debug package lifecycle | disposable containerのinstall/upgrade/reinstall/purge成功 |
+| Pi | 新Debugの機能assertとDOM確認は成功。ただし再生中のundervoltageを後解析で発見し、電源安定性/総合実機受入は未成立。追加負荷は停止 |
+
+実機のsysfs観測ではblock nodeのmajor/minor/inode、resolved syspath、USB busnum/devnumがread-onlyで得られることを確認した。
+daemon userはpicdplayer。旧journalと権限へ依存するreset検出は導入せず、物理同一性を証明する値として公開しない。
+新sourceの配備は再build/自動回帰成功後だけに行う。
+nativeはworker/observer/engineの各sourceを再compileして`-fsanitize=address,undefined`または別binaryの
+`-fsanitize=thread`で実行した。Linuxは既存build imageの`build-device-check`、`build-device-minimal`を
+DebugのAPI/metadata ONまたはOFF・WPE OFFでconfigure/buildし、各directoryのCTestを実行した。
+標準構成は`PICDPLAYER_BUILD_TYPE=Debug PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build
+PICDPLAYER_WPE_VOLUME=picdplayer-wpe221-build ./scripts/build-container.sh`と同imageのCTest、
+同Debug/imageで`./scripts/test-package-lifecycle.sh`を実行した。既存SDK identityを照合して再利用し、WebKitは再compileしていない。
+
+fake試験は観測状態/signatureの世代、安定UNKNOWN/ABSENT、遅延sample拒否、node/sysfs parser、
+cap失効/新世代bind・C2降格・offset config保持、old in-flight read/queue/event拒否、
+旧coordinator待ちfactory/controlの非発行、shutdown closeのowner/coordinator所有を含む。
+既存UI fixtureのdrive capabilityでNOT_CHECKEDを使っていた箇所はKnowledgeのUNKNOWNへ修正し、
+新contextのfixtureに旧cap/診断を持ち越さない。新公開fieldはserializerに実装してから試験へ追加した。
+検出不能なreset/交換、ioctl中断、物理同一性、physical hotplug/reset・異常媒体・別drive・聴感は未確認として残す。
+今回はC238/D239/Bのcapture runtime接続や外部照合を追加しない。
+
+### 非破壊Pi確認と電源条件
+
+現行EnvironmentFiles/DropInPathsとargsのSettings fileだけを参照し、設定3ファイルと旧Debug packageをprivate領域へ保全した。
+非参照0600 backupは内容を読まずmetadataだけ記録した。中断後にもhash/args/requested policy/背景requested/package一致をread-onlyで確認した。
+背景GETのrequested/effectiveとPOSTのenabledは別の契約であり、helperの初回誤参照を修正しただけでアプリは変更していない。
+その初回partial backupは上書きせず同hashを確認して再利用した。
+
+標準`PICDPLAYER_BUILD_TYPE=Debug PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build ./scripts/deploy.sh`で配備し、
+両service activeとWPE主runtimeを確認した。package SHA-256は
+`59701bdda6a95a916d5fd43744270de0bdfa07cd8d8ba9ee3e883e4aad822b35`、実行binaryは
+`d8019bc9422b54d31d17c2a60c6f0f8376ed766d7cbdb2b884423c269c704c1e`でstagingと一致した。
+旧packageは`4d2011c3342d2d8abdde4a325b0a28bf6148614b4aa3052bac348572a120c80f`を保持している。
+
+現在の通常CDでAPI/WS、play、pause、+2秒seek、resume、stopの機能assertを実行した。
+観測generation=1/PRESENT/INITIALのまま変わらず、revalidating/retiring_ioはfalse、disc generation=1、
+read evidenceのreader-open counterは初回とresumeとも1だった。履歴23 regionのdisc世代一致とoffset UNKNOWN/nullを確認した。
+callerの操作/stream変更をphysical観測counterの変化と混同していない。
+Inspectorのread-only DOMでは1920x1080、connection connected、NODE PRESENT / observed context 1 /
+physical identity unverifiedを確認した。PNGや実PCM fileは作成していない。
+
+**ただし電源条件を満たす正常実機受入とは扱わない。** 後解析したkernel journalに
+2026-10-17 12:26:26 UTCの`Undervoltage detected!`、12:26:32 UTCの`Voltage normalised`があった。
+play開始12:26:21.989、pause12:26:28.177、resume12:26:28.569、stop12:26:29.590 UTCであり、警告は再生中だった。
+元helperはUSB disconnect/reset/over-current等を監視したがunder-voltageを含めておらず、途中中止できていなかった。
+元のresult.json（機能assert passed）とraw journalを保持し、analysis.jsonで電源安定性false/総合受入INCOMPLETEを補足した。
+guardをunder-voltage等にも広げたが、電源/USB確認前の追加負荷・再配備・再試験は行っていない。
+電圧のnormalisedだけで負荷時の安全を再確認したとは推定しない。USB再接続/resetやread failure/underrunはこのrunでは検出しなかった。
+観測generation安定やPRESENTが電源healthの保証でないことも、この結果と区別する。
+
+同runでmain_loop_stallはapi_service 73,644 usと62,529 usを観測した。API/WS/Inspectorを伴う短時間観測で、
+原因や新旧比較はしておらず、#121/#83の解消・#184の長期安定性確認には使わない。
+試験後はDebug・offset未指定・STOPPED/track1、元args/requested policy/背景requested、設定3hashと非参照backup metadata一致を確認した。
+API8080/Inspector9223はloopback待受、両service active。12:26:33 UTC以降のread-only kernel照会に追加eventはなかった。
+これは電源問題の原因確定・解消や聴感確認ではない。
+
+証跡はローカルの`/var/folders/np/xlf6yym55bx3_tsbgtl5znhw0000gn/T/kilo/device88-hardware-Rsoah1`、
+Piの`/tmp/picdplayer-device88-RzHlrI`へ非公開で保持する。config/旧package・raw result/journal/各JSONとDOM情報を含むためGit追加・公開しない。
+`evidence/verify.py`は元run、rootのverify.pyはguard修正版であり、修正版の実負荷成功を主張しない。
+追加の負荷/物理hotplug/reset試験には利用者の電源・USB経路の再確認と別承認が必要。#88と関連hardware Issueはcloseしない。
+
 ## #237 排他的取得worker（2026-10-17 JST）
 
 基準masterは`5c266debe954efcbab53bb06dbf6ee6e8935b04d`。利用者からBだけの実装・自動検証・

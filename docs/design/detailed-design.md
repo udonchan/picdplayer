@@ -229,8 +229,12 @@ DRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを報告できる�
 意味しない。DAE、C2 trust、cache、accurate streamはUNKNOWNを維持し、offset値もprobeでは取得しない。
 明示起動offsetはsession側で保持し、probe完了後の公開値にも再適用する。probeはMediaWorkerで
 非同期に実行し、probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
-probeの遅延は後続のmedia観測を遅らせ得る。現在は起動時一回のprobeであり、hotplug/reset時の能力失効と
-再probeは#88で扱い、未実装である。
+probeの遅延は後続のmedia観測を遅らせ得る。#88ではread-only node/sysfs観測を別ownerへ置き、
+観測context変化とreader failureにより能力・TOC・旧結果を失効して再probeする。
+MediaWorker自身が共有coordinatorとgeneration admissionを所有し、caller callbackはraw操作だけを渡す。
+mainでgenerationを照合し、retiring reader/media I/Oの終了前に新contextの操作を発行しない。
+未観測reset/交換は保証せず、reader-open counterと物理同一性は分ける。
+[検出範囲と限界](integrity-design.md#device-lifecycle-observation)を参照する。
 
 `--drive-speed-x N`が指定され、probe結果が`speed_control=YES`なら、Audio CDのTOC採用後に
 STOPPEDまたはPAUSED中だけMediaWorkerへ`set_drive_speed`を一回要求する。callbackは

@@ -1,4 +1,5 @@
 #pragma once
+#include "device_lifecycle.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -34,7 +35,35 @@ struct DriveCapabilities {
     std::optional<int> current_speed_x;
     std::optional<int> read_offset_samples;
     std::string probe_error;
+    std::optional<DeviceObservationSnapshot> observation{};
+    bool observation_revalidating = false;
+    bool observation_retiring_io = false;
 };
+
+inline DriveCapabilities invalidated_drive_capabilities(const std::string& device,
+    std::optional<int> configured_offset, const DeviceObservationSnapshot& observation) {
+    DriveCapabilities result;
+    result.device = device;
+    result.read_offset_samples = configured_offset;
+    result.observation = observation;
+    return result;
+}
+
+inline bool bind_drive_probe(DriveCapabilities& current, DriveCapabilities probed,
+                             std::uint64_t generation, const DeviceObservationSnapshot& observation) {
+    if (generation != observation.generation) return false;
+    const auto device = current.device;
+    const auto offset = current.read_offset_samples;
+    if (!observation.sampled || observation.presence != DevicePresence::present || probed.device != device) {
+        current = invalidated_drive_capabilities(device, offset, observation);
+        current.probe_error = "probe is not bound to a current device observation";
+        return false;
+    }
+    current = std::move(probed);
+    current.read_offset_samples = offset;
+    current.observation = observation;
+    return true;
+}
 
 // Test seam for a read-only MMC packet. Return zero on success or errno.
 // テスト用の読み取り専用MMC packet境界。成功時は0、失敗時はerrnoを返す。

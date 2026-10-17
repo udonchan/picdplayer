@@ -262,10 +262,15 @@ PoCは導入CI→master seed→別branch/新規PRの通常CIの順とし、全�
 [#81 診断API・status表示](https://github.com/udonchan/picdplayer/issues/81)を追跡する。
 修正の検証範囲は[検証状況](verification.md)を参照する。
 
-## 物理drive hotplug（保留）
+## 物理drive hotplug（観測実装・物理受入保留）
 
 [#88](https://github.com/udonchan/picdplayer/issues/88)で物理交換/reset検出・能力失効・再取得を追跡する。
-#7の物理lifecycle部分を分離したPending項目。#35のreader-open観測世代と混同せず、#24の追加Hard dependencyにはしない。
+#7の物理lifecycle部分を分離した項目。#88の今回差分では[観測世代/失効/再probe/旧操作拒否](../design/integrity-design.md#device-lifecycle-observation)を実装する。
+#35のreader-open counterと別に扱い、#24の追加Hard dependencyにはしない。native ASan/UBSan/TSan、Linux標準69/69・最小41/41を確認した。
+新Debugの通常再生/API/WS/DOMの機能assertは成功したが、再生中undervoltageを後解析で発見し追加負荷を停止した。
+電源安定性、node/sysfs samplingの検出不能ケース、物理抜き差し/reset・異常媒体/別driveの実機受入は未完了。
+[検証記録](verification.md#88-device-lifecycle2026-10-17-jst)参照。
+Issue状態はOpenのまま、C/D/provider・物理操作・Issue closeは今回の対象外。
 
 ### 全ディスクread mapの前提
 

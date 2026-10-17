@@ -9,6 +9,7 @@
 #include "media_state.hpp"
 #include "media_worker.hpp"
 #include "drive_capabilities.hpp"
+#include "device_lifecycle.hpp"
 #include "read_policy.hpp"
 #include "logger.hpp"
 #ifdef ENABLE_METADATA
@@ -23,6 +24,7 @@
 #include <random>
 #endif
 #include <charconv>
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <iostream>
@@ -132,6 +134,16 @@ void run_player_session(const std::string& device, CddaBackend backend,
     PlayerController controller;
     auto audio = make_alsa_output(audio_device, audio_latency_ms * 1000U);
     auto drive_access = std::make_shared<DriveAccessCoordinator>();
+    auto device_observer = std::make_shared<DeviceLifecycleObserver>([device] { return observe_device_node(device); });
+    auto accepted_device_generation = std::make_shared<std::atomic<std::uint64_t>>(0);
+    DeviceObservationSnapshot device_observation;
+    bool device_context_ready = false;
+    bool device_io_retiring = false;
+    bool drive_probe_attempted = false, drive_probe_finished = false;
+    const auto initial_observation_grace = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    const auto device_context_current = [&] {
+        return device_observer->permits(device_observation.generation);
+    };
     validate_read_policy(initial_read_policy, buffer_config.capacity_cd_frames);
     const char* initial_read_policy_source = "startup";
 #ifdef ENABLE_API
@@ -159,12 +171,20 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                                  drive_probe_complete,
                                                  drive_capabilities.c2_supported.value);
     auto reader_factory = [=] {
+        const auto generation = accepted_device_generation->load();
+        const auto current = [device_observer, accepted_device_generation, generation] {
+            return accepted_device_generation->load() == generation && device_observer->permits(generation);
+        };
+        if (!current()) throw std::runtime_error("device observation changed before reader open");
         ReadPolicy policy;
         std::optional<ReadOffsetWindow> window;
         { std::lock_guard lock(*reader_policy_mutex); policy = *reader_policy; window = *offset_window; }
         DirectOptions options;
         { std::lock_guard lock(*direct_options_mutex); options = *direct_options; }
+        if (!current()) throw std::runtime_error("device observation changed before backend open");
         auto reader = make_cdda_reader(backend, device, options);
+        reader = make_device_epoch_reader(std::move(reader), current);
+        if (!current()) throw std::runtime_error("device observation changed during reader open");
         if (configured_read_offset) {
             if (!window) throw std::runtime_error("offset audio range unavailable");
             reader = make_offset_reader(std::move(reader), *window);
@@ -179,20 +199,20 @@ void run_player_session(const std::string& device, CddaBackend backend,
                      initial_read_policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
                      initial_block_frames);
     MediaWorker media_worker(
-        [device, drive_access] { return drive_access->invoke(
-            [&] { return read_cd_media(device).observation; }); },
-        [device, drive_access] { return drive_access->invoke(
-            [&] { return read_cd_toc(device); }); },
-        [device, drive_access] { drive_access->invoke([&] { eject_cd(device); }); },
-        [device, drive_access] { return drive_access->invoke(
-            [&] { return probe_drive_capabilities(device); }); },
-        [device, drive_access] { drive_access->invoke([&] { request_cd_start(device); }); },
-        [device, drive_access, configured_drive_speed_x] {
-            drive_access->invoke([&] {
-                const auto result = request_drive_speed(device, *configured_drive_speed_x);
-                if (!result.error.empty()) throw std::runtime_error(result.error);
-            }); },
-        [device, drive_access] { drive_access->invoke([&] { request_cd_stop(device); }); });
+        drive_access,
+        [device] { return read_cd_media(device).observation; },
+        [device] { return read_cd_toc(device); },
+        [device] { eject_cd(device); },
+        [device] { return probe_drive_capabilities(device); },
+        [device] { request_cd_start(device); },
+        [device, configured_drive_speed_x] {
+            const auto result = request_drive_speed(device, *configured_drive_speed_x);
+            if (!result.error.empty()) throw std::runtime_error(result.error);
+        },
+        [device] { request_cd_stop(device); },
+        [device_observer, accepted_device_generation](std::uint64_t generation) {
+            return generation == accepted_device_generation->load() && device_observer->permits(generation);
+        });
     ArtistBackgroundPolicy artist_background_policy(false, "metadata_disabled");
 #ifdef ENABLE_METADATA
     std::string artist_background_key;
@@ -266,7 +286,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
         log_notice("player") << "Commands: play pause stop next previous track N seek SECONDS state quit";
     print_state(controller);
     MediaStateTracker media_state;
-    (void)media_worker.request(MediaWork::probe_drive);
     std::optional<DiscToc> loaded_toc;
     std::uint64_t disc_generation = 0;
     bool toc_pending = false;
@@ -303,6 +322,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
         }
 #endif
         const auto state = controller.state();
+        auto published_drive = drive_capabilities;
+        published_drive.observation = device_observation;
+        published_drive.observation_revalidating = !device_context_ready && device_observation.presence != DevicePresence::absent;
+        published_drive.observation_retiring_io = device_io_retiring;
         auto read = engine.read_diagnostics();
         read.session_id = diagnostic_session_id;
         read.requested_policy = requested_read_policy;
@@ -325,7 +348,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
         auto candidate = serialize_presentation_model(make_presentation_model(
             api_revision + 1, state, media_state.state(), loaded_toc, metadata,
-            drive_capabilities, read, recent_events, has_cover_asset,
+            std::move(published_drive), read, recent_events, has_cover_asset,
             toc_needs_refresh ? std::nullopt : std::optional<std::uint64_t>(disc_generation),
             metadata_generation, std::move(background_url), std::move(background_urls)));
         if (!api_state_json.empty() &&
@@ -363,7 +386,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     if (publish_api_snapshot() && api_server) api_server->publish_state(api_state_json);
                     return true;
                 }
-                if (command.type == ApiCommandType::eject) {
+                 if (command.type == ApiCommandType::eject) {
+                     if (!device_context_ready || !device_context_current() || device_io_retiring) return false;
                     if (media_state.state() == MediaLifecycleState::ejecting) {
                         log_info("media") << "eject=already_pending";
                         return true;
@@ -419,7 +443,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (command.type == ApiCommandType::select_metadata_candidate ||
                     command.type == ApiCommandType::decline_metadata_candidates) {
 #ifdef ENABLE_METADATA
-                    if (!metadata_enabled || command.session_id != diagnostic_session_id ||
+                     if (!device_context_ready || !device_context_current() || !metadata_enabled || command.session_id != diagnostic_session_id ||
                         command.disc_generation != disc_generation || toc_needs_refresh || !loaded_toc ||
                         media_state.state() != MediaLifecycleState::audio_ready ||
                         !(command.type == ApiCommandType::decline_metadata_candidates
@@ -434,7 +458,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     return false;
 #endif
                 }
-                if (media_state.state() == MediaLifecycleState::ejecting ||
+                 const bool local_audio_control = command.type == ApiCommandType::stop || command.type == ApiCommandType::pause;
+                 if ((!local_audio_control && (!device_context_ready || !device_context_current() || device_io_retiring)) ||
+                     media_state.state() == MediaLifecycleState::ejecting ||
                     controller.state().playback == PlaybackState::no_disc) return false;
                 CecCommand player_command = CecCommand::play;
                 switch (command.type) {
@@ -519,12 +545,65 @@ void run_player_session(const std::string& device, CddaBackend backend,
             std::chrono::steady_clock::now() - started).count();
         if (elapsed_us >= 50'000)
             log_warning("player") << "main_loop_stall stage=" << stage
-                                  << " duration_us=" << elapsed_us;
+                                   << " duration_us=" << elapsed_us;
+    };
+    const auto apply_device_observation = [&](DeviceObservationSnapshot observation) {
+        if (observation.generation == device_observation.generation) {
+            device_observation = std::move(observation);
+            return;
+        }
+        const bool had_context = device_observation.generation != 0;
+        device_observation = std::move(observation);
+        media_worker.invalidate(device_observation.generation);
+        controller.remove_disc();
+        engine.set_disc_end(0);
+        try { engine.synchronize(); }
+        catch (const std::exception&) { log_warning("device") << "audio reset failed during device invalidation"; }
+        worker.discard_reader();
+        if (had_context || loaded_toc) worker.set_disc_generation(++disc_generation);
+        loaded_toc.reset();
+        { std::lock_guard lock(*reader_policy_mutex); offset_window->reset(); }
+        toc_pending = false;
+        toc_needs_refresh = true;
+        media_state = MediaStateTracker{}; // No synthetic disc-insertion/autoplay on device reconnect.
+        device_context_ready = false;
+        device_io_retiring = true;
+        drive_probe_attempted = drive_probe_finished = drive_probe_complete = false;
+        drive_speed_request_attempted = false;
+        drive_stop_requested_at.reset();
+        next_drive_stop = std::chrono::steady_clock::time_point::max();
+        next_media = std::chrono::steady_clock::now();
+        drive_capabilities = invalidated_drive_capabilities(device, configured_read_offset, device_observation);
+        {
+            std::lock_guard lock(*direct_options_mutex);
+            direct_options->request_c2_pointers = false;
+            direct_options->inactive_c2_status = C2Status::not_checked;
+        }
+        accepted_device_generation->store(device_observation.generation);
+        recent_events.clear();
+#ifdef ENABLE_METADATA
+        enrichment.invalidate();
+#endif
+#ifdef ENABLE_API
+        api_eject_pending = api_eject_inflight = false;
+#endif
+        apply_read_policy(requested_read_policy);
+        log_notice("device") << "observation_generation=" << device_observation.generation
+                             << " presence=" << device_presence_name(device_observation.presence)
+                             << " reason=" << device_change_reason_name(device_observation.reason)
+                             << " physical_identity=UNVERIFIED";
     };
     bool quitting = false;
     while (!quitting) {
         const auto now = std::chrono::steady_clock::now();
         const auto control_started = now;
+        apply_device_observation(device_observer->snapshot());
+        if (device_io_retiring && worker.device_released() && !media_worker.retiring())
+            device_io_retiring = false;
+        const bool may_access_device = !device_io_retiring && device_context_current();
+        if (!drive_probe_attempted && may_access_device && worker.device_released() &&
+            (device_observation.sampled || now >= initial_observation_grace) &&
+            media_worker.request(MediaWork::probe_drive)) drive_probe_attempted = true;
         if (read_policy_pending &&
             (controller.state().playback == PlaybackState::stopped ||
              controller.state().playback == PlaybackState::no_disc))
@@ -543,7 +622,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             recent_events.push_back(std::move(read_event));
         }
 #ifdef ENABLE_API
-        if (api_eject_pending && worker.device_released() && media_worker.request(MediaWork::eject)) {
+        if (api_eject_pending && may_access_device && device_context_ready &&
+            worker.device_released() && media_worker.request(MediaWork::eject)) {
             api_eject_pending = false;
             api_eject_inflight = true;
             const auto wait_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -555,7 +635,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             // Keep status ioctls off the drive while CD-DA reads are active.
             // A read failure stops playback; polling then resumes and observes
             // an opened tray or removed disc.
-            bool may_poll_media = controller.state().playback != PlaybackState::playing;
+            bool may_poll_media = may_access_device && drive_probe_finished &&
+                controller.state().playback != PlaybackState::playing;
 #ifdef ENABLE_API
             may_poll_media = may_poll_media && !api_eject_pending && !api_eject_inflight;
 #endif
@@ -569,7 +650,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #else
         constexpr bool eject_idle = true;
 #endif
-        if (configured_drive_speed_x && !drive_speed_request_attempted &&
+        if (may_access_device && device_context_ready && configured_drive_speed_x && !drive_speed_request_attempted &&
             media_state.state() == MediaLifecycleState::audio_ready &&
             playback != PlaybackState::playing && eject_idle &&
             drive_capabilities.speed_control.value == Knowledge::yes &&
@@ -585,7 +666,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             next_drive_stop = now + drive_stop_idle;
         }
         previous_playback = playback;
-        if (media_state.state() == MediaLifecycleState::audio_ready &&
+        if (may_access_device && device_context_ready && media_state.state() == MediaLifecycleState::audio_ready &&
             playback == PlaybackState::stopped && eject_idle && now >= next_drive_stop &&
             media_worker.request(MediaWork::stop_drive)) {
             drive_stop_requested_at = std::chrono::steady_clock::now();
@@ -593,6 +674,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         }
         MediaWorkerResult media_result{};
         while (media_worker.pop(media_result)) {
+            if (media_result.observation_generation != device_observation.generation || !device_context_current()) continue;
             if (media_state.state() == MediaLifecycleState::ejecting &&
                 media_result.work != MediaWork::eject &&
                 media_result.work != MediaWork::probe_drive) {
@@ -600,6 +682,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 continue;
             }
             if (!media_result.error.empty()) {
+                if (media_result.work == MediaWork::probe_drive) {
+                    drive_probe_finished = true;
+                    drive_capabilities.probe_error = media_result.error;
+                }
                 if (media_result.error != last_media_error)
                     log_warning("media") << media_result.error;
                 last_media_error = media_result.error;
@@ -620,9 +706,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
             last_media_error.clear();
             if (media_result.work == MediaWork::probe_drive) {
                 if (media_result.drive) {
-                    drive_capabilities = std::move(*media_result.drive);
-                    drive_capabilities.read_offset_samples = configured_read_offset;
-                    drive_probe_complete = true;
+                    drive_probe_finished = true;
+                    drive_probe_complete = bind_drive_probe(drive_capabilities, std::move(*media_result.drive),
+                                                            media_result.observation_generation, device_observation);
                     if (direct_c2_pointers && backend == CddaBackend::direct) {
                         std::lock_guard lock(*direct_options_mutex);
                         direct_options->request_c2_pointers = drive_capabilities.c2_supported.value == Knowledge::yes;
@@ -667,6 +753,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
             } else if (media_result.work == MediaWork::observe) {
                 const auto before = media_state.state();
                 const auto after = media_state.observe(*media_result.observation);
+                if (*media_result.observation != MediaObservation::unknown) {
+                    if (after == MediaLifecycleState::no_disc || after == MediaLifecycleState::unsupported)
+                        device_context_ready = true;
+                    else if (after == MediaLifecycleState::loading) device_context_ready = false;
+                }
                 if (after != before)
                     log_info("media") << "state=" << media_state_name(after);
                 if (after == MediaLifecycleState::loading && after != before) {
@@ -749,6 +840,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 }
 #endif
                 toc_needs_refresh = false;
+                device_context_ready = true;
             } else if (media_result.work == MediaWork::set_drive_speed) {
                 drive_capabilities.requested_speed_x = static_cast<int>(*configured_drive_speed_x);
                 drive_capabilities.speed_request_error.clear();
@@ -811,6 +903,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
             log_error("player") << "playback stopped: " << error.what();
             print_state(controller);
         }
+        if (engine.take_reader_failure() && device_context_current()) {
+            apply_device_observation(device_observer->reader_failed());
+        }
         report_slow_stage("engine_tick", engine_started);
 #ifdef ENABLE_API
         if (api_server) {
@@ -850,6 +945,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 const auto received = cec.receive();
                 if (!received.dequeued) break;
                 if (received.command && media_state.state() != MediaLifecycleState::ejecting &&
+                    ((*received.command == CecCommand::stop || *received.command == CecCommand::pause) ||
+                     (device_context_ready && device_context_current() && !device_io_retiring)) &&
                     apply_cec_command(controller, *received.command)) {
                     engine.synchronize();
                     print_state(controller);
@@ -876,6 +973,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
             bool changed = true;
             if (command == "quit") { quitting = true; break; }
             if (command == "state") { print_state(controller, true); continue; }
+            if (command != "stop" && command != "pause" &&
+                (!device_context_ready || !device_context_current() || device_io_retiring)) {
+                log_warning("player") << "command rejected while device context is unavailable";
+                continue;
+            }
             if (media_state.state() == MediaLifecycleState::ejecting) {
                 log_warning("player") << "command rejected while ejecting";
                 continue;

@@ -109,12 +109,36 @@ metadata/artworkの到着は再生開始とは独立し、再生状態だけか�
 | speed_request_error | string | 明示された速度要求を適用しなかった最後の理由（ioctl失敗または能力非対応/不明）。未指定・成功時は空 |
 | current_speed_x | number? | drive速度の観測値。継続実測は未実装 |
 | read_offset_samples | int? | stereo sample frame単位の明示起動値。未指定はnull、明示0とは区別。source/detailは[Read Offset](#read-offset)参照 |
+| observation | object? | [device観測context](#device-lifecycle-observation)。null/旧payloadで欠損は未取得でありABSENTではない |
 
 能力はdrive直下。`drive.capabilities`という階層はない。No Discでも利用可能なprobe情報を表示できる。
 `c2_supported`はMMC CD Read Featureが不在、またはC2 Flagsが取得できた場合だけDRIVE_REPORTEDのYES/NOとなる。
 これはC2 error pointerを報告できるというdrive宣言で、読み取り時のC2観測、reportの正確さ、または
 bit-perfect再生の証明ではない。command failureまたは応答不正時はUNKNOWNで`probe_error`に理由を残す。
 kernelがspeed制御対応と報告したことは、速度変更成功や実測速度の証明ではない。
+
+### Device Lifecycle Observation
+
+`drive.observation`は#88の実装から公開する追加objectである。完全な契約と限界は
+[device lifecycle設計](integrity-design.md#device-lifecycle-observation)を参照する。schema_version=1の旧clientは未知fieldを無視できる。
+
+| field | 型 | 意味 |
+|---|---|---|
+| generation | uint | 同じread.session_id内の観測context。初回待ちは0、変化/reader failure失効でadvance。物理IDでもreader-open counterでもない |
+| presence | string | UNKNOWN / ABSENT / PRESENT。device node/metadataの観測でありdisc/tray状態ではない |
+| reason | string | PENDING / INITIAL / STATE_CHANGED / SIGNATURE_CHANGED / READER_FAILURE。reset/交換の確定判定を表す値ではない |
+| sampled | bool | ownerがsampleを適用したこと。trueでもUNKNOWN/取得失敗があり得る |
+| method | string | 現行はNODE_SYSFS_POLL。signatureとmajor/minor/inode等の内部tokenは公開しない |
+| error | string | 有界な観測エラー。PRESENTや空errorからdrive health/校正/原盤一致を推測しない |
+| revalidating | bool | mainが新contextのmedia/TOC適用を確認中。source不明とcapability NOは別である |
+| retiring_io | bool | 旧reader/media ownerのI/O/closeがまだquiescentでない。取消受付は解放完了ではない |
+
+既存read evidenceのdevice_generationはreader open counterのまま維持する。disc/stream/policy世代も同値と仮定しない。
+観測不可の場合、現在contextへbindできないcapability reportはUNKNOWNにし、requested configを保持する。
+C2_PROBE_PENDINGは有効なcurrent-context reportの前提未充足で、必ずしもcallが実行中という意味ではない。
+old read/probe/TOC/speed/diagnosticの結果を新contextへ適用せず、204もcontext変更後の旧device操作の実行保証にしない。
+通常のdisc挿入autoplayとdevice再接続による失効を区別し、再接続だけで旧streamを再開しない。
+probe_errorの空だけで観測済み/probe成功と推定せず、generation・presenceとcapabilityの根拠を照合する。
 
 ## Read
 
