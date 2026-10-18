@@ -40,6 +40,13 @@ layoutがnull、sessionまたはdisc世代が変わった場合は、保持し�
 Integrityは常時アクセス可能な計測layerである。#24のPhase 1では実使用による評価のため、現在取得できる
 read/drive値を原則常時表示する。値を削除・単純化せず、typography、contrast、spacingで一次情報より控えめにする。
 長いmetadata、No Disc、Integrityが未取得のときにも、一次情報と概要が縦scrollなしで確認できることを標準targetの確認条件とする。
+長文のalbum名・album artist名・track名・track artist名・drive名は、表示領域の幅に応じて1行へ詰める。
+短い名前の通常文字サイズは維持し、収まらなければ通常値の90%、80%、75%へ段階的に縮小する。
+12pxを下回らない下限でも収まらない場合だけ、後ろ側をASCIIの`...`に置き換える。
+文字数の固定上限ではなく実表示幅で判定し、結合文字やemoji等のgraphemeを途中で分割しない。
+省略した名前の全文はtooltipとアクセシビリティ用ラベルに残す。元のsnapshot/API値は変更せず、
+名前・表示幅・viewport変更および初回font確定で再評価し、短い名前や広い領域へ戻れば通常表示を復元する。
+これは名前だけの表示方針であり、再生状態・時刻・計測値・warning・pending・strategyの降格理由を省略しない。
 
 概要の`CURRENT READ · CLEAN`等はcurrent playback evidenceの時点・範囲の分類であり、disc全体、原盤、
 bit-perfect、verification成功を意味しない。current evidenceがなければNOT AVAILABLEとする。current playbackは

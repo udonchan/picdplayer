@@ -161,6 +161,11 @@ default UIの表示方針であり、Custom UIに同じ配置を義務付けな�
 `queued_blocks / floor(buffer_capacity_frames / read_block_frames)`と同じ正確な数値を必ず併記する。
 buffer以外のcoverage、速度、LBA、capabilityなどを見かけの割合に変換しない。
 
+標準UIの長いalbum/artist/track/drive名は、各表示領域に合わせて文字サイズを段階的に詰め、
+下限でも収まらない末尾だけ`...`で省略する。省略時の全文はtooltipとアクセシビリティ用ラベルに残す。
+通常サイズと縮小下限の規定は[機能設計](../design/functional-design.md#playerのintegrity表示)を参照する。
+snapshotの元文字列、数値、状態・warning・降格理由は変更せず、Custom UIに同じ省略処理を要求しない。
+
 標準MonitorはSINGLE/REPEATのrequested/effective選択とpendingを表示専用で示す。
 strategyもsnapshotのrequested/effective/pending/downgrade_reasonを区別し、互換fieldとの不一致を
 明示する。欠損値を適用済みに補完せず、降格理由をPCM品質やC2 trustの評価として扱わない。

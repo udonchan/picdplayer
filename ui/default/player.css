@@ -113,6 +113,8 @@ main {
   margin-inline: auto;
 }
 
+.details { min-width: 0; }
+
 .art {
   position: relative;
   display: grid;
@@ -163,11 +165,6 @@ main {
 
 .details h1 {
   margin: 0;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   font-size: clamp(30px, 3.6vw, 48px);
   line-height: 1.05;
   letter-spacing: -0.045em;
@@ -175,11 +172,6 @@ main {
 
 .album-artist {
   margin: 8px 0 28px;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
   color: var(--muted);
   font-size: clamp(18px, 2vw, 24px);
 }
@@ -203,22 +195,12 @@ main {
 
 .track-row h2 {
   margin: 0;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   font-size: clamp(21px, 3vw, 32px);
   line-height: 1.2;
 }
 
 .track-row p {
   margin: 4px 0 0;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
   color: var(--muted);
 }
 
@@ -459,7 +441,11 @@ main {
 .evidence-value { margin: 0; overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
 .integrity-note, .map-heading p { margin: 8px 0 0; color: var(--muted); font-size: 10px; }
 .map-heading p { margin-top: 4px; }
-.drive-name { margin: 12px 0 16px; font-size: 17px; overflow-wrap: anywhere; }
+.drive-name { margin: 12px 0 16px; font-size: 17px; }
+#album, #album-artist, #track-title, #track-artist, #drive-name {
+  min-width: 0;
+  white-space: nowrap;
+}
 
 .metrics.compact {
   grid-template-columns: minmax(0, .75fr) minmax(0, 1fr) minmax(0, .75fr) minmax(0, 1fr);

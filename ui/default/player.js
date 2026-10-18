@@ -72,6 +72,85 @@ const setHidden = (element, value) => {
   if (element.hidden !== value) element.hidden = value;
 };
 
+const metadataNames = new Map(['album', 'album-artist', 'track-title', 'track-artist', 'drive-name']
+  .map((id) => [id, { text: null, dirty: false, resetFont: true }]));
+const metadataSegments = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+let metadataFitScheduled = false;
+
+function scheduleMetadataFit() {
+  if (metadataFitScheduled) return;
+  metadataFitScheduled = true;
+  requestAnimationFrame(() => {
+    metadataFitScheduled = false;
+    for (const [id, name] of metadataNames) {
+      if (!name.dirty || name.text === null) continue;
+      const element = byId(id);
+      const width = element.clientWidth;
+      if (!(width > 0)) continue;
+      name.dirty = false;
+      if (name.resetFont) {
+        setStyle(element, 'fontSize', '');
+        name.normalSize = Number.parseFloat(getComputedStyle(element).fontSize);
+        name.resetFont = false;
+      }
+      // Always fit the source label, never the prefix left by an earlier fit.
+      set(id, name.text);
+      for (const scale of [1, .9, .8, .75]) {
+        setStyle(element, 'fontSize', scale === 1 ? '' : `${Math.max(12, name.normalSize * scale)}px`);
+        if (element.scrollWidth <= width) break;
+      }
+      const truncated = element.scrollWidth > width;
+      if (truncated) {
+        const parts = Array.from(metadataSegments.segment(name.text), ({ segment }) => segment);
+        let low = 0;
+        let high = parts.length;
+        while (low < high) {
+          const middle = Math.ceil((low + high) / 2);
+          set(id, `${parts.slice(0, middle).join('')}...`);
+          if (element.scrollWidth <= width) low = middle;
+          else high = middle - 1;
+        }
+        set(id, `${parts.slice(0, low).join('')}...`);
+      }
+      const fullText = truncated ? name.text : '';
+      if (element.title !== fullText) element.title = fullText;
+      if (truncated) {
+        if (element.getAttribute('aria-label') !== name.text) element.setAttribute('aria-label', name.text);
+      } else if (element.hasAttribute('aria-label')) element.removeAttribute('aria-label');
+    }
+  });
+}
+
+function setMetadataName(id, value) {
+  const name = metadataNames.get(id);
+  const text = value == null || value === '' ? '—' : String(value);
+  if (name.text === text) return;
+  name.text = text;
+  name.dirty = true;
+  set(id, text);
+  scheduleMetadataFit();
+}
+
+const metadataResize = new ResizeObserver((entries) => {
+  let changed = false;
+  for (const { target, contentRect } of entries) {
+    const name = metadataNames.get(target.id);
+    // Height changes caused by fitting must not schedule another layout pass.
+    if (name.width === contentRect.width) continue;
+    name.width = contentRect.width;
+    name.resetFont = name.dirty = changed = true;
+  }
+  if (changed) scheduleMetadataFit();
+});
+for (const id of metadataNames.keys()) metadataResize.observe(byId(id));
+function invalidateMetadataFonts() {
+  for (const name of metadataNames.values()) name.resetFont = name.dirty = true;
+  scheduleMetadataFit();
+}
+// Responsive font sizes can change even while a max-width column stays fixed.
+globalThis.addEventListener('resize', invalidateMetadataFonts);
+document.fonts.ready.then(invalidateMetadataFonts);
+
 function renderReadConfiguration(read) {
   const label = (value) => value == null ? 'NOT AVAILABLE'
     : typeof value === 'string' && value.trim() ? value : 'UNKNOWN';
@@ -1181,8 +1260,8 @@ function render(snapshot) {
     : '—';
 
   set('media-message', mediaMessage(hasDisc, disc.state, enrichment.status, enrichment.selection));
-  set('album', hasDisc ? (disc.title || 'Audio CD') : 'No disc');
-  set('album-artist', hasDisc
+  setMetadataName('album', hasDisc ? (disc.title || 'Audio CD') : 'No disc');
+  setMetadataName('album-artist', hasDisc
     ? (disc.artist || (enrichment.status === 'LOADING'
       ? 'Looking up album information'
       : 'Unknown artist'))
@@ -1190,8 +1269,8 @@ function render(snapshot) {
   set('track-number', Number.isInteger(player.track_number)
     ? String(player.track_number).padStart(2, '0')
     : '—');
-  set('track-title', hasDisc ? (track?.title || fallbackTrack) : '—');
-  set('track-artist', hasDisc ? (track?.artist || disc.artist || '') : '');
+  setMetadataName('track-title', hasDisc ? (track?.title || fallbackTrack) : '—');
+  setMetadataName('track-artist', hasDisc ? (track?.artist || disc.artist || '') : '');
 
   const position = player.position_frames;
   const length = player.track_duration_frames ?? track?.duration_frames;
@@ -1231,7 +1310,7 @@ function render(snapshot) {
   set('read-coverage', `${coverage.scope || 'UNKNOWN'} · ${safeNonNegative(coverage.accepted_unique_frames) ? coverage.accepted_unique_frames : '—'} accepted unique frames`);
   set('read-stall', formatReadStall(read.read_stall));
   set('integrity-summary', integritySummary(read));
-  set('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ') || drive.device || 'UNKNOWN DRIVE');
+  setMetadataName('drive-name', [drive.vendor, drive.model].filter(Boolean).join(' ') || drive.device || 'UNKNOWN DRIVE');
   set('cap-dae', formatCapability(drive.digital_audio_extraction));
   set('cap-c2', formatCapability(drive.c2_supported));
   set('cap-c2-trust', formatCapability(drive.c2_trustworthy));

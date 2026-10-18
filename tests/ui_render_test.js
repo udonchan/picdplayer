@@ -61,8 +61,11 @@ async function main() {
   let deferState = false;
   let stateReply;
   const context = {
+    addEventListener() {},
+    ResizeObserver: class { observe() {} },
+    getComputedStyle: () => ({ fontSize: '20px' }),
     performance: { now: () => 1 },
-    document: { readyState: 'complete', getElementById: node, addEventListener() {},
+    document: { fonts: { ready: Promise.resolve() }, readyState: 'complete', getElementById: node, addEventListener() {},
       querySelectorAll: (selector) => selector === '.player-controls button[data-command]' ? [metadataControl] : [] },
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url, options) => {
@@ -337,8 +340,11 @@ async function slideshowTests() {
   }
   let stateReply;
   const context = {
+    addEventListener() {},
+    ResizeObserver: class { observe() {} },
+    getComputedStyle: () => ({ fontSize: '20px' }),
     performance: { now: () => now },
-    document: { readyState: 'complete', getElementById: node, querySelectorAll: () => [], addEventListener() {} },
+    document: { fonts: { ready: Promise.resolve() }, readyState: 'complete', getElementById: node, querySelectorAll: () => [], addEventListener() {} },
     location: { protocol: 'http:', host: 'localhost' },
     fetch: (url, options) => {
       if (url === '/api/artist-background') return Promise.resolve(options?.method === 'POST'
@@ -525,4 +531,218 @@ async function slideshowTests() {
   console.log('PASS: progressive pending decode, fade stability, same-first replacement, disc generation, OFF dwell and OFF decode cancellation');
   console.log('PASS: slideshow progression, shuffle, dwell/fade, preload/decode, failures, stale work, OFF, reduced motion and legacy snapshots');
 }
-main().then(slideshowTests).catch((error) => { console.error(error); process.exitCode = 1; });
+async function metadataFitTests() {
+  const ids = ['album', 'album-artist', 'track-title', 'track-artist', 'drive-name'];
+  const nodes = new Map();
+  const frames = [];
+  const writes = [];
+  const reads = [];
+  const requests = [];
+  const observed = [];
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  let resize;
+  let viewportResize;
+  let fontsReady;
+  let fontWidth = 1;
+  function node(id) {
+    if (nodes.has(id)) return nodes.get(id);
+    const attributes = new Map();
+    const classes = new Set();
+    const tracked = (kind) => new Proxy({}, { set(target, key, value) {
+      writes.push(`${id}.${kind}.${key}`); target[key] = value; return true;
+    } });
+    const value = {
+      id, width: 100, baseSize: id === 'drive-name' ? 14 : 20,
+      textContent: '', title: '', dataset: tracked('dataset'), style: tracked('style'),
+      complete: false, naturalWidth: 0,
+      classList: { contains: (name) => classes.has(name), add: (name) => classes.add(name), remove: (name) => classes.delete(name) },
+      addEventListener() {},
+      getAttribute: (name) => attributes.get(name) ?? null,
+      hasAttribute: (name) => attributes.has(name),
+      setAttribute(name, value) { writes.push(`${id}.attribute.${name}`); attributes.set(name, value); },
+      removeAttribute(name) { writes.push(`${id}.remove.${name}`); attributes.delete(name); },
+      get clientWidth() { reads.push(`${id}.clientWidth`); return this.width; },
+      // Deterministic grapheme-width approximation, not browser/font-layout evidence.
+      get scrollWidth() {
+        reads.push(`${id}.scrollWidth`);
+        const size = Number.parseFloat(this.style.fontSize) || this.baseSize;
+        let units = 0;
+        for (const { segment } of segmenter.segment(this.textContent)) {
+          units += /[\p{Script=Han}\p{Extended_Pictographic}]/u.test(segment) ? 1 : .5;
+        }
+        return Math.max(this.width, Math.ceil(units * size * fontWidth));
+      },
+    };
+    const proxy = new Proxy(value, { set(target, key, value) {
+      writes.push(`${id}.${key}`); target[key] = value; return true;
+    } });
+    nodes.set(id, proxy);
+    return proxy;
+  }
+  const snapshot = {
+    revision: 1,
+    player: { state: 'STOPPED', track_number: 1, position_frames: 0, track_duration_frames: 4500 },
+    disc: { state: 'AUDIO_READY', title: 'Album', artist: 'Artist' },
+    tracks: [{ number: 1, title: 'Track', artist: 'Singer', duration_frames: 4500 }],
+    drive: { vendor: 'V', model: 'Drive', read_offset_samples: 123 },
+    read: { policy: { requested: { mode: 'SINGLE' }, effective: { mode: 'SINGLE' }, pending: false },
+      strategy: { requested: 'PARANOIA', effective: 'PARANOIA', pending: false, downgrade_reason: 'NONE' },
+      stats: { read_calls: 7, frames_accepted: 900 } },
+    enrichment: { status: 'AVAILABLE' }, artwork: { cover: null },
+  };
+  const context = {
+    addEventListener(event, callback) { assert.equal(event, 'resize'); viewportResize = callback; },
+    performance: { now: () => 1 },
+    document: { readyState: 'complete', getElementById: node, querySelectorAll: () => [], addEventListener() {},
+      fonts: { ready: new Promise((resolve) => { fontsReady = resolve; }) } },
+    ResizeObserver: class { constructor(callback) { resize = callback; } observe(target) { observed.push(target.id); } },
+    getComputedStyle(element) { reads.push(`${element.id}.computedStyle`); return { fontSize: `${Number.parseFloat(element.style.fontSize) || element.baseSize}px` }; },
+    location: { protocol: 'http:', host: 'localhost' },
+    fetch: async (url) => { requests.push(url); return { ok: true, json: async () => snapshot }; },
+    WebSocket: class {}, requestAnimationFrame: (fn) => frames.push(fn), setTimeout() {}, clearTimeout() {},
+  };
+  vm.runInNewContext(source, context);
+  await new Promise(setImmediate);
+  function flush() {
+    let count = 0;
+    while (frames.length) { assert(++count < 10, 'animation frames must settle'); frames.shift()(); }
+  }
+  function render() {
+    snapshot.revision++;
+    const input = structuredClone(snapshot);
+    context.render(input); flush();
+    assert.deepEqual(input, snapshot, 'fitting must preserve every raw snapshot field');
+  }
+  function width(id, value, height = 20) {
+    node(id).width = value;
+    resize([{ target: node(id), contentRect: { width: value, height } }]);
+    flush();
+  }
+  function title(text) { snapshot.tracks[0].title = text; render(); }
+  function unclipped(id, text) {
+    assert.equal(node(id).textContent, text);
+    assert.equal(node(id).title, '');
+    assert.equal(node(id).getAttribute('aria-label'), null);
+  }
+  flush();
+  const initialRequestCount = requests.length;
+  assert.deepEqual(observed, ids, 'only the five metadata fields are observed');
+  for (const id of ids) width(id, 100);
+  unclipped('track-title', 'Track');
+  assert.equal(node('track-title').style.fontSize, '');
+  title('abcdefghijk');
+  unclipped('track-title', 'abcdefghijk');
+  assert.equal(node('track-title').style.fontSize, '18px', 'moderate text fits at 90%');
+  title('abcdefghijkl');
+  unclipped('track-title', 'abcdefghijkl');
+  assert.equal(node('track-title').style.fontSize, '16px', 'moderate text fits at 80%');
+  const long = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.repeat(4);
+  title(long);
+  const clipped = node('track-title').textContent;
+  assert(clipped.endsWith('...'));
+  assert.equal(node('track-title').style.fontSize, '15px');
+  assert.equal(node('track-title').title, long);
+  assert.equal(node('track-title').getAttribute('aria-label'), long);
+  assert(node('track-title').scrollWidth <= node('track-title').clientWidth);
+  assert.equal(snapshot.tracks[0].title, long, 'render must not mutate its source');
+  const next = `${long.slice(0, -1)}!`;
+  title(next);
+  assert.equal(node('track-title').textContent, clipped, 'tail-only change retains the same prefix');
+  assert.equal(node('track-title').title, next);
+  assert.equal(node('track-title').getAttribute('aria-label'), next);
+  for (const text of ['\u6f22\u5b57'.repeat(30), 'e\u0301'.repeat(60), '\ud83d\udc69\u200d\ud83d\udcbb'.repeat(30)]) {
+    title(text);
+    const visible = node('track-title').textContent;
+    assert(visible.endsWith('...'));
+    const prefix = visible.slice(0, -3);
+    const parts = Array.from(segmenter.segment(text), ({ segment }) => segment);
+    assert(parts.some((_, index) => parts.slice(0, index + 1).join('') === prefix), 'prefix ends at a grapheme boundary');
+    assert.equal(node('track-title').title, text);
+  }
+  width('track-title', 1000);
+  const markup = '<script>literal title</script>';
+  title(markup);
+  unclipped('track-title', markup);
+  assert.equal(node('track-title').innerHTML, undefined, 'markup must never be parsed');
+  title(long);
+  width('track-title', 100);
+  assert.equal(node('track-title').style.fontSize, '15px');
+  width('track-title', 2000);
+  unclipped('track-title', long);
+  assert.equal(node('track-title').style.fontSize, '', 'wide resize restores CSS base size');
+  width('track-title', 100);
+  assert.equal(node('track-title').style.fontSize, '15px', 'narrow resize does not compound shrinking');
+  node('track-title').baseSize = 24;
+  viewportResize(); flush();
+  assert.equal(node('track-title').style.fontSize, '18px', 'viewport resize recomputes font even at unchanged column width');
+  node('track-title').baseSize = 20;
+  viewportResize(); flush();
+  assert.equal(node('track-title').style.fontSize, '15px');
+  title('Short');
+  unclipped('track-title', 'Short');
+  assert.equal(node('track-title').style.fontSize, '');
+  width('track-title', 0);
+  reads.length = 0;
+  title(long);
+  assert(!reads.some((read) => read === 'track-title.scrollWidth'), 'zero width defers fitting');
+  assert.equal(node('track-title').textContent, long);
+  width('track-title', 100);
+  assert(node('track-title').textContent.endsWith('...'), 'visible resize activates deferred fitting');
+  reads.length = 0; writes.length = 0;
+  resize([{ target: node('track-title'), contentRect: { width: 100, height: 99 } }]);
+  assert.equal(frames.length, 0, 'height-only feedback schedules no fit');
+  assert.deepEqual(reads, []); assert.deepEqual(writes, []);
+  title('abcdefghij');
+  assert.equal(node('track-title').style.fontSize, '');
+  fontWidth = 1.2;
+  fontsReady(); await new Promise(setImmediate); flush();
+  assert.equal(node('track-title').style.fontSize, '16px', 'fonts.ready recomputes unchanged metadata');
+  fontWidth = 1;
+  const requestCount = requests.length;
+  reads.length = 0; writes.length = 0;
+  for (let i = 1; i <= 60; i++) {
+    snapshot.player.position_frames = i * 15;
+    snapshot.read.stats.read_calls = i;
+    render();
+  }
+  const fieldWrites = writes.filter((write) => ids.some((id) => write.startsWith(`${id}.`)));
+  assert.deepEqual(fieldWrites, [], '60 increasing revisions must not rewrite metadata');
+  assert.deepEqual(reads, [], '60 increasing revisions must not perform fitting reads');
+  assert.equal(requests.length, requestCount, 'metadata fitting performs no extra fetch');
+  assert.equal(node('read-stats').textContent, '60 / 900 frames');
+  assert.equal(node('drive-offset').textContent, '123 samples');
+  assert.equal(node('read-warning').textContent, 'NONE');
+  assert.equal(node('read-strategy-state').textContent, 'Pending: NOT PENDING \u00b7 Downgrade: NONE');
+  assert.equal(node('read-policy-single').textContent, 'SINGLE \u00b7 EFFECTIVE / REQUESTED');
+  for (const id of ['read-stats', 'drive-offset', 'read-warning', 'read-strategy-state', 'read-policy-single']) {
+    assert.equal(node(id).style.fontSize, undefined);
+    assert.equal(node(id).getAttribute('aria-label'), null);
+  }
+  for (const id of ids) width(id, 400);
+  snapshot.disc.title = long; snapshot.disc.artist = long;
+  snapshot.tracks[0].title = long; snapshot.tracks[0].artist = long;
+  snapshot.drive.model = long; render();
+  for (const id of ids) assert(node(id).textContent.endsWith('...'));
+  assert.equal(node('drive-name').style.fontSize, '12px', 'small base font respects 12px minimum');
+  snapshot.disc.title = 'Album'; snapshot.disc.artist = 'Artist';
+  snapshot.tracks[0].title = 'Track'; snapshot.tracks[0].artist = 'Singer'; render();
+  for (const [id, text] of [['album', 'Album'], ['album-artist', 'Artist'], ['track-title', 'Track'], ['track-artist', 'Singer']]) {
+    unclipped(id, text); assert.equal(node(id).style.fontSize, '');
+  }
+  snapshot.disc.title = long; snapshot.disc.artist = long;
+  snapshot.tracks[0].title = long; snapshot.tracks[0].artist = long; render();
+  const driveBefore = node('drive-name').textContent;
+  const driveTitle = node('drive-name').title;
+  snapshot.player = { state: 'NO_DISC' }; snapshot.disc = { state: 'NO_DISC' }; render();
+  for (const [id, text] of [['album', 'No disc'], ['album-artist', 'Insert an audio CD'], ['track-title', '\u2014'], ['track-artist', '\u2014']]) {
+    unclipped(id, text); assert.equal(node(id).style.fontSize, '');
+  }
+  assert.equal(node('drive-name').textContent, driveBefore, 'disc removal retains drive fitting');
+  assert.equal(node('drive-name').title, driveTitle);
+  snapshot.drive = { vendor: 'V', model: 'New' }; render();
+  unclipped('drive-name', 'V New');
+  assert.equal(node('drive-name').style.fontSize, '');
+  assert.equal(requests.length, initialRequestCount, 'all fitting, resize and font work adds no fetch');
+  console.log('PASS: metadata fit: scales, clipping, graphemes, literal text, raw cache, resets, resize, fonts and 60 updates (0 fitting reads / 0 metadata writes)');
+}
+main().then(slideshowTests).then(metadataFitTests).catch((error) => { console.error(error); process.exitCode = 1; });
