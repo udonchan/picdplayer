@@ -230,9 +230,15 @@ deploy後も停止したままとし、deploy scriptは前後のactive stateが�
 要求し、`failed`や遷移中の状態は転送前にエラーとする。deploy後は状態の一致とpackageの
 `install ok installed`を検査する。これは観測時点の確認であり、その後のcrashやTV表示・再生の
 正常性までは保証しない。
-標準deployはWPE launcherのversion 2.54.0も検査する。kioskがactiveの場合はMainPIDのprocess名を
-最大35秒待って確認し、Chromium fallbackをWPE成功として報告しない。Chromiumを明示運用している
-場合のみ`PICDPLAYER_EXPECT_KIOSK_RUNTIME=chromium ./scripts/deploy.sh`を使う。
+標準deployはWPE launcherのversion 2.54.0も検査する。kioskがactiveの場合は、インストール済みwrapperの
+内部照会`--startup-wait-budget-seconds`から起動待機予算を取得してMainPIDのprocess名を確認する。
+wrapperが受理する最大API待機とWPEのversion確認・強制終了猶予を正本とし、deploy側で設定fileや
+systemdの環境を再解釈しない。現行予算307秒にdeployの確認猶予5秒を加えたmonotonic期限を使う。
+これは実効設定が既定30秒の場合も共通の保守的な上限で、HTTP正常性や画面表示の保証ではない。
+照会失敗・不正な予算、期限超過、service停止・観測失敗はエラーとし、Chromium fallbackをWPE成功として報告しない。
+観測とsleepは残りcentisecondのtimeoutで制限する。予算照会自体は別の5秒＋kill猶予1秒で制限し、
+この期限はruntime確認区間だけに適用する。SSH転送やdpkg全体の期限・hard real-time保証ではない。
+Chromiumを明示運用している場合のみ`PICDPLAYER_EXPECT_KIOSK_RUNTIME=chromium ./scripts/deploy.sh`を使う。
 このoptionはtarget設定を変更せず、期待値だけを変える。inactiveなら起動して検査しない。
 
 upgrade時は実行中のserviceを残してdpkgがファイルを更新し、configure後に再起動する。

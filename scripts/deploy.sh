@@ -145,18 +145,57 @@ if [[ "${KIOSK_STATE_AFTER}" == active ]]; then
     ssh "${TARGET}" "bash -s -- '${EXPECTED_RUNTIME}'" <<'VERIFY'
 set -eu
 case "$1" in wpe) expected=picdplayer-wpe ;; chromium) expected=cage ;; esac
-for ((attempt=0; attempt<35; attempt++)); do
-    pid=$(systemctl show -p MainPID --value picdplayer-kiosk.service)
-    actual=$(ps -p "${pid:-0}" -o comm= 2>/dev/null) || actual=none
+budget=$(timeout --kill-after=1s 5s /usr/local/libexec/picdplayer-kiosk --startup-wait-budget-seconds) || {
+    echo 'ERROR: kiosk startup budget query failed' >&2; exit 1;
+}
+if ! [[ $budget =~ ^[1-9][0-9]{0,5}$ ]]; then
+    echo 'ERROR: invalid kiosk startup budget' >&2; exit 1
+fi
+read_clock() {
+    local uptime unused
+    read -r uptime unused < /proc/uptime
+    [[ $uptime =~ ^[0-9]+\.[0-9]{2}$ ]] || return 1
+    now_cs=$((10#${uptime/./}))
+}
+read_clock
+deadline_cs=$((now_cs + (budget + 5) * 100))
+remaining_time() {
+    read_clock
+    if (( now_cs >= deadline_cs )); then
+        echo 'ERROR: kiosk runtime startup deadline exceeded' >&2; exit 1
+    fi
+    local left_cs=$((deadline_cs - now_cs))
+    printf -v remaining '%d.%02ds' "$((left_cs / 100))" "$((left_cs % 100))"
+}
+while true; do
+    remaining_time
+    state=$(timeout --signal=KILL "$remaining" systemctl show -p ActiveState --value picdplayer-kiosk.service) || {
+        echo 'ERROR: kiosk service observation failed' >&2; exit 1;
+    }
+    [[ $state == active ]] || { echo 'ERROR: kiosk service is no longer active' >&2; exit 1; }
+    remaining_time
+    pid=$(timeout --signal=KILL "$remaining" systemctl show -p MainPID --value picdplayer-kiosk.service) || {
+        echo 'ERROR: kiosk PID observation failed' >&2; exit 1;
+    }
+    [[ $pid =~ ^[1-9][0-9]*$ ]] || { echo 'ERROR: kiosk has no MainPID' >&2; exit 1; }
+    remaining_time
+    actual=$(timeout --signal=KILL "$remaining" ps -p "$pid" -o comm=) || {
+        echo 'ERROR: kiosk process observation failed' >&2; exit 1;
+    }
+    remaining_time
     if [[ $actual == "$expected" ]]; then
         echo "kiosk_runtime_verified: expected=$1 process=$actual pid=$pid"
         exit 0
     fi
-    if [[ $actual == cage || $actual == picdplayer-wpe ]]; then break; fi
-    sleep 1
+    if [[ $actual == cage || $actual == picdplayer-wpe ]]; then
+        echo "ERROR: kiosk runtime mismatch: expected=$expected actual=$actual" >&2
+        exit 1
+    fi
+    remaining_time
+    timeout --signal=KILL "$remaining" sleep 1 || {
+        echo 'ERROR: kiosk runtime startup deadline exceeded' >&2; exit 1;
+    }
 done
-echo "ERROR: kiosk runtime mismatch: expected=$expected actual=$actual" >&2
-exit 1
 VERIFY
 else
     echo 'kiosk_runtime_verified: inactive (not started for verification)'

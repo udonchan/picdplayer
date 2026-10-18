@@ -13,6 +13,17 @@ BUILD_TYPE = sys.argv[2] if len(sys.argv) > 2 else 'Release'
 del sys.argv[1:]
 
 
+class StartupBudgetTest(unittest.TestCase):
+    def test_query_is_side_effect_free_and_configuration_independent(self):
+        env = {key: value for key, value in os.environ.items() if not key.startswith(('XDG_', 'PICDPLAYER_'))}
+        env.update(PICDPLAYER_API_WAIT_TIMEOUT_SECONDS='invalid', PICDPLAYER_KIOSK_RUNTIME='invalid')
+        result = subprocess.run(['bash', str(ROOT / 'systemd/picdplayer-kiosk.sh.in'), '--startup-wait-budget-seconds'],
+                                env=env, capture_output=True, text=True, timeout=2)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, '307\n')
+        self.assertEqual(result.stderr, '')
+
+
 @unittest.skipUnless(Path('/proc/uptime').exists(), 'Linux kiosk wrapper')
 class RuntimeTest(unittest.TestCase):
     def setUp(self):
@@ -105,6 +116,15 @@ class RuntimeTest(unittest.TestCase):
     def test_invalid_configuration(self):
         for field in ('PICDPLAYER_KIOSK_RUNTIME', 'PICDPLAYER_KIOSK_FALLBACK', 'PICDPLAYER_INSPECTOR'):
             self.assertEqual(self.wrapper(**{field: 'invalid'}).returncode, 2)
+
+    def test_api_wait_timeout_boundaries(self):
+        self.wpe()
+        for value in ('1', '300'):
+            result = self.wrapper(PICDPLAYER_API_WAIT_TIMEOUT_SECONDS=value)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('WPE_EXEC', result.stdout)
+        for value in ('0', '301'):
+            self.assertEqual(self.wrapper(PICDPLAYER_API_WAIT_TIMEOUT_SECONDS=value).returncode, 2)
 
     def test_chromium_profile_and_override(self):
         for profile in ('Debug', 'Release', 'RelWithDebInfo', 'MinSizeRel'):

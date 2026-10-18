@@ -267,12 +267,21 @@ PICDPLAYER_CAGE=/usr/bin/cage
 PICDPLAYER_CHROMIUM=/usr/bin/chromium
 ```
 
-wrapperはChromiumを起動する前に、既定で30秒間`127.0.0.1:8080`のlistenを待つ。daemon側で
+wrapperはWPE/Chromiumを起動する前に、既定で30秒間`127.0.0.1:8080`のlistenを待つ。daemon側で
 `--api-port 8080`を指定し忘れた場合やAPIの起動が遅い場合に、Chromiumの`This site can't be reached`
 画面へ進む可能性を減らすためである。これはTCP接続確認であり、HTTPの正常応答や、その直後の
 daemon停止まで保証しない。ページを読み込めた後の切断は既存のWebSocket再接続で復旧する。
 別portを使う場合はURLと待受先を同時に変える。待受時間は1〜300秒、portは1〜65535。
 wrapperはBashとcoreutilsの`timeout`を使用し、DNS/TCP待ちにも期限を適用する。
+deployのruntime確認はwrapperの内部照会`--startup-wait-budget-seconds`で取得した最大起動待機予算と
+確認猶予を使う。照会は環境設定・XDG directory・API接続を必要とせず、runtimeを起動したりfileを書き換えたりしない。
+この予算の正本はwrapperであり、待機設定上限をdeployへ重複定義しない。
+
+実機の`PAMName=login`条件では、kioskのstdoutがserviceではなくsession scopeへ帰属することがある。
+`journalctl -u picdplayer-kiosk.service`やservice invocation IDだけでwrapperログを網羅できるとは限らない。
+現在のMainPIDと`SYSLOG_IDENTIFIER=picdplayer-kiosk`も対応付け、対象boot/時間を限定して確認する。
+wrapperの経過時刻markerは`wrapper_elapsed_ms`であり、待機開始は`event=api_wait_start`、成功は`event=api_ready`。
+process restartをまたいだログを同じ試行として混ぜない。
 
 ```ini
 PICDPLAYER_KIOSK_URL=http://127.0.0.1:18080/player
