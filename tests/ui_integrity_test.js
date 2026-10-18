@@ -20,6 +20,7 @@ async function main(scenario = null) {
   let pendingMap = false;
   const timers = [];
   let now = 0;
+  let configurationWrites = 0;
   const snapshot = {
     schema_version: 1, revision: 1,
     player: { state: 'PLAYING', track_number: 1, position_frames: 75, track_duration_frames: 4500 },
@@ -35,6 +36,8 @@ async function main(scenario = null) {
       queued_blocks: 1, buffer_capacity_frames: 90, read_block_frames: 75, dropped_events: 0,
       read_stall: { inflight_ms: null, timeout_ms: 10000, last_timeout_ms: null },
       policy: { pending: true, requested: { mode: 'REPEAT' }, effective: { mode: 'SINGLE' } },
+      strategy: { requested: 'direct+repeat-2of3', effective: 'direct-single-read',
+        pending: true, downgrade_reason: 'POLICY_RESTART_REQUIRED' },
       history: { included: false, capacity: 128 }, event_window: { first_sequence: 1, last_sequence: 2, worker_dropped: 0 },
       current_playback: { status: 'CLEAN', local_verification: 'SINGLE_READ', start_lba: 20, frames_read: 15,
         disc_generation: 2, direct_retries: 0, read_independence: 'CACHE_POSSIBLE',
@@ -62,6 +65,11 @@ async function main(scenario = null) {
     const value = { textContent: '', hidden: false, dataset: {}, style: {}, complete: false, naturalWidth: 0,
       classList: { contains() { return false; }, add() {}, remove() {} }, removeAttribute() {},
       addEventListener(event, callback) { listeners.set(`${id}:${event}`, callback); } };
+    let text = '';
+    Object.defineProperty(value, 'textContent', { get() { return text; }, set(next) {
+      text = next;
+      if (/^read-(policy|strategy)-/.test(id)) ++configurationWrites;
+    } });
     nodes.set(id, value); return value;
   }
   vm.runInNewContext(source, {
@@ -179,7 +187,15 @@ async function main(scenario = null) {
   sockets[0].onopen();
   assert.equal(node('connection').textContent, 'DAEMON · CONNECTED');
   assert.equal(node('connection').dataset.state, 'connected');
-  assert.equal(node('read-policy').textContent, 'SINGLE → REPEAT (PENDING)');
+  assert.equal(node('read-policy-single').textContent, 'SINGLE · EFFECTIVE');
+  assert.equal(node('read-policy-repeat').textContent, 'REPEAT · REQUESTED');
+  assert.equal(node('read-policy-single').dataset.effective, 'true');
+  assert.equal(node('read-policy-repeat').dataset.requested, 'true');
+  assert.equal(node('read-policy-state').textContent, 'Pending: PENDING (until STOPPED)');
+  assert.equal(node('read-strategy-effective').textContent, 'Effective: direct-single-read');
+  assert.equal(node('read-strategy-requested').textContent, 'Requested: direct+repeat-2of3');
+  assert.match(node('read-strategy-state').textContent, /PENDING.*POLICY_RESTART_REQUIRED/);
+  assert.equal(node('read-strategy-compatibility').hidden, true);
   assert.equal(node('drive-speed-request').textContent, '4x REQUEST ACCEPTED');
   assert.equal(node('drive-speed-current').textContent, 'NOT AVAILABLE');
   assert.equal(node('read-buffer').textContent, '1 / 1 blocks');
@@ -304,6 +320,87 @@ async function main(scenario = null) {
   await settle();
   assert.match(node('read-map-state').textContent, /revision 4/);
   assert.doesNotMatch(node('read-map-state').textContent, /revision 999/);
+
+  const configuration = structuredClone(restored);
+  configuration.player.state = 'STOPPED';
+  configuration.read.current_playback = null;
+  configuration.revision = 4;
+  const requestsBeforeConfiguration = historyRequests;
+  const publishConfiguration = () => {
+    ++configuration.revision;
+    sockets[0].onmessage({ data: JSON.stringify(configuration) });
+  };
+  for (const mode of ['SINGLE', 'REPEAT']) {
+    configuration.read.policy = { requested: { mode }, effective: { mode }, pending: false };
+    configuration.read.strategy = { requested: 'direct-single-read', effective: 'direct-single-read',
+      pending: false, downgrade_reason: 'NONE' };
+    publishConfiguration();
+    assert.equal(node(`read-policy-${mode.toLowerCase()}`).textContent, `${mode} · EFFECTIVE / REQUESTED`);
+    assert.equal(node(`read-policy-${mode === 'SINGLE' ? 'repeat' : 'single'}`).dataset.effective, 'false');
+    assert.match(node('read-policy-state').textContent, /Pending: NOT PENDING$/);
+    configuration.read.policy.pending = true;
+    configuration.read.strategy.pending = true;
+    publishConfiguration();
+    assert.match(node('read-policy-state').textContent, /Pending: PENDING \(until STOPPED\)$/,
+      'same mode does not imply the complete policy has already applied');
+    assert.match(node('read-strategy-state').textContent, /Pending: PENDING/);
+  }
+  for (const reason of ['NONE', 'POLICY_RESTART_REQUIRED', 'C2_PROBE_PENDING', 'C2_CAPABILITY_UNKNOWN',
+    'C2_UNSUPPORTED', 'C2_BACKEND_UNSUPPORTED', 'C2_STREAM_RESTART_REQUIRED']) {
+    const pending = ['POLICY_RESTART_REQUIRED', 'C2_PROBE_PENDING', 'C2_STREAM_RESTART_REQUIRED'].includes(reason);
+    configuration.read.strategy = { requested: reason === 'C2_BACKEND_UNSUPPORTED' ? 'paranoia-library-single-read'
+      : 'direct-c2-pointers-single-read', effective: reason === 'C2_BACKEND_UNSUPPORTED'
+      ? 'paranoia-library-single-read' : 'direct-single-read', pending, downgrade_reason: reason };
+    configuration.read.effective_strategy = configuration.read.strategy.effective;
+    publishConfiguration();
+    assert.equal(node('read-strategy-state').textContent,
+      `Pending: ${pending ? 'PENDING (until STOPPED)' : 'NOT PENDING'} · Downgrade: ${reason}`);
+    assert.doesNotMatch(node('read-strategy-state').textContent, /APPLIED|CLEAN/);
+  }
+  configuration.read.effective_strategy = 'compatibility-disagrees';
+  publishConfiguration();
+  assert.equal(node('read-strategy-compatibility').hidden, false);
+  assert.match(node('read-strategy-compatibility').textContent, /compatibility-disagrees.*MISMATCH/);
+  assert.equal(node('read-strategy-effective').textContent, 'Effective: direct-single-read');
+  for (const pending of [null, undefined, 'false', 0]) {
+    configuration.read.policy = { requested: { mode: 'SINGLE' }, effective: null, pending };
+    configuration.read.strategy = { requested: null, effective: null, pending, downgrade_reason: null };
+    publishConfiguration();
+    assert.match(node('read-policy-state').textContent, /Effective: NOT AVAILABLE.*Pending: UNKNOWN$/);
+    assert.equal(node('read-strategy-state').textContent, 'Pending: UNKNOWN · Downgrade: NOT AVAILABLE');
+    assert.equal(node('read-strategy-effective').textContent, 'Effective: NOT AVAILABLE');
+    assert.match(node('read-strategy-compatibility').textContent, /strategy effective unavailable/);
+  }
+  const hostile = '<img src=x onerror=alert(1)>' + 'x'.repeat(220);
+  configuration.read.policy = { requested: { mode: hostile }, effective: { mode: false }, pending: null };
+  configuration.read.strategy = { requested: hostile, effective: hostile, pending: false, downgrade_reason: hostile };
+  configuration.read.effective_strategy = hostile;
+  publishConfiguration();
+  assert.match(node('read-policy-state').textContent, /Effective: UNKNOWN · Requested: UNKNOWN \(<img/);
+  assert.equal(node('read-strategy-requested').textContent, `Requested: ${hostile}`);
+  assert.equal(node('read-strategy-effective').textContent, `Effective: ${hostile}`);
+  assert.equal(node('read-strategy-state').textContent, `Pending: NOT PENDING · Downgrade: ${hostile}`);
+  assert.equal(node('read-strategy-compatibility').hidden, true);
+  const writesBeforeIdentical = configurationWrites;
+  publishConfiguration();
+  assert.equal(configurationWrites, writesBeforeIdentical, 'identical configuration must not rewrite DOM text');
+  delete configuration.read.policy;
+  delete configuration.read.strategy;
+  delete configuration.read.effective_strategy;
+  publishConfiguration();
+  assert.equal(node('read-policy-single').textContent, 'SINGLE');
+  assert.equal(node('read-policy-repeat').textContent, 'REPEAT');
+  assert.equal(node('read-policy-single').dataset.effective, 'false');
+  assert.equal(node('read-policy-repeat').dataset.requested, 'false');
+  assert.equal(node('read-policy-state').textContent,
+    'Effective: NOT AVAILABLE · Requested: NOT AVAILABLE · Pending: UNKNOWN');
+  assert.equal(node('read-strategy-effective').textContent, 'Effective: NOT AVAILABLE');
+  assert.equal(node('read-strategy-requested').textContent, 'Requested: NOT AVAILABLE');
+  assert.equal(node('read-strategy-state').textContent, 'Pending: UNKNOWN · Downgrade: NOT AVAILABLE');
+  assert.equal(node('read-strategy-compatibility').hidden, true);
+  await settle();
+  assert.equal(historyRequests, requestsBeforeConfiguration, 'configuration display does not fetch extra diagnostics');
+  console.log('PASS: policy selections, strategy reasons, pending/null/mismatch, literal strings and DOM dedup');
   sockets[0].onclose();
   assert.equal(node('connection').textContent, 'DAEMON · RECONNECTING');
   assert.equal(node('connection').dataset.state, 'reconnecting');

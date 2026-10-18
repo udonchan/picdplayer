@@ -11,6 +11,66 @@
 重複したbacklog/verificationは記録を保持して整合し、以下に詳細な音声候補の再現・回帰・配備記録を併記する。
 当時のcommit対象の実装・test・CMakeは配備sourceとbyte一致であり、その保存のための再配備やPi操作は行わなかった。
 
+## #164 policy/strategy表示の限定単位（2026-10-18 UTC）
+
+開始時にGitHubの最新master `e6a7f59`、PR #244、必須`build-and-test`成功
+（run `39111181094`、head `bcc4413`）とtree一致、#226のCompleted closeを再確認した。
+過去の未commit/未統合という記録はその時点の履歴として扱い、#226を再実装しない。
+新規worktreeの`fix/164-policy-strategy-display`はこのmasterから分離し、既存worktree・branch・
+stash・untracked・build/package・SDK cache・private証跡を保持する。
+
+08:44:38 UTCのPi読み取りで標準WPE Debug、STOPPED/AUDIO_READY、両service active/running、
+自動再起動0、flag `0x0`、60.1°Cを確認した。package `dba45279…afa14d`、daemon
+`dcd958f8…32dda2`、HTTP Player JS `353e58fb…13fb38`、wrapper `1e792264…ed807`は
+配備記録と一致した。追加の読み取りでpackage installedと背景requested/effective=false、available=trueを確認した。
+snapshotはpolicy要求/実効SINGLE、direct C2 pointer strategy、速度要求2x・実速度null、offset未指定であり、
+全既定値の基線や実速度測定とは扱わず設定を変更しない。
+`/api/settings`は存在せず404だったため、実装の正しい`/api/artist-background`で確認し直した。
+同payloadのため再配備せず、service・再生・媒体・設定操作や過去試験helperの再実行は行わない。
+
+非BuildrootのOpen Issueを比較し、#178/#124等の実機受入や#177/#238/#239の追加機能・採用判断ではなく、
+#164の公開済みpolicy/strategyを標準Monitorへ投影する表示専用単位を選ぶ。
+SINGLE/REPEATの要求・実効・保留、strategyの4項目・欠損・互換field不一致を扱い、
+Settings操作・schema・read engine・二列構図は変更しない。pending=falseを要求mechanismの成功やPCM品質へ読み替えない。
+最初の実装委譲は空の成果報告で終了し、UI/testの差分もなかった。完了と扱わず主担当で実装した。
+Read policyのSINGLE/REPEATを同時に並べ、EFFECTIVE/REQUESTEDの文字と枠線でも選択状態を示す。
+既知modeでは重複するmode文章を省き、保留状態を別行に示す。未知/欠損modeは要求・実効を明記する。
+Strategyは4項目を個別に示し、欠損時も互換fieldをauthoritativeな実効値として補完しない。
+互換値が異なる場合はMISMATCH、正本が欠損ならその旨と互換値を併記する。追加取得やpolicy操作はない。
+
+| 検証 | 観測結果と境界 |
+|---|---|
+| Mac Node | `ui_integrity_test.js`の従来map/世代/503 retryの7 scenarioと追加configuration検査が成功。全降格reason、SINGLE/REPEAT一致/相違、同mode/同strategyでpending、null/欠損/不正型、未知・長文・markup文字列、互換不一致、旧表示消去、同値DOM更新なし、追加map取得なしを検証 |
+| 既存UI回帰 | `ui_render_test.js`、`ui_controls_test.js`、`ui_boot_test.js`、`ui_status_test.js`成功。同値STOPPED 60 snapshotでDOM write attempts 0。Settings/背景/CEC経路の自動試験であり実機受入ではない |
+| Negative control | 保全済み#226の旧Player JSへ新しいIntegrity試験を適用すると新しい選択ラベル検査が失敗しexit 1。保全元は読み取りのみ。最終新JSでは成功 |
+| Linux build | recipe一致のSDKを新worktreeへ非破壊clone copyし再利用。`PICDPLAYER_BUILD_TYPE=Debug PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build ./scripts/build-container.sh`で標準WPE/API/metadata有効のbuild/stage/package生成成功。Piへ配備しない |
+| 最終全CTest | 同じLinux/aarch64 imageで`ctest --test-dir build-container --output-on-failure`、70/70成功、51.45秒。UI埋込assetを最終修正後に再生成・再buildして実行。途中のUI以外62/62や暫定版70/70のみで完了としない |
+| Package | 同Debugの`test-package-lifecycle.sh`成功。source/stage/archive内のPlayer HTML/CSS/JS 3ファイルがそれぞれbyte一致し、staged daemonは`build_type=Debug profile=Debug` |
+| Mac Chrome | headless Chrome 155、公開schemaの有効な1曲layout/2region map・capture時刻・markerを確認する合成fixture。1920×1080/390×844/720×720とnormal/pending/missing/long/hostile/mismatchの18条件が成功。全条件で横overflow・overflowによる文字切れ・例外・想定外の変更POSTなし、要求/実効のaccessible labelと切断後の状態保持/RECONNECTING表示を確認 |
+| 1080p退行修正 | 最初は通常条件で縦overflowが発生し、同fixtureの変更前にはないことを確認。新設policyの重複文章とstrategy注記位置・行間/局所spacingだけを調整し、内容を隠さず再試験。最終normal/pending/missing/hostile/mismatchでは縦overflowもなく、全Monitor要素がviewport内。longの220文字級識別子/reasonは折返し、縦scrollを許容する |
+| 独立レビュー | 全code/test/docs差分と上記の局所修正を再レビューし、code/testの実質的指摘なし。backlogの未実装表記指摘はこの限定実装と未受入を分けて修正。Node5 scriptとdiff checkも別担当で成功。browser/build/Piは独立に再実行したという意味ではない |
+
+最終local Debug packageは`package-container/picdplayer_0.1.0_Debug_aarch64.deb`、SHA256
+`9e2a82768db82a79f3ad89421d8215cd891aabf1c7ddf00f0fc7d8fa8cfb7906`。
+最終Player HTML/CSS/JSのSHA256はそれぞれ
+`2867953032fbe2918cfc0eaa3e3aecac600386d8d251d702669f781807c512a7`、
+`00a6412d47e4b6f1ba590eede1fa13689b5cb903d554e3e0e55d41b425d7bb5b`、
+`9297369cbf259d01243d184c83c21348e3afd8fb58f7defe86c4c62d892f0ccf`。
+Pi上の既存packageとは異なる。local検証終了時点では未配備・未commit/未push/未統合で、
+GitHubのIssue/PR状態を変更していなかった。
+
+browser helperは新しい一時ファイルだけを使用した。初期readiness判定が旧UIを許したsmoke結果は
+受入から除外し、厳格化後に新UIのDowngrade labelも認識するよう判定を補修した。
+空のtracks等のfixture不備も直し、上表は有効なlayout/mapの描画を必須にした最終結果である。
+owned Chrome process/profile/loopback fixture serverは終了・撤去し、asset不変を確認した。
+本検査は画像なしfallbackとWebSocket stubによるlocal browser試験であり、実transport/背景共存やPi表示の代替ではない。
+Release再build・sanitizer、背景0/1/複数/fallbackとの全面状態別受入、Pi/WPE・TV表示・音声/CEC・長期試験は
+この単位で未実施。全長文を1080p一画面へ収める保証や#124のscrollbar原因解消とも扱わず、#164はOpenを維持する。
+
+後続の2026-10-18の確認で、利用者が対象8ファイルのcommit・push、`Refs #164`のPR作成と
+必須CI確認を承認した。merge・Issue close・Pi操作は含めない。上記の未commit/未push等は検証当時の履歴であり、
+実際の保存・PR・CIの現在状態はGit履歴とGitHubを正本とする。承認だけでそれらの成功を主張しない。
+
 ## #226 deployの起動待機契約（2026-10-18 UTC）
 
 master `1a44aaf`から専用worktree/branch `fix/226-deploy-startup-wait`を作成し、

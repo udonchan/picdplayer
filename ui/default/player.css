@@ -447,6 +447,13 @@ main {
 
 .metrics dt { color: var(--muted); }
 .metrics dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.monitor-policy-modes { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 2px; }
+.monitor-policy-mode { padding: 2px 5px; border: 1px solid var(--line); font-size: 11px; }
+.monitor-policy-mode[data-effective="true"] { border-style: double; border-width: 3px; padding: 0 3px; }
+.monitor-policy-mode[data-requested="true"][data-effective="false"] { border-style: dashed; }
+.configuration-line { display: block; font-size: 12px; line-height: 1.3; }
+.configuration-line[hidden] { display: none; }
+.configuration-note { display: block; color: var(--muted); font-size: 10px; }
 .evidence-card h3 { margin: 0 0 10px; font-size: 15px; }
 .evidence-label { margin: 10px 0 3px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
 .evidence-value { margin: 0; overflow-wrap: anywhere; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -462,7 +469,7 @@ main {
 .drive-card .drive-name { margin: 8px 0 10px; }
 .drive-card .integrity-note { margin-top: 8px; }
 
-.read-status-metrics { grid-template-columns: minmax(8rem, .65fr) minmax(0, 1.65fr); }
+.read-status-metrics { grid-template-columns: minmax(8rem, .65fr) minmax(0, 1.65fr); row-gap: 6px; }
 .read-quantity-metrics { margin-top: 14px; grid-template-columns: minmax(8rem, .65fr) minmax(0, 1.65fr); }
 .buffer-measurement {
   display: grid;

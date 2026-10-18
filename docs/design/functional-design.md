@@ -78,6 +78,15 @@ block bufferは正の`read_block_frames`と容量から上式が算出できる�
 `queued_blocks / block_capacity blocks`の正確なテキストを併記する。他の値に推測上の比率を作らない。
 `read_stall`はin-flight/last timeoutとlimitの診断値で、ioctlを中断したこと、PCMの回復、drive故障を意味しない。
 
+Read observationのpolicy表示はSINGLE/REPEATを同時に示す表示専用の選択状態とし、snapshotの
+requested/effectiveを文字ラベルでも区別する。pendingはSTOPPED境界での反映待ちであり、要求を
+現streamへ適用済みと表示しない。欠損・不正なmodeやpendingを既定値や適用成功へ補完しない。
+modeが同じでも詳細値の変更等でpendingになり得るため、mode一致から反映済みを推定しない。
+Strategyは`read.strategy`のrequested/effective/pending/downgrade_reasonを個別に表示する。
+互換field `read.effective_strategy`との不一致は隠さず、欠損したstrategyを互換値で補完しない。
+降格理由はoptionalなreader構成の選択理由で、PCM品質やC2 trustの評価ではない。
+この表示はSettings操作・schema・Monitorの二列構図を変更しない。
+
 ## UIのカスタマイズ
 
 UIのHTML/CSS/JSは`ui/default/`を単一のソースとし、ビルド時にfallback用として埋め込む。
