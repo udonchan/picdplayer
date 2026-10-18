@@ -161,6 +161,11 @@ default UIの表示方針であり、Custom UIに同じ配置を義務付けな�
 `queued_blocks / floor(buffer_capacity_frames / read_block_frames)`と同じ正確な数値を必ず併記する。
 buffer以外のcoverage、速度、LBA、capabilityなどを見かけの割合に変換しない。
 
+標準MonitorはSINGLE/REPEATのrequested/effective選択とpendingを表示専用で示す。
+strategyもsnapshotのrequested/effective/pending/downgrade_reasonを区別し、互換fieldとの不一致を
+明示する。欠損値を適用済みに補完せず、降格理由をPCM品質やC2 trustの評価として扱わない。
+追加API取得やpolicy操作は伴わず、Custom UIへ同じ表示部品を要求しない。
+
 Custom UIが同様の表示を実装する場合、`CLEAN`をdisc全体/原盤/bit-perfectの保証にしない。current playback
 evidenceとlatest readは別の観測であり、前者は出力PCM根拠、後者はread-aheadを含み得る最新readである。
 差から物理head位置、可聴位置、速度、遅延を推測しない。接続表示を置く場合はIntegrity header内で

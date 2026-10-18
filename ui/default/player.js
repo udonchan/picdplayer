@@ -72,6 +72,38 @@ const setHidden = (element, value) => {
   if (element.hidden !== value) element.hidden = value;
 };
 
+function renderReadConfiguration(read) {
+  const label = (value) => value == null ? 'NOT AVAILABLE'
+    : typeof value === 'string' && value.trim() ? value : 'UNKNOWN';
+  const modeLabel = (value) => ['SINGLE', 'REPEAT'].includes(value) ? value
+    : typeof value === 'string' && value.trim() ? `UNKNOWN (${value})` : label(value);
+  const pendingLabel = (value) => value === true ? 'PENDING (until STOPPED)'
+    : value === false ? 'NOT PENDING' : 'UNKNOWN';
+  const requested = read.policy?.requested?.mode;
+  const effective = read.policy?.effective?.mode;
+  for (const mode of ['SINGLE', 'REPEAT']) {
+    const id = `read-policy-${mode.toLowerCase()}`;
+    const selected = [effective === mode ? 'EFFECTIVE' : '', requested === mode ? 'REQUESTED' : ''].filter(Boolean);
+    set(id, `${mode}${selected.length ? ` · ${selected.join(' / ')}` : ''}`);
+    const element = byId(id);
+    for (const [key, value] of [['effective', effective === mode], ['requested', requested === mode]]) {
+      if (element.dataset[key] !== String(value)) element.dataset[key] = String(value);
+    }
+  }
+  const modeDetails = ['SINGLE', 'REPEAT'].includes(effective) && ['SINGLE', 'REPEAT'].includes(requested)
+    ? '' : `Effective: ${modeLabel(effective)} · Requested: ${modeLabel(requested)} · `;
+  set('read-policy-state', `${modeDetails}Pending: ${pendingLabel(read.policy?.pending)}`);
+  const strategy = read.strategy;
+  set('read-strategy-effective', `Effective: ${label(strategy?.effective)}`);
+  set('read-strategy-requested', `Requested: ${label(strategy?.requested)}`);
+  set('read-strategy-state', `Pending: ${pendingLabel(strategy?.pending)} · Downgrade: ${label(strategy?.downgrade_reason)}`);
+  const legacy = read.effective_strategy;
+  const showCompatibility = typeof legacy === 'string' && legacy.trim() && legacy !== strategy?.effective;
+  setHidden(byId('read-strategy-compatibility'), !showCompatibility);
+  set('read-strategy-compatibility', showCompatibility
+    ? `Compatibility effective_strategy: ${legacy} · ${typeof strategy?.effective === 'string' && strategy.effective.trim() ? 'MISMATCH' : 'strategy effective unavailable'}` : null);
+}
+
 // The View owns focus only; the daemon snapshot remains the playback authority.
 // View が保持するのは focus だけで、再生状態は daemon の snapshot を正とします。
 const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
@@ -1180,12 +1212,7 @@ function render(snapshot) {
     enrichment.selection);
   showBackground(snapshot, hasDisc);
   set('read-activity', read.activity || 'UNKNOWN');
-  set('read-strategy', read.effective_strategy || 'UNKNOWN');
-  const requestedPolicy = read.policy?.requested?.mode;
-  const effectivePolicy = read.policy?.effective?.mode;
-  set('read-policy', read.policy?.pending
-    ? `${effectivePolicy || 'UNKNOWN'} → ${requestedPolicy || 'UNKNOWN'} (PENDING)`
-    : (effectivePolicy || requestedPolicy || 'UNKNOWN'));
+  renderReadConfiguration(read);
   const blockCapacity = safeNonNegative(read.buffer_capacity_frames) && safeInteger(read.read_block_frames)
     && read.read_block_frames > 0 ? Math.floor(read.buffer_capacity_frames / read.read_block_frames) : null;
   const bufferKnown = safeNonNegative(read.queued_blocks) && blockCapacity !== null && blockCapacity > 0;

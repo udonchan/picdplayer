@@ -62,8 +62,19 @@
           <h3>Read monitor</h3>
           <dl class="metrics read-status-metrics">
             <dt>Activity</dt><dd id="read-activity">—</dd>
-            <dt>Read policy</dt><dd id="read-policy">—</dd>
-            <dt>Strategy</dt><dd id="read-strategy">—</dd>
+            <dt>Read policy</dt><dd id="read-policy">
+              <div class="monitor-policy-modes" role="group" aria-label="Read policy mode observations (display only)">
+                <span id="read-policy-single" class="monitor-policy-mode">SINGLE</span>
+                <span id="read-policy-repeat" class="monitor-policy-mode">REPEAT</span>
+              </div>
+              <span id="read-policy-state" class="configuration-line">Effective: NOT AVAILABLE · Requested: NOT AVAILABLE · Pending: UNKNOWN</span>
+            </dd>
+            <dt>Strategy<span class="configuration-note">Reader selection, not PCM quality or C2 trust.</span></dt><dd id="read-strategy">
+              <span id="read-strategy-effective" class="configuration-line">Effective: NOT AVAILABLE</span>
+              <span id="read-strategy-requested" class="configuration-line">Requested: NOT AVAILABLE</span>
+              <span id="read-strategy-state" class="configuration-line">Pending: UNKNOWN · Downgrade: NOT AVAILABLE</span>
+              <span id="read-strategy-compatibility" class="configuration-line" hidden></span>
+            </dd>
             <dt>Stream warning</dt><dd id="read-warning">—</dd>
           </dl>
           <section class="buffer-measurement" aria-label="Block buffer">
