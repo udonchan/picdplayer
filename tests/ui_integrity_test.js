@@ -73,7 +73,9 @@ async function main(scenario = null) {
     nodes.set(id, value); return value;
   }
   vm.runInNewContext(source, {
-    performance: { now: () => now }, document: { readyState: 'complete', getElementById: node, addEventListener() {} },
+    addEventListener() {},
+    ResizeObserver: class { observe() {} }, getComputedStyle: () => ({ fontSize: '20px' }),
+    performance: { now: () => now }, document: { fonts: { ready: Promise.resolve() }, readyState: 'complete', getElementById: node, addEventListener() {} },
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url) => {
       assert.notEqual(url, '/api/read-history', 'map refresh must not fetch full history');

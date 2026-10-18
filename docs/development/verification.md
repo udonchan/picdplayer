@@ -207,6 +207,48 @@ local検証終了時点の追加tracked差分はこの記録/backlogだけで未
 Issue close・追加Pi操作・private証跡のstage/公開は含めない。保存/PR/CI/mergeの現在状態はGit履歴とGitHubを正本とし、
 検証時点の未commit等を現在状態へ読み替えず、承認だけで実行成功を主張しない。
 
+## #164 長文名の縮小と末尾省略
+
+2026-10-18 UTC、利用者が「ある程度まで詰め、それでも長い末尾を`...`へ置き換える」方針を明示した。
+最新master `b484154`から`fix/164-fit-long-metadata`を分離し、album/album artist/track/track artist/drive名の
+5欄だけを対象に、実幅で通常値→90%→80%→75%（12px未満にしない）の1行表示とgrapheme単位の末尾省略を実装した。
+省略時の全文はtitle/aria-labelに残し、元snapshot・計測値・warning/pending/降格理由を変更しない。
+名前変更、幅/viewport変更、初回fonts.readyで一つのrAFへ集約して再評価し、短文や広幅へ戻れば復元する。
+以前の単純なclamp除去とscroll許容の不採用案とは異なり、今回は名称の省略を明示承認された条件として設計に反映した。
+
+最初の実装委譲は途中で切れた報告のみで、UI/test差分もなかったため完了とは扱わず主担当で実装した。
+試験側の別委譲は4個の既存Node試験を更新し、他のJSON fixture/既存assertを弱めず必要なbrowser API mockと
+独立した幅近似fixtureを追加した。利用制限で中断した後、worktreeと最新masterを照合して再開した。
+一時browser helperにも補修が残っていたため、説明だけで完了とせず内容を確認して実行した。
+
+| 最終検証 | 観測結果と限界 |
+|---|---|
+| Node 5 script | render/integrity/controls/status/bootが全て成功。既存の60同値STOPPEDはDOM write attempts 0、60進捗更新は72を維持。追加の60同値metadataを含むrevision/position/公開済みread_calls更新はmetadata write 0・fitting read 0。縮小/省略、Unicode、literal markup、raw値維持、同じ省略prefixの末尾変更、NoDisc、幅0、resize/fonts.ready、ROの高さfeedbackを確認 |
+| Negative control | 保存済み旧JSへ新しいrender試験を適用すると、名前5欄の観測検査が失敗してexit 1。保存元は読み取りのみ。新JSでは成功 |
+| 最初の実寸検証・修正 | 狭幅の`1fr`がnowrap文字列のintrinsic幅へ広がり、省略されない問題を検出。独立レビューで固定列幅時のresponsive font cache失効漏れと、検証器のfont相対letter spacing補正漏れも確認。`.details`のmin-width 0、native resizeでのfont再評価、検証器のcross-size測定を一組で修正した。body/cardのoverflowを隠して成功にしていない |
+| Mac Chrome 最終36 case | 1920×1080、390×844、720×720で短文・中程度・長いLatin/CJK/grapheme/markup・置換・60同値更新・短文化・NoDiscを検証し、幅変更6 caseも含め失敗/JS error 0。通常/長文の1920はNow Playing/Monitorがviewport内、狭幅は一列・横overflowなし。中程度は全文のまま90%、長文は下限とASCII `...`、title/ARIA全文を確認。数値・warning・pending/reasonは非省略 |
+| 幅変更と通常比較 | 初回font確定を待ち、native resizeだけで狭→広→狭を検証。1920→1280→1920ではalbum列792px一定でもfontが36→34.56→36pxへ再計算。変更前と短文のfont 48/24/32/16/17px・各欄rect・Now Playing/Monitor geometryは一致するが、CSSのnowrap/overflow指定まで同一という意味ではない |
+| 描画上の限界 | grapheme caseにinkがtight line boxを越すwarning 5件あり、overflow visibleで実際のclip ancestor逸脱はない。警告0とはしない。実font差し替え後のloadingdone、全OS/font、Pi/WPE/TVの描画や可読性は未確認 |
+| Linux/aarch64 Debug | 標準WPE SDKのrecipe一致を確認して新worktreeへ非破壊cloneし、build/stage/packageを新規生成。全CTest 70/70成功（初回52.06秒、追加fixtureの診断更新を公開済みread_callsへ揃えた最終再検査53.30秒）。package lifecycle成功（legacy fixture→candidate upgrade→同artifact reinstall→purge）。candidate単独のfresh installを別に実施したとはしない |
+| Artifact・独立レビュー | source/stage/archiveのHTML/CSS/JSがそれぞれbyte一致し、staged daemonのprofile/build typeはDebug。独立レビューと一組の修正後の再レビューで実質的な残指摘なし。review担当のbuild/browser再実行や実機受入を意味しない |
+
+browserのbaselineは`issue164-fit-SYNTHETIC-yfhzlhn1/`、最初の失敗は`issue164-fit-SYNTHETIC-s612df4w/`、
+最終結果は`issue164-fit-SYNTHETIC-i68j6fz8/`へ上書きせず保存した。最終reportのSHA256は
+`996257042b7ebbc72f8c964c187d5dcaa1fa6355045ebe6bbd240bf8f3395276`、
+helperは`97c475115885cd6d2d8356e4b5f10db0d6961fdf9c6e61d8b8fec8739469a137`。
+各runは実行中の入力hash不変とworktree status/HEAD不変を検査し、owned Chrome/profile/serverを終了した。
+raw reportにはstatus_after自体を保存していないため、status前後の独立再照合まで記録済みとはしない。
+合成文字列/PNG/JSON/helperはGit対象に含めない。
+
+local Debug package SHA256は`cc3ac5151c252ac86f4a6313d50155b0d4edd1381868ba4e536cd582b045f08b`、
+CSSは`56ebde8298d501294c55cf8ac185f1ccb9f14026dad198689a45405be7d105f4`、
+JSは`d8b0f62e5c536e4a762cd5d8060760cdca588508d4c415b36fa11eb9546bec09`。
+local検証終了時点ではPi操作・再配備・commit/push/PRを行わず、未commit/未統合/未配備で保持した。
+その時点でRelease再build・sanitizer・新headのCI、実WPE/TV確認、背景共存の全面受入は未実施だった。
+その後、利用者は対象10ファイルだけのcommit・push・`Refs #164`のPR作成・必須CI成功後の通常mergeを承認した。
+Issue close・追加Pi操作/再配備・private証跡のstage/公開は含めない。保存/CI/統合の現在状態はGit履歴とGitHubを
+正本とし、当時の未commit等を現在状態へ読み替えず、承認だけで成功を主張しない。#164はOpenのままとする。
+
 ## #226 deployの起動待機契約（2026-10-18 UTC）
 
 master `1a44aaf`から専用worktree/branch `fix/226-deploy-startup-wait`を作成し、

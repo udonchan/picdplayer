@@ -66,9 +66,12 @@ async function main() {
   });
   node('settings-close').disabled = false; // Matches the always-enabled Back button in player.html.
   vm.runInNewContext(source, {
+    addEventListener() {},
+    ResizeObserver: class { observe() {} }, getComputedStyle: () => ({ fontSize: '20px' }),
     Date: class extends Date { static now() { return now; } },
     performance: { now: () => 1 },
     document: {
+      fonts: { ready: Promise.resolve() },
       readyState: 'complete', getElementById: node,
       get activeElement() { return activeElement; },
       createElement: element,

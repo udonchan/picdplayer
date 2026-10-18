@@ -14,8 +14,11 @@ async function scenario({ failRest = false, failTelemetry = false, paintFirst = 
   const nodes = new Map();
   let clock = 10;
   const context = {
+    addEventListener() {},
+    ResizeObserver: class { observe() {} }, getComputedStyle: () => ({ fontSize: '20px' }),
     performance: { now: () => clock++ },
     document: {
+      fonts: { ready: Promise.resolve() },
       readyState: 'interactive',
       addEventListener: (name, fn) => { listeners[name] = fn; },
       getElementById: (id) => {
