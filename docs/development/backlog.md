@@ -32,7 +32,7 @@ Issue整理とコードのcommitを別単位にする。
 |---|---|
 | 直近1 | #121: 音声優先診断修正の独立レビュー・統合と限定受入。過去control/CECを一括解決扱いしない |
 | 直近2 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない |
-| 独立した小修正 | #226: deployとwrapperの待機契約不整合。正本を使いmock中心に検証する |
+| 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
 | 次順位 | #164: 公開済みpolicy/strategy表示。既存2列構図を再設計しない |
 | 実装済み・限定受入待ち | #10: 補正試聴/TV端表示、#88: 観測可能な物理hotplug、#51: 実写真と音声/CEC、#178: Settings全経路 |
 | 取得・資源安全性 | #49: encoded上限とdecoded寸法/memory、memory-only/cache部品の保証範囲。TV表示は#51 |
@@ -215,7 +215,7 @@ sudoなしのprocess観測でもWPEがMainPIDで、Chromium fallbackではない
 | [#188 Prevent Chromium error pages from remaining on the kiosk display](https://github.com/udonchan/picdplayer/issues/188) | Not planned/superseded。未実装/未受入の製品要求を#219のactive checklistへ移管。WPE採用で解決したという意味ではなく、明示Chromium/fallback経路も維持する。 |
 | [#220](https://github.com/udonchan/picdplayer/issues/220) | Open。source/version/2patchの開発供給と標準package/SDK cacheは成立済み。v1.0へ保留した依存固定・ABI・sandbox実隔離/権限・更新/正式供給を旧#189/#191/#193から集約。sid rootfsをhost混在/製品供給へ転用しない。 |
 | [#221](https://github.com/udonchan/picdplayer/issues/221) | 成立性調査としてCompletedでClose。SHA256固定2.54.0＋VIDEO guard/seccomp linkの2patch付きTrixie/arm64構成でconfigure/build/stage、pkg-config、launcher/processのlink/依存検査を記録し、#222〜#225の後続CIで成果を保全・検証。無改変upstream・完全再現性・正式供給とは区別し、残条件は#219/#220へ追跡する。 |
-| [#226](https://github.com/udonchan/picdplayer/issues/226) | Open。deployの約35秒の実効runtime確認とkioskの最大300秒API待機を整合させる独立tooling Issue。code修正・長い待機の再現試験は未実施。 |
+| [#226](https://github.com/udonchan/picdplayer/issues/226) | 限定scopeの実装・検証記録。master `1a44aaf`から分離し予算照会とmonotonic期限を実装。mock・negative control・実GNU timeout、Linux/aarch64 WPE Debug/Release各70/70・package回帰・レビュー修正確認済み。通常Debug配備に加え、2026-10-18の利用者の対話実行で一時TCP待機45.840秒・実verifier exit 0・実WPEと設定復元を確認。先行sudo認証中断は履歴として保持。統合/closeの現在状態はIssueと対応PRを参照。実APIを停止する遅延、実機の上限/失敗matrixや試聴・長期受入までは含めない。 |
 
 2026-10-15のprofileレビューではarchiveと実binaryのidentity照合、生成wrapper試験、実multi-config拒否試験を補修した。
 既存のAPI無効daemon fixtureもAPI専用部分だけ分離し、最小構成37/37を確認した。
@@ -246,8 +246,9 @@ sudoなしで確認した。cold boot・DRM解放・異常終了fallback等は�
 2026-10-13 UTC、利用者の方針により、開発中はWPEを主runtimeとして進め、復旧の追加検討は
 必要になった時点へ保留する。既存の明示Chromium選択/fallback実装は保持するが、追加の実機
 復旧試験を現段階の取り込み条件にはしない。未確認を確認済みとは扱わない。
-レビューでdeployのruntime待機上限35秒とkioskのAPI待機設定上限300秒の不一致を確認した。
-長い待機設定では正常起動前にdeployが失敗を報告し得る。コードは未修正で、背景機能とは別の#226へ追跡する。
+当時のレビューでdeployのruntime待機上限35秒とkioskのAPI待機設定上限300秒の不一致を確認した。
+長い待機設定では正常起動前にdeployが失敗を報告し得る。当時はコード未修正で、背景機能とは別の#226へ移管した。
+後続作業の現在状態は上の#226の行と検証記録を参照する。
 
 ## Buildrootの検討成果保全と採用保留
 

@@ -1,6 +1,16 @@
 #!/bin/bash
 set -eu
 
+readonly maximum_api_wait_seconds=300
+readonly version_timeout_seconds=5
+readonly command_kill_after_seconds=1
+# An internal deploy query must not need runtime configuration or start a kiosk.
+if [[ ${1-} == --startup-wait-budget-seconds ]]; then
+  (( $# == 1 )) || exit 2
+  echo "$((maximum_api_wait_seconds + version_timeout_seconds + 2 * command_kill_after_seconds))"
+  exit 0
+fi
+
 # Linux uptime is monotonic (centisecond resolution); no subprocess per marker.
 # Linux uptime を使い、時刻補正の影響を受けない経過時間を記録します。
 read -r boot_uptime _ < /proc/uptime
@@ -36,8 +46,8 @@ fi
 
 port=$((10#$PICDPLAYER_API_WAIT_PORT))
 wait_seconds=$((10#$PICDPLAYER_API_WAIT_TIMEOUT_SECONDS))
-if (( port < 1 || port > 65535 || wait_seconds < 1 || wait_seconds > 300 )); then
-  echo "picdplayer-kiosk: port must be 1..65535; wait timeout must be 1..300 seconds" >&2
+if (( port < 1 || port > 65535 || wait_seconds < 1 || wait_seconds > maximum_api_wait_seconds )); then
+  echo "picdplayer-kiosk: port must be 1..65535; wait timeout must be 1..$maximum_api_wait_seconds seconds" >&2
   exit 2
 fi
 case "$PICDPLAYER_KIOSK_RUNTIME" in wpe|chromium) ;; *) echo 'invalid kiosk runtime' >&2; exit 2 ;; esac
@@ -58,7 +68,7 @@ if [[ $effective == wpe ]]; then
     reason=wpe-previous-failure
   elif [[ ! -x $PICDPLAYER_WPE ]]; then
     reason=wpe-missing
-  elif ! version=$(timeout --kill-after=1s 5s "$PICDPLAYER_WPE" --version) ||
+  elif ! version=$(timeout --kill-after="${command_kill_after_seconds}s" "${version_timeout_seconds}s" "$PICDPLAYER_WPE" --version) ||
        ! [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] ||
        (( 10#${BASH_REMATCH[1]} < 2 || (10#${BASH_REMATCH[1]} == 2 && 10#${BASH_REMATCH[2]} < 54) )); then
     reason=wpe-incompatible
@@ -86,7 +96,7 @@ while true; do
     exit 1
   fi
   # DNS and TCP connection establishment can block; bound the whole attempt.
-  if timeout --kill-after=1s "${remaining}s" /bin/bash -c \
+  if timeout --kill-after="${command_kill_after_seconds}s" "${remaining}s" /bin/bash -c \
       'exec 3<>"/dev/tcp/$1/$2"' kiosk-connect "$PICDPLAYER_API_WAIT_HOST" "$port" 2>/dev/null; then
     kiosk_mark api_ready
     break

@@ -1,15 +1,191 @@
 # 検証状況と残課題
 
-更新日: 2026-10-17。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-18。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
 2026-10-17、利用者がここまでのcommit・pushを承認した。Issue整理は`docs/issue-cleanup-a1-a2`、
 診断修正の保存先はそのcommitを土台にする`fix/audio-first-diagnostics`とし、master直接更新・PR作成は含めない。
 以下の未commit/未push/未配備/文書未統合という記述は各作業時点の履歴で、現在の保存状態はGitのbranch/履歴を参照する。
 未実施の音声/CEC/長期・物理受入は、この保存操作でも完了へ変更しない。
 
-本branchでは整理文書commit `7b8d099`を土台に、配備用worktreeの差分を3-wayで照合した。
+当時の保存branchでは整理文書commit `7b8d099`を土台に、配備用worktreeの差分を3-wayで照合した。
 重複したbacklog/verificationは記録を保持して整合し、以下に詳細な音声候補の再現・回帰・配備記録を併記する。
-commit対象の実装・test・CMakeは配備sourceとbyte一致であり、この保存のための再配備やPi操作は行わない。
+当時のcommit対象の実装・test・CMakeは配備sourceとbyte一致であり、その保存のための再配備やPi操作は行わなかった。
+
+## #226 deployの起動待機契約（2026-10-18 UTC）
+
+master `1a44aaf`から専用worktree/branch `fix/226-deploy-startup-wait`を作成し、
+deployの約35秒判定とwrapperのAPI待機最大300秒の不整合を扱う。最初のlocal作業ではPiの操作・配備・
+service変更、設定/sudoers変更、commit/push/PRを含めず、後続の別承認による通常配備を本節末尾に分けて記録する。
+最初の実装委譲は利用制限・接続切断で中断し、再開時点の差分は親担当の3文書だけだった。
+その状態を実装完了や自動試験成功とは扱わず、同じ限定scopeで再開した。
+
+委譲終了後も実装4ファイルに差分がないことを確認したため、主担当で実装・試験を行った。
+wrapperを起動待機予算の正本とし、deployはインストール済みwrapperの内部照会
+`--startup-wait-budget-seconds`から上限を取得する。現在は最大API待機300秒、APIのkill猶予1秒、
+WPE version確認5秒とkill猶予1秒で307秒。deployの確認猶予5秒を加えたmonotonic期限を使う。
+設定が既定30秒の場合も共通の保守的な上限で、systemdの実効環境を別layerで再解釈しない。
+既定値・許容範囲・runtime選択・fallbackは変更しない。
+
+観測コマンドとsleepは残りcentisecondの`timeout --signal=KILL`で制限し、遅れた観測を成功にしない。
+queryは別の5秒＋kill猶予1秒で制限する。これはruntime確認区間の期限であり、SSH転送・dpkg全体や
+OS schedulingに対するhard real-time保証ではない。inactive kioskを起動せず、query/観測失敗、
+不正な予算、期限超過、停止/失敗・PID不在、WPE/Chromium不一致を失敗として扱う。
+
+| 検証 | 結果・境界 |
+|---|---|
+| Bash構文 | deploy・wrapperの`bash -n`成功 |
+| 仮想時間mock | 実heredocと実template queryを実行。40秒/300秒相当の遅延、期限直前/同時/超過、待機したまま、遅れた観測、wrapper予算変更への追従、query/観測失敗・不正値、fallback/明示Chromium、inactiveを検証 |
+| Negative control | fixture内だけに旧masterのdeployを入れ、40秒/300秒の2 subcaseが失敗することを確認。保全worktreeの変更はなし |
+| 実timeout | Linuxの実GNU timeoutが、残り0.01秒の観測でblockするcommandを終了し、PID観測失敗にすることを確認 |
+| Wrapper | 予算queryはXDG/設定なし・不正設定下でも307だけを返す。API待機1/300秒を受理し0/301秒を拒否。既存profile/fallback等を含む11/11成功 |
+| 標準WPE Debug | `picdplayer-profile-review-build` arm64 imageとコピー先の既存SDK cacheを使用。標準`build-container.sh`で最終sourceを再生成・build/stage/package成功 |
+| 全CTest | Linux/aarch64、API/metadata/WPE ONで70/70成功（49.97秒）。`deployment_scripts`はgenerated maintainer scriptを含め35/35、skipなし |
+| Package | 標準`test-package-lifecycle.sh`成功。archive内wrapperはgenerated scriptとbyte一致し、XDGなしでquery=307を確認 |
+| 独立レビュー | 空PIDを既定値へ置換するfixtureと、丸め/kill猶予による期限超過を指摘。両方を修正し、限定再レビューで残指摘なし |
+
+最初のfixture試験では空PID caseが失敗し、上記の修正後に成功した。追加archive照合の最初の実行は
+shellの引用符処理で展開先を渡せず失敗したため、成功へ読み替えず、専用helperでbyte一致とqueryを再確認した。
+変更対象外66件と暫定packageの先行成功だけで完了にせず、最終sourceで全70件とpackage回帰を実行した。
+このDebug検証時点ではRelease build・sanitizerは再実行していない。後続のRelease検証を以下に記録する。
+
+新規worktreeのlocal検証用Debug package SHA256は
+`dba452796904dba50c419838ade6dd9f75829e0f328031a840389c46ffafa14d`。
+このlocal回帰時点ではPiへ配備していないartifactで、#121の配備packageとは異なる。元worktree/cache/branch/stashは保持した。
+
+### Release回帰（2026-10-18 UTC）
+
+後続の継続依頼で、製品コードを変えずReleaseでも同じ標準手順を実行した。先に今回のDebugの
+build/stage/packageを専用worktree内の`build-issue226-debug-evidence/`へclone copyし、packageのbyte一致と
+上記SHA256を確認した。コピーしたCMake build treeは証跡保存用で、別pathから再configureして再利用しない。
+元の保全対象worktreeのartifactは変更せず、専用worktreeの通常出力だけを標準scriptでReleaseへ更新した。
+
+- `PICDPLAYER_BUILD_TYPE=Release PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build ./scripts/build-container.sh`成功。
+- 同じLinux/aarch64 imageで全CTest 70/70成功（50.20秒）。wrapper/profile・deploy/mockも含む。
+- 同profileの標準`test-package-lifecycle.sh`成功。archiveのbuild-profileはReleaseで、wrapperはgenerated scriptとbyte一致。
+- archiveのwrapperはXDG設定なしでquery=307を返す。保持したDebug packageのSHA256は不変。
+
+Release packageは`package-container/picdplayer_0.1.0_Release_aarch64.deb`、SHA256は
+`c2066cc5997663145d8b81aeb7312bbf6d076d4bf50a41c66d03b0a981623533`。
+Release回帰終了時点の`build-container/`・`stage/`・`package-container/`はこのReleaseの出力を指し、Debugの証跡は上記別directoryに保持した。
+この時点では両方ともlocal検証用で、Pi配備・GitHub公開・版付きrelease候補生成は行っていない。
+sanitizer・実機の長い待機は未実施のまま。
+
+local回帰完了時点では未commit・master未統合・未配備で、GitHub IssueはOpenのまま変更していない。
+
+### 通常Debug deployの限定実機確認（2026-10-18 UTC）
+
+利用者が実機確認を依頼した後、現在状態を読み取り確認し、Debugを維持した通常deployを1回だけ行う
+対象・時間・restart・保全・中断条件を別途確認した。再生/CEC/媒体/cold boot・設定/sudoers変更、
+35秒超の実systemd遅延注入、自動rollback/再配備、dpkg途中の強制終了は承認範囲に含めない。
+70°C以上・電源/USB異常・想定外の状態/設定/hash・配備/観測失敗では追加操作を中止する条件とした。
+
+Releaseの通常出力を`build-issue226-release-evidence/`へ保持し、Debugの証跡から通常出力へclone copyした。
+コピー元Debugと保持先Releaseのpackage SHA256は上記値と一致し、上書き/削除した保全対象worktreeはない。
+現在の通常`build-container/`・`stage/`・`package-container/`はDebugで、両profileの証跡を別directoryにも保持する。
+Debug archiveのdaemonとPlayer JSは以前の配備と同じhashで、wrapperのみ新しい予算照会を含むことを確認した。
+
+| 項目 | 観測 |
+|---|---|
+| 直前状態 | STOPPED/AUDIO_READY、WPE Debug、両service active。private backup準備完了時63.4°C、flag 0 |
+| 保全 | targetの新しいprivate directoryに旧package、実効設定/optional不在、unit/引数/policy/背景/boot、API state、journalを保存。開始前12 files、終了後18 filesでdirectory0700/files0600・ownerを確認。以前のprivate backupは変更しない |
+| 配備 | `PICDPLAYER_BUILD_TYPE=Debug PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build ./scripts/deploy.sh`を1回実行して成功。active→activeを維持し、標準dpkg処理に伴うdaemon→kioskの新invocationと開始時刻順を確認 |
+| 実runtime | deploy自身が`expected=wpe process=picdplayer-wpe`を確認。version/profileの標準検査も成功。実wrapperのquery=307 |
+| package SHA256 | `dba452796904dba50c419838ade6dd9f75829e0f328031a840389c46ffafa14d` |
+| daemon / HTTP Player | `dcd958f8a9f6e1e8c1638e622fee8b845e927f317f443fdf1f2a8b2ff532dda2` / `353e58fbd4203669ee9ce3986f9e4db8c00fa43363663380c886566f8a13fb38`。配備前後で確認 |
+| wrapper SHA256 | `1e792264e1cc2c2c8af9299adbba16691419371d74e31d273dc4ee04115ed807`。Debug archive/generated script/実配備が一致 |
+| 設定維持 | 取得した実効設定・unit内容/参照先・起動引数・policy全体・背景requested/effective/available・bootが前後一致。捕捉した設定源の比較であり、未知の全persisted stateの完全backupとは主張しない |
+| 終了後観測 | 30秒の観測区間で約5秒間隔の7 sample。検査・保存処理を含め33.119秒で07:06:15 UTCまで確認。STOPPED/AUDIO_READY、実WPE、両service active、auto restart 0、観測最大65.0°C、flag 0 |
+| journal | 読み取り権限警告なしでservice/kernelを取得。配備前cursor以降、stall/underrun/read error、電源/USB異常、service WARN/ERROR等のguarded eventは該当0。raw証跡はtarget private directoryのみ |
+
+通常deployが失敗したという報告はなく、新しい契約を実Pi上で実行できた。ただし起動を意図的に遅らせていないので、
+35秒超の実systemd待機・上限/期限・API未起動/fallback/inactiveの実機受入まで成功としない。
+これらはmock/限定Linux試験の成功と区別する。再配備後のplay/pause/seek・CEC・試聴・TV/DRM表示・長期試験も未実施。
+設定内容・API key・画像・raw journal・private backupの実pathをGit/GitHubへ含めない。
+この通常deploy確認時点では未commit・master未統合でGitHub Issue #226はOpenを維持した。#219の復旧matrixや#184の受入も別枠のまま。
+
+### 45秒実待機の開始前中断（2026-10-18 UTC）
+
+後続の継続依頼で、kioskだけをrestartし、試験専用`/run` drop-inで待機先を予約したloopback port、
+待機上限75秒へ一時変更する1回の試験を別途承認した。実APIの8080は停止せず、portを起動45秒後にlistenさせ、
+deployからそのまま抽出したruntime verifierで実wrapper→実WPEを確認する条件だった。
+試験上限90秒・70°C/flag/log/stateによる中断、成功/失敗のいずれも専用変更だけを撤去してkioskを元設定へrestartし、
+30秒確認する。daemon restart・package再配備・再生/CEC/媒体/cold boot・既存設定/sudoers変更は含めない。
+
+実行前にhelperのmarker解釈・後始末・期限・設定差分/衝突・復元確認を独立レビューし、指摘を修正した。
+Linux上の限定helper試験4件（PAM sessionのmarker/PID帰属、WARN捕捉、実行中/終了済みobserverの子process終了）も成功。
+これはhelperの試験であり、45秒の実機受入の代替ではない。
+
+07:37:26 UTC、最初の`sudo -n systemctl edit --runtime ... --stdin`が失敗した。
+復元経路の`sudo -n systemctl daemon-reload`も失敗したため、承認した中断条件に従ってroot操作は追加試行しなかった。
+sudo監査2件はいずれも`a password is required`。事前の`sudo -n -l <command>`成功はコマンド実行許可の確認であり、
+NOPASSWDの保証ではなかった。無対話で実行できると解釈した事前判定を訂正する。
+
+07:38:18 UTCの読み取り確認では、以下が成立した。
+
+- 試験drop-inとそのruntime directoryは存在せず、最初の編集は成立していない。
+- daemon/kioskともactive、PID・invocation・開始時刻・設定参照先は試験前と同一、auto restart 0。
+- 取得した設定hashとunit environmentも不変。STOPPED/AUDIO_READY、61.2°C、flag 0。
+- kiosk restart・45秒待機・TCP listen解放には到達していない。package再配備やdaemon restartも行っていない。
+- 新しいtarget private directoryにbefore/失敗summary/読み取り事後確認を保存した。旧private backupは変更しない。
+
+結果は**開始前中断・未実施**で、正常な復元操作が完了したという意味ではない。
+変更自体が成立していないことを別の読み取り確認で確かめた。通常deploy成功やmock成功を、この実待機の成功へ読み替えない。
+sudoers変更、dpkg経由の迂回、資格情報の取得、root操作の自動再試行は行わない。
+次にこの条件を実施するには利用者側の対話認証/手動操作を含む段取りが必要で、現時点の非対話権限だけでは続行しない。
+
+後続の手順提示依頼で、同じ対話SSH端末から`sudo -v`で認証し、一般userのままhelperを実行する段取りを用意した。
+最終helperのLinux限定4試験とbundle構文を再確認し、Piの新しいユーザ領域directoryへ0700/0600で配置、転送前後hashも確認した。
+root実行・非TTY・認証ticketなしでは変更前に中断するguardを付けた。配置だけでhelper自体は実行せず、service/root操作も行っていない。
+パスワードをagentへ渡したり、別SSH sessionへticketが引き継がれると仮定したり、sudoersを変更したりする手順にはしない。
+手順提示時点ではこの対話実行の結果は得ていなかった。後続の限定成功を以下に分けて記録する。
+
+### 対話実行による45秒超の実待機成功（2026-10-18 UTC）
+
+利用者が一般userの同一対話SSH端末で認証し、配置済みhelperを1回実行した。
+07:53:56〜07:55:34 UTCの出力を受領後、主担当はroot/service操作をせずprivate証跡と現在状態を読み取り照合した。
+agentの別SSHへsudo ticketが引き継がれたとは扱わず、sudoers変更・資格情報の共有/取得はない。
+
+| 項目 | 観測・証跡 |
+|---|---|
+| 開始条件 | STOPPED/AUDIO_READY、実WPE Debug。preflight温度60.7°C |
+| 35秒超の観測 | verifier起動から36.160秒、service開始から37.117秒の時点で確認処理がまだ待機中だった |
+| TCP待機解除 | service開始45.707秒で専用loopback portをlisten。接続1件を観測。実API 8080は停止していない |
+| 実wrapper marker | 同じMainPIDの`api_wait_start=160`、`api_ready=46000`、`wpe_exec=46000`（各wrapper_elapsed_ms）。実待機差分45,840 ms |
+| 実verifier | deploy.shから無変更で抽出したruntime確認処理がexit 0、`expected=wpe process=picdplayer-wpe`を確認。保存sourceのSHA256とtrial記録も一致 |
+| 復元 | 試験drop-inと作成したruntime directoryは撤去済み。元の設定hash・unit参照先/environment・policy/背景/bootを確認し、復元後WPEと30秒観測が成功 |
+| daemon | restartを要求しておらず、試験前後でMainPID・invocation・開始時刻が同じ。session/stream/disc世代もguard対象 |
+| 電源・温度 | 最大観測68.8°C、70°C中断上限未満。throttling/guarded journal異常による中断なし。ただし長期の温度安定性は未確認 |
+| 結果 | `LIMITED_REAL_WAIT_PASS`、failureなし、restored=true。試験区間90秒上限内に正の待機確認を完了し、復元確認は別区間で実施 |
+| private証跡 | 15 files、directory0700/files0600・ownerを読み取り確認。設定・raw journal・sudo情報・実pathは公開しない |
+
+08:02:35 UTCの追加読み取りでも、両service active、auto restart 0、STOPPED/AUDIO_READY、実WPE、flag 0、60.7°C。
+daemonは試験前と同一invocation、両serviceは保存した復元後記録と一致。一時file/directory不在と、捕捉した設定hashの不変を確認した。
+配備package `dba45279…afa14d`とwrapper `1e792264…ed807`も従来記録と一致し、再配備は行っていない。
+
+この成功は、意図的にTCP readinessを遅らせた条件で、35秒を超えても実systemd wrapperを待ち実WPEを受理できることに限定する。
+実daemon/APIの起動そのものを遅らせた試験、最大300秒・期限超過・API永続未起動・fallback/inactiveの実機matrix、
+再生/試聴・TV/DRM表示・CEC・長期試験は未実施。既存のmock/自動試験成功と区別し、#121/#184の全受入には広げない。
+この限定検証を記録した時点では未commit・master未統合で、GitHub Issueの更新/close・push/PRは行っていなかった。
+
+### 保存・統合・closeの承認
+
+2026-10-18、利用者が#226の対象8ファイルのcommit/push、`Refs #226`のPR、最新headの必須CI成功後の
+保護規則に従うmerge、master反映確認と公開可能な完了記録・backlog整合を経たIssue closeまでを承認した。
+Piの再配備/restart/再生操作は含めない。既存worktree/branch/stash/cache/private証跡を保持し、
+自動head削除時は同じSHAで作業branchを保全する。
+この承認自体はGitHubでの実行結果ではない。実際のcommit・PR・CI・統合・Issue状態はGit履歴と#226の対応PRを正本とする。
+以上の未commit/未統合/未配備等は各検証時点の履歴であり、後の保存・統合を未実装と読み替えない。
+
+### 実機journal帰属の補正
+
+実機では`PAMName=login`によりkiosk stdoutがserviceとは異なるsession scopeへ帰属し、
+serviceの`_SYSTEMD_INVOCATION_ID`だけを指定するとwrapper markerを取り落とすことを確認した。
+markerの実形式は`event=api_wait_start/api_ready/wpe_exec`と`wrapper_elapsed_ms`であり、`boot_ms`ではない。
+この試験helperでは開始前cursor以降、実MainPIDと`SYSLOG_IDENTIFIER=picdplayer-kiosk`を対応付けて読む。
+service `_SYSTEMD_UNIT`だけでなく当該identifierのWARN/ERRORも確認対象とする。
+通常deploy区間（07:04〜07:06:16 UTC）もこの帰属で読み直し、対象7 recordsにguarded pattern/priorityの該当0を確認した。
+先のservice invocation抽出だけで全kiosk stdoutを網羅していたとは扱わず、この追加確認を分けて記録する。
+raw journal・sudo policy出力・private証跡の実pathはGit/GitHubへ含めない。
 
 ## #121 retry修正版の実機配備（2026-10-17 UTC）
 
@@ -989,7 +1165,7 @@ code変更・SDK build/cache操作はこの整理では行わない。原workspa
 | #193 | Closed / Not planned | opt-in sid trialは#222の標準source-built runtimeへ置換。旧#194のtimer/SSH/復旧は現行productionの成功ではない |
 | #219 | Open | 現行runtimeのcold boot・失敗/終了/復旧・DRM/child・詳細UI/入力/HTTPWS/Inspectorの未確認matrixを集約 |
 | #220 | Open | 開発供給を成立済みと区別し、v1.0の依存固定/ABI/sandbox実隔離・権限・更新/正式供給へ残す |
-| #226 | Open | deployの約35秒判定とkiosk API待機最大300秒の独立不一致。code・実機遅延再現は未修正/未実施 |
+| #226 | 当時Open | 当時は待機契約不一致が未修正で実機遅延再現も未実施。後続の修正・自動試験・実機45.840秒待機は冒頭の2026-10-18記録を参照 |
 
 #219/#220本文と移管コメントを先に更新してから旧Issueをcloseした。#221の成立性5条件のみは
 確認済みとして本文を更新し、元の32分失敗/2patch/資源・依存記録を保持した。#191等の全受入条件を

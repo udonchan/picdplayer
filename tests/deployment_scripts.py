@@ -26,8 +26,18 @@ class DeploymentScriptsTest(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.log = self.root / "calls.jsonl"
+        self.real_timeout = shutil.which('timeout')
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         TEST_ROOT=str(self.root), TEST_LOG=str(self.log))
+        (self.root / 'uptime').write_text('0.00 0.00\n')
+        shutil.copyfile(SOURCE / 'systemd/picdplayer-kiosk.sh.in', self.root / 'wrapper')
+        query = self.root / 'budget-query'
+        query.write_text('''#!/bin/bash
+if [[ ${QUERY_FAILURE:-0} == 1 ]]; then exit 1; fi
+if [[ -n ${QUERY_OUTPUT+x} ]]; then printf '%s\\n' "$QUERY_OUTPUT"; exit 0; fi
+exec bash "$TEST_ROOT/wrapper" "$@"
+''')
+        query.chmod(0o755)
         mock = '''#!/usr/bin/env python3
 import json, os, pathlib, shlex, subprocess, sys
 name = pathlib.Path(sys.argv[0]).name
@@ -39,7 +49,9 @@ if name == 'ssh':
     if 'bash -s --' in command:
         if os.environ.get('RUNTIME_FAILURE'):
             sys.exit(1)
-        sys.exit(subprocess.run(['bash', '-s', '--', shlex.split(args[-1])[-1]], input=sys.stdin.read(), text=True).returncode)
+        script = sys.stdin.read().replace('/proc/uptime', shlex.quote(os.environ['TEST_ROOT'] + '/uptime'))
+        script = script.replace('/usr/local/libexec/picdplayer-kiosk', shlex.quote(os.environ['TEST_ROOT'] + '/budget-query'))
+        sys.exit(subprocess.run(['bash', '-s', '--', shlex.split(args[-1])[-1]], input=script, text=True, timeout=20).returncode)
     if 'picdplayer-wpe --version' in command:
         sys.exit(int(os.environ.get('WPE_VERSION_FAILURE', '0')))
     if 'sudo -n -l' in command:
@@ -92,11 +104,37 @@ if name == 'systemctl':
             path = self.bin / command
             path.write_text(mock)
             path.chmod(0o755)
+        # Fast polling fixtures advance Linux uptime, not wall time or Bash SECONDS.
+        polling = {
+            'systemctl': '''case "$*" in
+*ActiveState*) [[ ${SYSTEMCTL_FAILURE:-0} == 1 ]] && exit 1; echo "${RUNTIME_STATE-active}"
+if [[ -n ${SYSTEMCTL_CLOCK:-} ]]; then echo "$SYSTEMCTL_CLOCK 0.00" > "$TEST_ROOT/uptime"; fi ;;
+*MainPID*) [[ ${PID_FAILURE:-0} == 1 ]] && exit 1
+if [[ ${BLOCK_PID:-0} == 1 ]]; then /bin/sleep 2; fi
+echo "${RUNTIME_PID-101044}" ;;
+esac''',
+            'ps': '''[[ ${PS_FAILURE:-0} == 1 ]] && exit 1
+read -r now unused < "$TEST_ROOT/uptime"
+if (( ${now%%.*} < ${RUNTIME_READY_AT:-0} )); then echo bash; else echo "${ACTUAL_RUNTIME:-picdplayer-wpe}"; fi
+if [[ -n ${OBSERVATION_CLOCK_JUMP:-} ]]; then echo "$OBSERVATION_CLOCK_JUMP.00 0.00" > "$TEST_ROOT/uptime"; fi''',
+            'sleep': '''read -r now unused < "$TEST_ROOT/uptime"
+echo "$(( ${now%%.*} + ${VIRTUAL_STEP:-1} )).00 0.00" > "$TEST_ROOT/uptime"''',
+            'timeout': '''flag=$1
+while [[ $1 == --* ]]; do shift; done
+printf '["timeout", ["%s", "%s"]]\\n' "$flag" "$1" >> "$TEST_LOG"
+if [[ -n ${REAL_TIMEOUT_BIN:-} ]]; then exec "$REAL_TIMEOUT_BIN" "$flag" "$@"; fi
+shift
+exec "$@"''',
+        }
+        for name, body in polling.items():
+            path = self.bin / name
+            path.write_text('#!/bin/bash\n' + body + '\n')
+            path.chmod(0o755)
 
     def run_script(self, name, **env):
         result = subprocess.run(['bash', str(self.root / 'scripts' / name)],
                                 env=dict(self.env, **env), text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
         return result, calls
 
@@ -160,9 +198,70 @@ if name == 'systemctl':
         self.assertNotEqual(result.returncode, 0)
 
     def test_inactive_runtime_is_not_started_for_verification(self):
-        result, calls = self.run_script('deploy.sh', BEFORE='inactive', AFTER='inactive')
+        result, calls = self.run_script('deploy.sh', BEFORE='inactive', AFTER='inactive', QUERY_FAILURE='1')
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertFalse(any('bash -s --' in ' '.join(args) for name, args in calls))
+
+    def test_delayed_runtime_beyond_old_limit_and_maximum_api_wait(self):
+        for delay in ('40', '300'):
+            with self.subTest(delay=delay):
+                (self.root / 'uptime').write_text('0.00 0.00\n')
+                result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', RUNTIME_READY_AT=delay)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn('kiosk_runtime_verified:', result.stdout)
+
+    def test_startup_deadline_boundaries(self):
+        budget = int(subprocess.check_output(['bash', str(self.root / 'wrapper'), '--startup-wait-budget-seconds'], text=True)) + 5
+        for ready, success in ((budget - 1, True), (budget, False), (budget + 1, False)):
+            with self.subTest(ready=ready):
+                (self.root / 'uptime').write_text('0.00 0.00\n')
+                result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', RUNTIME_READY_AT=str(ready), VIRTUAL_STEP='1')
+                self.assertEqual(result.returncode == 0, success, result.stdout)
+                if not success:
+                    self.assertIn('deadline exceeded', result.stdout)
+
+    def test_late_observation_cannot_report_success(self):
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', OBSERVATION_CLOCK_JUMP='1000')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('deadline exceeded', result.stdout)
+
+    def test_observation_timeout_uses_fractional_remaining_budget(self):
+        result, calls = self.run_script('deploy.sh', BEFORE='active', AFTER='active', SYSTEMCTL_CLOCK='311.99')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(('timeout', ['--signal=KILL', '0.01s']), [(name, args) for name, args in calls])
+
+    @unittest.skipUnless(sys.platform == 'linux', 'GNU timeout observation guard')
+    def test_real_timeout_kills_blocking_observation(self):
+        self.assertIsNotNone(self.real_timeout)
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', QUERY_OUTPUT='1',
+                                    SYSTEMCTL_CLOCK='5.99', BLOCK_PID='1', REAL_TIMEOUT_BIN=self.real_timeout)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('PID observation failed', result.stdout)
+
+    def test_budget_is_taken_from_installed_wrapper(self):
+        wrapper = self.root / 'wrapper'
+        wrapper.write_text(wrapper.read_text().replace('maximum_api_wait_seconds=300', 'maximum_api_wait_seconds=400'))
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', RUNTIME_READY_AT='400')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_invalid_or_failed_budget_is_not_success(self):
+        for env in ({'QUERY_FAILURE': '1'}, *({'QUERY_OUTPUT': value} for value in ('', '0', '-1', '01', '1.5', 'abc', '1\n2', '999999999999999999999'))):
+            with self.subTest(env=env):
+                result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', **env)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertNotIn('Deployment completed successfully', result.stdout)
+
+    def test_runtime_observation_failures_are_not_success(self):
+        for env in ({'SYSTEMCTL_FAILURE': '1'}, {'PID_FAILURE': '1'}, {'PS_FAILURE': '1'},
+                    {'RUNTIME_PID': '0'}, {'RUNTIME_PID': ''}, {'RUNTIME_STATE': ''}, {'RUNTIME_STATE': 'inactive'}, {'RUNTIME_STATE': 'failed'}):
+            with self.subTest(env=env):
+                result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', **env)
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_explicit_chromium_rejects_wpe(self):
+        result, _ = self.run_script('deploy.sh', BEFORE='active', AFTER='active', PICDPLAYER_EXPECT_KIOSK_RUNTIME='chromium')
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('runtime mismatch', result.stdout)
 
     def test_invalid_runtime_blocks_transfer(self):
         result, calls = self.run_script('deploy.sh', PICDPLAYER_EXPECT_KIOSK_RUNTIME='invalid')
