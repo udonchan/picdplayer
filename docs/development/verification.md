@@ -171,6 +171,42 @@ local検証終了時点のtracked差分はbacklog/verificationの2文書だけ�
 Issue close・追加Pi操作・実験版採用・private証跡のstage/公開は含めない。これら未commit等は当時の履歴であり、
 保存/PR/CI/mergeの実際の状態はGit履歴とGitHubを正本とする。承認だけで成功を主張しない。
 
+## #164 合成2画像の実時間crossfade限定確認（2026-10-18 UTC）
+
+最新master `6c7ca85`から`test/164-real-time-crossfade`を分離し、既配備#245 head `c7cf88f`から
+実装/UI/testに差分がないことを確認した。前節の仮想時間での描画未確認を補う目的で、Mac headless Chromeの
+1920×1080・normal motion・合成白/黒PNGの最初の1切替だけを実時間で観測した。
+公開契約の45000ms dwell/4000ms fadeは変更せず、HTTP/WS transportだけをloopback fixtureに差し替えた。
+productionのclock/timer、render/image callback、styleは差し替えず、Pi操作・再配備・実再生は行わない。
+
+新しい一時helper `issue164-wall-clock-fade-20261018.py`を作成した。初回runは51.296秒で画像切替を
+観測したが、正常なboot POST 5種類を同一pathへの過剰要求と誤判定しexit 1（30/31成功）。
+継承fixtureの不完全なCLEAN evidenceとevent windowも見つかったため、1回の修正にまとめ、null current/latest・
+STOPPED/IDLE・position/queue 0・空event window・降格理由と整合する合成C2 NOへ変更した。
+初回のCLEAN表示をPCM品質や正しいread evidence保持の根拠にはしない。初回証跡は上書きせず保存した。
+
+修正後の1回だけ再測定し、exit 0、32/32検査成功、Chrome phase 51.291秒（各run上限60秒）を確認した。
+従来のNode `ui_render_test.js`も全3 PASS group成功。同値STOPPED 60 snapshotのDOM write attemptsは0。
+
+| 観測 | 限定結果 |
+|---|---|
+| 実dwell | 白→黒GETのserver monotonic差45.015156208秒、CDP差45.003097秒。44秒付近では旧画像opacity 0.24、新画像source未設定 |
+| 実fade | midpointの旧/新computed opacityは0.118002/0.121998。new layerのtransitionstart→endは4000.900ms、CSS elapsedTimeは4秒。約4.5秒後と後続sampleで旧0/新0.24。旧srcは保持され、削除されたとは扱わない |
+| 実paint | before/mid/after PNGの同じ16×16 margin領域の平均RGBは約(43.25,46.25,46.81)→(26.35,28.91,30.31)→(14.09,16.62,17.62)。独立担当もPNGのCRC/decodeと値を照合し、全時間非表示ではないことを確認。可読性/WCAGの証明ではない |
+| foregroundと要求 | 全6 sampleでpolicy/strategy、warning NONE、STOPPED/IDLE、position 0、current/latest NOT AVAILABLE、接続表示が不変。GETは8 path各1回、POSTは同じpage idの期待するboot event 5種類各1回だけ。想定外POST/外部origin/JS errorなし |
+| 不変・終了 | UI 3 asset・旧helper・CDP source・初回証跡の11 hashが不変。worktreeの実装/testに差分なし。owned Chrome/profile/HTTP serverを終了し、証跡directory 0700・各file 0600。独立レビューは再実行ではなくcode/保存記録/合成PNGの照合 |
+
+helperのSHA256は`98d34619adc6254b9f73fc6bf303056e6f894ce32f99bfdd1cc7a4dc1629b8bf`。
+最終private証跡directoryは`issue164-wall-clock-fade-20261018-88aozu9w/`、`report.json`のSHA256は
+`bf2a556ec669ced1032fbae9f1113f3fce38d804e73da282b898418ccf72d648`。合成PNG/JSON/helperはGitに含めない。
+これで確認したのは同じproduction UIのMac Chrome実時間2画像1切替であり、以前の仮想時間下失敗の原因を
+virtual timeだけと断定しない。3枚shuffle/繰返し/refill、他状態、実写真contrast/WCAG、Pi/WPE/TV、音声/CEC、
+長期受入や#164全体の完了ではない。実装修正・追加Pi操作は不要と判断し、#164はOpenを維持する。
+local検証終了時点の追加tracked差分はこの記録/backlogだけで未commit/未pushだった。
+その後、利用者が今回の2文書だけのcommit・push・`Refs #164`のPR作成・必須CI成功後の通常mergeを承認した。
+Issue close・追加Pi操作・private証跡のstage/公開は含めない。保存/PR/CI/mergeの現在状態はGit履歴とGitHubを正本とし、
+検証時点の未commit等を現在状態へ読み替えず、承認だけで実行成功を主張しない。
+
 ## #226 deployの起動待機契約（2026-10-18 UTC）
 
 master `1a44aaf`から専用worktree/branch `fix/226-deploy-startup-wait`を作成し、
