@@ -71,6 +71,106 @@ Release再build・sanitizer、背景0/1/複数/fallbackとの全面状態別受�
 必須CI確認を承認した。merge・Issue close・Pi操作は含めない。上記の未commit/未push等は検証当時の履歴であり、
 実際の保存・PR・CIの現在状態はGit履歴とGitHubを正本とする。承認だけでそれらの成功を主張しない。
 
+## #164 背景共存の合成検証と長文metadata実験（2026-10-18 UTC）
+
+利用者の追加承認でPR #245を通常mergeし、master `faab0f0`とCI成功head `c7cf88f`のtreeが
+`8c31a8c3fe95816546dd16710564a9b164343ae0`で一致することを確認した。必須CI run `39114996518`は成功。
+自動削除されたremote branchを同じheadで保全し直し、local branch/worktree・元master・古い
+同名origin/master branch・stash・#226保存branchは保持した。#164はOpenであり、Pi配備は含めなかった。
+
+後続依頼では同じ#164の残受入から合成背景との共存を選び、masterから新worktree/branch
+`test/164-background-coexistence`を分離した。新機能・schema・二列構図・背景保存・長時間実機試験へ広げない。
+09:46:42 UTCのPi読み取りでは旧#226の標準WPE Debug、STOPPED/AUDIO_READY、両service active、
+自動再起動0、flag `0x0`、60.1°C、package/daemon/HTTP JS/wrapper hashが以前の配備記録と一致した。
+policy要求/実効SINGLE、direct C2 pointer、速度要求2x・実速度null、offset未指定、背景OFFを再確認し変更しない。
+新UIの配備はまだない。設定fileのhash/参照先とInspectorのloopback listenを読み取り、内容・秘密を公開しない。
+`sudo -n -l`の許可表示だけで実installやsystemctlのNOPASSWDを保証したとは扱わない。
+
+背景検証は新しい一時helper `issue164-background-browser-20261018.py`を用い、既存helperは変更しない。
+生成した白/黒/checker PNGだけを同一loopback originで実decodeし、画像0枚のcover/neutral、1枚、
+3枚のplaylist、HTTP 404、decode失敗、NoDiscの遅い旧応答、世代置換、切断、pending/UNKNOWN/警告を
+1920×1080/390×844/720×720で観測した。transportは明示したWebSocket stubでありdaemon接続の受入ではない。
+
+初回委譲runは検証器のCSS数値表現・DOM id・切断後snapshot・virtual-time待機の不備があり受入に使わない。
+合意した修正1回で止めた最終runは86 case/1429 assertion、exit 1、32失敗だった。
+内訳は短いalbumのline box寸法差28件（glyph欠落の確証なし）、実際の長文metadata省略3 viewport、
+仮想時間下のcrossfade描画1件。数値の大きさや合格assertionだけで全体合格へ変更しない。
+親担当も合成PNGと実CSSを確認し、album/album artist/track/track artistの4か所が既存line-clampで
+省略されることを確認した。これだけを除去し、既存のwrap・通常font/spacing・grid・背景timer/APIを維持する案を実験した。
+この案では非常に長い内容に縦scrollが必要となる。既存`ui_render_test.js`へ4 ruleのwrap/no-clamp静的guardを追加し、
+旧CSSを指定するとexit 1、新CSSでは従来DOM dedup/画像 lifecycle/slideshow試験を含め成功することを確認した。
+静的guard単独をbrowser表示の証明にはしない。以下の成功は実験の検証であり、採用判断とは区別する。
+
+| 最終追加検証 | 観測と限界 |
+|---|---|
+| 同じbrowser helperで実験CSSを再測定 | 86 case/1429 assertion、2.610秒。metadata clip flag 31件（実際の長文3件と寸法warning 28件）は再現せず、横overflowなし、通常1080pのNow Playing/Monitorが収まり、狭幅は一列。長文は縦scrollで保持。exit 1は残るcrossfade描画1件であり、全体成功とはしない |
+| 背景・状態の限定観測 | layer/source/実decode、404/不正画像fallback、NoDiscで旧画像参照の失効、切断ラベルとsnapshot保持、policy/strategy/UNCERTAIN等のDOMを観測。JS例外/console error/想定外POSTは0。実写真・実WS transport・音声・TVの受入ではない |
+| 描画・色の残確認 | productionの45秒dwell/4秒fadeを変えず98,040msを仮想進行し3 sourceを選択/decodeしたが、最初の切替でtarget opacity 0.24に対しcomputed opacity 0。virtual compositorの限界とproduction欠陥を区別できず、全面crossfade合格/不具合確定のどちらにもしない。Chrome `color(srgb ...)`を誤解析するhelperのcontrast比は根拠に使わない |
+| 判定器の限界 | pendingの部分文字列assertはNOT PENDINGも含み得るため、このrunだけで正しい保留表示の受入を主張しない。既存`ui_integrity_test.js`の厳格な文字列/boolean検査と分離する。画像request上限検査も短時間の粗い観測で、資源安全性/耐久の証明ではない |
+| Linux/aarch64 Debug実験build | 編集後に標準WPEのbuild/stage/packageを再生成し、全CTest 70/70成功、52.26秒。package lifecycle script成功。Release再build・sanitizer・新headのGitHub CIは未実施。実験artifactは配備候補にしない |
+| 独立レビューと不採用判断 | 通常1080p geometryは変更前と一致し、4 fieldの省略除去という限定効果は確認できた。一方、functional-designの既存条件は長文でも一次情報/概要を縦scrollなしで確認することで、実験では極端な長文時にMonitorがy約2157〜2748へ押し出される。これは受入未達であり、単に縦scrollを許可する設計追記は条件緩和になるため取り消した。新しいlayout/操作設計へ無断で進まず不採用とした |
+
+修正前の最終private evidenceは`issue164-background-browser-evidence-20261018-e9i2zjc5/`、
+`acceptance.json`のSHA256は`faf54358d2a3c86f4bc80995a836d920eb8a30680a07026e308ce8e4736999fb`。
+`review-caveats.json`は`af83f903bdc75cde6035a8666fa9130d78c3ebfc2463d296458b155f07bb3746`。
+新CSSの再測定は別directory `issue164-background-browser-evidence-20261018-5ct_g55f/`で保存し、
+`acceptance.json`は`d734d2e5f93f55abec2d079f5459645a8d64cd7c1e77a76cf0e35d220b8daef4`。
+helper内の「line clamps remain unchanged」という固定注記は修正前向けで、後者には当てはまらない。
+両方のraw結果や無効なcontrast比を全面成功の根拠へ転用せず、ここに記載した限定観測として扱う。
+owned Chrome/profile/loopback serverの終了、実行中assetと旧helperの不変を確認した。
+
+不採用実験のlocal Debug package SHA256は
+`515d9cba9ff367ce61f3db3b4edc23c00e3afe9f389545242260f73e428f698c`、
+Player CSSは`d72ad5d8f296bb455eec8891e00e003c7eea2ad28cabfd2584fb2c9cb9d3df67`。
+以前に検証した#245 packageを新worktreeへclone copyした後、本修正のbuildで新しいpackageへ再生成した。
+元の#245 packageや#226のbuild/packageは再生成・上書きしていない。
+独立レビュー後、今回自分が編集したCSS/testと条件を緩める設計追記だけをapply_patchで取り消し、
+実装・test・設計はmasterと同じ状態へ戻した。利用者/他担当の変更を戻す操作ではない。
+実験のsource/testとpackageは新worktreeの`experiment-metadata-wrap-evidence/`へ保存し、
+archive名は`picdplayer_0.1.0_Debug_aarch64.not-for-deploy.deb`とした。build/stageは
+`build-metadata-wrap-experiment-evidence/`、`stage-metadata-wrap-experiment-evidence/`へ退避し、
+移動したCMake treeは証跡専用で再利用しない。package-containerの標準filenameは保全済み#245の
+`9e2a82768db82a79f3ad89421d8215cd891aabf1c7ddf00f0fc7d8fa8cfb7906`へ戻し、実験版の誤配備を避けた。
+その時点の追加差分は検証/backlog記録だけで未commit/未push。前の承認を次の保存・PRやPi操作へ流用しない。
+背景共存の全面受入・実WPE/TV・音声/CEC・長期試験は引き続き未完了とし、#164をOpenで保持する。
+
+その後、利用者は統合済み#245 Debugの限定配備とSTOPPED中最大2分のWPE読み取りを承認した。
+対象はpackage `9e2a8276…b7906`で、実験版を除外し、新private backup、標準deploy、既存active serviceの
+postinst再起動、異常時の旧package復元だけとした。再生/媒体/背景ON/設定変更/Issue closeは含めない。
+見込み3〜5分、配備10分超・認証要求・状態/電源/温度異常等で停止する手順を確認した。
+ただし新規preflight/backup helperは参照session値の誤りで停止し、1回の再試行も設定digest参照値の
+不一致で停止した。いずれもbackup作成より前であり、Piへのpackage転送・install・restartは未実施、
+新private backupもまだ作成していない。これは新規補助toolの参照値不備で、Piの故障や設定変更と断定しない。
+10:09 UTCの追加読み取りでは旧payloadのままSTOPPED/AUDIO_READY、service active、再起動0、flag 0、58.0°C。
+実APIと設定digestを読み直してlocal helperだけを修正し、独立レビューで参照値一致・guard後の新規private保存のみ・
+install/service変更なしを確認した。さらにcopy元を検証した絶対pathへ揃え、copy後package digestの実照合を追加した。
+修正ガードはまだPiで再実行していない。自己申告した再試行上限を超えて黙って続けず、追加試行の確認待ちとした。
+
+利用者の再開承認後、修正ガード1回が成功し、新しいprivate backupを作成した。旧package copy後の
+SHA256 `dba45279…afa14d`を検証し、設定tar/hash・before API状態/policy/背景・serviceをprivateに保全した。
+その後、標準`deploy.sh`でpackage `9e2a8276…b7906`を配備し、実install・service verifierが成功した。
+この実行では非対話の固定dpkg installが成功したという事実であり、一般のsystemctl操作や将来の認証を保証しない。
+権限回避、sudoers変更、手動service制御や別sessionへのticket引継ぎは行っていない。
+
+| 実機の限定確認 | 観測結果と境界 |
+|---|---|
+| 配備payload | package `9e2a82768db82a79f3ad89421d8215cd891aabf1c7ddf00f0fc7d8fa8cfb7906`、daemon `29e3e8c5d3ac2b5dcd209921b472433c94e747bf9df4b79812fd34f18d7eac63`、HTTP Player JS `9297369cbf259d01243d184c83c21348e3afd8fb58f7defe86c4c62d892f0ccf`が検証済み候補と一致。wrapperは`1e792264…ed807`のまま、profile/build typeともDebug。実験版`515d9cba…698c`は配備していない |
+| serviceと電源 | daemon/kioskともactive/running、自動再起動0、実WPE processを標準verifierが確認。起動時刻10:22:45 UTC。配備後flag 0・62.3°C、最終読み取りflag 0・59.1°C。これ以降の長期安定を主張しない |
+| 設定・媒体 | 設定hash照合とoptional kiosk設定file不在を再確認。before/afterのpolicy/background JSONをparseした値は同一（byte列は末尾改行のみ異なる）で、これを設定変化としない。SINGLE・direct C2 pointer・速度要求2x・offset未指定・背景OFFを維持。14 track TOC、track 1/position 0、STOPPED/AUDIO_READYがbefore/after/finalで一致 |
+| read根拠 | current/latestはnullのまま、16個のread statsは全て0で一致し、coverageも0。実WPEではcurrent/latestをNOT AVAILABLEとし、CLEANへ補完していない。restartでsession IDは変化し、stream generationは3のまま。非zero失敗履歴の保持を実証したという意味ではなく、before記録をprivate backupに残す |
+| 実WPE表示 | 既存loopback Inspectorを一時SSH forwardし、既存pageのread-only DOM/geometryとPNGを取得。1920×1080、SINGLEのEFFECTIVE/REQUESTED、REPEATの表示、Pending: NOT PENDING、strategy要求/実効・pending・Downgrade NONE、warning NONE、STOPPED/CONNECTEDを観測。5領域が全てvisible/viewport内、横/縦overflowなし。REPEATの選択属性や全状態をこの観測だけで受入済みとはしない |
+| 時間・終了 | capture markerは10:23:22〜10:24:00 UTC（38秒）、Inspector接続1.733秒。service起動から最終runtime読み取りまで75秒で、承認した2分以内。capture markerはsnapshot exposure時刻の独立証明ではない。観測後SSH forwardを終了し、restart/再生/媒体/背景ON/設定変更/追加観測loopは行わない |
+| 独立なlocal証跡照合 | 別担当がlocal before/after/final JSON・TOC・old archive hash・geometry・PNG header/bytesを確認。実SSH commandやTVを再実行したという意味ではない。private directoryは0700、PNG/観測JSONは0600。final state JSONだけ0664で作成されていたため、新規artifactのremote/local両copyを0600へ修正し確認。内容変更や再runtime観測はせず、元から0700のdirectory内だった |
+
+新しいremote private backupとlocal private証跡directoryへ旧archive・設定・JSON・PNGを保全した。
+画像やraw JSON/configはGitへ含めず、公開しない。rollbackは不要で、統合済み#245 DebugをPiへ残した。
+TVの目視・試聴・PLAYING/pending/NoDisc/長文等の実WPE各状態・実artist背景の0/1/複数/failure受入・
+crossfadeの全面描画・CEC・長期耐久は実施していない。#164は引き続きOpenとする。
+local検証終了時点のtracked差分はbacklog/verificationの2文書だけで未commit/未push、GitHub Issue/PRは変更していなかった。
+その後、利用者はこの2文書だけのcommit・push・`Refs #164`のPR作成・必須CI成功後の通常mergeを承認した。
+Issue close・追加Pi操作・実験版採用・private証跡のstage/公開は含めない。これら未commit等は当時の履歴であり、
+保存/PR/CI/mergeの実際の状態はGit履歴とGitHubを正本とする。承認だけで成功を主張しない。
+
 ## #226 deployの起動待機契約（2026-10-18 UTC）
 
 master `1a44aaf`から専用worktree/branch `fix/226-deploy-startup-wait`を作成し、
