@@ -249,6 +249,85 @@ local検証終了時点ではPi操作・再配備・commit/push/PRを行わず�
 Issue close・追加Pi操作/再配備・private証跡のstage/公開は含めない。保存/CI/統合の現在状態はGit履歴とGitHubを
 正本とし、当時の未commit等を現在状態へ読み替えず、承認だけで成功を主張しない。#164はOpenのままとする。
 
+## #164 背景・状態別受入の準備と停止
+
+PR #248の必須CI run `39176250497`成功後に通常mergeし、master `659c6fc`と実装head `cf04f14`のtreeが
+`ce5f2570e75e8358afb166626b089d465826ca1d`で一致することを確認した。保存branch/worktreeは保全した。
+その後の依頼に対し、同masterから`test/164-state-acceptance`を分離し、配備と背景・状態別確認を準備した。
+2026-10-18 23:44:29 UTCのPi読み取りでは旧#245 Debug package `9e2a8276…b7906`、daemon `29e3e8c5…7eac63`、
+HTTP JS `9297369c…2f0ccf`、wrapper `1e792264…ed807`。STOPPED/AUDIO_READY、両service active、再起動0、
+flag 0、58.5°C、SINGLE/direct C2 pointer・速度要求2x・offset未指定・背景OFFだった。以後の状態は仮定しない。
+新候補`cc3ac515…5f08b`を新worktreeへclone copyし、profile Debugとarchive内UIがmaster sourceとbyte一致することを
+確認した。archive内daemonは`1ee3eb9e4855f3325fa6dabb33df126e6dd29295d7236fb7992c7a8df54e79c9`で、旧payloadと区別する。
+新private backup・標準deploy・一時WPE fixture画面・最大30秒再生と復元の具体案を提示したが、選択回答はなく実機操作の
+承認は未確定。Piへのbackup作成/転送/install/restart/画面切替/再生/背景設定/媒体操作は一切行っていない。
+
+ローカル専用の新一時helper `issue164-state-acceptance-20261018.py`を作成した。初回は1.90秒、cover-onlyの
+1観測を試みたがscrollHeight 53/clientHeight 50というline box差をclipと誤判定しexit 1、合格観測0。
+独立レビューは実clip判定、接続/例外監視、CSP、同sessionのrevision/cache、N/A、C2 fallback、NoDisc/切断保持、
+request budget、収束・deadline/cleanupの不足をまとめて指摘した。helperだけを1回補修し、productionに変更はない。
+
+補修後の許可した1回はexit 1、cleanupを含め1.354秒でbootstrap中に停止した。desktop 0/16、狭幅0/4、
+切断/再接続0/2、同context 0/4で、準備したmatrixの合格観測は0。5件の`Network.loadingFailed`が
+`type=Fetch`、`canceled=true`、`net::ERR_ABORTED`でFATAL判定された。Runtime例外/console errorは記録されていないが、
+未実行matrixの正常性や製品不具合の証明にはならない。server側には5種類のboot POSTに対する204があるものの、
+request IDとURLの対応をreportに残しておらず、5件のcancelがそのboot要求だったとは確定できない。
+fatal gateにより失敗時PNG取得も止まり、補修後のscreenshotはない。FAILをPASSへ変換せず、再試行上限で停止した。
+
+初回証跡は`issue164-state-SYNTHETIC-2pw080ep/`、補修後は別の`issue164-state-GROUPED-SYNTHETIC-6o5rdtcq/`へ保存。
+補修後helper SHA256は`56ca6b33e9d4d29a771056cef1d0640ba7278f9c438b9f71f5acffa757c44f1b`、
+reportは`9262bddc4bf1903dd08d0e5f80490924a5f1dfd27471c4fc157b5e10c349d139`。
+8 cleanup/検証stage成功、owned Chrome終了/profile除去/server close、入力hash/Git status不変を記録し、
+親担当も現在のsource差分なしとhashを照合した。独立再レビューは保存code/reportの確認であり再実行ではない。
+補修したclip/error/CSP/context等のmatrix動作はruntime未検証。未使用`--serve`のdefault 180秒/max 300秒は、
+local runの120秒上限と別の将来用server modeであり、この回で実行していない。
+
+次はrequest ID→URLの相関を保存する最小bootstrap診断で、cancelの原因と安全ゲートの分類を特定する必要がある。
+予期しないJS/CSP/通信失敗を一括で無視して受入を通す修正はしない。追加診断は新たに範囲/試行上限を定めて行い、
+この判定器を合格済みとしてPiへ持ち込まない。#248配備と実WPE確認には実機操作の明示承認も必要なままである。
+helper/合成画像/raw JSONはGitへ含めず、その時点の追加tracked差分はbacklog/verificationの記録だけ。未commit/未pushで保全し、
+#164はOpenを維持する。今回1〜3の受入を完了したとは報告しない。
+
+## #164 新Debug配備と実背景1枚の停止中確認
+
+2026-10-19 UTC、利用者が実機検証の継続を依頼した。00:23:56の読み取りでは旧#245 Debug、
+STOPPED/AUDIO_READY、両service active、再起動0、flag 0、59.1°C。対象・操作列・時間・中断条件・復元方法を
+具体化し、利用者が新private backup・標準Debug配備・通常WPE確認・背景ON最大90秒/OFF復元を明示承認した。
+未合格fixture、実再生、媒体/policy/速度/offset/volume操作、cold boot、TV目視、Issue closeは含めない。
+
+現在値から作成した新guardで旧package/config/policy/媒体を照合してから新private backupを作り、copy後の
+旧archive `9e2a8276…b7906`を実照合した。標準`deploy.sh`とservice verifierが成功し、新#248 Debugを残した。
+実機packageは`cc3ac5151c252ac86f4a6313d50155b0d4edd1381868ba4e536cd582b045f08b`、daemonは
+`1ee3eb9e4855f3325fa6dabb33df126e6dd29295d7236fb7992c7a8df54e79c9`、HTTP JSは
+`d8b0f62e5c536e4a762cd5d8060760cdca588508d4c415b36fa11eb9546bec09`、HTTP CSSは
+`56ebde8298d501294c55cf8ac185f1ccb9f14026dad198689a45405be7d105f4`と候補に一致した。
+wrapperは`1e792264…ed807`のまま。固定dpkg呼出しの成功を一般のsudo/systemctl権限保証へ広げず、権限回避はない。
+
+| 実機での限定確認 | 実際の観測と境界 |
+|---|---|
+| 通常画面 | 既存normal Playerだけをread-only Inspectorで観測。1920×1080、CONNECTED、5領域がvisible/viewport内、横/縦overflowなし。名前5欄はnormal font 48/24/32/16/17pxで実幅内、dirty/fit scheduledはfalse、fonts loaded。source文字列と表示が一致。これは実長文の省略/resize動作を実機確認したという意味ではない |
+| 初回背景ON/OFF | APIのONを観測し、ON要求前からOFF確認まで64.059秒、controller全体68.579秒。30 sample、エラー0。候補URLは0→1枚だが、ON撮影が到着前だったため保存PNGはcover fallbackと同一。controller成功を実画像表示成功とせず、追加ONは自動実行しなかった |
+| 追加承認と実画像 | 利用者が追加で最大90秒のON/OFFを1回承認。変更しない安全controllerで64.062秒後にOFFを確認（全体67.883秒）、30 sample、エラー0。別read-only observerはONから待機して1回撮影し、30.028秒で完了。API/currentSnapshot/DOMの同じ候補1枚がcomplete、naturalWidth 1920、opacity 0.24、cover opacity 0になり、主担当もprivate PNGで背景とforegroundの配置を確認した |
+| 表示・根拠 | 実画像ありと通常画面のmetadata/診断表示・共通geometryが一致し、1920×1080で5領域がviewport内、横/縦overflowなし。current/latestはNOT AVAILABLE、warning NONE、16 read statsは全て0のまま。CLEANへ補完せず、SINGLE・direct C2 pointer・速度要求2x・offset未指定・track 1/position 0・14-track TOCを維持した。実速度やPCM品質の試験ではない |
+| OFF・終了状態 | 2回ともrequested/effective=falseへ復元。artist両layerのsrc消去/opacity 0とcover opacity 0.24を保存。最終markerは01:00:56 UTC、daemon PID 11762/kiosk PID 11788、両active/running、自動再起動0、flag 0、58.5°C。設定hashとoptional kiosk設定不在を主担当が再照合し、SSH forwardを終了した。new Debugを保持しrollback不要 |
+| 独立local照合 | 別担当がAPI/WPEのrevision/artwork/player一致、source/currentSrcと候補の対応、画像decode/opacity、状態/policy/TOC/stats不変、private directory 0700/file 0600、旧archive hashを照合。SSH/deploy/TVの独立再実行ではない。ON PNGとOFF PNGのbyte hash差も確認したが、decoded pixel差分やWCAG contrastの証明ではない |
+
+背景制御はlocal curlの全体timeoutと各操作の単調時計deadlineを使い、観測予算をON+72秒までとしてOFF/確認/fallbackの
+予算を確保した。Inspector処理は独立したread-only subprocessを12秒上限とし、停止してもOFF制御を塞がない構造を
+独立レビューした。これはホスト停止や通信断でもOFFを保証するものではない。今回の実測では両回とも90秒未満で復元した。
+準備/承認待ち時間と実ON時間は分け、連続耐久試験として扱わない。この作業によるservice再起動はpostinstの2 serviceだけ。
+
+新remote private backupとlocalの`issue164-normal-live-20261019-YW65c9/`、
+`issue164-background-live-20261019-6naXHT/`、`issue164-background-repeat-20261019-pBjs6H/`、
+`issue164-image-live-20261019-izuLst/`に前後JSON/PNG/旧archive等を保全した。実写真・個人metadata・URL・raw configは
+Gitに含めず公開しない。中間の旧観測/初回の到着前撮影や未合格fixture証跡も上書きしていない。
+得られた候補は最大1枚で、複数画像/crossfade/失敗fallback、PLAYING/pending/NoDisc/長文/接続断等の実WPE各状態、
+TV目視/試聴/CEC/長期受入は未確認。未合格matrixはFAILのままで、#164全体をcloseする根拠にはしない。
+local検証終了時点のtracked差分はbacklog/verificationだけで未commit/未pushだった。
+その後、利用者は今回の2文書だけのcommit・push・`Refs #164`のPR作成・必須CI成功後の通常mergeを承認した。
+追加Pi操作・Issue close・private証跡のstage/公開は含めない。保存/PR/CI/mergeの現在状態はGit履歴とGitHubを正本とし、
+当時の未commit等を現在状態へ読み替えず、承認だけで実行成功を主張しない。
+
 ## #226 deployの起動待機契約（2026-10-18 UTC）
 
 master `1a44aaf`から専用worktree/branch `fix/226-deploy-startup-wait`を作成し、
