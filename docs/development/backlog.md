@@ -41,13 +41,15 @@ Issue整理とコードのcommitを別単位にする。
 | 必要な条件が揃うまで保留 | #146: 傷/別drive、#147: 専用安全環境のpackage中断試験。失敗未観測を異常系合格にしない |
 | v1実装・代表確認を完了した統合単位 | #177/#178: 保存/実service復元とSettings表示/API回帰を完了し、承認済みPR/必須CI経由の統合で終了。物理受入は#252/#51、通常運転は#184に残す |
 | 利用者の実機操作待ち | #252: Player/Settingsの物理リモコン代表受入を一本化。#178/#51は同じrunを参照し重複試験しない |
+| V2以降・非blocking | #254: WPE失敗表示/復帰・DRM/child cleanup。#219のv1移行は完了し、独自の未完了復旧だけを移管。#250のIntegrity hardeningとは別所有 |
 | 将来の機能・設計 | #19: quiet boot、#20: read-only root、#42: Custom UI更新、#238/#239: 外部照合基盤 |
 | 正式供給・配布枠 | #45/#66/#67: release/license/package inventory、#220: v1.0供給精査。#46方式選定後の#47/#68と#69は保留 |
 | 追加研究保留 | #198/#199/#200: Buildroot。#74の調査は完了、採用は未決定 |
 
 写真切替の限定受入は#51、通常継続運転は#184、定量性能は#83、異常媒体/別driveは#146、
-physical hotplugは#88、runtime復旧matrixは#219に一本化する。同じrunを参照できても合格条件は混同しない。
-#219の追加復旧検討は必要時まで保留する従来方針を維持し、未確認を成功へ変更しない。
+physical hotplugは#88、WPE固有の追加復旧はV2の#254に一本化する。同じrunを参照できても合格条件は混同しない。
+#219はv1のWPE移行完了で終了し、未実施の失敗復旧・DRM/child受入は成功へ変更せず#254へ移管した。
+#254は非blockingで現在着手せず、#184/#51/#252等の独立したv1受入をV2へ移したものではない。
 背景保存要望は#177だけで追跡し、重複Issueは作らない。2026-10-19の#164終了では、既存Issueと重複しない
 Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管した。
 
@@ -217,17 +219,18 @@ sudoなしのprocess観測でもWPEがMainPIDで、Chromium fallbackではない
 
 | Issue | 主な範囲 |
 |---|---|
-| [#219](https://github.com/udonchan/picdplayer/issues/219) | Open。WPE主系/packageはPR #222、Inspector PNGは#231、Debug/Release分離は#232で統合済み。限定Pi profile確認と、未確認のcold boot/終了・DRM/child/fallback/詳細input matrixを区別する。旧#188の初回document失敗/汎用browserエラー/復帰・有界再試行の未完了条件も移管。追加復旧検討は必要時まで保留。旧sid trial・fixture・基本再生を全受入の代用にしない。[検証記録](verification.md)参照。 |
-| [#188 Prevent Chromium error pages from remaining on the kiosk display](https://github.com/udonchan/picdplayer/issues/188) | Not planned/superseded。未実装/未受入の製品要求を#219のactive checklistへ移管。WPE採用で解決したという意味ではなく、明示Chromium/fallback経路も維持する。 |
+| [#219](https://github.com/udonchan/picdplayer/issues/219) | Completed（v1のWPE移行範囲）。WPE主系/標準packageはPR #222、Inspector PNGは#231、Debug/Release分離は#232で統合済み。PR #253でも標準WPEの配備を確認。2026-10-19の利用者指示で、独自の失敗表示/復帰・異常終了時DRM/child cleanupと旧#188からの未完了条件をV2・非blockingの#254へ移管してcloseした。旧matrixの未確認を全件成功へ変更しない。通常cold bootは#184、物理リモコンは#252、写真/TV/試聴は#51、正式供給は#220のまま。[終了判断](verification.md#219-v1移行完了とv2復旧への移管2026-10-19)参照。 |
+| [#254 V2: Harden WPE failure recovery and DRM cleanup](https://github.com/udonchan/picdplayer/issues/254) | Open、V2以降・非blocking。初回document取得失敗と表示後API/WS切断を区別した説明可能な表示/有界復帰、異常終了/再起動時のDRM解放・排他/child cleanup/音声非阻害だけを#219から継承。現在は実装・試験を開始しない。既存のTCP待機やsystemd設定・fixtureを全実機受入へ読み替えず、再開時に代表scope・時間・復元を合意する。Chromium/Cage受入や新CEC基盤を暗黙の必須条件にしない。#226の待機修正は完了済みで再実装しない。 |
+| [#188 Prevent Chromium error pages from remaining on the kiosk display](https://github.com/udonchan/picdplayer/issues/188) | Not planned/superseded。未実装/未受入の失敗表示・復帰要求は#219を経てV2の#254へ移管。WPE採用だけで全失敗復旧を解決したとは扱わない。Chromium/Cageはv1受入対象外だが既存選択/fallbackコードは削除しない。 |
 | [#220](https://github.com/udonchan/picdplayer/issues/220) | Open。source/version/2patchの開発供給と標準package/SDK cacheは成立済み。v1.0へ保留した依存固定・ABI・sandbox実隔離/権限・更新/正式供給を旧#189/#191/#193から集約。sid rootfsをhost混在/製品供給へ転用しない。 |
-| [#221](https://github.com/udonchan/picdplayer/issues/221) | 成立性調査としてCompletedでClose。SHA256固定2.54.0＋VIDEO guard/seccomp linkの2patch付きTrixie/arm64構成でconfigure/build/stage、pkg-config、launcher/processのlink/依存検査を記録し、#222〜#225の後続CIで成果を保全・検証。無改変upstream・完全再現性・正式供給とは区別し、残条件は#219/#220へ追跡する。 |
+| [#221](https://github.com/udonchan/picdplayer/issues/221) | 成立性調査としてCompletedでClose。SHA256固定2.54.0＋VIDEO guard/seccomp linkの2patch付きTrixie/arm64構成でconfigure/build/stage、pkg-config、launcher/processのlink/依存検査を記録し、#222〜#225の後続CIで成果を保全・検証。無改変upstream・完全再現性・正式供給とは区別する。移行#219は完了、追加復旧はV2の#254、正式供給は#220を参照する。 |
 | [#226](https://github.com/udonchan/picdplayer/issues/226) | 限定scopeの実装・検証記録。master `1a44aaf`から分離し予算照会とmonotonic期限を実装。mock・negative control・実GNU timeout、Linux/aarch64 WPE Debug/Release各70/70・package回帰・レビュー修正確認済み。通常Debug配備に加え、2026-10-18の利用者の対話実行で一時TCP待機45.840秒・実verifier exit 0・実WPEと設定復元を確認。先行sudo認証中断は履歴として保持。統合/closeの現在状態はIssueと対応PRを参照。実APIを停止する遅延、実機の上限/失敗matrixや試聴・長期受入までは含めない。 |
 
 2026-10-15のprofileレビューではarchiveと実binaryのidentity照合、生成wrapper試験、実multi-config拒否試験を補修した。
 既存のAPI無効daemon fixtureもAPI専用部分だけ分離し、最小構成37/37を確認した。
 4 build typeは各65/65とpackage lifecycleを隔離containerで確認済み。後続の承認済み実機deployでは
 Debug→Release切替、loopback Inspector接続/PNG、Releaseのport閉鎖・INFO抑制、API/WSとCEC登録を確認した。
-実音声・物理入力・背景ON実表示・長期再生は今回未検証であり#219はOpenを維持する。
+この2026-10-15単位では実音声・物理入力・背景ON実表示・長期再生は未検証であり、当時#219はOpenを維持した。
 詳細なcommand・exit code・混在条件は[検証記録](verification.md#debugrelease-profile分離2026-10-15)を参照する。
 
 2026-10-14の整理では、#189は採用評価・意思決定、#191は最小direct DRM PoC成立と残条件移管の
