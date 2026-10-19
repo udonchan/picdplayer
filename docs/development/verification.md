@@ -2,6 +2,38 @@
 
 更新日: 2026-10-19。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## #219 v1移行完了とV2復旧への移管（2026-10-19）
+
+PR #253の必須CI成功とmaster `75df663`への統合を確認した後、#219の残件を読み取り照合した。
+WPE primary化・標準build/package/deploy、Inspector PNG、Debug/Release分離は既に統合済みであり、
+当日のPiでも実WPE process・package/profile/hashを確認済みである。#226の待機予算・deploy期限も
+Completed済みで、古い本文の「未修正」は当時の記録である。
+
+残る独自作業は初回document取得失敗と表示後API/WS切断の区別、説明可能な失敗表示と有界なPlayer復帰、
+異常終了・再起動時のDRM解放/排他、WPE child残留とcleanup、daemon/音声非阻害の受入である。
+wrapperのTCP待受は`/player`取得成功の保証ではなく、WPE load失敗時は異常終了する。
+restart制限・cgroup管理・WS再接続とfixtureの存在だけで、上記の実機受入を成功とは扱わない。
+
+利用者が「残った作業はV2に移行」と明示したため、[#254](https://github.com/udonchan/picdplayer/issues/254)を
+V2以降・非blockingの唯一の追加WPE復旧所有先として作成し、#219のv1移行範囲をCompletedで終了した。
+#188から#219へ継承した未完了の失敗表示/復帰も#254へ移管する。旧本文・未完了checkbox・過去の
+FAIL/未確認はhistoryとして保全し、全matrixをPASSへ変更した終了ではない。#254は現時点で着手しない。
+
+この移管は#219固有の追加復旧だけを対象とし、通常cold boot/継続運転#184、物理リモコン#252、
+写真・TV・試聴#51、正式runtime供給#220等のv1受入は元のIssueで維持する。cursor#28、表示#164、
+保存#177、Settings#178のCompletedと、#124のUI改修後Pendingも維持する。
+Chromium/Cageはv1対象外だが既存選択/fallbackコード・既定値は変更しない。
+Integrity固有のV2 hardening#250は別所有のままで、本移管に混ぜない。
+
+この移管単位で変更したのはGitHubの所有範囲とbacklog/本記録だけであり、製品コード・runtime設定・配備物は
+変更していない。追加local build/test・Pi操作・restart・入力・背景ONも行っていない。
+文書はmaster `75df663`から`docs/219-v2-recovery-close`へ分離し、移管時点では未commitだった。
+その後の利用者の文書統合指示で、復旧経路と既存試験を再読し、v1で必要な追加コード差分がないことを
+再確認した。WPE初回load失敗時の説明可能な復帰や異常時cleanupの改善は#254のV2範囲であり、
+この文書PRには実装を含めない。文書だけをcommit・PR/必須CI経由で統合する。
+文書検証はIssue/link/close状態照合、全diffと`git diff --check`を用いる。PRの実際のCI/merge状態は
+GitHubを正本とし、過去CIを今回の新試験として流用しない。
+
 ## #28 WPE移行によるv1完了（2026-10-19）
 
 利用者が、不要なmouse cursorはWeb runtimeをChromiumからWPEへ移行する際に解消したと
