@@ -33,7 +33,7 @@ Issue整理とコードのcommitを別単位にする。
 | 直近1 | #121: 音声優先診断修正の独立レビュー・統合と限定受入。過去control/CECを一括解決扱いしない |
 | 直近2 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
-| 次順位 | #164: 公開済みpolicy/strategy表示。既存2列構図を再設計しない |
+| 完了したv1表示 | #164: policy/strategy・長文表示と代表確認を完了してCompleted。追加hardeningは#250でv2以降へ延期 |
 | 実装済み・限定受入待ち | #10: 補正試聴/TV端表示、#88: 観測可能な物理hotplug、#51: 実写真と音声/CEC、#178: Settings全経路 |
 | 取得・資源安全性 | #49: encoded上限とdecoded寸法/memory、memory-only/cache部品の保証範囲。TV表示は#51 |
 | 後順位の現行課題 | #3: WPE起動時間、#14: CEC消失/claim、#28: 不要cursor、#83: 性能、#124: scrollbar |
@@ -45,7 +45,8 @@ Issue整理とコードのcommitを別単位にする。
 写真切替の限定受入は#51、通常継続運転は#184、定量性能は#83、異常媒体/別driveは#146、
 physical hotplugは#88、runtime復旧matrixは#219に一本化する。同じrunを参照できても合格条件は混同しない。
 #219の追加復旧検討は必要時まで保留する従来方針を維持し、未確認を成功へ変更しない。
-新規Issueは作成せず、背景保存要望も#177だけで追跡する。
+背景保存要望は#177だけで追跡し、重複Issueは作らない。2026-10-19の#164終了では、既存Issueと重複しない
+Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管した。
 
 ## 実機評価・改善
 
@@ -89,7 +90,8 @@ physical hotplugは#88、runtime復旧matrixは#219に一本化する。同じru
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
 | [#24 Integrate CD read integrity into the player UI](https://github.com/udonchan/picdplayer/issues/24) | #98/#99と監査修正#103〜#106はマージ済み。Phase 1ではscope付きsummary・有界disc read map・全read/drive値を常時表示し、実使用で情報量を評価する。primary playbackを優先し、daemon接続をIntegrity headerへ統合する。PR #108をマージしPhase 1はClose済み。通常Pi CDP確認済み。deterministicな異常scenarioの開発確認は#109で完了し、実機異常系は#146、通常系の継続運転は#184、性能測定は#83で追跡する。 |
 | [#150 Reorganize Integrity Monitor information hierarchy and responsive layout](https://github.com/udonchan/picdplayer/issues/150) | PR #163でCompleted。通常CDのPi CDPとmixed fixtureの[比較記録](reports/2026-09-30-disc-read-map/README.md)を保全。policy/strategy選択表示と背景共存の状態別評価は#164。#83/#124の#150依存は充足済みで、旧親#25は残作業移管により終了した。 |
-| [#164 Finish Integrity Monitor state presentation after artist backgrounds](https://github.com/udonchan/picdplayer/issues/164) | Open。PR #245のpolicy/strategy表示とPR #248の名前5欄の縮小→末尾`...`はmaster統合済み。[長文の自動検証](verification.md#164-長文名の縮小と末尾省略)後、新DebugをPiへ配備し、STOPPEDの通常画面と実背景1枚で1920×1080の配置を[限定確認](verification.md#164-新debug配備と実背景1枚の停止中確認)。背景は各回の終了時OFFへ復元済み。複数画像/失敗fallback・他の実WPE状態・実長文・TV目視・音声/CECは未確認。[Mac実時間crossfade](verification.md#164-合成2画像の実時間crossfade限定確認2026-10-18-utc)は合成2画像の1切替だけ。[広い状態matrix](verification.md#164-背景状態別受入の準備と停止)は検証器bootstrap FAILで未評価のまま保全し、実機の限定成功へ読み替えない。以前の省略除去案は不採用。2列構図やschemaを再設計せず、計測値・warning・pending・降格理由を省略しない。 |
+| [#164 Finish Integrity Monitor state presentation after artist backgrounds](https://github.com/udonchan/picdplayer/issues/164) | Completed（v1）。PR #245のpolicy/strategy、PR #248の長文名の縮小/末尾省略、代表自動試験・通常実WPE/実背景1枚の限定確認を完了。2026-10-19の利用者方針により、深い組合せと検証器hardeningは#250へ延期して終了した。[終了判断](verification.md#164-v1完了とv2以降への移管)参照。旧matrixはFAIL・未評価のまま、未確認を成功へ変更していない。実写真/TVは#51、通常運転は#184等の独立受入を維持し、それら全体をv2や完了扱いにしない。 |
+| [#250 V2: Harden Integrity Monitor state combinations and fixture diagnostics](https://github.com/udonchan/picdplayer/issues/250) | Open、v2以降・非blocking・現時点では着手しない。#164固有の追加状態/背景/platform組合せ、非典型font/長文条件、fixture/network分類のhardeningだけを所有する。必要性とユーザー影響から小単位を選び、全直積・全OS/fontの保証を完了条件にしない。実写真#51、資源#49、通常運転#184、Settings#178、scrollbar#124、性能#83、保存#177の責務を重複させない。 |
 
 ## 障害対応・機能改善
 
