@@ -17,26 +17,36 @@ int main() {
     try {
         const auto path = (directory / "settings.json").string();
         std::string error;
-        check(!load_saved_read_policy(path, 300, error) && error.empty());
+        check(!load_settings(path, 300, error) && error.empty());
         const ReadPolicy policy{ReadVerificationMode::repeat, 75, 2, 3, 5000};
-        check(save_read_policy(path, policy, 300, error) && error.empty());
-        const auto loaded = load_saved_read_policy(path, 300, error);
-        check(loaded && loaded->mode == ReadVerificationMode::repeat &&
-              loaded->region_frames == 75 && loaded->time_budget_ms == 5000);
-        check(!save_read_policy(path, policy, 30, error) && !error.empty());
-        check(load_saved_read_policy(path, 300, error)->time_budget_ms == 5000);
+        check(save_settings(path, {policy, true}, 300, error) && error.empty());
+        const auto loaded = load_settings(path, 300, error);
+        check(loaded && loaded->read_policy.mode == ReadVerificationMode::repeat &&
+              loaded->read_policy.region_frames == 75 && loaded->read_policy.time_budget_ms == 5000 &&
+              loaded->artist_background_enabled);
+        check(!save_settings(path, {policy, false}, 30, error) && !error.empty());
+        check(load_settings(path, 300, error)->artist_background_enabled);
+        const std::string legacy = R"({"schema_version":1,"read_policy":{"mode":"repeat","region_frames":75,"required_matches":2,"maximum_attempts":3,"time_budget_ms":5000}})";
+        { std::ofstream output(path); output << legacy; }
+        check(!load_settings(path, 300, error)->artist_background_enabled);
+        for (const auto& invalid : {
+            R"({"schema_version":2,"artist_background_enabled":"true","read_policy":{"mode":"repeat","region_frames":75,"required_matches":2,"maximum_attempts":3,"time_budget_ms":5000}})",
+            R"({"schema_version":1,"extra":false,"read_policy":{"mode":"repeat","region_frames":75,"required_matches":2,"maximum_attempts":3,"time_budget_ms":5000}})"}) {
+            { std::ofstream output(path); output << invalid; }
+            check(!load_settings(path, 300, error) && !error.empty());
+        }
 
         { std::ofstream output(path, std::ios::trunc); output << "{broken"; }
-        check(!load_saved_read_policy(path, 300, error) && !error.empty());
+        check(!load_settings(path, 300, error) && !error.empty());
         { std::ofstream output(path, std::ios::trunc); output <<
-            R"({"schema_version":2,"read_policy":{}})"; }
-        check(!load_saved_read_policy(path, 300, error) && !error.empty());
+            R"({"schema_version":3,"read_policy":{}})"; }
+        check(!load_settings(path, 300, error) && !error.empty());
         fs::remove(path);
         fs::create_symlink(directory / "missing", path);
-        check(!load_saved_read_policy(path, 300, error) && !error.empty());
+        check(!load_settings(path, 300, error) && !error.empty());
         fs::remove(path);
-        check(!save_read_policy((directory / "missing" / "settings.json").string(),
-                                policy, 300, error) && !error.empty());
+        check(!save_settings((directory / "missing" / "settings.json").string(),
+                                {policy, true}, 300, error) && !error.empty());
     } catch (...) {
         fs::remove_all(directory);
         throw;

@@ -181,7 +181,12 @@ version付きJSONへ保存し、次のdaemon起動時に読み戻す。保存済
 指定しなければ従来どおりruntime変更は再起動後に残らない。標準PlayerのSettingsからSINGLE/REPEATを
 変更できる。背景設定もAPI由来の利用可否を示す。この開発差分ではmetadataと有効なproject keyが
 あれば明示ONを要求できる。key指定だけでは外部取得を開始せず、画像到着・許諾済みも保証しない。
-背景の保存は未実装で、Read Policyの保存設定とは独立してsession限りと表示する。
+同じ保存先へ背景の要求ON/OFFもRead Policyと一組で保存する。保存先なしでは背景もsession限りとなる。
+背景GET自身の`persistence_configured`、`persistence_state`、`requested_source`で確認し、
+Read Policyの表示から推測しない。OFFは保存失敗でも取得・表示を止めて204を返し、
+Settingsは未保存と明示する。`unsaved`なら再起動時に以前のONへ戻る可能性があるため、
+保存先の問題を解消後にOFFを再要求し、`saved`を確認する。保存ONを復元してもkey不在等では
+要求ON・実効OFFと理由を返し、取得しない。version 1は背景OFFとして読み、次の保存でversion 2へ移行する。
 `GET /api/read-policy`の`persistence_configured`は保存先を指定したかだけを示し、個々のPOSTの
 保存成功はHTTP応答で確認する。falseのとき変更は現在のdaemon sessionだけに有効である。
 `requested_source`と`effective_source`はそれぞれ要求値と適用済み値の出所を示す。

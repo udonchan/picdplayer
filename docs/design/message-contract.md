@@ -16,16 +16,24 @@
 | GET /api/disc-map | 詳細履歴を含まないDISC集計。標準Playerの周期更新用 |
 | GET /api/read-policy | requested/effective/pending、`requested_source`/`effective_source`（`startup`/`restored`/`saved`/`session`）、`persistence_configured`（boolean、保存先指定の有無）。出所は要求と実効値それぞれに対応し、pending中は異なり得る。保存先指定だけでは保存成功を保証しない。設定操作の契約は機能設計参照 |
 | POST /api/metadata-selection | loopback限定。候補番号を選択、またはnullで全候補を明示的に採用しない。受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
-| GET /api/artist-background | main ownerのrequested/effective/available（bool）とunavailable_reason（stringまたはnull）。利用可能なら理由はnull、metadata無効・非compileはmetadata_disabled、key不在・不正はkey_missing、runtime非対応providerはruntime_unavailable。provider未提供の場合は503 |
-| POST /api/artist-background | loopback限定。512 bytes以下の`{"enabled":bool}`のみ。OFFは即時・冪等204、ONは技術的に利用可能なら画像到着前でも204、利用不能なら状態を変えず409。No Discや通信失敗は設定受理と区別する。型違い・未知field・不正JSONは400、上限超過413、他method405、外部mutation403 |
+| GET /api/artist-background | main ownerのrequested/effective/available（bool）とunavailable_reason（stringまたはnull）。利用可能なら理由はnull、metadata無効・非compileはmetadata_disabled、key不在・不正はkey_missing、runtime非対応providerはruntime_unavailable。`persistence_configured`（bool）、`persistence_state`（session_only/saved/unsaved）、`requested_source`（startup/restored/saved/session）を追加。provider未提供の場合は503 |
+| POST /api/artist-background | loopback限定。512 bytes以下の`{"enabled":bool}`のみ。OFFは保存失敗でも取得・表示を止めて204、保存成否はGETで確認。ONは利用可能かつ保存先指定時は保存成功で204、利用不能・保存失敗なら状態を変えず409。No Discや画像の通信失敗は設定受理と区別する。型違い・未知field・不正JSONは400、上限超過413、他method405、外部mutation403 |
 | GET /api/presentation/artwork/background/{opaque-reference} | 現行の取得済み背景画像だけを最大8 MiBで配信。OFF・disc/artist変更・辞退・再取得による旧参照は404。他method405。no-storeで、provider URLや内部IDをpathへ埋め込まない |
 
-背景状態にはkey、内部path、provider URL、Artist MBIDを含めない。背景設定の保存・復元は未実装で、
-Read Policyのpending/source/保存情報を流用しない。key指定だけでは候補JSONも写真も取得しない。
+背景状態にはkey、内部path、provider URL、Artist MBIDや保存エラーの生文字列を含めない。
+背景の保存情報は自身の要求値に対応し、Read Policyのpending/source/保存情報を流用しない。
+`session_only`は保存先なし、`saved`は現在の要求値を含むsnapshotの復元または保存成功、
+`unsaved`は保存先指定済みだが現在の要求値の保存を確認できていない状態を表す。
+保存先を指定しただけ、またはOFFが204だっただけでは保存成功を意味しない。
+保存失敗のOFFはrequested/effective=false、requested_source=session、persistence_state=unsavedを返す。
+同じOFFの再要求またはRead Policy保存の成功で未保存状態を解消できる。savedは電源断耐久性の保証ではない。
+復元したONは利用不能でもrequested=trueを保持し、effective=falseと理由を返す。新規ON拒否の契約は変えない。
+key指定だけでは候補JSONも写真も取得しない。
 標準SettingsはこのAPIをRead Policyと独立して読み、利用不能理由と要求値・実効値を表示する。
 利用不能時のONを無効にし、既知の状態でOFFを要求できる。背景画像の配信、snapshotへの参照、
-session ONはPR #223でmasterへ統合済み。複数画像配信は#229のPoC拡張で、実provider・WPE写真表示の確認とは区別する。
-候補JSON・画像取得は空cache pathの一時的memory経路で、ディスク保存の採否と背景の保存schemaは後続作業である。
+session ONはPR #223でmasterへ統合済み。背景保存は設定ファイルのversion 2を用い、
+公開snapshotのschema_versionとは別とする。候補JSON・画像取得は空cache pathの一時的memory経路であり、
+設定選択の保存は画像のディスク保存を意味しない。
 
 `PlayerSession` → `make_presentation_model` → `serialize_presentation_model`が公開経路。
 `diagnostic_fields`を共有してdrive/read/recent_eventsを投影する。

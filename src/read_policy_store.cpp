@@ -15,19 +15,7 @@ namespace {
 namespace fs = std::filesystem;
 constexpr std::size_t maximum_settings_bytes = 4096;
 
-nlohmann::json encode(const ReadPolicy& policy) {
-    return {{"schema_version", 1}, {"read_policy", {
-        {"mode", policy.mode == ReadVerificationMode::repeat ? "repeat" : "single"},
-        {"region_frames", policy.region_frames},
-        {"required_matches", policy.required_matches},
-        {"maximum_attempts", policy.maximum_attempts},
-        {"time_budget_ms", policy.time_budget_ms}}}};
-}
-
-ReadPolicy decode(const nlohmann::json& root, std::size_t capacity) {
-    if (!root.is_object() || root.size() != 2 || !root.contains("schema_version") ||
-        root["schema_version"] != 1 || !root.contains("read_policy"))
-        throw std::invalid_argument("unsupported settings schema");
+ReadPolicy decode_read_policy(const nlohmann::json& root, std::size_t capacity) {
     const auto& value = root["read_policy"];
     if (!value.is_object() || value.size() != 5 || !value.contains("mode") ||
         !value["mode"].is_string() || !value.contains("region_frames") ||
@@ -48,11 +36,43 @@ ReadPolicy decode(const nlohmann::json& root, std::size_t capacity) {
     return policy;
 }
 
+nlohmann::json encode_settings(const SettingsSnapshot& snapshot) {
+    return {{"schema_version", 2}, {"read_policy", {
+        {"mode", snapshot.read_policy.mode == ReadVerificationMode::repeat ? "repeat" : "single"},
+        {"region_frames", snapshot.read_policy.region_frames},
+        {"required_matches", snapshot.read_policy.required_matches},
+        {"maximum_attempts", snapshot.read_policy.maximum_attempts},
+        {"time_budget_ms", snapshot.read_policy.time_budget_ms}}},
+        {"artist_background_enabled", snapshot.artist_background_enabled}};
+}
+
+SettingsSnapshot decode_settings(const nlohmann::json& root, std::size_t capacity) {
+    if (!root.is_object() || !root.contains("schema_version") || !root["schema_version"].is_number_integer() ||
+        !root.contains("read_policy"))
+        throw std::invalid_argument("unsupported settings schema");
+    const auto version = root["schema_version"];
+    SettingsSnapshot snap;
+    if (version == 2) {
+        if (root.size() != 3 || !root.contains("artist_background_enabled") ||
+            !root["artist_background_enabled"].is_boolean())
+            throw std::invalid_argument("missing or invalid artist_background_enabled");
+    } else if (version == 1) {
+        if (root.size() != 2)
+            throw std::invalid_argument("unsupported settings schema");
+        snap.artist_background_enabled = false;
+    } else {
+        throw std::invalid_argument("unknown settings schema version");
+    }
+    snap.read_policy = decode_read_policy(root, capacity);
+    if (version == 2) snap.artist_background_enabled = root["artist_background_enabled"].get<bool>();
+    return snap;
+}
+
 std::string os_error() { return std::strerror(errno); }
 }
 
-std::optional<ReadPolicy> load_saved_read_policy(const std::string& path,
-                                                  std::size_t capacity, std::string& error) {
+std::optional<SettingsSnapshot> load_settings(const std::string& path,
+                                              std::size_t capacity, std::string& error) {
     error.clear();
     const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
     if (fd < 0) {
@@ -75,16 +95,17 @@ std::optional<ReadPolicy> load_saved_read_policy(const std::string& path,
     close(fd);
     if (count < 0) { error = std::strerror(saved_errno); return std::nullopt; }
     if (bytes.size() > maximum_settings_bytes) { error = "settings file too large"; return std::nullopt; }
-    try { return decode(nlohmann::json::parse(bytes), capacity); }
-    catch (const std::exception& exception) { error = exception.what(); return std::nullopt; }
+    try {
+        return decode_settings(nlohmann::json::parse(bytes), capacity);
+    } catch (const std::exception& exception) { error = exception.what(); return std::nullopt; }
 }
 
-bool save_read_policy(const std::string& path, const ReadPolicy& policy,
-                      std::size_t capacity, std::string& error) {
+bool save_settings(const std::string& path, const SettingsSnapshot& snapshot,
+                   std::size_t capacity, std::string& error) {
     error.clear();
-    try { validate_read_policy(policy, capacity); }
+    try { validate_read_policy(snapshot.read_policy, capacity); }
     catch (const std::exception& exception) { error = exception.what(); return false; }
-    const auto bytes = encode(policy).dump();
+    const auto bytes = encode_settings(snapshot).dump();
     const auto directory = fs::path(path).parent_path();
     if (directory.empty() || bytes.size() > maximum_settings_bytes) {
         error = "invalid settings path or size";
@@ -114,8 +135,6 @@ bool save_read_policy(const std::string& path, const ReadPolicy& policy,
     if (okay) okay = rename(name.data(), path.c_str()) == 0;
     if (!okay) { error = os_error(); unlink(name.data()); }
     else if (fsync(dirfd) != 0) {
-        // The rename has already made the new value visible. Report degraded
-        // crash durability without telling the caller that nothing changed.
         error = "settings directory sync failed: " + os_error();
     }
     close(dirfd);

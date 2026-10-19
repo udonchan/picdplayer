@@ -175,6 +175,12 @@ int main() {
         check(route_api_request("POST", "/api/ui-boot", provider, {}, boot_body, {}, nullptr,
             [](std::string_view, std::string_view, double) { return false; }).status == 429);
 
+        ArtistBackgroundPolicy unavailable_restored(false, "key_missing");
+        unavailable_restored.restore_requested(true);
+        check(unavailable_restored.requested() && !unavailable_restored.effective());
+        check(!unavailable_restored.set_enabled(true) && unavailable_restored.requested());
+        check(unavailable_restored.set_enabled(false) && !unavailable_restored.requested());
+
         ArtistBackgroundPolicy background_policy;
         const ApiStateProvider background = [&] { return background_policy.json(); };
         int background_commands = 0;
@@ -436,6 +442,14 @@ int main() {
         check(occurrences(websocket_received, R"("revision":8)") == 1);
         check(websocket_received.find(asset_reference) != std::string::npos);
 
+        constexpr std::pair<CecNavigation, const char*> navigation_actions[] = {
+            {CecNavigation::up, R"({"action":"up"})"},
+            {CecNavigation::down, R"({"action":"down"})"},
+            {CecNavigation::left, R"({"action":"left"})"},
+            {CecNavigation::right, R"({"action":"right"})"},
+            {CecNavigation::select, R"({"action":"select"})"},
+            {CecNavigation::back, R"({"action":"back"})"},
+        };
         std::atomic<bool> navigation_connected = false;
         std::atomic<bool> navigation_done = false;
         std::string navigation_received;
@@ -460,7 +474,7 @@ int main() {
                     navigation_received.append(buffer, static_cast<std::size_t>(count));
                     if (navigation_received.find("101 Switching Protocols") != std::string::npos)
                         navigation_connected = true;
-                    if (navigation_received.find(R"({"action":"up"})") != std::string::npos) break;
+                    if (navigation_received.find(R"({"action":"back"})") != std::string::npos) break;
                 }
             }
             close(fd); navigation_done = true;
@@ -469,13 +483,19 @@ int main() {
             server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         check(navigation_connected);
-        server.publish_navigation(CecNavigation::up);
+        for (const auto& [action, message] : navigation_actions) server.publish_navigation(action);
         for (int i = 0; i < 1000 && !navigation_done; ++i) {
             server.service(); std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         navigation_client.join();
-        check(navigation_received.find(R"({"action":"up"})") != std::string::npos);
-        check(navigation_received.find(R"({"revision":8})") == std::string::npos);
+        std::size_t navigation_position = 0;
+        for (const auto& [action, message] : navigation_actions) {
+            const auto position = navigation_received.find(message, navigation_position);
+            check(position != std::string::npos);
+            check(occurrences(navigation_received, message) == 1);
+            navigation_position = position + std::strlen(message);
+        }
+        check(navigation_received.find(R"("revision":)") == std::string::npos);
 
         const ApiReadPolicyProvider policy_provider = [] {
             return std::string(R"({"requested":{"mode":"REPEAT"},"effective":{"mode":"SINGLE"},"pending":true})");

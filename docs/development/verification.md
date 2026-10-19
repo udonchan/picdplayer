@@ -1,6 +1,213 @@
 # 検証状況と残課題
 
-更新日: 2026-10-18。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-19。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## #28 WPE移行によるv1完了（2026-10-19）
+
+利用者が、不要なmouse cursorはWeb runtimeをChromiumからWPEへ移行する際に解消したと
+実機の状況を報告し、記録した上で#28をcloseするよう指示した。v1の対応・受入対象は
+WPEPlatform DRMとし、Chromium/Cageを対象外とする方針も明示された。
+この報告と対象範囲に基づき#28をCompletedでcloseした。
+
+旧Cageのinput調査と、2026-10-05のWPE直接DRM PoCでもcursorが残った観測は当時の履歴として
+保全する。今回の報告は現行利用環境での解消を示すが、解消したcommitやmechanismの特定、
+旧受入matrix全体・cold boot・全input deviceの再検証を行ったという意味ではない。
+cursor終了単位では追加Pi観測・TV目視・CEC操作・build/testを行っておらず、利用者の実機報告と
+agentによる自動検証を区別する。製品コード、udev/input policy、fallback既定値を変更せず、
+既存のChromium明示選択・fallback実装も削除しない。後続#177/#178の配備・service設定は別単位である。
+
+別課題#124のscrollbarは解消扱いにせず、利用者の方針によりv1向けUI改修後の確認までPendingとする。
+このUI改修はまだIssue化しておらず、今回新規Issueや追加の受入条件を作成しない。
+先行文書は`docs/28-wpe-v1-close`のworktreeに保全し、後述の統合承認でこのPRへ整合させた。
+
+## #177/#178 背景選択の保存とOFF未保存契約（2026-10-19）
+
+利用者が#178と#177を協調して進める方針を確認し、OFFの保存失敗時は「取得・表示を止め、
+未保存と明示する」を採用した。master `e08d178`から独立worktreeの
+`feature/177-background-persistence`を分離し、既存branch/worktree・dirty差分・artifactは保持する。
+先行#28の終了文書は当初`docs/28-wpe-v1-close`へ分離し、後述の利用者承認で今回の統合単位へ含めた。
+元のworktree・未commit差分も保全する。
+
+対象はRead Policyと背景要求値の一組保存、version 1読込とversion 2書込、保存ONとavailabilityの分離、
+OFF停止を保存失敗で妨げない契約、背景API固有の保存状態とSettings案内、代表software操作試験である。
+Read Policyのpendingはeffectiveではなくrequestedを保存し、他方の設定変更で失わない。
+保存ONが起動時に利用不能なら要求ON・実効OFFとして理由を返し、通常のON拒否は維持する。
+保存先の自動有効化・service設定変更、key管理、画像disk cache、provider追加、UI再設計は対象外とする。
+
+CEC調査では`cec_input_test`の変換/filter、`api_server_test`の実WebSocket配信、
+`ui_controls_test.js`のmock semantic入力が存在する一方、物理bus受信からPlayer/UIを通す
+tracked自動E2Eは見つからなかった。同一adapterの送信成功を外部受信の証明にしない。
+新しいvirtual CEC基盤や別送信装置をv1必須にせず、既存の実WebSocket試験を6 actionの順序付き配信へ、
+既存UI試験をsemantic入力だけのSettings開閉・ON/OFF代表操作列へ拡張する。
+TVリモコン・実表示・試聴は後続で具体的な操作列・時間・復元方法の承認を得てから別途確認する。
+今回は最初の60分を実装・自動試験区間の上限とし、未完なら残件を示して停止する。
+試行は初回と一組の修正・再確認を基本とし、新しいコーナーケースを完了条件へ積み増さない。
+利用制限で中断後、11:22 UTCに利用者が再開と約1時間の不在中の続行を指示したため、
+同じscopeのlocal実装・検証だけを再開した。実機操作やIssue完了の承認とは扱わない。
+
+Pi操作・配備・service再起動、commit/push/PR、Issue closeは当初のlocal実装単位には含めず、
+実機操作は後述の別承認で行う。#177/#178をOpenのまま維持し、#51の実写真受入は別単位とする。
+
+最初のbackend/UI委譲差分には未完成の編集があり、07:30 UTC頃の親レビューで
+`player_session.cpp`の重複宣言・関数断片混入と、背景ではなくRead Policyに追加した保存案内を確認した。
+この差分はbuild・配備しておらず受入に使わない。担当へ編集・build停止を指示し、書込終了の確認後に
+親担当が一組の修正として引き取った。これ以前の最小構成41/41は事前基線であり、新保存実装の成功ではない。
+
+### Local実装・自動検証結果
+
+- version 2はRead Policyと背景要求値を一組で保存し、version 1の旧policyは背景OFFで読む。
+  起動時に旧fileを書換えず、次の明示保存で移行する。未知version/fieldと背景型不正は不採用とする。
+- 復元ONとavailabilityを分離し、利用不能時も要求ONを保持して実効OFF・理由を返す。
+  ONの新規要求は利用不能・保存失敗なら409で不変。OFFは保存失敗でも停止して204、
+  背景GETは`persistence_state=unsaved`、`requested_source=session`を返す。
+- Read Policyと背景の相互更新で他方を保持する。OFF未保存後のRead Policy保存成功でも現在のOFFを保存し、
+  Settingsは背景自身の再GETによって未保存案内を解消する。保存先未指定は従来どおりsession限り。
+- `read_policy_persistence`は実daemon・loopback API・No Discを使い、旧schema無書換え、移行、
+  両方向の値保持、保存ONの利用不能復元、通常ON拒否、rename失敗時のOFF204/旧file保全/未保存、
+  policy再保存による復旧、次回OFF復元、ON保存失敗の不変、session限定を確認した。
+  keyは合成fixtureであり、全CTestは`--network none`のcontainerで実行し、provider照会や実写真を使わない。
+- 既存`api_server`試験は6 semantic actionを一接続で順序付きに受信し、各1回とstate channel非混在を確認。
+  `ui_controls_test.js`はsemantic入力だけでSettings→ON→未保存OFF→policy保存による解消→Back/focus復帰を確認。
+  これは層別software試験であり、物理CECからWPEまでの自動E2Eとは呼ばない。
+
+最初の全CTestは68/70だった。追加fieldへ未追随の`player_daemon`fixtureを修正し、
+Ninja未導入の既定imageによる`build_profile`失敗は、既存の検証用imageを正しい
+`PICDPLAYER_BUILD_IMAGE`で指定して再確認した。最初に用いた`BUILD_IMAGE`はscriptの変数ではなく、
+既定imageが選ばれていた。build toolやproduct codeをこの環境差のために変更していない。
+
+| 検証 | 結果・境界 |
+| --- | --- |
+| macOS Node | `ui_controls_test.js`、`ui_render_test.js`成功 |
+| Linux/aarch64標準WPE Debug | `PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build PICDPLAYER_BUILD_TYPE=Debug ./scripts/build-container.sh`成功。SDK recipe一致のcache再利用、stage install、package生成、profile一致を確認 |
+| 標準WPE Debug全CTest | 最終70/70成功。API/METADATA/WPEはON、PARANOIAはOFF。`--network none`、SDK mountと`LD_LIBRARY_PATH`を使用 |
+| 最小構成 | API/METADATA/WPEをOFFにした最終sourceの再build、全CTest 41/41成功。事前基線だけでなく修正後も再実行 |
+| metadata非compile・API ON | `build-navigation`でdaemon/store/API testをbuildし、`api_server`/`read_policy_store`/`read_policy_persistence`の3/3成功 |
+| Debian lifecycle | 同じDebug/image指定で`./scripts/test-package-lifecycle.sh`成功。disposable container内の検証でありPi配備・systemd稼働確認ではない |
+| 差分・静的レビュー | 全diffと`git diff --check`確認。独立したread-onlyレビューで具体的なbehavioral findingなし。新しい物理E2E基盤は追加しない |
+
+既存`api_server.cpp`の`ApiCommand::session_id`欠落初期化warningは残るが、今回このsourceは変更しない。
+packageは`package-container/picdplayer_0.1.0_Debug_aarch64.deb`であり、SHA-256は
+`70e7800dc2ffd6e89737c4a9d838bee6c24b573f4f239fd52edc56698651ea89`。
+stage daemonは`205d8144dad0302207287c4b45dee22910de053ee1fca32c597e697a79d45f19`、
+Player JSは`a14dc2f6756223006cced2878470f35bd24ad980b83d0a8c591fac2c278b81bf`。
+stageのPlayer JS/HTMLとsourceのbyte一致も確認した。生成時点ではlocal candidateであり、
+後述12:26 UTCの配備確認で同じhashを実機と照合した。
+
+### 実機に残す代表受入
+
+同一TV・通常CD一枚でSettings開閉・Back/focus、policy変更のpendingと停止後反映、
+背景ON/OFF、短い試聴を確認する。保存・再起動は稼働serviceの`--settings-file`有無を確認してから
+操作列・時間・復元方法を合意する。保存先未設定なら設定変更と再起動の別承認が必要であり自動で有効化しない。
+今回の自動試験を実service/cold boot/電源断/物理remote/TV可読性/音声の確認へ読み替えない。
+Settings/保存の代表受入は約10分枠を基本とし、セットアップが必要なら別途区切る。
+#51の写真複数枚・切替・TV・試聴は別枠のままとし、新たなcorner caseを完了条件に加えない。
+
+12:09 UTCの続行指示後、alias `picdplayer-pi`でservice/保存先/profile/hash/APIを読み取ろうとしたが、
+解決先のED25519 host keyが既知でなく、`StrictHostKeyChecking=yes`で接続前に停止した。
+`ssh-keygen -F`のaliasと解決先照会でも既定known_hostsに一致はなかった。
+照合緩和・自動鍵登録・別addressへの接続は行わず、信頼できるhost identity確認を利用者へ求める。
+remote commandは実行されておらず、現在のPi状態・保存先・配備hashを観測したとは扱わない。
+配備・設定変更・restart・再生/背景/CEC操作も行っていない。
+
+12:14 UTC、利用者がPi consoleで確認したED25519 fingerprintを提示した。取得した公開鍵の指紋と
+完全一致を確認し、repository外の作業専用known_hostsへpinして`StrictHostKeyChecking=yes`で接続した。
+通常のSSH設定・既存known_hostsは変更せず、鍵自動更新も無効とした。
+12:15 UTCのread-only観測では標準WPE Debug、両service active/running、自動restart 0、
+STOPPED/AUDIO_READY、track 1、SINGLE要求/実効・pendingなし、背景OFF/available=true、
+電源flag `0x0`、61.2°Cだった。`--settings-file`は稼働daemonに付いておらず保存は未有効である。
+package/daemon/HTTP Player JS/wrapperのhashは引継ぎの旧配備記録と一致し、新しいlocal候補ではない。
+最初のmedia抽出は旧snapshotの`media.state`を誤って参照してnullだったが、公開presentationの
+`disc.state`でAUDIO_READYを再確認した。nullを媒体なしの観測へ読み替えない。
+この確認でも配備・設定変更・restart・再生・背景ON・CEC入力は行っていない。
+次は標準deploy（activeだった両serviceのrestartを含む）、保存先有効化、代表操作と復元の具体案を
+利用者と合意してから進める。管理者権限やNOPASSWDを仮定せず、password/ticket共有を求めない。
+
+### 承認した配備・保存先の有効化
+
+利用者は準備・配備10分＋代表受入10分、初回と修正一組、背景ON各90秒以内、
+保存確認のdaemon再起動1回を承認した。成功時は新packageと保存有効化を残し、
+STOPPED/SINGLE/背景OFFへ戻す。commit/PR/Issue close、#51写真切替、cold bootは含めない。
+旧packageは`~/private-177-178-20261019T1220/previous.deb`へprivate退避し引継ぎhashとの一致を確認。
+利用者が同directoryへ`/etc/default/picdplayer`を保全し、既存settingsがあれば退避する手順を実行した。
+今回は旧settingsの退避物はなく、既存EXTRA_ARGSに保存先だけを追加した。
+編集前後の引数を値を公開せず比較し、`--settings-file /var/lib/picdplayer/settings.json`の一組以外は
+一致することを確認した。key設定は変更・公開していない。
+
+最初のdeployはtracked-process実行側のシェル展開で一時SSH関数の引数が誤解釈され、
+ControlPath長エラーでSSH前に停止した。転送・install・restartはなかった。
+blocking shellで同じ関数の引数とread-only SSHを確認し、一組の修正として再試行した。
+標準`./scripts/deploy.sh`は変更せず、ephemeral SSH関数と`RSYNC_RSH`へ照合済みpinを渡した。
+Debug/profileとpackage hashを確認して通常のdpkg経路で配備し、両serviceはactiveを維持、
+実process `picdplayer-wpe`の起動確認までscriptは成功した。
+
+12:26:12 UTCのpost-deploy読取では両service active/running、自動restart 0、
+STOPPED/AUDIO_READY、SINGLE要求/実効、pending=false、背景OFF/available=trueだった。
+両設定APIの`persistence_configured=true`を確認し、背景は新規保存前のため
+`persistence_state=unsaved`/`requested_source=startup`である。保存失敗を観測したという意味ではない。
+daemon/package/HTTP Player JSのhashは上記candidateと完全一致した。
+保存・実service再起動・リモコン・目視・試聴の代表受入はここから別に確認する。
+
+### リモコン受入の延期と一本化
+
+最初の「リモコンだけでSettingsを開く」案内に対し、利用者は現在実機の近くにおらず操作できないため、
+リモコン動作確認を一つのIssueへまとめ、可能なときに着手すると指示した。成功の報告ではない。
+依頼に基づき[#252](https://github.com/udonchan/picdplayer/issues/252)を作成し、物理リモコンの
+Settings開閉/選択/Back/focus、代表再生/停止・policy pending、背景ON/OFFの唯一の受入記録先とした。
+#178は画面実装・表示/API回帰、#51は写真・切替・TV可読性・音声、#177は保存/実serviceを所有し、
+それぞれのIssue本文先頭を更新して同じリモコンrunを重複要求しないことを明記した。
+旧本文・広い受入条件はhistoryとして保全し、3 Issueをclose・合格に変更していない。
+
+12:31:24 UTCの最終read-only観測で両service active/running・自動restart 0、STOPPED/AUDIO_READY、
+SINGLE要求/実効・pendingなし、背景OFF/available=trueを再確認した。
+保存先は有効だが背景は`unsaved`/`startup`のままであり、今回追加の設定POST・保存後restartはない。
+リモコン入力・背景ON・再生・試聴・TV確認も行っていない。
+新packageと保存先有効化は承認どおり残し、旧package/configはprivate backupに保全した。
+後日の#252着手時に操作列・基本10分・試行上限・背景ON期限・復元を再確認する。
+今回の承認を無期限の入力操作や新matrixの承認に読み替えない。
+
+### 実serviceでの保存・再起動復元（12:37 UTC）
+
+利用者が自動確認を進め、残件を既存/新規Issueへ集約して閉じる方向で進めるよう指示した。
+先に承認済みのdaemon再起動1回・背景ON90秒以内を使い、リモコンや再生を使わない代表受入を実施した。
+事前にSTOPPED/AUDIO_READY・SINGLE・背景OFF・保存先指定を確認し、serviceの`User=picdplayer`、
+実processのuid一致、`StateDirectory=picdplayer`/mode 0700をread-onlyで照合した。
+
+12:37:25 UTC、policyをREPEATへ変更し背景ONを保存した。ONの`persistence_state=saved`と
+source `saved`を確認後、`sudo -n /usr/bin/systemctl restart picdplayer.service`を1回実行し成功した。
+password/ticket共有、権限変更、sudoers迂回は行っていない。
+daemon PIDは13389から13571へ変わり、active/running・自動restart 0で復帰した。
+再起動後はRead Policyの要求/実効がREPEAT・両sourceが`restored`、pending=false、
+背景の要求/実効がON・source `restored`・state `saved`であり、両設定の実service復元を確認した。
+同じAPI値を同じPIDで読み直しただけの試験ではない。
+
+終了処理で背景OFFと元のSINGLE全5値をPOSTした。ON要求前からOFF受理までの上限は約0.99秒で、
+90秒を大きく下回る。kiosk PIDは13440のまま、両service active/running・自動restart 0だった。
+ただし直後の終了assertは失敗し、当該箇所の値を出力していなかったため、原因や一時的なpendingを
+観測したとは断定しない。このcommand全体は非0終了であり、そのままPASSへ変更しない。
+
+追加POST・再起動をせず、12:37:48 UTCに独立したGETで再確認した結果、
+STOPPED/AUDIO_READY、SINGLE要求/実効（75 frames / matches 2 / attempts 3 / budget 10000ms）、
+pending=false・両source `saved`、背景要求/実効OFF・source `saved`・state `saved`を確認し、
+この最終状態のassertは成功した。保存/再起動復元の成功、即時終了assertの失敗、後続の安全状態確認を
+区別して残す。検証器を厳密化するための追加restartや新matrixは行わない。
+
+#177のv1代表保存・復元はこの結果とlocal失敗/移行回帰で確認済みとし、通常cold bootを含む
+継続運転は既存#184、実リモコンは#252、写真/TV/試聴は#51へ残す。
+電源断耐久性を今回のv1終了条件へ追加せず、未検証・非保証を維持する。
+#178は実装/表示/API回帰の完了範囲と#252の物理受入を分ける。
+この観測時点ではsource/文書が未commit・未push・master未統合のため#177/#178をcloseせず、
+Git保存・PR/必須CI経由の統合の承認を得てから終了処理へ進む。
+
+### Git統合とv1終了範囲の承認
+
+利用者は先行#28文書も整合させたcommit・push・PR作成・必須CI成功後mergeと、
+#177/#178のcloseまでを一括承認した。v1終了範囲は保存・復元実装と代表自動/実service確認、
+Settings実装・表示/API回帰とする。物理リモコンの未実施は#252、写真・TV・試聴は#51、
+通常cold boot・継続運転は#184へ明示的に残し、これらを完了扱いにしない。
+このPRは#177/#178の終了対象を参照するが、#252/#51/#184を閉じるものではない。
+Git/PRの実際の保存・CI・merge・Issue状態はそれぞれを正本とし、この承認だけで統合済みとは扱わない。
+
+## 以前の記録の保存経緯
 
 2026-10-17、利用者がここまでのcommit・pushを承認した。Issue整理は`docs/issue-cleanup-a1-a2`、
 診断修正の保存先はそのcommitを土台にする`fix/audio-first-diagnostics`とし、master直接更新・PR作成は含めない。

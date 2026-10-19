@@ -20,6 +20,7 @@ async function main() {
   let deferBackgroundGet = false;
   let deferBackgroundPost = false;
   let backgroundOffline = false;
+  let backgroundSaveFails = false;
   let backgroundGets = 0;
   const pendingPolicyGets = [];
   let deferPolicyGet = false;
@@ -88,6 +89,8 @@ async function main() {
           if (policyPostStatus === 204) {
             policy.requested = { ...body, mode: body.mode.toUpperCase() };
             policy.pending = true;
+            if (background.persistence_configured) background = { ...background,
+              persistence_state: 'saved', requested_source: 'saved' };
           }
           return { ok: policyPostStatus === 204, status: policyPostStatus };
         }
@@ -102,6 +105,9 @@ async function main() {
           if (deferBackgroundPost) return new Promise((resolve) => pendingBackgroundPosts.push(resolve));
           if (backgroundPostStatus === 204) background = { ...background, requested: body.enabled,
             effective: body.enabled && background.available };
+          if (backgroundPostStatus === 204 && background.persistence_configured) background = { ...background,
+            persistence_state: backgroundSaveFails ? 'unsaved' : 'saved',
+            requested_source: backgroundSaveFails ? 'session' : 'saved' };
           return { status: backgroundPostStatus };
         }
         backgroundGets += 1;
@@ -436,6 +442,38 @@ async function main() {
   navigation('back');
   assert.equal(node('settings-panel').hidden, true);
   failPost = false;
+  // One semantic-only Settings journey. This does not simulate a physical CEC bus.
+  policyPostStatus = 204;
+  background = { requested: false, effective: false, available: true, unavailable_reason: null,
+    persistence_configured: true, persistence_state: 'saved', requested_source: 'restored' };
+  const semantic = async (action) => {
+    now += 300;
+    navigation(action);
+    await new Promise(setImmediate);
+  };
+  const selectSetting = async (id) => {
+    for (let step = 0; step < 5 && node(id).dataset.focused !== 'true'; step++) await semantic('right');
+    assert.equal(node(id).dataset.focused, 'true');
+    await semantic('select');
+  };
+  assert.equal(controls[6].dataset.focused, 'true');
+  await semantic('select');
+  assert.equal(node('settings-panel').hidden, false);
+  assert.match(node('settings-background-save-state').textContent, /saved.*Restored/);
+  await selectSetting('background-on');
+  assert.equal(backgroundPosts.at(-1).enabled, true);
+  assert.equal(node('settings-background-state').textContent, 'Requested / effective: On / On.');
+  backgroundSaveFails = true;
+  await selectSetting('background-off');
+  assert.equal(backgroundPosts.at(-1).enabled, false);
+  assert.equal(node('settings-background-state').textContent, 'Requested / effective: Off / Off.');
+  assert.match(node('settings-background-save-state').textContent, /Off is applied.*NOT SAVED.*Restart/);
+  backgroundSaveFails = false;
+  await selectSetting('policy-single');
+  assert.match(node('settings-background-save-state').textContent, /saved for daemon restarts/);
+  await selectSetting('settings-close');
+  assert.equal(node('settings-panel').hidden, true);
+  assert.equal(controls[6].dataset.focused, 'true');
   postStatus = 204;
   snapshot.revision = 6;
   snapshot.enrichment = { status: 'UNAVAILABLE', selection: {

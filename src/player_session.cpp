@@ -148,13 +148,19 @@ void run_player_session(const std::string& device, CddaBackend backend,
     };
     validate_read_policy(initial_read_policy, buffer_config.capacity_cd_frames);
     const char* initial_read_policy_source = "startup";
+    bool initial_background_requested = false;
 #ifdef ENABLE_API
+    bool background_saved = false;
+    const char* background_source = "startup";
     if (!settings_file.empty()) {
         std::string error;
-        if (auto saved = load_saved_read_policy(settings_file, buffer_config.capacity_cd_frames, error)) {
-            initial_read_policy = *saved;
+        if (auto saved = load_settings(settings_file, buffer_config.capacity_cd_frames, error)) {
+            initial_read_policy = saved->read_policy;
             initial_read_policy_source = "restored";
-            log_info("settings") << "loaded read_policy";
+            initial_background_requested = saved->artist_background_enabled;
+            background_saved = true;
+            background_source = "restored";
+            log_info("settings") << "loaded user settings";
         } else if (!error.empty()) {
             log_warning("settings") << "read_policy_load_failed reason=" << error;
         }
@@ -226,8 +232,11 @@ void run_player_session(const std::string& device, CddaBackend backend,
     }
     artist_background_policy = ArtistBackgroundPolicy(metadata_enabled && !artist_background_key.empty(),
                                                       metadata_enabled ? "key_missing" : "metadata_disabled");
+    artist_background_policy.restore_requested(initial_background_requested);
     EnrichmentService enrichment(metadata_enabled, metadata_cache, artist_background_policy,
-                                 std::move(artist_background_key));
+                                  std::move(artist_background_key));
+#else
+    artist_background_policy.restore_requested(initial_background_requested);
 #endif
     PlaybackEngine engine(controller, worker, *audio, 0,
                           std::chrono::milliseconds(initial_read_policy.time_budget_ms));
@@ -394,10 +403,28 @@ void run_player_session(const std::string& device, CddaBackend backend,
         };
         ApiCommandHandler command_handler = [&](const ApiCommand& command) {
                 if (command.type == ApiCommandType::set_artist_background) {
-                    if (!artist_background_policy.set_enabled(command.enabled)) return false;
+                    if (command.enabled && !artist_background_policy.available()) return false;
+                    if (!command.enabled) {
+                        artist_background_policy.set_enabled(false);
 #ifdef ENABLE_METADATA
-                    if (!command.enabled) enrichment.stop_background();
+                        enrichment.stop_background();
 #endif
+                    }
+                    if (!settings_file.empty()) {
+                        std::string error;
+                        const bool saved = save_settings(settings_file,
+                            {requested_read_policy, command.enabled}, buffer_config.capacity_cd_frames, error);
+                        if (!saved && command.enabled) {
+                            log_warning("settings") << "background_save_failed reason=" << error;
+                            return false;
+                        }
+                        background_saved = saved;
+                        background_source = saved ? "saved" : "session";
+                        if (!error.empty()) log_warning("settings") << "background_save_warning reason=" << error;
+                    } else {
+                        background_source = "session";
+                    }
+                    if (command.enabled) artist_background_policy.set_enabled(true);
                     if (publish_api_snapshot() && api_server) api_server->publish_state(api_state_json);
                     return true;
                 }
@@ -428,11 +455,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     } catch (const std::invalid_argument&) { return false; }
                     if (!settings_file.empty()) {
                         std::string error;
-                        if (!save_read_policy(settings_file, command.read_policy,
+                        if (!save_settings(settings_file, {command.read_policy, artist_background_policy.requested()},
                                               buffer_config.capacity_cd_frames, error)) {
                             log_warning("settings") << "read_policy_save_failed reason=" << error;
                             return false;
                         }
+                        background_saved = true;
+                        background_source = "saved";
                         if (!error.empty())
                             log_warning("settings") << "read_policy_save_warning reason=" << error;
                     }
@@ -526,7 +555,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                                                  [&] { return api_state_json; },
                                                  std::move(command_handler), serialize_read_policy, std::move(ui),
                                                  std::move(artwork_provider), [&] { return diagnostic_response(true); },
-                                                 [&] { return artist_background_policy.json(); },
+                    [&] {
+                        auto json = artist_background_policy.json();
+                        json.pop_back();
+                        const auto state = settings_file.empty() ? "session_only" : background_saved ? "saved" : "unsaved";
+                        return json + ",\"persistence_configured\":" + (settings_file.empty() ? "false" : "true") +
+                            ",\"persistence_state\":\"" + state + "\",\"requested_source\":\"" + background_source + "\"}";
+                    },
                                                  std::move(background_artwork_provider), [&] { return diagnostic_response(false); });
         auto line = log_notice("api");
         line << "listening=http://";

@@ -39,7 +39,9 @@ def verify_background_api(port, available=False, reason="metadata_disabled"):
             return error.code, error.read()
 
     expected = {"requested": False, "effective": False, "available": available,
-                "unavailable_reason": None if available else reason}
+                "unavailable_reason": None if available else reason,
+                "persistence_configured": False, "persistence_state": "session_only",
+                "requested_source": "startup"}
     deadline = time.monotonic() + 3
     while True:
         try:
@@ -61,6 +63,7 @@ def verify_background_api(port, available=False, reason="metadata_disabled"):
         assert status == expected_status, (status, body)
         if status == 204:
             expected["requested"] = expected["effective"] = json.loads(payload)["enabled"]
+            expected["requested_source"] = "session"
         assert json.loads(request("artist-background")[1]) == expected
     assert request("artist-background", method="PUT")[0] == 405
     assert request("read-policy") == policy_before

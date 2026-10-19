@@ -59,7 +59,8 @@ secretとは分け、service userのみが書ける領域に置く。read-only r
 別途書き込み可能にする。`PICDPLAYER_EXTRA_ARGS`は運用者の起動引数を渡す経路であり、
 設定ファイルそのものではない。
 
-現行version 1ファイルは`schema_version`とRead Policyの5項目を厳密に検証する。
+version 2ファイルは`schema_version`、Read Policyの5項目、`artist_background_enabled`のbooleanを
+一組として厳密に検証する。version 1はRead Policyを維持し背景OFFとして読み、起動時には移行書込をしない。
 ファイルがない場合は起動値を使う。symlink、非regular file、4 KiB超、未知version/field、
 破損JSON、範囲外の値は採用せず警告して起動値へ戻す。起動を失敗させず、壊れた内容を
 上書きもしない。再生中のpolicy POSTでは、入力検証と保存が成功してからrequestedを更新し、
@@ -68,8 +69,13 @@ STOPPED/NO_DISCになるまでeffectiveを保持する。保存先がない場�
 保存は同じdirectoryの一時ファイルを0600で作り、全量write・file sync・renameを経てから
 dir syncを試みる。rename前の失敗では一時ファイルを除去し、旧本体と現行policyを維持する。
 現行実装はrename後のdir sync失敗を警告するがPOSTを受理し、crash後の永続性までは保証しない。
-この曖昧さを一般設定へ広げず、#177では成功応答と耐障害性の意味を定義し、電源断・容量不足・
-権限不足・旧schema移行時の試験で確かめる。通常起動で前回値を復元できなければ、
+両設定のPOSTは同じsnapshot writerを使い、Read Policyがpendingでもeffectiveではなくrequestedを保存する。
+背景ONは保存前にavailabilityを確認し、保存失敗なら409で変更しない。
+背景OFFは先にpolicy無効化・enrichment取消・参照失効を行い、保存失敗でも204で停止を受理する。
+背景GETには未保存状態を返す。次のOFFまたはRead Policyの保存成功で現在のOFFを含む一組を書き、未保存を解消する。
+復元した背景ONはavailabilityにかかわらず要求値として保持し、enrichment生成前に適用する。
+利用不能ならeffective=falseであり、通常のPOST ON拒否とは別の復元経路とする。
+この保存は電源断後の耐久性を保証しない。通常起動で前回値を復元できなければ、
 起動値と背景OFFへfallbackし、最後の正常設定が残るよう破損ファイルの自動上書きは避ける。
 
 ## media・TOC関数

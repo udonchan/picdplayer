@@ -3,11 +3,14 @@
 第一段階のCustom UIは[運用契約](../manual/custom-ui.md)を参照する。
 PR #179で`--settings-file`を明示した場合のRead Policy保存・復元を実装し、masterへ統合済み。
 PR #180で標準PlayerにRead PolicyのSINGLE/REPEATを選ぶSettings画面を部分実装した。
-Settings画面を通じたPi実serviceの再起動後復元は未検証である。一般設定API、Artist Backgroundの
-保存、hot reloadはない。PR #223でsession ON・単一画像runtimeをmasterへ統合し、
+Settings画面を通じた物理操作は#252の未実施受入とし、loopback APIによるPi実serviceの保存・再起動復元は確認済みである。
+#177の開発差分で背景の要求値を
+Read Policyと同じversion 2ファイルへ保存・復元する。一般設定API、hot reloadはない。
+PR #223でsession ON・単一画像runtimeをmasterへ統合し、
 key指定だけの候補照会を停止したまま、明示ON時だけ取得・配信する。SettingsはAPIに基づく背景選択を
-部分実装し、利用不能時のONを無効にする。#229でローカル環境変数keyと複数画像を追加する。#177は背景保存・実service
-検証が残りOpenであり、このUI変更でRead Policyの保存schemaを拡張しない。
+部分実装し、利用不能時のONを無効にする。#229でローカル環境変数keyと複数画像を追加した。
+#177/#178はv1実装・代表自動/実service確認を完了し、本変更のPR/必須CI経由の統合で終了する。
+物理リモコンは#252、写真/TV/試聴は#51、通常cold boot/継続運転は#184に残す。検証の境界はverificationを参照する。
 採用済みの保存・優先順位・適用契約は
 [機能設計](../design/functional-design.md#設定の所有保存適用境界)を正とする。
 
@@ -19,7 +22,7 @@ key指定だけの候補照会を停止したまま、明示ON時だけ取得・
 | 項目 | 現行経路 | 設定画面での扱い | 適用・制約 |
 |---|---|---|---|
 | Read Policy（SINGLE/REPEAT、region、matches、attempts、budget） | `--read-verification`は起動時、5項目は`GET/POST /api/read-policy` | 最初の画面候補。基本modeと詳細値を分け、requested/effective/pendingを表示 | 再生中の変更は停止境界までpending。`--settings-file`を指定した場合だけ変更を保存し、保存済み値は次回起動時にCLIの初期値を上書きする |
-| Artist Backgroundの有効/無効 | `GET/POST /api/artist-background`。この開発差分では技術的に利用可能ならsession ONを204で受理、利用不能なら409、OFFは即時204。保存なし | API由来のrequested/effective/availableと理由を表示。既定OFF、利用不能時はON無効、既知の状態でOFF可能。背景設定はsession限りと明示 | metadataと有効なproject keyが必要。画像到着とON受理は別。権利・許諾判断は利用者に委ねる。key指定だけでは照会しない |
+| Artist Backgroundの有効/無効 | `GET/POST /api/artist-background`。保存先ありではRead Policyと一組で要求値を保存。ONは利用不能・保存失敗なら409。OFFは保存失敗でも即時204 | API由来のrequested/effective/availableと理由、背景自身の保存状態・出所を表示。既定OFF、利用不能時はON無効。OFF未保存は明示する | 保存ONも起動時に利用不能なら要求だけ保持し実効OFF。画像到着とON受理は別。権利・許諾判断は利用者に委ねる。keyだけでは照会しない |
 | metadata照会 | `--metadata off\|musicbrainz` | 後続候補 | network利用と再起動境界を要設計。Artist Backgroundはartist MBIDがなければ利用不可 |
 | drive速度要求 | `--drive-speed-x 1..255` | 後続の詳細設定候補 | 停止/一時停止中に要求。受理は実測速度や騒音低下を保証しない |
 | direct C2 pointer要求 | `--direct-c2-pointers` | 後続の詳細設定候補 | direct backend限定。能力・downgradeを表示し、C2の有無を読取保証とみなさない |
@@ -60,7 +63,7 @@ Read Policyについて確定できる契約は機能・詳細設計へ移した
 - 保存先は再生成可能なcacheと分離し、service userだけが書ける領域とする。`StateDirectory`の
   利用を候補とし、read-only rootを将来採用しても状態領域を分離できるようにする。
 - schema version、未知field、旧版、破損、不完全なwrite、容量上限、権限不足の動作を検証する。
-  受理済みの設定が保存に失敗したら「保存成功」と応答せず、現行effective値を維持する。
+  保存失敗を保存成功と表示しない。Read PolicyとONは失敗時に変更しないが、背景OFFは取得・表示を止め未保存を明示する。
 - 書き込みは同じfilesystem内のtemporary file、sync、atomic rename等で不完全な本体を見せない。
   異常停止後の復元可能性と、失敗時の安全な既定値を試験する。
 - Read Policyは現行のrequested/effective/pendingと停止境界を維持する。Artist Backgroundの
@@ -70,16 +73,16 @@ Read Policyについて確定できる契約は機能・詳細設計へ移した
 
 ### 他の設定へ拡張する際の検討表
 
-#177の残りを実装する際に、曖昧なまま画面から保存したように見せないための検討表である。
-Read Policyの保存・復元だけ`--settings-file`指定時に実装済みで、他の項目は未実装/未確定である。
+#177の保存実装で扱う範囲を示す。Read Policyと背景選択以外の一般設定は未実装/未確定である。
+OFF保存失敗時も停止する契約は2026-10-19に利用者が明示した。
 
 | 論点 | 第一段階の案 | 確認すべき失敗例 |
 |---|---|---|
 | 対象 | Read Policyの全5項目を一組、Artist Backgroundの真偽値を独立項目 | 一部だけ書いたpolicy、未知field、型違い |
 | 優先順位 | Read Policyはbuilt-in値→起動引数→保存済みuser値。user管理対象以外は起動引数を維持 | 明示`--read-verification`と保存済みmodeの競合は後者を採用。user値のresetは未実装 |
 | 保存先 | systemdの`StateDirectory`内のversion付き小容量ファイル。cacheやCustom UI rootとは別 | directory不在、service userの権限不足、read-only root |
-| 保存手順 | Read Policyは一時書込、file sync、rename、directory syncを試みる。rename後のdirectory sync失敗は現行実装で警告付き受理とし、電源断後の耐久性は未保証。他の項目で要求する成功条件は別途決める | write途中の電源断、rename失敗、容量不足、再起動 |
-| 起動時復元 | 現行version 1の有効なRead Policyを維持し背景OFFとする。新schemaへ移す場合は全体を検証して原子的に書き、失敗時は旧版を保全。不正な値は起動値/背景OFFへfallbackし理由を診断可能にする | 壊れたJSON、旧version、未知version、無効範囲 |
+| 保存手順 | 両設定の要求値を一組で一時書込、file sync、rename、directory syncを試みる。rename後のdirectory sync失敗は警告付き受理とし、電源断後の耐久性は未保証。OFFは保存失敗でも停止し未保存を表示 | rename失敗、容量不足、再起動。電源断の実機注入は未確認 |
+| 起動時復元 | version 1の有効なRead Policyを維持し背景OFFとする。version 2では保存した背景要求値も復元。起動時書換えはせず、次の保存で移行。不正なファイルは一組を不採用にし起動値/背景OFFへfallback | 壊れたJSON、旧version、未知version、無効範囲。旧binaryはversion 2非対応 |
 | 適用 | Read Policyは停止境界のrequested/effective/pendingを維持。背景OFFは即時に新規取得/表示を止める。背景ONはproviderと表示条件が利用可能な時だけ受理 | 再生中のpolicy変更、offline、keyなし、provider拒否 |
 | 公開 | 値、出所、保存成否、適用状態、利用不能理由を返し、秘密鍵や内部pathは返さない | network越しPOST、Custom UI未対応、API接続断 |
 
@@ -91,7 +94,8 @@ Read Policyの保存・復元だけ`--settings-file`指定時に実装済みで�
 操作不能につながり得るので、起動時fallback、last-known-good保存、適用確認とrollbackを項目別に設計する。
 現行ReadPolicyのrequested/effective/pendingと停止境界の契約を再利用できるか検討する。
 
-Settings UI → configuration API → validated configuration → 永続化 → 適用結果公開とする。
+Settings UI → configuration API → validated configurationから保存・適用・結果公開をdaemonが所有する。
+Read Policyと背景ONは保存成功後に適用し、背景OFFは保存成否にかかわらず停止して未保存状態を公開する。
 daemonが唯一の設定ownerであり、UIはTOMLを直接書き換えない。書き込み権限、原子的保存、
 再起動が必要な項目、失敗時の通知をAPI追加時に決める。再生設定と表示だけの設定を同一の
 即時適用として扱わない。
