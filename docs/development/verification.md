@@ -328,6 +328,34 @@ local検証終了時点のtracked差分はbacklog/verificationだけで未commit
 追加Pi操作・Issue close・private証跡のstage/公開は含めない。保存/PR/CI/mergeの現在状態はGit履歴とGitHubを正本とし、
 当時の未commit等を現在状態へ読み替えず、承認だけで実行成功を主張しない。
 
+## #164 v1完了とv2以降への移管
+
+2026-10-19、利用者は#164の検証がコーナーケースと検証器の厳密化へ広がっていることを指摘し、
+v1完了を優先して追加hardeningをv2以降へ延期する方針を明示した。既存Issueとの非重複の所有範囲を照合し、
+新規フォローアップ1件・#164のCompleted close・記録2文書のcommit/push/PR/必須CI成功後mergeを承認した。
+
+v1の完了範囲はPR #245のpolicy/strategy表示、PR #248の長文名の段階的縮小/末尾省略、欠損・不明値を成功へ
+補完しない既存意味の維持、代表自動/browser試験と限定実WPE確認、関連文書の整合とした。
+根拠は上記実装PRとCI、Mac代表18/36条件、Linux/aarch64試験、PR #246/#247/#249の記録であり、
+今回の終了判断のために追加実装・検証器改修・新たな実機試験は行っていない。
+
+GitHubの#164本文に現行v1範囲・根拠・限界・移管先を明記し、当初本文と未完了checkboxは履歴として保全した。
+06:17:03 UTCに`state=closed/state_reason=completed`を確認した。元の全受入条件が全platform/全実機状態で
+成功したという意味ではなく、利用者が承認したv1範囲を完了し追加条件を延期した終了である。
+
+| 残課題の所有先 | 今回の扱い |
+|---|---|
+| #250（新規、v2以降） | Integrity Monitor固有の深い状態×背景×platform/viewport、非典型font/長文条件、fixture/network分類と正負例の追加hardening。非blocking・現時点では着手しない。全直積/全OS/fontを新しい完了条件にしない |
+| #51/#184 | 実写真・切替・TV可読性と限定音声/CEC、通常運転・操作・継続受入は既存の責務を維持。Issue全体をv2へ延期・完了扱いにしない |
+| #49/#178/#124/#83/#177 | 画像資源、Settings、scrollbar原因、性能、保存は既存所有先のまま。新しい重複条件を追加しない |
+
+旧matrixのFAIL・未評価、未確認の実機状態、private画像/JSON/config・build/package・保存branch/worktreeは保持する。
+追加bootstrap診断の未commit記録は元の`test/164-bootstrap-network`worktreeへ保全し、今回の終了記録に混ぜて
+受入PASSとしない。未実装classifierや今後のmatrix再試行は#250の将来検討であり、#164を再びblockedにしない。
+通常利用で具体的な再現bugが見つかった場合は、そのbugだけを別途判断し、包括hardeningの完了待ちにはしない。
+今回は記録2文書だけの更新で、製品コード・公開API・標準レイアウト・Pi配備を変更しない。保存/PR/CI/mergeの実際の状態は
+Git履歴とGitHubを正本とし、過去のOpen/未commit記述は各観測時点の履歴として読む。
+
 ## #226 deployの起動待機契約（2026-10-18 UTC）
 
 master `1a44aaf`から専用worktree/branch `fix/226-deploy-startup-wait`を作成し、
