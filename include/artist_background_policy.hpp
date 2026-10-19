@@ -17,6 +17,10 @@ public:
     bool effective() const { return requested_ && available(); }
     bool available() const { return available_; }
     std::string_view unavailable_reason() const { return reason_; }
+
+    bool requested() const { return requested_; }
+    // Restoring consent does not bypass the effective availability gate.
+    void restore_requested(bool enabled) { requested_ = enabled; }
     std::string json() const {
         return std::string("{\"requested\":") + (requested_ ? "true" : "false") +
             ",\"effective\":" + (effective() ? "true" : "false") +
@@ -24,6 +28,7 @@ public:
             ",\"unavailable_reason\":" + (available() ? std::string("null") :
                 "\"" + std::string(unavailable_reason()) + "\"") + "}";
     }
+
 private:
     bool requested_ = false;
     bool available_ = false;

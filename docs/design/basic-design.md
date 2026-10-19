@@ -7,6 +7,9 @@
 Raspberry Pi OS Liteはruntime/hardware検証環境である。将来Buildrootへ移植可能な小さなnative daemonを目指す。
 一般的な音楽ライブラリ管理、ripping、desktop操作を主用途にはしない。
 
+v1のTV表示runtimeはWPEPlatform DRMを対象とし、Chromium/Cageはv1の対応・受入対象から外す。
+既存のChromium明示選択・fallback実装は残すが、その動作をv1の完了条件にはしない。
+
 追加の製品目標として、再生PCMについて「観測した事実、採用理由、未確認事項」を説明できるようにする。
 音質や完全性を観測以上に主張しない。read成功、反復一致、原盤PCMとの一致、
 出力経路のbit一致を分けて扱う。能力UNKNOWNをNOへ置き換えない。

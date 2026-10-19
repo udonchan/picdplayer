@@ -55,15 +55,19 @@ sudo useradd --system --user-group --no-create-home \
 
 unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspberry Pi OS上で
 各groupが存在し、`/dev/cec0`、`/dev/sr0`、ALSA deviceへアクセスできることを確認する。
-unitはRead Policyの任意保存先として`StateDirectory=picdplayer`を作成する。保存を試す場合だけ
+unitはRead Policyと背景選択の任意保存先として`StateDirectory=picdplayer`を作成する。保存を有効にする場合だけ
 `PICDPLAYER_EXTRA_ARGS`へ`--settings-file /var/lib/picdplayer/settings.json`を追加する。
 `--settings-file`には絶対ファイルパスを指定する。空文字・相対パス・末尾が`/`のパスは起動時に拒否する。
 通常のunitはこの引数を自動付与しない。標準PlayerのSettings画面ではRead Policyの
 SINGLE/REPEATを選べるが、保存は`--settings-file`指定時だけ有効になる。
-Artist BackgroundのSettingsはAPI由来の利用可否を表示する。この開発差分ではmetadataと有効な
-project keyがあればsession ONを明示要求できるが、key指定だけでは候補・画像を取得しない。
+Artist BackgroundのSettingsはAPI由来の利用可否と背景自身の保存状態を表示する。metadataと有効な
+project keyがあればONを明示要求できるが、key指定だけでは候補・画像を取得しない。
 OFFは即時取消と参照失効を要求し、再生の停止境界を待たない。画像の許諾判断は利用者に委ねる。
-背景設定の保存は未実装で、Read Policyの保存先指定を背景の保存案内へ流用しない。
+保存先指定時は両設定を一組で保存・復元する。OFFの保存に失敗しても取得・表示は止まり、
+Settingsは未保存と明示する。再起動すると以前に保存されたONへ戻る可能性があるため、
+保存先の問題を解消してOFFを再要求し、背景GETの`persistence_state=saved`を確認する。
+この確認は電源断耐久性の保証ではない。version 1は背景OFFで読み、次の保存でversion 2へ移行する。
+旧binaryはversion 2を読めない。今回の実装だけで稼働中Piの設定を変更したりserviceを再起動したりしない。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。
 scriptはCMake install規則から生成したDebian packageをinstallする。package postinstはdaemon-reload後に
@@ -100,7 +104,7 @@ EnvironmentFile構文に従って値を引用する。`--drive-speed-x N`を指�
 設定変更は`sudo systemctl restart picdplayer.service`で反映する。
 
 `--artist-background-key-file /etc/picdplayer/fanart-api-key`の起動オプションは保持するが、
-背景は既定OFFのため、有効なkeyを指定しても明示ON前には候補JSONや写真を取得しない。
+背景は既定OFFのため、有効なkeyを指定しても利用者の明示ONまたは保存ONの復元前には候補JSONや写真を取得しない。
 従来のkey指定だけで候補を照会する開発経路は停止した。
 保持するprovider部品はfanart.tvの**project key**を`api-key`ヘッダーで送る。personal key用の
 `client-key`経路は未実装なので、利用者のpersonal keyをこのfileに設定しない。
@@ -110,8 +114,8 @@ symlink、group writable、otherの全権限を許可しない。最大256文字
 ファイルが存在しない、または無効な場合はkey/pathをlogへ出さず、Artist候補取得だけを無効化する。
 metadata取得とCD再生は続ける。`GET /api/artist-background`はmetadataが無効・非compileなら
 `metadata_disabled`、metadataが有効でkeyがない・不正なら`key_missing`を返す。
-この開発差分のloopback POSTではOFFは冪等204、技術的に利用可能なONは画像到着前でも204、
-利用不能なONは409で拒否する。背景設定の保存は未実装。写真の一時取得・同一origin配信と
+loopback POSTではOFFは保存失敗でも停止して204、ONは技術的に利用可能なら画像到着前でも受理するが、
+利用不能または設定保存失敗なら409で拒否する。背景自身の保存状態はGETで確認する。写真の一時取得・同一origin配信と
 標準Playerの単一背景表示はPR #223でmasterへ統合済みであり、実provider・実機写真の確認とは区別する。
 key file指定は写真表示をONにしたことを意味せず、ON受理も画像到着・利用許諾済みを保証しない。
 画像利用に必要な権利・許諾の確認は利用者に委ね、製品が許諾を保証しないことを説明して明示ONを求める。
@@ -181,6 +185,11 @@ restartとdaemon-reloadを行う。
 ## Chromium/Cage kiosk
 
 ### WPE主runtimeの境界
+
+v1の対応・受入対象はWPEPlatform DRMであり、Chromium/Cageは対象外とする。
+不要cursorの#28は、WPE移行時に解消したという2026-10-19の利用者実機報告により完了とする。
+以下のChromium明示選択・fallbackは既存実装の説明であり、v1対応の保証ではない。
+このruntime方針の文書化ではfallback既定値や起動設定を変更していない。
 
 標準wrapperはWPEを優先し、`PICDPLAYER_KIOSK_RUNTIME=chromium`で従来経路を
 明示選択できる。標準Docker buildは`ENABLE_WPE_KIOSK=ON`でlauncherとWPE 2.54.0 runtimeを

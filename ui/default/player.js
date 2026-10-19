@@ -481,6 +481,22 @@ function renderBackgroundSettings() {
     ? `Requested / effective: ${backgroundState.requested ? 'On' : 'Off'} / ${backgroundState.effective ? 'On' : 'Off'}.`
     : 'Requested / effective: Unknown / Unknown.');
   set('settings-background-status', backgroundStatus);
+  let persistence = 'Background save status unknown.';
+  if (valid) {
+    const configured = backgroundState.persistence_configured;
+    const state = backgroundState.persistence_state;
+    if ((configured === undefined && state === undefined) || (configured === false && state === 'session_only')) {
+      persistence = 'Background changes apply to this daemon session only.';
+    } else if (configured === true && state === 'saved') {
+      const source = { startup: 'Startup', restored: 'Restored', saved: 'Saved', session: 'Session only' };
+      const label = Object.prototype.hasOwnProperty.call(source, backgroundState.requested_source)
+        ? source[backgroundState.requested_source] : 'Unknown';
+      persistence = `Background preference saved for daemon restarts. Source: ${label}.`;
+    } else if (configured === true && state === 'unsaved') {
+      persistence = `${backgroundState.requested ? '' : 'Off is applied. '}Background preference NOT SAVED. Restart may restore the previous choice.`;
+    }
+  }
+  set('settings-background-save-state', persistence);
 }
 async function loadBackgroundSettings() {
   const sessionId = settingsRequestId;
@@ -612,7 +628,10 @@ async function selectPolicy(index) {
         time_budget_ms: requested.time_budget_ms }),
     });
     if (response.status !== 204) throw new Error(`HTTP ${response.status}`);
-    if (settingsOpen && requestId === settingsRequestId) await loadPolicySettings();
+    if (settingsOpen && requestId === settingsRequestId) {
+      await loadPolicySettings();
+      if (settingsOpen && requestId === settingsRequestId) await loadBackgroundSettings();
+    }
   } catch {
     failed = true;
   } finally {

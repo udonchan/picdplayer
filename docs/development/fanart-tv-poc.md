@@ -10,7 +10,7 @@ fanart.tvの正式採用、公開バイナリ・bootable imageへのkey同梱、
 2026-10-17のIssue整理で#229と旧親#25のtrackingをNot planned/supersededとして終了した。
 PoCの全条件を合格にしたのではない。実写真切替・時間条件・TV可読性・取得切替中の音声/代表CECは
 [#51](https://github.com/udonchan/picdplayer/issues/51)、通常継続運転は#184、定量性能は#83、
-decoded資源安全性は#49、背景保存/次回復元の未実装は#177、Settings画面受入は#178へ一本化する。
+decoded資源安全性は#49、背景保存/次回復元は#177、Settings画面受入は#178へ一本化する。
 以下の過去の検証・未確認・権利条件は保持し、基本再生報告を全条件の検証へ読み替えない。
 
 WPEを主系とし、最新masterで採用済みのWPE 2.54専用WPEPlatform/DRM launcherを使う。
@@ -53,7 +53,10 @@ symlink、group書込、otherの全権限を拒否する。file末尾の改行1�
 service用EnvironmentFileにkey値を記載しない。
 
 有効なkeyがあるだけでは取得しない。標準PlayerのSettingsからArtist Backgroundを明示ONにする。
-設定はsession限りで、起動時はOFF。key不在・不正・metadata無効ではONを受理しない。
+保存先なしでは設定はsession限りで起動時はOFF。#177の開発差分では`--settings-file`指定時だけ
+利用者の背景要求値も保存・復元する。保存ONでも起動時key不在等では要求だけ保持し実効OFFとなる。
+新規ON操作はkey不在・不正・metadata無効では受理しない。保存・OFF未保存の契約は
+[機能設計](../design/functional-design.md#設定の所有保存適用境界)を参照する。
 ON受理は認証成功、写真の到着、画像の利用許諾を保証しない。
 
 ## 取得と表示

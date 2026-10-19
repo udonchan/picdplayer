@@ -73,8 +73,10 @@ messageは`{"action":"up"}`形式で、actionは`up/down/left/right/select/back`
 標準PlayerのSettings表示は標準UI固有であり、Custom UIへ注入しない。標準画面では
 Read PolicyのSINGLE/REPEATをCECの方向/決定/Backで選択し、`GET/POST /api/read-policy`を使用する。
 Artist Backgroundは`GET/POST /api/artist-background`に基づき利用可否・要求値・実効値を表示し、
-利用不能時はONを無効にする。背景設定はsession限りで、Read Policyの保存とは別である。
-この開発差分ではmetadataと有効なproject keyがあればsession ONを要求できるが、画像到着や
+利用不能時はONを無効にする。背景の保存状態は背景GET自身から取得し、Read Policyの保存情報を流用しない。
+`--settings-file`指定時は要求値を一組で保存し、指定なしではsession限りとなる。
+OFFは保存失敗でも停止して204を返すため、`persistence_state=unsaved`を未保存と表示する。
+この開発差分ではmetadataと有効なproject keyがあればONを要求できるが、画像到着や
 利用許諾済みを意味しない。session設定と単一背景はPR #223でmaster統合済み。
 Custom UIに同じ画面・背景描画を要求しない。#229の複数画像拡張ではoptionalな
 `artwork.background.urls`、`dwell_ms`、`crossfade_ms`を追加するが、既存の`url`は維持する。

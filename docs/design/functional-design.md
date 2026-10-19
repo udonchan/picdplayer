@@ -16,10 +16,12 @@ Phase 1bではこのsnapshotだけを入力にする読み取り専用technical 
 current/latest evidence、stream warning、drive capabilityと有界なdisc read mapを表示する。
 任意導入の`picdplayer-kiosk.service`はWPEPlatform DRMのWPE launcherを優先して起動し、
 この画面だけをtty1へ表示する。daemonとbrowserは別serviceであり、browserが状態を所有しない。
-Chromium/Cageは明示選択と復旧用に残す。標準Docker buildはWPE 2.54.0と2patchのruntimeを
-同じDebian packageへ収める。requested/effective runtimeを区別し、fallbackをWPE成功とは扱わない。
-Now Playing document内のcursorはCSSで隠すが、Cageのerror pageや他applicationまで含む
-cursor非表示の保証やquiet bootは未実装である。標準Playerにはtransport操作、metadata候補選択、
+Chromium/Cageは明示選択と復旧用の実装を残すが、v1の対応・受入対象ではない。
+標準Docker buildはWPE 2.54.0と2patchのruntimeを同じDebian packageへ収める。
+requested/effective runtimeを区別し、fallbackをWPE成功とは扱わない。
+不要cursorの#28は、WPE移行時に解消したという2026-10-19の利用者実機報告に基づきv1完了とする。
+Now Playing document内のCSSによるcursor非表示は残す。v1対象外のCageのerror pageや他applicationの
+cursor非表示を保証せず、quiet bootは未実装である。標準Playerにはtransport操作、metadata候補選択、
 Read PolicyのSettings画面があり、状態変更の正本はdaemon側に置く。
 
 ### PlayerのIntegrity表示
@@ -167,8 +169,8 @@ QUIET/BALANCED/SECUREへの対応は未実装。
 ### 設定の所有・保存・適用境界
 
 daemonを設定値の検証、保存、適用、状態公開のownerとする。ViewやCustom UIは
-設定ファイルを直接編集しない。現行の利用者変更対象はRead Policyの5項目だけで、
-`GET/POST /api/read-policy`を使う。機器、ALSA、CEC、API bind/port、CDDA reader、
+設定ファイルを直接編集しない。利用者変更対象はRead Policyの5項目とArtist BackgroundのON/OFFで、
+それぞれ`GET/POST /api/read-policy`と`GET/POST /api/artist-background`を使う。機器、ALSA、CEC、API bind/port、CDDA reader、
 Custom UI path、cache path、providerのsecretは起動引数またはsystemd設定を所有者とし、
 このAPIから変更できない。今後利用者変更対象を増やす場合は、項目ごとに型、優先順位、
 適用境界、失敗時の復旧、公開してよい情報を決めてからAPIとschemaを拡張する。
@@ -188,27 +190,34 @@ PLAYING/PAUSEDなら停止境界までpendingにする。204は要求の受理�
 将来の電源断後の復元完了を保証しない。保存処理は一時ファイルのsync、同じdirectory内での
 rename、directory syncを試みる。現行実装ではrename後のdirectory sync失敗を警告として扱う。
 この場合、新値が現在見えていても電源断後の耐久性は確認できない。完全な耐久性を要件にする場合は
-この失敗時のAPI結果と復旧動作を#177で再検討する。
+この失敗時のAPI結果と復旧動作を別途定める。今回のv1保存範囲へ電源断耐久性の保証を追加しない。
 
-Artist Backgroundは既定OFFで、`GET/POST /api/artist-background`からsession限りのON/OFFを扱う。
-この開発branchはDraft PR #217のruntimeを再利用する。metadataと保護fileから読込済みの形式上有効なproject keyが利用可能なら、
+Artist Backgroundは既定OFFで、保存先なしではsession限り、`--settings-file`指定時は要求ON/OFFを保存する。
+metadataと保護fileから読込済みの形式上有効なproject keyが利用可能なら、
 No Discや画像到着前でもONを204で受理する。利用不能なら409で状態を変えず、理由をGETで示す。
-背景設定の保存・復元は未実装。SettingsはAPIの利用可否を表示し、利用不能時にONを有効にしない。
+SettingsはAPIの利用可否を表示し、利用不能時にONを有効にしない。
 provider key fileの存在は利用者の表示許可ではなく、keyだけでは候補JSONの取得も開始しない。
 OFFで要求を協調取消し、保持画像・参照を即時失効させる。取得・通信・decodeの失敗は設定受理と
 区別し、再生・通常metadata・操作を継続する。利用可能表示はprovider側の認証成功・network到達も保証しない。
-master `f0d44c1`のON拒否は開発差分の統合前の状態である。
+保存先指定時のONは保存成功後に適用し、保存失敗なら409で要求・実効を変えない。
+OFFは保存失敗でも取得・表示を停止して204を返す。このとき背景GETの`persistence_state`は
+`unsaved`、出所は`session`となり、Settingsは未保存と次回起動時に以前の設定へ戻り得ることを明示する。
+同じOFFの再要求またはRead Policyの保存成功で、現在の背景OFFも保存され未保存状態を解消する。
+Read Policyと背景のどちらを更新しても、現在の要求値を一組として保存し、他方を消さない。
+保存ONの復元は新規ON操作と分け、起動時key不在等でも要求ONを保持するが、実効OFFと理由を示し取得しない。
+keyだけでONにはせず、復元した利用者選択を使う。起動中のkey再読込や自動的なcapability復旧は追加しない。
 ダウンロード画像の利用に必要な権利・許諾・表示条件の確認と利用判断は利用者に委ねる。
 製品は画像の権利を保証せず、明示ON自体が権利者の許諾を生むわけではないことを説明する。
 全画像の包括的許諾を製品側で確認することはruntime実装の前提にしない。外部写真は配布物へ同梱しない。
 ディスクキャッシュの採否・容量・保持期間・削除は独立した設計事項とし、この権利方針では決定しない。
 一般設定API、全CLI optionの永続化、hot reload、機器設定の稼働中変更はこの部分実装に含めない。
 
-設定拡張の契約では、現行の`schema_version=1`をRead Policyだけを持つ旧版として扱い、
-有効な旧版を読み込む場合でもArtist BackgroundはOFFとする。新schemaへの移行は旧値全体の
-検証後にだけ行い、失敗時は旧ファイルを保全する。未知の新versionやfield、破損・一部欠落を
-推測で補完して採用しない。電源断や書込失敗では最後に完全に検証できた値、または起動値と
-背景OFFへ戻れることを#177の実装・試験条件とする。user設定をresetする操作、機器設定の
+設定ファイルの`schema_version=2`はRead Policyと`artist_background_enabled`のbooleanを持つ。
+`schema_version=1`をRead Policyだけを持つ旧版として読み、有効な旧版でも背景はOFFとする。
+起動時に書換えず、次の設定保存でversion 2へ移行する。移行は旧値全体の検証後にだけ行い、
+失敗時は旧ファイルを保全する。未知version/field、破損・一部欠落は推測で補完して採用せず、
+起動値と背景OFFへ戻す。旧binaryへのdowngradeはversion 2を読めないため、以前の保存値の復元を保証しない。
+user設定をresetする操作、機器設定の
 上書きや再起動後のrollback操作は、必要な項目ごとに別途契約を定める。
 
 single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
@@ -333,8 +342,9 @@ Settingsには`GET /api/read-policy`の`requested_source`と`effective_source`�
 requested/effective/availableをAPIから表示し、欠損・型不正・取得失敗はUnknownとして操作を無効にする。
 ONはavailableがtrueの場合の明示操作のみ、OFFは既知の状態で操作可能とする。POSTの204後に
 同APIを再取得し、状態を楽観的に更新しない。背景のeffectiveは写真到着・decode成功を意味しない。
-背景の保存はなく、Read Policyの保存情報を背景へ流用しない。利用不能・未知の状態でONを操作できない。
-単一画像runtimeとsession ONはPR #223でmasterへ統合済みであり、#229で複数画像へ拡張する。
+背景の保存案内は背景API自身の`persistence_configured`/`persistence_state`/`requested_source`を用い、
+Read Policyの保存情報を流用しない。旧daemonで追加fieldがなければsession限りとして扱う。
+利用不能・未知の状態でONを操作できない。
 閉じた画面や再表示前の古い応答は適用しない。
 SettingsからのOFFが204で受理されたら、state streamの遅延・切断を待たず現在のartist画像を消す。
 失効した不透明参照は旧callback/遅延modelで復活させず、cover fallbackは維持する。受理後に開始する
@@ -406,7 +416,7 @@ OFFではworkerを生成・要求せず、作成済みworkerは取消して保�
 標準Playerはartist背景→ぼかしたcover→既定背景へfallbackし、古い画像完了とdecode失敗を無視する。
 複数画像は45秒滞在・4秒crossfadeのshuffle slideshowとし、1枚なら静止する。
 reduced motionではfadeを即時にし、追加画像・同じsnapshotで現在表示やtimerを初期化しない。
-Custom UIへ背景描画を注入しない。背景設定保存は未実装。
+Custom UIへ背景描画を注入しない。背景選択の保存は画像自体のdisk cacheとは独立する。
 自動retryはせず、fanart APIと画像CDNの429後は別々のprocess共有期限で`Retry-After`を尊重する。
 次画像候補への切替でもCDNの期限を迂回せず、API期限はCAA・MusicBrainz・画像CDN要求を停止しない。
 待機値欠落・不正時の60秒はPoC側の方針で、公式quotaではない。
