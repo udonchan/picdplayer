@@ -1,5 +1,16 @@
 # 残課題とIssue一覧
 
+## 監査修正（2026-10-22）
+
+[#257](https://github.com/udonchan/picdplayer/issues/257)で保存・WPE依存・統合状態の記述を
+`c61faca`の実装へ合わせた。[#259](https://github.com/udonchan/picdplayer/issues/259)は
+設定FIFOをopen待ちせず拒否する修正と回帰試験を追加した。両修正の統合・終了状態は対応PRとIssueを正本とする。
+[#258](https://github.com/udonchan/picdplayer/issues/258)は旧`13485ee`上の未commit候補だけを対象とする
+別branchの修正で、現行WPEや統合済みPR #244を再実装しない。今回の確認は
+[検証状況](verification.md)を参照し、実機受入・配備の成功とは区別する。
+PR #260でmaster `05a1a3e`へ統合された#257/#259を、このDraft PR #256にも取り込む。
+下表のC/D接続済み状態と未実施の実機受入を保持し、PR #256自体はmasterへ統合しない。
+
 2026-09-26の一覧を基に、2026-10-17にIssue・merge済み実装・設計・検証範囲を再照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
 着手・進捗・完了条件は各GitHub Issueで管理する。Issueを閉じる際は仕様と検証記録も更新する。
@@ -23,14 +34,15 @@ AGENTS.md §11に英語の追加規約を記載し、限定試行は初回と修
 
 2026-10-17のIssue整理単位では文書だけを変更し、実装・試験・Pi操作を行わなかった。
 後続依頼による#121の修正・配備は別単位で記録し、本branchでは整理済み文書と配備済みコードを照合した。
-Issue整理は`docs/issue-cleanup-a1-a2`、診断修正の保存先はそのcommitを土台にする`fix/audio-first-diagnostics`とする。
+当時のIssue整理は`docs/issue-cleanup-a1-a2`、診断修正の保存先はそのcommitを土台にする`fix/audio-first-diagnostics`だった。
 2026-10-17のcommit/push承認はmaster直接更新・PR作成を含まず、作業中の未commit等は検証記録に履歴として残す。
 元の未commit候補は`feature/audio-first-diagnostics`、配備用候補は`fix/audio-first-review`のworktreeに保持し、
-Issue整理とコードのcommitを別単位にする。
+Issue整理とコードのcommitを別単位にした。これらは作業時点の記録であり、整理と限定診断修正は
+2026-10-17のPR #243（`1a44aaf`）でmasterへ統合済み。残る受入は下表のとおり。
 
 | 順位・区分 | Issueと所有範囲 |
 |---|---|
-| 直近1 | #121: 音声優先診断修正の独立レビュー・統合と限定受入。過去control/CECを一括解決扱いしない |
+| 直近1 | #121: PR #243で限定診断修正は統合済み。固定packageでの限定受入と過去control/CEC観測の分類を残し、一括解決扱いしない |
 | 直近2 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
 | 完了したv1表示 | #164: policy/strategy・長文表示と代表確認を完了してCompleted。追加hardeningは#250でv2以降へ延期 |
@@ -114,7 +126,7 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#25 Add artist backgrounds as progressive player enrichment](https://github.com/udonchan/picdplayer/issues/25) | Not planned/supersededで親tracking終了。#48/#50は完了。取得/資源安全性#49、写真受入#51、保存#177、Settings#178、Integrity表示#164、性能#83、通常継続#184へ一本化。機能全体完成ではなく未実施を保持。Custom UIへの自動注入・写真同梱は行わない。 |
 | [#229 Validate fanart.tv artist backgrounds with local developer keys](https://github.com/udonchan/picdplayer/issues/229) | Not planned/superseded。PR #230の実API認証/JPEG3枚/OFF失効/WPE写真snapshot/基本再生報告と制約を保全。未確認の実写真切替・TV可読性・音声/代表CECは#51、長期は#184、性能は#83、decoded安全性は#49へ移管。全PoC受入の合格ではない。[PoC記録と残所有先](fanart-tv-poc.md)参照。key/画像/private証跡を公開しない。 |
 | [#49 Finish artist background acquisition safety and bounded resource guarantees](https://github.com/udonchan/picdplayer/issues/49) | Open、取得経路はPR #176/#223/#230で統合済み。encoded上限とdecoded寸法/memory、memory-only runtimeとcache部品の保証範囲を仕上げる。TV/写真切替は#51。画像利用判断は利用者に委ね、包括的許諾を製品が保証しない（[検証ノート](verification.md#fanarttv画像の権利条件2026-10-02再確認)）。runtime disk cache・Personal key・追加providerを必須実装に積み増さない。 |
-| [#177 Persist user settings for read policy and artist backgrounds](https://github.com/udonchan/picdplayer/issues/177) | v1実装・代表保存/復元確認完了。本変更をPR/必須CI経由で統合してCompleted終了とする承認済み。一組保存・旧schema読込・利用不能時ON復元・OFF保存失敗でも停止を実装。標準全CTest70/70、最小41/41、metadata非compile対象3/3、package lifecycle成功。12:26 UTCにPi配備・保存先有効化・hash一致、12:37 UTCに実service保存→PID変更を伴う再起動→両設定復元を確認。即時終了assert失敗と後続GETのSTOPPED/SINGLE/背景OFF・保存済み確認を区別して[記録](verification.md#177178-背景選択の保存とoff未保存契約2026-10-19)。通常cold boot/継続運転は#184、物理リモコンは#252。電源断耐久性は未保証。実際のclose/対応PRはIssueを正本とする。 |
+| [#177 Persist user settings for read policy and artist backgrounds](https://github.com/udonchan/picdplayer/issues/177) | PR #253（`75df663`）でmaster統合済み、v1 Completed。一組保存・旧schema読込・利用不能時ON復元・OFF保存失敗でも停止を実装。当時の標準全CTest70/70、最小41/41、metadata非compile対象3/3、package lifecycle、Pi実serviceの一回再起動による両設定復元は[記録](verification.md#177178-背景選択の保存とoff未保存契約2026-10-19)参照。即時終了assert失敗と後続GETの復元確認を区別する。通常cold boot/継続運転は#184、物理リモコンは#252。電源断耐久性は未保証。 |
 | [#50 Support progressive delivery of visual enrichment](https://github.com/udonchan/picdplayer/issues/50) | Completed。PR #175/#223/#230のmetadata先行・artwork/背景の独立status・世代照合と1→2→3枚の実HTTP/WS回帰を根拠に限定配信scopeを終了。通常全network条件での音声無欠落や長期保証ではない。取得#49、写真受入#51、通常継続#184へ残す。 |
 | [#51 Complete real-photo acceptance of Player backgrounds and slideshow](https://github.com/udonchan/picdplayer/issues/51) | Open、PR #223/#230で実装済み・実写真受入待ち。fallback、0/1/複数、shuffle、45秒/4秒、reduced motionとDOM回帰は統合済み。#229の残受入を継承し、実写真切替/時間条件、TV可読性、実CD音声を固定条件で確認する。物理リモコン入力は利用者指示で#252に集約し、同じrunを参照して重複要求しない。長期CPU/memoryは#83/#184に一本化し、取得安全性#49全体のblocked-byは解除。Custom UIへ自動注入しない。 |
 | [#214](https://github.com/udonchan/picdplayer/issues/214)、[#215](https://github.com/udonchan/picdplayer/issues/215)、[#216](https://github.com/udonchan/picdplayer/issues/216) | 各限定scopeでCompleted。隔離Pi Chromium合成decode/fallback/失効とcleanup、metadata labelのDOM mutation 1→0修正、実HTTP/WS合成component fixture。旧#217からPR #223への成果継承を確認。元の固定SHA・失敗・artifact記録を保持し、WPE実写真/光学/ALSA/音声/CEC/長期受入の証拠へ変更しない。 |
@@ -122,7 +134,7 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#28 Hide unwanted cursor in the current kiosk while preserving useful input](https://github.com/udonchan/picdplayer/issues/28) | v1完了。2026-10-19、利用者がWPE移行時の解消を報告しcloseを指示。Chromium/Cageはv1対応・受入対象外。旧Cage調査とWPE PoCのcursor残存観測は履歴として保全し、全状態・cold boot等の旧matrix成功へ読み替えない。[終了根拠](verification.md#28-wpe移行によるv1完了2026-10-19)参照。 |
 | [#124 Investigate unintended kiosk scrollbar display](https://github.com/udonchan/picdplayer/issues/124) | Open / Pending。2026-10-19の利用者方針により、まだIssue化していないv1向けUI改修後の再確認まで保留。旧TV目視/DOM overflow非検出を保全し、修正済み・解消済みとはしない。再開時は固定WPEのTV/PNG/DOMを照合する。#25全体のblocked-byは解除済み。 |
 | [#31 Add CEC-driven controls to the Player view](https://github.com/udonchan/picdplayer/issues/31) | Close済みの親Issue。[#54 loopback操作契約](https://github.com/udonchan/picdplayer/issues/54)、[#55 CEC navigation配信](https://github.com/udonchan/picdplayer/issues/55)、[#56 Player操作UI](https://github.com/udonchan/picdplayer/issues/56)に分割済み。#54はPR #168、#55はPR #167、#56はPR #169をmergeしてClose済み。Piで上下左右・決定・Back、再生/音声・一時停止・停止、右方向キー約2秒長押し後の選択停止を確認した。CECとChromium keydownの二重入力を#56で抑制した。別TV・入力切替時の挙動は未確認。metadata候補pickerは[#166](https://github.com/udonchan/picdplayer/issues/166)で別途扱う。 |
-| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | v1実装・表示/API回帰完了。本変更をPR/必須CI経由で統合してCompleted終了とする承認済み。PR #180/#223の画面へ背景自身の保存/未保存案内とpolicy保存後の再GETを追加。semantic入力だけのSettings→ON/OFF→Back/focus試験、実WebSocket6 actionも成功し12:26 UTCにPi配備済みだが、物理CEC→Settingsの自動E2Eではない。物理リモコンの代表受入は未実施で#252へ集約し、完了扱いにしない。保存は#177、写真/TV/試聴は#51。実際のclose/対応PRはIssueを正本とする。 |
+| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | PR #253（`75df663`）でmaster統合済み、v1 Completed。PR #180/#223の画面へ背景自身の保存/未保存案内とpolicy保存後の再GETを追加。当時のsemantic入力だけのSettings→ON/OFF→Back/focus試験、実WebSocket6 actionとPi配備確認は物理CEC→Settingsの自動E2Eではない。物理リモコンの代表受入は未実施で#252へ集約し、完了扱いにしない。保存は#177、写真/TV/試聴は#51。 |
 | [#252 Complete v1 physical-remote acceptance for Player and Settings](https://github.com/udonchan/picdplayer/issues/252) | Open、利用者が実機近くで操作できる時に着手。2026-10-19の利用者指示で物理リモコンの唯一の代表受入記録先とする。Settings開閉/選択/Back/focus、短い再生/停止とpolicy pending、利用可能時ON/OFFを基本10分・初回＋修正一組で確認し、STOPPED/SINGLE/背景OFFへ戻す。#51同時runのCEC部分もここを参照。開始時に時間・操作・復元を再確認し、新自動化基盤や全TV matrixを追加しない。未実施を合格扱いにしない。 |
 
 ### 過去の統合・配備経緯（2026-10-13時点）

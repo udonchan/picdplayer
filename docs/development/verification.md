@@ -1,6 +1,19 @@
 # 検証状況と残課題
 
-更新日: 2026-10-21。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-22。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## PR #260監査修正のDraftへの取込（2026-10-22）
+
+利用者指示によりmaster `05a1a3e`をPR #256のbranchへ取り込む。設定FIFOのnonblocking拒否と
+回帰試験・CTest timeout、共同保存/WPE依存・完了Issueの文書訂正を保持する。
+競合はbacklogと本検証記録だけで、C/D実装・過去の証拠・下記実機再開点を保持して解消した。
+master側の「C/D未実装」は監査基準masterの状態であり、このDraftの実装状態を戻す意味ではない。
+同名local branch `origin/master`が旧commitを指しているため、remote refを完全名で指定した。
+Draft状態は維持し、本PRのmaster統合・#238/#239のclose・実機接続/配備は行わない。
+今回のbuild/CI結果は対応PRへ記録し、過去の72/72やPR #260の結果で代用しない。
+取込後のsourceをnetworkなしLinux/aarch64でfresh Debug buildし、API/metadata ON・WPE OFF・
+daemon/kiosk unit ONの全CTest 71/71成功を確認した。FIFO保存fallbackとC/D/Node回帰を含む。
+これは実機取得/取消/表示やWPE launcherの今回のlocal検証ではない。
 
 ## Draft保存と実機再開点（2026-10-21）
 
@@ -209,6 +222,31 @@ Cの後に実装する対象は実STOPPED/ALSA停止、playback reader解放、c
 未実行理由、device観測世代、confirm前の有効条件、bounded manifestとした。後続Dでの接続・検証結果は上段に別記する。
 今回Pi・実disc・外部providerにはアクセスせず、compile/test以外のruntime変更も行っていない。
 source/文書は未commit・未push・未統合で、#238/#239はOpenのまま維持する。
+
+## #257/#259 監査修正（2026-10-22）
+
+`c61faca`基準のlocal branch `fix/audit-257-259`で、設定読込をno-follow・nonblockingのopenと
+取得fdの`fstat`検査にした。writerのいないFIFOも待たずに拒否し、既存の起動値fallbackへ戻す。
+2秒alarm付き子processでFIFO拒否、単体試験でdirectory/過大fileを追加し、既存のv1/v2・不正JSON・
+symlink回帰を維持した。CTestの単体試験にも10秒timeoutを設定した。
+実daemonのloopback API試験へFIFO/directory/symlink/過大fileからのfallbackを追加し、
+破損内容・symlinkが自動上書きされないことも確認した。
+新単体試験を修正前のHEAD sourceへlinkした負例はFIFO childがalarm終了し、親assert失敗
+（exit 134）となった。修正版は成功した。旧`13485ee`向けにも同じ修正と回帰を適用した。
+
+検証はnetworkなしの`picdplayer-profile-review-build`、Linux/aarch64、fresh Debug、
+API/metadata ON、WPE OFF、daemon/kiosk unit ONでbuildし、全CTest 69/69成功。
+WPE library/launcherは今回buildしておらず、実機・実drive・ALSA実出力・CEC・TV・配備は未検証。
+元の設定保存/復元のhardware受入範囲や電源断耐久性を広げるものではない。
+
+#257は機能設計の共同保存要約、build manualのWPE依存、backlogの#121統合済み・#177/#178完了を
+修正した。#238/#239はmaster未実装とIssue報告のlocal候補を区別し、候補自体は検証・変更していない。
+過去の未commit/未統合・未確認記録は当時の証拠として保持し、#184等を完了に変更しない。
+全diff・リンク先と`git diff --check`を照合した。両修正の保存commitは`7a4ea22`で、
+続くPR作成・CI・統合依頼の対象は#257/#259に限定する。統合・終了の現在状態と今回PRのCIは
+対応PR/Issueを正本とし、上記local試験や過去のCIを今回のCI成功へ読み替えない。
+旧候補固有の#258は`9ac4dcb`として別branchへ保存・push済みで、現行WPEへ持ち込まない。
+PR作成前の再照合で#238/#239の候補がPR #256へ保存済みと確認し、backlogの保存状態を更新した。
 
 ## #219 v1移行完了とV2復旧への移管（2026-10-19）
 
