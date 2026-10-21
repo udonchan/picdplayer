@@ -21,8 +21,11 @@ WPE library/launcherは今回buildしておらず、実機・実drive・ALSA実�
 #257は機能設計の共同保存要約、build manualのWPE依存、backlogの#121統合済み・#177/#178完了を
 修正した。#238/#239はmaster未実装とIssue報告のlocal候補を区別し、候補自体は検証・変更していない。
 過去の未commit/未統合・未確認記録は当時の証拠として保持し、#184等を完了に変更しない。
-全diff・リンク先と`git diff --check`を照合した。両修正は本branchへ保存し、master未統合で、
-Issue #257/#259はOpenのまま。旧候補固有の#258は別branchで修正し現行WPEへ持ち込まない。
+全diff・リンク先と`git diff --check`を照合した。両修正の保存commitは`7a4ea22`で、
+続くPR作成・CI・統合依頼の対象は#257/#259に限定する。統合・終了の現在状態と今回PRのCIは
+対応PR/Issueを正本とし、上記local試験や過去のCIを今回のCI成功へ読み替えない。
+旧候補固有の#258は`9ac4dcb`として別branchへ保存・push済みで、現行WPEへ持ち込まない。
+PR作成前の再照合で#238/#239の候補がPR #256へ保存済みと確認し、backlogの保存状態を更新した。
 
 ## #219 v1移行完了とV2復旧への移管（2026-10-19）
 
