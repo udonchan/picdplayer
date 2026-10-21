@@ -53,6 +53,19 @@ def verify_background_api(port, available=False, reason="metadata_disabled"):
     assert status == 200 and json.loads(body) == expected, (status, body)
     policy_before = request("read-policy")
     assert policy_before[0] == 200
+    capture = json.loads(request("complete-pcm")[1])
+    assert capture["schema_version"] == 1 and capture["state"] == "IDLE"
+    assert capture["job_id"] == 0 and not capture["busy"] and capture["reader_released"]
+    assert not capture["can_start"] and capture["external_verification"] == "NOT_CHECKED"
+    assert request("complete-pcm/result")[0] == 404
+    start = {"action": "start", "session_id": capture["session_id"], "disc_generation": 1,
+             "duration_ms": 1000, "profile": "local-pcm-sha256-v1"}
+    status, body = request("complete-pcm", json.dumps(start).encode(), "POST")
+    assert status == 409 and json.loads(body)["executed"] is False
+    cancel = {"action": "cancel", "session_id": capture["session_id"], "job_id": 1}
+    status, body = request("complete-pcm", json.dumps(cancel).encode(), "POST")
+    assert status == 409 and json.loads(body)["error"] == "capture_no_job"
+    assert json.loads(request("complete-pcm")[1])["job_id"] == 0
     for payload, expected_status in [(b'{"enabled":true}', 204 if available else 409),
                                       (b'{"enabled":false}', 204),
                                       (b'{"enabled":false}', 204),
@@ -67,6 +80,7 @@ def verify_background_api(port, available=False, reason="metadata_disabled"):
         assert json.loads(request("artist-background")[1]) == expected
     assert request("artist-background", method="PUT")[0] == 405
     assert request("read-policy") == policy_before
+    assert json.loads(request("complete-pcm")[1])["state"] == "IDLE"
     state = json.loads(request("state")[1])
     assert state["player"]["state"] == "NO_DISC", state
     assert state["artwork"]["background"] is None, state["artwork"]

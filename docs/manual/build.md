@@ -51,10 +51,11 @@ package version、daemon・WPE binaryのbuild type/profile、生成wrapperのpro
 ## 必要環境
 
 Linux、C++20コンパイラ、CMake 3.20以上、ALSAとLinux CEC/CD-ROMの開発ヘッダーが必要。
+API有効時のlocal SHA-256機能、または`BUILD_TESTING=ON`のconsumer試験にはOpenSSL libcryptoの開発ヘッダー/libraryも必要。
 Raspberry Pi OSでは次のパッケージを使用する。Pythonは開発用試験のみ。
 
 ```sh
-sudo apt install build-essential cmake ninja-build libasound2-dev linux-libc-dev python3
+sudo apt install build-essential cmake ninja-build libasound2-dev linux-libc-dev libssl-dev python3
 cmake -S . -B build-direct
 cmake --build build-direct -j1
 ctest --test-dir build-direct --output-on-failure

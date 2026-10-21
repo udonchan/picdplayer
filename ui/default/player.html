@@ -133,8 +133,8 @@
         <div class="settings-heading"><div><p class="eyebrow">PLAYER SETTINGS</p><h2 id="settings-title">Read policy</h2></div><button id="settings-close" type="button">Back</button></div>
         <p class="settings-note">Choose how the next read is performed. A change during playback waits until playback stops.</p>
         <div class="settings-choices" role="group" aria-label="Read verification mode">
-          <button id="policy-single" type="button" disabled>Single read</button>
-          <button id="policy-repeat" type="button" disabled>Repeat verification</button>
+          <button id="policy-single" type="button" aria-disabled="true" aria-describedby="settings-policy-status">Single read</button>
+          <button id="policy-repeat" type="button" aria-disabled="true" aria-describedby="settings-policy-status">Repeat verification</button>
         </div>
         <p id="settings-policy-status" class="settings-status" role="status">Loading read policy…</p>
         <p id="settings-persistence" class="settings-note">Checking whether changes are saved…</p>
@@ -149,14 +149,25 @@
         <div class="settings-unavailable">
           <h3>Artist background</h3>
           <div class="settings-choices" role="group" aria-label="Artist background">
-            <button id="background-off" type="button" disabled>Off</button>
-            <button id="background-on" type="button" disabled>On</button>
+            <button id="background-off" type="button" aria-disabled="true" aria-describedby="settings-background-status">Off</button>
+            <button id="background-on" type="button" aria-disabled="true" aria-describedby="settings-background-status">On</button>
           </div>
           <p id="settings-background-state" class="settings-note">Requested / effective: Unknown / Unknown.</p>
           <p id="settings-background-status" class="settings-status" role="status">Loading background availability...</p>
           <p id="settings-background-save-state" class="settings-note" role="status">Checking whether background changes are saved...</p>
           <p class="settings-note">Effective On does not mean a photo has loaded.</p>
           <p class="settings-note">Artist photos are provided by fanart.tv (https://fanart.tv). Please consider contributing artwork. On allows photo fetching; you are responsible for checking image rights and permissions. PiCDPlayer does not guarantee them, and On does not grant permission. External photos are not bundled.</p>
+        </div>
+        <div id="settings-pcm-region" class="settings-unavailable">
+          <h3>Local PCM fingerprint</h3>
+          <p class="settings-note">Requires STOPPED playback and an explicit read offset of 0 (--read-offset-samples 0). Acquires a local SHA-256 fingerprint with a 30 minute limit. No PCM file is saved and no network comparison is performed. A fingerprint is not original-disc verification.</p>
+          <div class="settings-choices" role="group" aria-label="Local PCM fingerprint">
+            <button id="pcm-start" type="button" aria-disabled="true" aria-describedby="settings-pcm-status settings-pcm-feedback">Acquire (30 minute limit)</button>
+            <button id="pcm-cancel" type="button" aria-disabled="true" aria-describedby="settings-pcm-status settings-pcm-feedback">Cancel acquisition</button>
+          </div>
+          <p id="settings-pcm-status" class="settings-status" role="status">Local PCM acquisition unavailable.</p>
+          <p id="settings-pcm-feedback" class="settings-note" role="status"></p>
+          <p id="settings-pcm-result" class="settings-note" hidden></p>
         </div>
       </div>
     </section>

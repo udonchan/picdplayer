@@ -21,11 +21,15 @@ struct CompletePcmProfile {
     bool operator==(const CompletePcmProfile&) const = default;
 };
 
+// Shared policy/resource preflight; no consumer calls or device I/O.
+std::size_t complete_pcm_reservation(const ReadPolicy&, const CompletePcmProfile&);
+
 struct CompletePcmIdentity {
     std::string session_id;
     std::uint64_t job_id = 0, disc_generation = 0, reader_incarnation = 0, policy_revision = 0;
     std::optional<std::int32_t> offset_samples;
     CompletePcmProfile profile;
+    std::uint64_t device_observation_generation = 0;
     bool operator==(const CompletePcmIdentity&) const = default;
 };
 
