@@ -1,6 +1,28 @@
 # 検証状況と残課題
 
-更新日: 2026-10-19。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-22。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## #257/#259 監査修正（2026-10-22）
+
+`c61faca`基準のlocal branch `fix/audit-257-259`で、設定読込をno-follow・nonblockingのopenと
+取得fdの`fstat`検査にした。writerのいないFIFOも待たずに拒否し、既存の起動値fallbackへ戻す。
+2秒alarm付き子processでFIFO拒否、単体試験でdirectory/過大fileを追加し、既存のv1/v2・不正JSON・
+symlink回帰を維持した。CTestの単体試験にも10秒timeoutを設定した。
+実daemonのloopback API試験へFIFO/directory/symlink/過大fileからのfallbackを追加し、
+破損内容・symlinkが自動上書きされないことも確認した。
+新単体試験を修正前のHEAD sourceへlinkした負例はFIFO childがalarm終了し、親assert失敗
+（exit 134）となった。修正版は成功した。旧`13485ee`向けにも同じ修正と回帰を適用した。
+
+検証はnetworkなしの`picdplayer-profile-review-build`、Linux/aarch64、fresh Debug、
+API/metadata ON、WPE OFF、daemon/kiosk unit ONでbuildし、全CTest 69/69成功。
+WPE library/launcherは今回buildしておらず、実機・実drive・ALSA実出力・CEC・TV・配備は未検証。
+元の設定保存/復元のhardware受入範囲や電源断耐久性を広げるものではない。
+
+#257は機能設計の共同保存要約、build manualのWPE依存、backlogの#121統合済み・#177/#178完了を
+修正した。#238/#239はmaster未実装とIssue報告のlocal候補を区別し、候補自体は検証・変更していない。
+過去の未commit/未統合・未確認記録は当時の証拠として保持し、#184等を完了に変更しない。
+全diff・リンク先と`git diff --check`を照合した。両修正は本branchへ保存し、master未統合で、
+Issue #257/#259はOpenのまま。旧候補固有の#258は別branchで修正し現行WPEへ持ち込まない。
 
 ## #219 v1移行完了とV2復旧への移管（2026-10-19）
 

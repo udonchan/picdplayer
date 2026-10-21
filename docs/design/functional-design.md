@@ -104,7 +104,8 @@ UIのHTML/CSS/JSは`ui/default/`を単一のソースとし、ビルド時にfal
 `/builtin/player`とtechnical statusはCustom UIから独立して配信する。通常の再生状態や
 metadata modelはUI選択によって変更しない。manifest version・ファイル上限・URL契約は
 [Custom UI](../manual/custom-ui.md)を参照する。runtime JS検査、hot reload、一般設定APIは未実装。
-Read Policyのみ、`--settings-file`を指定したAPI有効Playerで保存・起動時復元する部分実装がある。
+`--settings-file`を指定したAPI有効Playerでは、Read PolicyとArtist Backgroundの要求ON/OFFを
+一組で保存・起動時復元する。保存失敗時の扱いと利用不能な背景ONの復元は後述の設定契約に従う。
 
 ## media・TOC
 

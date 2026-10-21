@@ -3,6 +3,8 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 namespace fs = std::filesystem;
@@ -43,6 +45,23 @@ int main() {
         check(!load_settings(path, 300, error) && !error.empty());
         fs::remove(path);
         fs::create_symlink(directory / "missing", path);
+        check(!load_settings(path, 300, error) && !error.empty());
+        fs::remove(path);
+        check(mkfifo(path.c_str(), 0600) == 0);
+        const auto child = fork();
+        check(child >= 0);
+        if (child == 0) {
+            alarm(2);
+            const bool rejected = !load_settings(path, 300, error) && !error.empty();
+            _exit(rejected ? 0 : 1);
+        }
+        int status = 0;
+        check(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+        fs::remove(path);
+        fs::create_directory(path);
+        check(!load_settings(path, 300, error) && !error.empty());
+        fs::remove(path);
+        { std::ofstream output(path); output << std::string(4097, ' '); }
         check(!load_settings(path, 300, error) && !error.empty());
         fs::remove(path);
         check(!save_settings((directory / "missing" / "settings.json").string(),
