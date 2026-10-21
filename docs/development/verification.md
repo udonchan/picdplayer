@@ -1,7 +1,29 @@
 # 検証状況と残課題
 
-更新日: 2026-10-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-22。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 日付付きの測定は当該条件だけの結果である。
+
+## #258/#259 旧候補の監査修正（2026-10-22）
+
+基準は`13485ee`と既存未commit候補。旧Chromium/Cage構成のTCP接続fragmentの変数展開を修正し、
+deployはactiveなkioskだけをwrapper由来予算＋5秒の単一monotonic期限で確認する。
+queryは一回、各systemctl/ps/sleepも残り時間で制限し、inactiveならquery/起動確認を行わない。
+既存の追加試験を修正してCTestへ登録した。mockのPATHを保持し、実remote shellを仮想uptimeで実行する。
+GNU timeout自体は置換せず、遅延成功、期限直前/期限切れ、観測timeout、不正予算、query失敗、
+runtime/state/PID不正と、実loopback listen成功・接続不能を確認した。
+
+設定読込は`O_NONBLOCK`を加え、writerのいないFIFOをopen待ちせずfdの`fstat`で拒否する。
+2秒alarm付き子processの単体試験と、FIFO/directory/symlink/過大/不正JSONでも実daemonが
+起動値を返すloopback API試験を追加した。元の設定は自動上書きしない。
+新単体試験を修正前のHEAD sourceへlinkすると両リビジョンでFIFO childがalarm終了し、
+親assert失敗（exit 134）を確認した。修正版は成功した。
+
+networkなしの`picdplayer-profile-review-build`、Linux/aarch64、fresh Debug、API/metadata ON、
+daemon/kiosk unit ONでbuildし、全CTest 49/49成功。`kiosk_runtime`内の43個別試験も成功した。
+旧追加試験の初回実行ではsocket import漏れを検出・修正後に再実行した。
+実機・SSH配備・systemd実service・CEC/HDMI/音声/長期運転は未検証で、WPE機能の導入はしていない。
+修正はこのbranchへ保存し、masterへの統合は未実施。現行文書の#257と現行版の#259は
+`c61faca`基準の別checkoutで扱う。commit/pushしても実機受入やIssue完了を意味しない。
 
 ## 利用者設定の保存（#177、部分実装）
 

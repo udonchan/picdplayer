@@ -1,5 +1,17 @@
 # 残課題とIssue一覧
 
+## 旧候補の監査修正（2026-10-22）
+
+このbranchは`13485ee`を基準とする旧Chromium/Cage構成であり、現行masterのWPE実装とは分ける。
+[#258](https://github.com/udonchan/picdplayer/issues/258)で既存未commit候補のTCP変数展開、
+wrapper正本の予算に基づくdeploy期限、inactive尊重と回帰試験登録を修正した。
+[#259](https://github.com/udonchan/picdplayer/issues/259)の設定FIFO拒否もこのbranchに適用した。
+修正はこのbranchへ保存し、master未統合で、実機配備はしていない。現行文書の整合修正
+[#257](https://github.com/udonchan/picdplayer/issues/257)は`c61faca`基準の別checkoutで扱い、
+旧branchの機能を現行master相当へ更新したとはしない。検証範囲は[検証状況](verification.md)を参照する。
+
+以下は旧branch時点の一覧であり、GitHubの現在状態は各Issueを正本とする。
+
 2026-09-26の一覧を基に、2026-09-28にIntegrity・drive・CI検証範囲を再照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
 着手・進捗・完了条件は各GitHub Issueで管理する。Issueを閉じる際は仕様と検証記録も更新する。

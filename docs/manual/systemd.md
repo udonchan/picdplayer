@@ -58,6 +58,8 @@ unitの`SupplementaryGroups`に`video cdrom audio`を指定している。Raspbe
 unitは将来の永続設定用に`StateDirectory=picdplayer`を作成する。Read Policy保存を試す場合だけ
 `PICDPLAYER_EXTRA_ARGS`へ`--settings-file /var/lib/picdplayer/settings.json`を追加する。
 `--settings-file`には絶対ファイルパスを指定する。空文字・相対パス・末尾が`/`のパスは起動時に拒否する。
+読み込みはno-follow・nonblockingでopenしてfdの種別を検査する。FIFO等の非regular file、
+symlink、不正・過大な内容は警告して起動値へ戻し、元ファイルを自動上書きしない。
 通常のunitはこの引数を自動付与しない。設定画面やArtist Backgroundの有効化はまだない。
 
 ユーザー・runtime packageと下記の設定をPiに準備してから、Macで`./scripts/deploy.sh`を実行する。

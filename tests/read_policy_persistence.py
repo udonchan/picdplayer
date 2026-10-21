@@ -1,6 +1,7 @@
 """Exercise the real loopback API and saved policy across daemon restarts, without a drive."""
 
 import json
+import os
 import pathlib
 import socket
 import subprocess
@@ -98,6 +99,21 @@ with tempfile.TemporaryDirectory(prefix="picdplayer-policy-persistence-") as tmp
         assert policy["requested_source"] == policy["effective_source"] == "startup"
 
     run_daemon(settings, fallback)
+    assert settings.read_text() == "{broken"
+    settings.write_text(" " * 4097)
+    run_daemon(settings, fallback)
+    assert settings.stat().st_size == 4097
+    settings.unlink()
+    os.mkfifo(settings, 0o600)
+    run_daemon(settings, fallback)
+    settings.unlink()
+    settings.mkdir()
+    run_daemon(settings, fallback)
+    settings.rmdir()
+    settings.symlink_to(pathlib.Path(tmp) / "missing.json")
+    run_daemon(settings, fallback)
+    assert settings.is_symlink()
+    settings.unlink()
 
     def session_only(port, policy):
         assert policy["persistence_configured"] is False

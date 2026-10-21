@@ -214,8 +214,11 @@ inactive serviceを新たにstart/enableせず、初回のservice user作成、r
 deploy後も停止したままとし、deploy scriptは前後のactive stateが一致することを確認する。
 実機検証時だけ手動で起動する。deploy前は両serviceが`active`または`inactive`であることを
 要求し、`failed`や遷移中の状態は転送前にエラーとする。deploy後は状態の一致とpackageの
-`install ok installed`を検査する。これは観測時点の確認であり、その後のcrashやTV表示・再生の
-正常性までは保証しない。
+`install ok installed`を検査する。activeなkioskだけはwrapperの
+`--startup-wait-budget-seconds`を一度取得し、5秒のgraceを加えた単一の`/proc/uptime`期限内で
+MainPIDが待機中のbashからCageへ移ることを確認する。各観測commandも残り時間で制限し、
+異常状態・不正な予算・期限切れはdeploy失敗とする。inactiveならqueryも起動確認も行わない。
+これは旧Chromium/Cage構成でのprocess観測であり、その後のcrashやTV表示・再生の正常性までは保証しない。
 
 upgrade時は実行中のserviceを残してdpkgがファイルを更新し、configure後に再起動する。
 標準UIはdaemon内に埋め込まれ、Custom UIも起動時に読み込む。新しい配信内容と表示の確認は

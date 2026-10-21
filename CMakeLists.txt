@@ -316,6 +316,7 @@ if(BUILD_TESTING)
         target_compile_options(read_policy_store_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(read_policy_store_test PRIVATE nlohmann_json::nlohmann_json)
         add_test(NAME read_policy_store COMMAND read_policy_store_test)
+        set_tests_properties(read_policy_store PROPERTIES TIMEOUT 10)
     endif()
     add_executable(integrity_state_test tests/integrity_state_test.cpp src/integrity_state.cpp)
     target_include_directories(integrity_state_test PRIVATE include)
@@ -405,6 +406,9 @@ if(BUILD_TESTING)
         add_test(NAME deployment_scripts COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/deployment_scripts.py
             ${CMAKE_CURRENT_BINARY_DIR} "${PICDPLAYER_PACKAGE_START_ORDER}")
+        add_test(NAME kiosk_runtime COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/kiosk_runtime_test.py)
+        set_tests_properties(kiosk_runtime PROPERTIES TIMEOUT 30)
         if(ENABLE_API)
             add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
