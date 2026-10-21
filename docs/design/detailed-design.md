@@ -61,7 +61,8 @@ secretとは分け、service userのみが書ける領域に置く。read-only r
 
 version 2ファイルは`schema_version`、Read Policyの5項目、`artist_background_enabled`のbooleanを
 一組として厳密に検証する。version 1はRead Policyを維持し背景OFFとして読み、起動時には移行書込をしない。
-ファイルがない場合は起動値を使う。symlink、非regular file、4 KiB超、未知version/field、
+読み込み時はno-follow・nonblockingでopenし、取得したfdの`fstat`でregular fileだけを受理する。
+FIFOにwriterがなくてもopen待ちせず拒否する。ファイルがない場合は起動値を使う。symlink、非regular file、4 KiB超、未知version/field、
 破損JSON、範囲外の値は採用せず警告して起動値へ戻す。起動を失敗させず、壊れた内容を
 上書きもしない。再生中のpolicy POSTでは、入力検証と保存が成功してからrequestedを更新し、
 STOPPED/NO_DISCになるまでeffectiveを保持する。保存先がない場合は同じ適用境界でsession値だけを変える。

@@ -74,7 +74,8 @@ std::string os_error() { return std::strerror(errno); }
 std::optional<SettingsSnapshot> load_settings(const std::string& path,
                                               std::size_t capacity, std::string& error) {
     error.clear();
-    const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    // Reject special files after open without waiting for a FIFO writer.
+    const int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);
     if (fd < 0) {
         if (errno != ENOENT) error = os_error();
         return std::nullopt;

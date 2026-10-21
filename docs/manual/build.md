@@ -146,7 +146,10 @@ serviceを未導入なら停止操作は不要。終了はCtrl-C/SIGTERM。
 | `ENABLE_METADATA` | `pkg-config libdiscid-dev libcurl4-openssl-dev nlohmann-json3-dev` | MusicBrainz・Cover Art参照 |
 | `ENABLE_API` | `pkg-config libwebsockets-dev nlohmann-json3-dev` | HTTP操作・WebSocket状態配信 |
 | `INSTALL_SYSTEMD_UNIT` | systemd運用環境 | daemon service unitのインストール |
-| `INSTALL_SYSTEMD_KIOSK_UNIT` | 実行先にCage・Chromium | kiosk unit・wrapperのインストール |
+| `INSTALL_SYSTEMD_KIOSK_UNIT` | 選択runtimeの実行依存（標準WPE。旧Chromium選択時のみCage・Chromium） | kiosk unit・wrapperのインストール |
+
+標準Docker buildのWPE launcher/runtimeは`ENABLE_WPE_KIOSK=ON`で別途生成・同梱する。
+unitのinstallだけではruntimeは生成されない。残存するChromium選択/fallbackコードはv1の対応・受入対象外である。
 
 metadata/API有効版の例:
 
