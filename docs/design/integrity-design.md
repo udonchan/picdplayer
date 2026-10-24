@@ -16,7 +16,8 @@
 | 実装済み | read-only能力probe、UNKNOWNモデル、区間付きReadEvidence、stream世代、ALSA再生head推定、bounded event、technical status |
 | 実装済み | 先読み容量・開始閾値、drive access直列化、single/repeat、ReadPolicyの停止境界でのruntime適用 |
 | 実装済み | direct backendのC2 pointer opt-in、capabilityに応じたsingle/repeat strategy選択とdowngrade reason公開 |
-| 未実装の要求 | cache軽減を伴う独立性、C2 trust評価、offset、追加mode、外部照合 |
+| 実装済み | 明示read offsetとsample補正・playable window・端coverage。物理校正/試聴は別確認 |
+| 未実装/未確認の要求 | cache軽減を伴う独立性、C2 trust評価、追加mode、外部照合。local checksum/明示jobは開発差分で本番接続済みだが未統合・実機未確認 |
 | 未確定の詳細 | cache対策手順、mode既定値、照合サービス・依存library |
 
 現在の公開型は[ReadEvidence / ReadDiagnostics](../../include/integrity_state.hpp)、
@@ -45,7 +46,7 @@ playback continuity、quiet operation、extensibility、UI simplicityとする�
 ## 2. 現行実装と追加要求の境界
 
 観測core、technical status、先読み設定、drive access直列化、任意の反復一致は現行設計へ統合した。
-追加要求の中心はC2 trust評価、cache独立性、offset、追加mode、外部照合である。direct C2 pointerは
+追加要求の中心はC2 trust評価、cache独立性、追加mode、外部照合である。offsetの実装は後述#10を参照する。direct C2 pointerは
 明示opt-inで、capabilityに応じた現行single/repeat strategy選択とdowngrade reasonを公開する。
 ReadPolicyの稼働中切替は実装・自動試験済みで、
 通常CDでPLAYING/PAUSED中の保留とSTOPPED境界での適用を確認した。現在の小さなReadPolicyと、
@@ -651,11 +652,13 @@ NOT_CHECKED/UNAVAILABLEと理由を返し、追加rippingを自動で開始し�
 
 2026-10-16、#160は設計だけを進めるものとして、PCM非保存のincremental方式、明示開始、
 通常再生との同時取得なし、全域coverageの厳密判定を利用者が承認した。
-以下はproduction取得の未実装契約であり、current snapshot、通常起動、reader、providerを変更するものではない。
-#236でpure input core、#237で注入readerを所有する内部workerを追加した。どちらもtest-onlyで、
-実drive factory・provider・production公開は未接続。入力完全性やfake取得を実機full-disc captureの完成とは扱わない。
-COMPLETE等の語もこの将来jobの概念で、既存`read.activity=COMPLETE`の意味を変更しない。
-#13はClosedだがprovider/checksum/transportは未実装である。PR #161は制約整理であり、機能完成の根拠にしない。
+以下は当初production取得の将来契約だった。後述C/D開発差分ではlocal指紋の明示jobを実装し、
+通常のPlayer snapshotと起動/再生動作へ自動取得や外部照合の意味を追加しない。
+#236でpure input core、#237で注入readerを所有する内部workerをtest-onlyとして追加した。
+2026-10-19のC/D開発差分でlocal SHA-256と実session/factory/APIへ接続するが、
+入力完全性やfake取得を実機full-disc captureの確認済みと扱わない。外部providerは未接続のままである。
+COMPLETE等の語は専用jobの状態で、既存`read.activity=COMPLETE`の意味を変更しない。
+#13はClosedだが外部provider互換checksum/transportは未実装である。PR #161は制約整理であり、外部照合完成の根拠にしない。
 
 #### 対象と完全性
 
@@ -705,7 +708,8 @@ providerが別の端除外やoffset探索を要求する場合も、暗黙にtar
 consumerは入力profile、algorithm/version、必要state量、処理単位・上限、既知vectorを持つ既知の実装だけを使う。
 consumerはcapture worker上の有界なCPU処理とし、network/disk I/Oを行わない。chunkの正常復帰で
 全byteの消費を確認し、block全chunkの成功後にだけcoverageを進める。例外後のconsumer stateは再利用しない。
-providerやchecksum algorithmは今回採用しない。未確定/非対応consumerでfull-disc readだけを先に始めない。
+設計当初はprovider/checksum algorithmを採用しなかった。2026-10-19に後述のlocal SHA-256 profileだけを
+利用者が採用し、外部providerは未採用のままとした。未確定/非対応consumerでfull-disc readだけを先に始めない。
 canonical byte列のprofile一致とprovider protocolの適合性は別で、例えばこのbyte列をCTDBへそのまま送れるとは主張しない。
 AccurateRipへの無許可アクセス、submission、修復、PCM uploadは行わない。
 
@@ -764,10 +768,10 @@ production統合では#88の消失/reset/同一path再接続の失効成果と�
 
 | 単位 | 単独の完了条件と依存 |
 |---|---|
-| [A: 完全性・canonical/incremental core (#236)](https://github.com/udonchan/picdplayer/issues/236) | pure input coreとtest-only対象を追加。TOC全域、連続prefix、track境界、byte order、宣言上限、取消/finalize競合を自動検証済み。provider通信・drive I/O・公開APIなし |
-| [B: 排他的取得worker (#237)](https://github.com/udonchan/picdplayer/issues/237) | Aに依存。注入reader所有・coordinator排他・call/job予算・取消とrelease待ち・旧結果拒否を内部workerへ実装。gate付きfakeで検証し、runtime/実driveへは未接続 |
-| [C: checksum profile/consumer adapter (#238)](https://github.com/udonchan/picdplayer/issues/238) | #13側の公式protocol・利用条件・algorithm選定に依存。既知vector・state上限・incremental適合を確認。通信/外部結果の実装とは分離し、A/Bと並行調査できる。未実装 |
-| [D: 明示jobのproduction統合と公開 (#239)](https://github.com/udonchan/picdplayer/issues/239) | A/B/Cと#88の物理失効統合を前提に、開始拒否/取消/release待ち/再操作、manifestの契約と別承認の実機評価を実装。最終UI再設計やprovider通信は含めない。未実装 |
+| [A: 完全性・canonical/incremental core (#236)](https://github.com/udonchan/picdplayer/issues/236) | A区間でpure coreとtest-only対象を追加。TOC全域、連続prefix、track境界、byte order、宣言上限、取消/finalize競合を検証し、後続Dからreuse。core自身はprovider通信・drive I/O・公開APIを持たない |
+| [B: 排他的取得worker (#237)](https://github.com/udonchan/picdplayer/issues/237) | B区間で注入reader所有・coordinator排他・call/job予算・取消/release待ち・旧結果拒否を内部workerへ実装しfakeで検証。後続Dで実session/factoryと接続するが、実drive受入は未確認 |
+| [C: checksum profile/consumer adapter (#238)](https://github.com/udonchan/picdplayer/issues/238) | 2026-10-19にprovider非依存local SHA-256を採用。consumer/core試験を経てD開発差分から利用。外部互換profileは公式protocol・利用条件の別採用が必要。通信/外部結果を実装済みとしない |
+| [D: 明示jobのproduction統合と公開 (#239)](https://github.com/udonchan/picdplayer/issues/239) | 2026-10-19のlocal差分で実session/raw factory/API/Settingsへ接続。開始拒否/取消/release待ち/手動再操作、有効なmanifestを実装。実drive取得・ALSA/物理失効・UI実機評価は別承認で未確認。最終UI再設計やprovider通信は含めない |
 
 設計PR #235段階では、利用者の承認は文書の統合、A/B/C/Dの実Issue作成とAだけの実装・自動検証・統合だった。
 その時点ではB/C/Dの実装、providerアクセス、実機操作、Issue closeは対象外で、表は分割案だった。
@@ -792,7 +796,7 @@ PR #235では設計だけを整理し、checksum計算・capture・provider・�
 #### Pure Core Implementation
 
 #236の[CompletePcmInput](../../include/complete_pcm_input.hpp)はthread-confinedな入力モデルであり、
-CMakeの`complete_pcm_input_test`だけがcompile/linkする。daemon target、既存reader、CLI/REST/WS/fixtureへ接続しない。
+A区間ではCMakeの`complete_pcm_input_test`だけへcompile/linkした。後述D開発差分ではAPI有効時のdaemonにも接続する。
 呼び手はjob専用のtrusted consumer、固定identity/profile/TOC/policy、有限durationとmonotonic clockを渡す。
 初期版のoffsetは明示0だけであり、原盤一致・校正済みを示す値ではない。
 
@@ -821,7 +825,7 @@ millisecond未満の残予算は切り捨てて0とし、新しいreadに残job�
 #### Acquisition Worker Implementation
 
 #237の[CompletePcmWorker](../../include/complete_pcm_worker.hpp)は明示使用の内部componentで、
-`complete_pcm_worker_test`だけにlinkする。daemonのmain/session、既存PcmWorker、CLI/API/UI/JSONへ接続しない。
+B区間では`complete_pcm_worker_test`だけにlinkした。後述D開発差分ではdaemonのmain/session/APIと接続する。
 constructorはowner threadを作るだけで、job受理までreader factory/TOC probeは呼ばない。
 callerはraw reader factory、TOC probe、共有DriveAccessCoordinator、thread-safeで非blockingなmonotonic clockを渡す。
 factory/probeはcoordinatorを再入せず、consumerはfreshなjob専用のbounded CPU実装でなければならない。
@@ -867,6 +871,65 @@ coreのreservation、consumer宣言量、wrapperの有界候補数とは区別�
 cancel/pollはreaderやconsumerを待たないが、destructorはownerをjoinするため進行中callが戻らなければ待つ。
 detach、別threadからの強制close、ejectの先行を導入しない。Dはrelease待ち中にmain loopで破棄/joinしないことが必要である。
 fake試験の成功を実driveの故障・中断・物理releaseが確認済みという根拠にはしない。
+
+#### Local PCM SHA-256 Profile（2026-10-19）
+
+利用者は、通常再生の必須ではない将来拡張だったC/Dを、明示全域取得とlocal指紋の用途で進めると
+明示した。これはAccurateRip/CTDB等の外部provider採用や利用許諾ではない。
+最初のC区間は[consumer](../../include/complete_pcm_sha256.hpp)とcore接続試験だけだった。
+続くD開発差分ではAPI有効時にdaemonへもcompile/linkし、実raw readerから同じconsumerを利用する。
+
+| 項目 | 採用値・意味 |
+| --- | --- |
+| canonical | `s16le-44100-stereo-v1`。上記canonical PCMと同一。header、track区切りbyte、追加無音、gain等をhashしない |
+| algorithm/version | `sha256` / `local-pcm-sha256-v1`。[FIPS 180-4](https://doi.org/10.6028/NIST.FIPS.180-4)のSHA-256を使用 |
+| 範囲 | discはcoreが受理したcanonical byte列の連結、trackは各TOC track内のbyte列。範囲と端/offset適格性の判断はcoreが所有する |
+| offset | 初期の明示0制約を維持。物理校正済みとせず、非0の端を暗黙に除外しない |
+| 入力上限 | 1 chunkは16 KiB以下、4 bytes整列、track番号1〜99の単調順。coreが4-byte stereo sample frame単位と正しいTOC境界を供給する |
+| 新規所有state | OpenSSLの固定`SHA256_CTX`をdisc/現trackに各1つ、最大99のtrack digestと固定16 KiB結果buffer。宣言は`sizeof`で算出し1 MiB以内 |
+| 実装上の選択 | opaqueなEVP provider stateのallocationを上限と推測しないため、現行OpenSSLの固定SHA APIを使用。low-level APIのdeprecated属性は当該翻訳単位だけ抑止し、独自hash algorithmは実装しない |
+| CPU/I/O | worker上でchunk単位にincremental処理。consumerにthread/network/file/drive I/Oはない。PCMは蓄積せずcontext/digestのみ保持 |
+| 結果 | 最大16 KiBのUTF-8 JSON、disc/各trackのbyte数と小文字64桁hex SHA-256。`kind=local_pcm_fingerprint`、`external_verification=NOT_CHECKED`を必須とする |
+| 寿命 | 一job専用consumer。finalize後の入力/再finalizeは拒否し、取消/無効化でdiscardする。部分resultをCOMPLETEとして公開しない |
+
+JSONのfieldは`kind`、`algorithm`、`version`、`canonical`、`external_verification`、`bytes`、`sha256`、
+`tracks`で、track要素は`number`/`bytes`/`sha256`を持つ。入力を読む間は結果を公開しない。
+consumer単体のalgorithm vector試験は任意の整列byte列や空入力も使うが、それをTOC全域取得receiptと扱わない。
+COMPLETEは従来どおりcore/workerとDのconfirm・実release・有効条件の成立を必要とする。
+digestは入力byte列の識別であり、repeat誤一致の解消、原盤正当性、物理disc同一性、外部MATCH、bit-perfect出力を証明しない。
+state宣言はconsumerの具体的な所有memoryであり、thread stack・process RSS・全library全体の上限ではない。
+`CompletePcmInput`の結果公開条件、8 MiB予約、1 MiB consumer上限、cancel/context失効は変更しない。
+
+#### Explicit Local Jobs Runtime（#239）
+
+`CompletePcmSession`を単一session ownerとし、`run_player_session()`が実controller/engine/worker/media状態を供給する。
+API有効・API起動時に一slotを用意するが、明示start受理までfactory/TOC/consumerの処理を開始しない。
+API名・field/versionは[公開契約](message-contract.md#explicit-local-pcm-jobs開発差分)で固定する。
+
+- 正確なSTOPPEDだけを許す。engineは同期開始時にquiescenceを取り消し、queue取消と成功したoutput reset、
+  保持PCM/evidence/submissionの消去後だけquiescentを立てる。ALSA handleのcloseを意味せず、PAUSED/NO_DISCは不適格。
+- 通常STOP/自然終了ではplayback readerを非同期に退役する。quiescentだけでなく実`device_released()`を別確認する。
+  解放待ちでstartが拒否されても取得は予約せず、利用者が再操作する。Playは従来のfactoryを必要時に再openする。
+- 開始可否のpolicy/resource判定とcore予約量は同じpure preflightを使う。通常再生で許されるregionでも
+  captureの75-frame制約や8 MiB予約に適合しなければ`policy_budget_unsupported`を示し、開始可能と偽表示しない。
+- start時にbackend/direct option・観測generation・policyを固定し、raw factory/TOCを共有coordinatorの内側で実行する。
+  worker Bがoffset0/repeat wrapperを所有し、通常再生用の既に補正/再読されたfactoryを二重利用しない。
+- device観測generationはidentityへ明示的に含め、capture reader incarnation/job番号やdisc_generationと混同しない。
+  hostの観測は継続し、退役完了・eject・probe/media/speed/spindownのdriveアクセス条件にはcaptureも含める。
+- HTTP/CEC/stdinのplay/seek/track等とpolicy変更は先にcaptureを失効させる。解放中なら要求は未実行とし、
+  reader解放後の手動再操作だけを受ける。Stopは既にSTOPPEDでも取消する。無関係な未知stdin文字列では取消しない。
+- APIで受けた取消を先に処理してからownerがpoll/confirmする。後続のCEC/stdin操作も次の公開応答より前にreceiptを撤回する。
+  GETは読取専用であり、取得進行・期限・confirmをGET頻度に依存させない。
+- 現slotのmanifestだけをcacheし、現在context/全gate不一致では結果を返さない。完了後も新操作やdevice/policy/disc変更で撤回する。
+  manifestは64 KiB以内、HTTP結果は既存の4 KiB分割/同時8 response上限を使う。PCMやmanifest履歴をdisk保存しない。
+- Settingsは30分上限を明示した取得/取消buttonと状態・release待ち・結果API位置を表示する。statusのread-only pollingは
+  panel内だけで、開閉やpoll失敗からPOSTを自動生成しない。202をCOMPLETE/解放済みとせず、拒否/未確認時は手動再操作とする。
+- Settingsの7 buttonは利用不能でもfocus可能とし、操作不可はaria-disabledで示す。条件不足での決定は理由表示だけで
+  POSTを送らず、説明文を特別なcursor対象にしない。backendの開始条件やloopback限定はこのUI表現で緩めない。
+
+実装はroot/sessionの状態を観測してgateを供給するが、fake成功を実ALSA停止・kernel I/O解放・物理drive適合の証拠にはしない。
+workerのcall/job期限は未完了化・後続I/O停止の期限であり、in-flight kernel I/Oを強制中断する保証ではない。
+shutdownは所有threadをjoinし、無期限に生存するdetached driveアクセスは作らない。
 
 ## 12. 移行phaseと完了条件
 

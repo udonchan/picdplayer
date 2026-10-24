@@ -3,7 +3,14 @@
 Now Playingとtechnical statusのHTML/CSS/JSのソースは`ui/default/`にある。CMakeがこの同じ
 ファイルからdefault UIを実行ファイルへ埋め込むため、install先のファイルが壊れてもdefaultは残る。
 API有効buildでは編集用コピーを`/usr/local/share/picdplayer/ui/default/`へinstallする。
-標準画面の変更には再buildが必要だが、Custom UIの編集にはdaemonの再起動だけでよい。
+埋め込み版の変更には再buildが必要だが、Custom UIの編集にはdaemon再起動と画面再読込だけでよい。
+
+UIだけを反復確認するときは、最終package用の埋め込みbuildとは分け、信頼するUIコピーを
+`--custom-ui`で読む既存経路を使える。HTML/CSS/JSの変更ごとにC++全build・全CTestを回す必要はない。
+対象のNode回帰とbundle読込を先に確認し、最終統合時に標準build/packageと全回帰を行う。
+これはhot reloadではなく起動時snapshotなので、copy完了後のdaemon再起動とbrowser再読込が必要である。
+常駐serviceのUI path/権限変更は別途承認し、package管理のdefault assetを書き換えれば即反映するとは扱わない。
+Inspectorでの一時的な見た目previewは、sourceや配備物の更新ではなく、reloadで失われる。CSPを緩めて試行しない。
 
 ## 導入
 

@@ -20,6 +20,7 @@
 #endif
 #ifdef ENABLE_API
 #include "api_server.hpp"
+#include "complete_pcm_session.hpp"
 #include "read_policy_store.hpp"
 #include "presentation_model.hpp"
 #include "presentation_json.hpp"
@@ -245,6 +246,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     const char* requested_read_policy_source = initial_read_policy_source;
     const char* effective_read_policy_source = initial_read_policy_source;
     bool read_policy_pending = false;
+    std::uint64_t policy_revision = 0;
     const auto apply_read_policy = [&](const ReadPolicy& policy) {
         validate_read_policy(policy, buffer_config.capacity_cd_frames);
         const auto block_frames = policy.mode == ReadVerificationMode::repeat
@@ -261,6 +263,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                            policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
                            block_frames);
         effective_read_policy = policy;
+        ++policy_revision;
         effective_read_policy_source = requested_read_policy_source;
         read_policy_pending = false;
         engine.reset_prebuffer_target();
@@ -323,6 +326,30 @@ void run_player_session(const std::string& device, CddaBackend backend,
     bool api_eject_pending = false;
     bool api_eject_inflight = false;
     std::chrono::steady_clock::time_point api_eject_requested_at{};
+    std::unique_ptr<CompletePcmSession> capture;
+    auto capture_options = std::make_shared<DirectOptions>();
+    auto capture_options_mutex = std::make_shared<std::mutex>();
+    auto capture_observation_generation = std::make_shared<std::atomic<std::uint64_t>>(0);
+    const auto capture_context = [&] {
+        CompletePcmContext context;
+        context.device_current = device_context_ready && !device_io_retiring && device_context_current();
+        context.gate = {controller.state().playback == PlaybackState::stopped,
+            engine.quiescent(), engine.quiescent(), worker.device_released(),
+            !toc_needs_refresh && loaded_toc && media_state.state() == MediaLifecycleState::audio_ready &&
+                !api_eject_pending && !api_eject_inflight};
+        context.toc = loaded_toc ? &*loaded_toc : nullptr;
+        context.media_idle = media_worker.idle();
+        context.policy_pending = read_policy_pending;
+        context.disc_generation = disc_generation;
+        context.observation_generation = device_observation.generation;
+        context.policy_revision = policy_revision;
+        context.offset_samples = configured_read_offset;
+        context.policy = effective_read_policy;
+        return context;
+    };
+    const auto capture_interrupt = [&] { return capture && capture->interrupt(); };
+    const auto capture_busy = [&] { return capture && capture->busy(); };
+    const auto capture_released = [&] { return !capture || capture->released(); };
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
         std::optional<std::uint64_t> metadata_generation;
@@ -383,6 +410,29 @@ void run_player_session(const std::string& device, CddaBackend backend,
     };
     std::unique_ptr<ApiServer> api_server;
     if (api_port) {
+        const auto capture_current = [=] {
+            const auto generation = capture_observation_generation->load();
+            return generation != 0 && generation == accepted_device_generation->load() &&
+                device_observer->permits(generation);
+        };
+        capture = std::make_unique<CompletePcmSession>(diagnostic_session_id,
+            backend == CddaBackend::direct ? "direct" : "paranoia",
+            [=] {
+                const auto generation = capture_observation_generation->load();
+                const auto current = [=] { return generation == accepted_device_generation->load() &&
+                    device_observer->permits(generation); };
+                if (!current()) throw std::runtime_error("capture context changed before open");
+                DirectOptions options;
+                { std::lock_guard lock(*capture_options_mutex); options = *capture_options; }
+                auto reader = make_device_epoch_reader(make_cdda_reader(backend, device, options), current);
+                if (!current()) throw std::runtime_error("capture context changed during open");
+                return reader;
+            }, [=] {
+                if (!capture_current()) throw std::runtime_error("capture context changed before TOC");
+                auto toc = read_cd_toc(device);
+                if (!capture_current()) throw std::runtime_error("capture context changed during TOC");
+                return toc;
+            }, drive_access);
         diagnostic_publisher = std::make_unique<ReadDiagnosticsPublisher>();
         const auto serialize_read_policy = [&] {
             const auto policy_json = [](const ReadPolicy& value) {
@@ -401,7 +451,27 @@ void run_player_session(const std::string& device, CddaBackend backend,
                    "\",\"effective_source\":\"" + effective_read_policy_source + '"' +
                    ",\"persistence_configured\":" + (settings_file.empty() ? "false" : "true") + '}';
         };
-        ApiCommandHandler command_handler = [&](const ApiCommand& command) {
+        ApiCommandHandler command_handler = [&](const ApiCommand& command) -> ApiCommandResult {
+                if (command.type == ApiCommandType::start_complete_pcm) {
+                    if (capture->busy()) return ApiCommandFailure::capture_busy;
+                    const auto context = capture_context();
+                    if (!capture->start_rejection(context)) {
+                        std::scoped_lock lock(*direct_options_mutex, *capture_options_mutex);
+                        *capture_options = *direct_options;
+                        capture_observation_generation->store(context.observation_generation);
+                    }
+                    return capture->start(command, context);
+                }
+                if (command.type == ApiCommandType::cancel_complete_pcm) return capture->cancel(command);
+                switch (command.type) {
+                case ApiCommandType::play: case ApiCommandType::pause: case ApiCommandType::stop:
+                case ApiCommandType::next: case ApiCommandType::previous: case ApiCommandType::seek_relative:
+                case ApiCommandType::select_track: case ApiCommandType::eject: case ApiCommandType::set_read_policy:
+                    if (capture_interrupt() && command.type != ApiCommandType::stop)
+                        return ApiCommandFailure::capture_releasing;
+                    break;
+                default: break;
+                }
                 if (command.type == ApiCommandType::set_artist_background) {
                     if (command.enabled && !artist_background_policy.available()) return false;
                     if (!command.enabled) {
@@ -521,6 +591,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     engine.synchronize(); print_state(controller); return true;
                 case ApiCommandType::set_read_policy: return false; // handled above
                 case ApiCommandType::set_artist_background: return false; // handled above
+                case ApiCommandType::start_complete_pcm: return false;
+                case ApiCommandType::cancel_complete_pcm: return false;
                 case ApiCommandType::select_metadata_candidate: return false; // handled above
                 case ApiCommandType::decline_metadata_candidates: return false; // handled above
                 case ApiCommandType::eject: break;
@@ -562,7 +634,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         return json + ",\"persistence_configured\":" + (settings_file.empty() ? "false" : "true") +
                             ",\"persistence_state\":\"" + state + "\",\"requested_source\":\"" + background_source + "\"}";
                     },
-                                                 std::move(background_artwork_provider), [&] { return diagnostic_response(false); });
+                                                  std::move(background_artwork_provider), [&] { return diagnostic_response(false); },
+                                                  [&](bool result) { return capture->response(capture_context(), result); });
         auto line = log_notice("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';
@@ -574,6 +647,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
             line << " commands=enabled";
     }
     auto next_api_snapshot = std::chrono::steady_clock::now();
+#else
+    const auto capture_interrupt = [] { return false; };
+    const auto capture_busy = [] { return false; };
+    const auto capture_released = [] { return true; };
 #endif
     std::string last_media_error;
     std::string input;
@@ -593,6 +670,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             return;
         }
         const bool had_context = device_observation.generation != 0;
+        (void)capture_interrupt();
         device_observation = std::move(observation);
         media_worker.invalidate(device_observation.generation);
         controller.remove_disc();
@@ -638,9 +716,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
         const auto now = std::chrono::steady_clock::now();
         const auto control_started = now;
         apply_device_observation(device_observer->snapshot());
-        if (device_io_retiring && worker.device_released() && !media_worker.retiring())
+        if (device_io_retiring && worker.device_released() && !media_worker.retiring() && capture_released())
             device_io_retiring = false;
-        const bool may_access_device = !device_io_retiring && device_context_current();
+        const bool may_access_device = !device_io_retiring && device_context_current() && !capture_busy() && capture_released();
         if (!drive_probe_attempted && may_access_device && worker.device_released() &&
             (device_observation.sampled || now >= initial_observation_grace) &&
             media_worker.request(MediaWork::probe_drive)) drive_probe_attempted = true;
@@ -801,6 +879,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (after != before)
                     log_info("media") << "state=" << media_state_name(after);
                 if (after == MediaLifecycleState::loading && after != before) {
+                    (void)capture_interrupt();
                     next_drive_stop = std::chrono::steady_clock::time_point::max();
 #ifdef ENABLE_METADATA
                     enrichment.invalidate();
@@ -814,6 +893,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     }
                 } else if (after == MediaLifecycleState::no_disc ||
                            after == MediaLifecycleState::unsupported) {
+                    (void)capture_interrupt();
                     next_drive_stop = std::chrono::steady_clock::time_point::max();
                     toc_pending = false;
                     toc_needs_refresh = true;
@@ -839,6 +919,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     continue;
                 if (!loaded_toc || !same_toc(*loaded_toc, *media_result.toc) ||
                     controller.state().playback == PlaybackState::no_disc || toc_needs_refresh) {
+                    (void)capture_interrupt();
                     controller.load_disc(*media_result.toc);
                     engine.set_disc_end(media_result.toc->leadout_lba);
                     engine.synchronize();
@@ -959,6 +1040,9 @@ void run_player_session(const std::string& device, CddaBackend backend,
             api_server->service();
             report_slow_stage("api_service", api_started);
         }
+        // API cancellation is processed before confirmation. Later CEC/stdin
+        // commands revoke receipts before the next public response.
+        if (capture) capture->poll(capture_context());
 #endif
         pollfd fds[]{{signals.fd, POLLIN, 0}, {interactive ? STDIN_FILENO : -1, POLLIN, 0},
                      {use_cec ? cec.poll_fd() : -1, POLLIN, 0}};
@@ -984,6 +1068,10 @@ void run_player_session(const std::string& device, CddaBackend backend,
             for (;;) {
                 const auto received = cec.receive();
                 if (!received.dequeued) break;
+                if (received.command && capture_interrupt() && *received.command != CecCommand::stop) {
+                    log_warning("player") << "command not executed: capture releasing; retry manually";
+                    continue;
+                }
                 if (received.command && media_state.state() != MediaLifecycleState::ejecting &&
                     ((*received.command == CecCommand::stop || *received.command == CecCommand::pause) ||
                      (device_context_ready && device_context_current() && !device_io_retiring)) &&
@@ -1013,6 +1101,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
             bool changed = true;
             if (command == "quit") { quitting = true; break; }
             if (command == "state") { print_state(controller, true); continue; }
+            const bool playback_command = command == "play" || command == "pause" || command == "stop" ||
+                command == "next" || command == "previous" || command.starts_with("track ") || command.starts_with("seek ");
+            if (playback_command && capture_interrupt() && command != "stop") {
+                log_warning("player") << "command not executed: capture releasing; retry manually";
+                continue;
+            }
             if (command != "stop" && command != "pause" &&
                 (!device_context_ready || !device_context_current() || device_io_retiring)) {
                 log_warning("player") << "command rejected while device context is unavailable";
@@ -1045,6 +1139,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             print_state(controller);
         }
     }
+    (void)capture_interrupt();
     controller.stop();
     engine.synchronize();
     log_notice("player") << "output stopped; waiting for outstanding drive I/O";

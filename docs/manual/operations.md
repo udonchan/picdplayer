@@ -197,6 +197,34 @@ Settingsは未保存と明示する。`unsaved`なら再起動時に以前のON�
 memory使用量が増える。開始閾値を増やすとplay・seek後の待ち時間も増える。
 現行の既定750/45 frameは通常CDでの比較から採用しており、傷discでの評価は継続する。
 
+## 明示的なlocal PCM指紋取得（開発差分）
+
+API有効buildのPlayer SettingsにLocal PCM fingerprintの明示取得・取消がある。
+取得は通常の再生ではなく全域を読む専用jobであり、起動・disc挿入・Settings開閉から自動開始しない。
+`Acquire (30 minute limit)`は利用者が30分の有限予算を選ぶ操作であり、完了や外部照合成功を保証しない。
+より長い有限予算を使う開発操作は[complete-PCM API](../design/message-contract.md#explicit-local-pcm-jobs開発差分)に従う。
+
+開始にはAUDIO_READY、正確なSTOPPED、出力停止/queue取消、playback reader実解放、現在のdevice/TOC/policy、
+idle media workerとcaptureで扱えるpolicy/resourceが必要である。通常STOPはreaderを非同期退役させるため、
+直後は解放待ちで開始不可になり得る。状態がreadyになってから明示的に再操作する。
+初期profileは設定として明示されたread offset 0だけを扱うが、driveの校正済みを意味しない。
+未設定/非0を自動的に0へ変更しない。daemonの起動設定変更・実discの全域読取は別に範囲と復元を合意する。
+
+取消の202受理とreader解放は別である。I/Oから戻るまではbusy/release待ちが残り、新取得は受け付けない。
+取得と競合するplay/seek/track/ejectは取消した上で未実行として拒否し、自動予約/再実行しない。
+既にSTOPPEDでのStopも取消として機能する。Settingsを閉じるだけでは取得を取消さない。
+COMPLETEかつ現在有効な結果だけが`/api/complete-pcm/result`へ公開され、次の操作/context変更で失効する。
+
+得られるのはlocal SHA-256指紋と取得範囲のmanifestであり、原盤正当性・外部MATCH・cache独立性・bit-perfect出力の証明ではない。
+PCMや取得履歴を保存せず、providerへuploadしない。kernel I/Oの強制中断やshutdownの非blockingは保証しない。
+候補のPi配備/idle起動までは確認したが、取得機能の実drive/ALSA/取消releaseと最新UIの実機受入はまだ行っていない。
+
+最初の実機試験は、設定・媒体・開始/終了状態と読取許可を合意してから、短い有限API予算で行える。
+例えば最初は15秒以内のjobを明示し、進行→取消→busy/reader解放待ち→解放後の再生/停止を確認する。
+これは全域完了の試験ではない。取得を開始したまま利用者の長い返答待ちにせず、期限/取消と
+SINGLE・背景OFF・STOPPEDへの復元を先に決める。実I/Oが返らない状態を解放済みと仮定して再操作しない。
+全域完了を確認する長いjobやUIの30分開始は、短い試験後に時間・取消手段を改めて合意する。
+
 ## 一回実行の診断
 
 ```sh

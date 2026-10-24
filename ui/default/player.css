@@ -273,10 +273,12 @@ main {
   background: #080c0de8;
 }
 .settings-surface {
+  --settings-inset: clamp(22px, 4vw, 38px);
   width: min(620px, 100%);
   max-height: calc(100vh - 40px);
   overflow-y: auto;
-  padding: clamp(22px, 4vw, 38px);
+  padding: var(--settings-inset);
+  scroll-padding: var(--settings-inset);
   border: 1px solid var(--line);
   background: var(--panel);
   box-shadow: 0 24px 70px #0009;
@@ -298,7 +300,8 @@ main {
 .settings-heading button[data-focused='true'],
 .settings-choices button:focus-visible,
 .settings-heading button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.settings-choices button:disabled { opacity: .55; }
+.settings-choices button:disabled,
+.settings-choices button[aria-disabled='true'] { opacity: .55; }
 .settings-note, .settings-unavailable p { color: var(--muted); font-size: 14px; }
 .settings-status { min-height: 2em; color: var(--retry); }
 .settings-details { display: grid; grid-template-columns: 1fr auto; gap: 6px 18px; margin: 18px 0; }

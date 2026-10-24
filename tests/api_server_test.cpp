@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstring>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <netinet/in.h>
 #include <ifaddrs.h>
 #include <sys/socket.h>
@@ -35,6 +36,28 @@ int main() {
         check(map_route("POST", history).status == 405 && history_calls == 1);
         check(map_route("GET", [] { return std::string(R"({"disc_map":null})"); }).body == R"({"disc_map":null})");
         check(map_route("GET", [] { return std::string(1024 * 1024 + 1, 'x'); }).status == 500);
+        int capture_gets = 0;
+        const std::string capture_result = "\"" + std::string(64 * 1024 - 2, 'r') + "\"";
+        const ApiCompletePcmProvider capture_provider = [&](bool result) {
+            ++capture_gets;
+            return ApiResponse{200, "application/json", result ? capture_result : R"({"phase":"idle"})"};
+        };
+        const auto capture_get = [&](std::string_view path, const ApiCompletePcmProvider& capture = {}) {
+            return route_api_request("GET", path, provider, {}, {}, {}, nullptr, {}, {}, {}, {}, {}, {}, capture);
+        };
+        for (const auto* path : {"/api/complete-pcm", "/api/complete-pcm/result"}) {
+            check(capture_get(path).status == 503);
+            const auto oversized = capture_get(path, [](bool) {
+                return ApiResponse{200, "application/json", std::string(64 * 1024 + 1, 'x')};
+            });
+            check(oversized.status == 500 && oversized.body == R"({"error":"diagnostics_too_large"})");
+            check(capture_get(path, [](bool) { return ApiResponse{409, "application/json", "provider-error"}; }).body == "provider-error");
+            check(route_api_request("PUT", path, provider, {}, {}, {}, nullptr, {}, {}, {}, {}, {}, {}, capture_provider).status == 405);
+        }
+        check(capture_gets == 0);
+        check(capture_get("/api/complete-pcm", capture_provider).body == R"({"phase":"idle"})");
+        check(capture_get("/api/complete-pcm/result", capture_provider).body == capture_result);
+        check(capture_gets == 2);
         auto response = route_api_request("GET", "/api/state", provider);
         check(response.status == 200 && response.content_type == "application/json");
         check(response.body == R"({"revision":7})" && calls == 1);
@@ -91,6 +114,63 @@ int main() {
         }
         check(route_api_request("POST", "/api/play", provider).status == 403);
         const ApiCommandHandler rejecting = [](const ApiCommand&) { return false; };
+        int capture_commands = 0;
+        ApiCommand captured{ApiCommandType::play, 0, {}, {}, 0, 0, 0};
+        const ApiCommandHandler capture_commands_handler = [&](const ApiCommand& command) {
+            ++capture_commands;
+            captured = command;
+            return true;
+        };
+        const auto capture_post = [&](std::string_view body, const ApiCommandHandler& handler) {
+            return route_api_request("POST", "/api/complete-pcm", provider, handler, body);
+        };
+        const auto start_body = nlohmann::json{{"action", "start"}, {"session_id", "session-1"},
+            {"disc_generation", 2}, {"duration_ms", 10800000}, {"profile", "local-pcm-sha256-v1"}};
+        const std::string cancel_body = R"({"action":"cancel","session_id":"session-1","job_id":18446744073709551615})";
+        auto capture_response = capture_post(start_body.dump(), capture_commands_handler);
+        check(capture_response.status == 202 && capture_response.body.empty());
+        check(captured.type == ApiCommandType::start_complete_pcm && captured.session_id == "session-1" &&
+              captured.disc_generation == 2 && captured.duration_ms == 10800000 && captured.job_id == 0);
+        capture_response = capture_post(cancel_body, capture_commands_handler);
+        check(capture_response.status == 202 && capture_response.body.empty());
+        check(captured.type == ApiCommandType::cancel_complete_pcm && captured.session_id == "session-1" &&
+              captured.job_id == UINT64_MAX && captured.duration_ms == 0 && captured.disc_generation == 0);
+        for (const auto& [field, value] : std::initializer_list<std::pair<const char*, nlohmann::json>>{
+              {"profile", "other"}, {"profile", 1}, {"duration_ms", 0}, {"duration_ms", 10800001},
+             {"duration_ms", -1}, {"duration_ms", 1.5}, {"duration_ms", "1"},
+             {"duration_ms", UINT64_MAX}, {"disc_generation", 0}, {"disc_generation", -1},
+             {"disc_generation", 2.0}, {"session_id", "bad token"}, {"session_id", std::string(65, 's')},
+             {"session_id", false}, {"action", "unknown"}, {"extra", true}}) {
+            auto invalid = start_body;
+            invalid[field] = value;
+            check(capture_post(invalid.dump(), capture_commands_handler).status == 400);
+        }
+        for (const auto* invalid : {"{}", "[]", "null", "{",
+             R"({"action":"start","session_id":"s","disc_generation":1,"duration_ms":1})",
+             R"({"action":"cancel","session_id":"s","job_id":0})",
+             R"({"action":"cancel","session_id":"s","job_id":-1})",
+             R"({"action":"cancel","session_id":"s","job_id":1.0})",
+             R"({"action":"cancel","session_id":"s","job_id":"1"})",
+             R"({"action":"cancel","session_id":"s","job_id":1,"extra":true})",
+             R"({"action":"cancel","session_id":"s","job_id":1,"job_id":2})"})
+            check(capture_post(invalid, capture_commands_handler).status == 400);
+        check(capture_post(std::string(4097, 'x'), capture_commands_handler).status == 413);
+        check(capture_commands == 2);
+        check(capture_post(start_body.dump(), {}).status == 403);
+        check(capture_post(cancel_body, rejecting).body == R"({"error":"command_rejected"})");
+        for (const auto& [failure, name] : {
+             std::pair{ApiCommandFailure::capture_releasing, "capture_releasing"},
+             std::pair{ApiCommandFailure::capture_not_ready, "capture_not_ready"},
+             std::pair{ApiCommandFailure::capture_context_changed, "capture_context_changed"},
+             std::pair{ApiCommandFailure::capture_no_job, "capture_no_job"},
+             std::pair{ApiCommandFailure::capture_busy, "capture_busy"}}) {
+            const ApiCommandHandler failed = [failure](const ApiCommand&) { return failure; };
+            capture_response = capture_post(cancel_body, failed);
+            check(capture_response.status == 409 && nlohmann::json::parse(capture_response.body) ==
+                nlohmann::json({{"error", name}, {"executed", false}, {"retry", "manual"}}));
+            check(route_api_request("POST", "/api/play", provider, failed).body == capture_response.body);
+        }
+        check(route_api_request("POST", "/api/complete-pcm/result", provider, capture_commands_handler).status == 405);
         for (const auto* path : {"/api/play", "/api/pause", "/api/stop", "/api/previous", "/api/next"})
             check(route_api_request("POST", path, provider, rejecting).status == 409);
         response = route_api_request("POST", "/api/seek", provider, commands,
@@ -184,7 +264,9 @@ int main() {
         ArtistBackgroundPolicy background_policy;
         const ApiStateProvider background = [&] { return background_policy.json(); };
         int background_commands = 0;
-        const ApiCommandHandler owner_commands = [&](const ApiCommand& command) {
+        const ApiCommandHandler owner_commands = [&](const ApiCommand& command) -> ApiCommandResult {
+            if (command.type == ApiCommandType::start_complete_pcm || command.type == ApiCommandType::cancel_complete_pcm)
+                return capture_commands_handler(command);
             if (command.type != ApiCommandType::set_artist_background) return commands(command);
             ++background_commands;
             return background_policy.set_enabled(command.enabled);
@@ -243,8 +325,9 @@ int main() {
         check(capable_route("GET", asset_reference).status == 404);
 
         // A wildcard listener must still allow commands from a loopback peer.
-        ApiServer server("0.0.0.0", 0, provider, owner_commands, {}, {}, {}, {}, background);
-        const auto post = [&](std::string_view path, const std::string& body, in_addr destination) {
+        ApiServer server("0.0.0.0", 0, provider, owner_commands, {}, {}, {}, {}, background, {}, {}, capture_provider);
+        const auto post = [&](std::string_view path, const std::string& body, in_addr destination,
+                              std::string_view method = "POST") {
             std::atomic<bool> finished = false;
             std::string reply;
             std::thread worker([&] {
@@ -257,7 +340,7 @@ int main() {
                 target.sin_port = htons(static_cast<std::uint16_t>(server.port()));
                 target.sin_addr = destination;
                 if (::connect(fd, reinterpret_cast<sockaddr*>(&target), sizeof(target)) == 0) {
-                    const std::string request = "POST " + std::string(path) +
+                    const std::string request = std::string(method) + " " + std::string(path) +
                         " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: " +
                         std::to_string(body.size()) + "\r\n\r\n" + body;
                     (void)send(fd, request.data(), request.size(), 0);
@@ -279,6 +362,14 @@ int main() {
             return reply;
         };
         const in_addr loopback{htonl(INADDR_LOOPBACK)};
+        const auto result_reply = post("/api/complete-pcm/result", "", loopback, "GET");
+        check(result_reply.find("HTTP/1.1 200") != std::string::npos);
+        check(result_reply.substr(result_reply.find("\r\n\r\n") + 4) == capture_result);
+        check(capture_gets == 3);
+        check(post("/api/complete-pcm", start_body.dump(), loopback).find("HTTP/1.1 202") != std::string::npos);
+        check(post("/api/complete-pcm", cancel_body, loopback).find("HTTP/1.1 202") != std::string::npos);
+        check(post("/api/complete-pcm", std::string(4097, 'x'), loopback).find("HTTP/1.1 413") != std::string::npos);
+        check(capture_commands == 4);
         check(post("/api/artist-background", R"({"enabled":true})", loopback).find("HTTP/1.1 409") != std::string::npos);
         check(post("/api/artist-background", R"({"enabled":false})", loopback).find("HTTP/1.1 204") != std::string::npos);
         check(post("/api/artist-background", "{}", loopback).find("HTTP/1.1 400") != std::string::npos);
@@ -310,7 +401,7 @@ int main() {
         freeifaddrs(interfaces);
         // A loopback-only test namespace has no address for an external-peer probe.
         if (external.s_addr != 0) {
-            for (const auto* path : {"/api/ui-boot", "/api/play", "/api/metadata-selection", "/api/artist-background"}) {
+            for (const auto* path : {"/api/ui-boot", "/api/play", "/api/metadata-selection", "/api/artist-background", "/api/complete-pcm"}) {
                 check(post(path, "", external).find("HTTP/1.1 403") != std::string::npos);
                 check(post(path, boot_body, external).find("HTTP/1.1 403") != std::string::npos);
             }

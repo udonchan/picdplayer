@@ -261,30 +261,49 @@ Custom UIが新fieldを仮定する必要はなく、現在の公開契約の互
 
 ## Complete PCM Input
 
-#160の[完全取得入力契約](integrity-design.md#complete-pcm-input)は未実装の設計である。
-#236でpure coreは追加したがtest-onlyで、runtimeやproviderへ接続していない。
-#237の取得workerも内部C++ interface/test-onlyであり、factory・gate・phase・busy/release・resultを現行JSONへ追加しない。
-coreの型・complete receipt・consumerのresult spanは内部C++契約であり、公開JSONの追加fieldではない。
-capture job、consumer、COMPLETE/未完了/無効といった語を現行REST/WSの新しいfieldやenumとして追加しない。
+#160の[完全取得入力契約](integrity-design.md#complete-pcm-input)はA/B/Cを経て、#239の開発差分で
+実session/APIへ接続する。以下はlocal SHA-256指紋専用の別契約であり、既存Player snapshotのschemaを拡張しない。
+coreのC++型・receipt・result spanをそのまま公開せず、ownerが有効条件と実reader解放を確認したmanifestだけを公開する。
+`local_pcm_fingerprint`/`NOT_CHECKED`は外部MATCHではない。起動・挿入・通常再生・GETから取得を開始しない。
 `read.activity=COMPLETE`はstreamのread終了、`coverage.observations_complete`やdisc mapのcompleteは
 観測台帳の欠落有無であり、専用取得jobの全域完了を意味しない。
 既存の`read.offset_window`は再生可能範囲の計算であり、全disc PCMの取得・保持・checksumの完成証明ではない。
 
-将来の公開契約は、session/jobとTOC・観測世代・profile、宣言範囲と確定prefix、offset/source、
-consumerのalgorithm/version、完了/未完了/無効、拒否/取消理由・残予算、reader解放待ち、memory上限を
-説明できることを必要とする。名前・型・欠損時・version・保持量はproduction実装の前に別途確定する。
-取消受付と物理I/O完了を同一表示にせず、競合した操作が実行/予約されていないことを明示する。
-現在のSTOPPED、CLEAN/RECOVERED、strategyやread_stallへ別の意味を押し込まない。
+### Explicit Local PCM Jobs（開発差分）
 
-完全性はcanonical入力の範囲とconsumer処理の属性であり、原盤一致・drive trust・物理同一性・外部MATCHとは別である。
-通常再生のhistory、MusicBrainz Disc ID、metadata、診断用の部分PCM fileから完全取得manifestを生成しない。
-source/fixtureやCustom UIが未実装のfieldを仮定する必要はなく、この設計段階の公開schema変更はない。
-#236による公開field/enum/eventの追加もない。coreのprefixとread観測、reader解放の申告gateを
-実機の全域取得やrelease確認済みとして描画しない。
-workerのcaller-supplied開始gate、取消と解放待ち、preparedとcaller確定の区別は
-[内部worker契約](integrity-design.md#acquisition-worker-implementation)を参照する。
-このsnapshotは実runtimeのSTOPPED/ALSA/mediaの自動観測ではなく、workerがIO内部でstuckでもpollで期限失効できる。
-一方、destructorのjoinまで非blockingとする保証ではない。将来公開する際はこの区別を維持する。
+| method/path | 契約 |
+| --- | --- |
+| GET /api/complete-pcm | read-onlyのowner状態。schema_version=1、session_id、現在disc_generation、job_id/duration_ms（未開始0）、state、failure/core_failure、native_error、busy、reader_released、call_inflight、waiting_for_access、accepted_frames/bytes、uncertain/recovered_reads、reserved_bytes、can_start/start_rejection、profile、external_verificationを返す。GETでpoll/confirmやdrive I/Oを実行しない |
+| POST /api/complete-pcm | loopback限定。startは下記5 field、cancelは下記3 fieldのみ。受理202は開始/取消要求の受理でありCOMPLETE/reader解放ではない。拒否は409で実行しない。無効body/profileは400、4096 bytes超は413、他methodは405、handlerなしは403 |
+| GET /api/complete-pcm/result | 現在の有効条件を満たすconfirmed COMPLETEだけをmanifestとして返す。なければ404。provider未設定は503。結果は64 KiB以内、送信は既存diagnostic経路の4 KiB分割・同時8 response上限を再利用 |
+
+start bodyは`action="start"`、`session_id`、`disc_generation`（正uint64）、`duration_ms`（1〜10,800,000）、
+`profile="local-pcm-sha256-v1"`。cancel bodyは`action="cancel"`、`session_id`、`job_id`（正uint64）。
+session_idは英数字/`-`/`_`、1〜64文字。未知/重複field、型・範囲違いはworkerへ渡さない。
+operatorが有限予算を明示し、最大3時間は既存workerの上限と一致させる。既定UIの明示開始は30分上限を表示する。
+
+一般の既存409は`{"error":"command_rejected"}`のまま。capture固有の拒否は
+`{"error":"capture_releasing","executed":false,"retry":"manual"}`等とし、操作は予約/自動再実行しない。
+固有errorは`capture_busy`、`capture_releasing`、`capture_not_ready`、`capture_context_changed`、`capture_no_job`。
+開始不能の詳細はstatusのstart_rejection（device/audio未準備、非STOPPED、output未停止、reader解放待ち、
+media busy、policy pending、offset unknown/非0、policy/resource予算非対応等）で区別する。
+
+stateはIDLE/COLLECTING/PREPARED/COMPLETE/INCOMPLETE/INVALID。busyとreader_releasedは結果状態と独立し、
+取消/期限/失効後もin-flight I/Oから戻るまでbusy=trueになり得る。新startは拒否し、完了後の明示再操作だけを受ける。
+取消は対象session/jobを検証し、完了済みreceiptに対する取消も公開を撤回する。
+play/seek/track/eject等は先にcaptureを失効させ、解放未完了なら要求自体は未実行で手動再操作とする。
+Stopは既にSTOPPEDでも取消できる。HTTP/CEC/stdin、policy/device/disc変更のどれも旧receiptを残さない。
+
+manifestはschema_version=1、kind=complete_pcm_manifest、duration_ms、identity（session/job/disc/device観測世代、
+capture reader incarnation、policy revision、明示offset）、backend、TOC、[begin,end) coverage、read_policy、
+local_read_observations、reader_released、cache_independence=NOT_PROVEN、external_verification=NOT_CHECKED、
+fingerprint（Cのlocal JSON結果）を持つ。inputのcoverage完了は原PCMの正当性やcache独立性の証明ではない。
+reader incarnationをdevice観測generationと同じcounterとして扱わない。現slot一件だけを保持し、履歴/PCM保存はしない。
+現在のSTOPPED、CLEAN/RECOVERED、strategyやread_stallへ別の意味を押し込まない。
+通常再生history、MusicBrainz Disc ID、metadata、部分PCM fileからmanifestを生成しない。
+workerの[内部契約](integrity-design.md#acquisition-worker-implementation)でいうgateを実sessionが観測するが、
+local試験だけで実drive/ALSA/物理release確認済みと描画しない。取消/期限もkernel I/Oを強制中断せず、
+destructorのjoinまで非blockingとする保証はない。
 
 ## 保持窓と世代
 

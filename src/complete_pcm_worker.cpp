@@ -154,6 +154,17 @@ void CompletePcmWorker::cancel() {
     stop_locked(CompletePcmState::incomplete, CompletePcmWorkerFailure::cancelled);
 }
 
+void CompletePcmWorker::invalidate() {
+    std::lock_guard lock(mutex_);
+    ++epoch_;
+    stop_locked(CompletePcmState::invalid, CompletePcmWorkerFailure::context_changed);
+}
+
+CompletePcmWorkerStatus CompletePcmWorker::status() const {
+    std::lock_guard lock(mutex_);
+    return status_;
+}
+
 void CompletePcmWorker::update_locked(const CompletePcmIdentity& current, const CompletePcmStartGate& gate) {
     if (status_.identity && current != *status_.identity) {
         ++epoch_;

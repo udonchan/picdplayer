@@ -2,6 +2,227 @@
 
 更新日: 2026-10-22。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 
+## PR #260監査修正のDraftへの取込（2026-10-22）
+
+利用者指示によりmaster `05a1a3e`をPR #256のbranchへ取り込む。設定FIFOのnonblocking拒否と
+回帰試験・CTest timeout、共同保存/WPE依存・完了Issueの文書訂正を保持する。
+競合はbacklogと本検証記録だけで、C/D実装・過去の証拠・下記実機再開点を保持して解消した。
+master側の「C/D未実装」は監査基準masterの状態であり、このDraftの実装状態を戻す意味ではない。
+同名local branch `origin/master`が旧commitを指しているため、remote refを完全名で指定した。
+Draft状態は維持し、本PRのmaster統合・#238/#239のclose・実機接続/配備は行わない。
+今回のbuild/CI結果は対応PRへ記録し、過去の72/72やPR #260の結果で代用しない。
+取込後のsourceをnetworkなしLinux/aarch64でfresh Debug buildし、API/metadata ON・WPE OFF・
+daemon/kiosk unit ONの全CTest 71/71成功を確認した。FIFO保存fallbackとC/D/Node回帰を含む。
+これは実機取得/取消/表示やWPE launcherの今回のlocal検証ではない。
+
+## Draft保存と実機再開点（2026-10-21）
+
+利用者は旅行先へ開発machineを持参しておりworktreeへアクセス可能と確認し、commit/pushとDraft PR作成を依頼した。
+この単位はソース保全・review・CIだけで、Pi接続・追加deploy・restart・merge・Issue closeは行わない。
+実機とlocal agentが使えないという先の制約を、開発machine上のworktree自体が存在しない意味に解釈しない。
+
+実装はCのlocal SHA-256とDの実session/API/Settings接続、最新の7-button一貫navigationを含む。
+Settingsは利用不能でもbuttonへfocusでき、aria-disabledで操作不能を示す。説明文自体をcursor対象にせず、
+決定時は理由表示だけでPOSTしない。最新UI差分は作成時のNode controls/renderで成功を再確認した。
+過去の標準72/72等は下段の日付・候補の結果であり、最新UIの実WPE確認や、このDraftの新CIと混同しない。
+実際のcommit・CI・Draft状態はGit/対応PRを正本とする。#238/#239には自動close指定を付けない。
+
+### 最後の利用者申告と再開順
+
+2026-10-20の最後の申告は、7 UI fileの配置と`--custom-ui /srv/picdplayer-ui-dev-20261020-aria`を
+既存EXTRA_ARGSへ追加して保存済み、まだ再起動していない、という状態である。
+配置元は`~/picdplayer-ui-upload-20261020-aria`、設定保全先はその中の`picdplayer.default.before-custom-ui`。
+配置先のhash/権限、設定の差分、live processへの反映は申告後に照合していない。現在の実機状態は推測しない。
+read offset0の追加は指示・実施しておらず、取得・取消・再生復帰の正例も未実施である。
+
+1. 実機へ再接続できたら、まず読取だけでservice・再生・capture busyと、配置file/hash/権限を確認する。
+2. 既存EXTRA_ARGSが保持されcustom-ui一組だけ増えたことをprivateに照合し、合意した範囲でdaemon/kioskを再起動する。
+3. 最新UIのHTTP hash、7 buttonの一貫focus、利用不能時の理由表示と無POSTを確認する。配置検証前にrestartしない。
+4. 取得を試す場合は、明示0が校正済みを意味しないことを合意し、設定変更/復元と短い有限budgetを別途承認する。
+5. 最初は短い取得/取消/release待ち/再操作/再生復帰を確認し、長い全域完了・TV/音声は時間と復元を区切る。
+
+これは既存残件の再開順であり、全driveや新しいmatrixを完了条件へ追加するものではない。
+source/文書だけをDraftへ保全し、private screenshot・archive・設定・key・package・SDKは含めない。
+
+## #239 明示local PCM jobの本番接続（2026-10-19〜20）
+
+利用制限による中断後に利用者が再開を指示し、採用済みCに続いてDのlocal実装を進めた。
+既存`feature/238-local-pcm-sha256`上のC差分・SDK・artifactは保全し、別機能のworktreeやPiには触れていない。
+API有効時はA/B/Cと`CompletePcmSession`をcdplayerdへcompile/linkし、実raw factory/TOC probeと共有coordinatorを渡す。
+APIのみ有効・metadata非compileでも成立させ、provider/network/PCM保存・自動取得は追加しない。
+
+session ownerはcontrollerのSTOPPED、engineの成功した出力reset/cancel・保持PCM消去、
+playback readerの実release、media idle、device/disc/policy/offsetを観測する。
+正常STOP/自然終了のreaderは非同期退役し、PAUSEDや単なるqueue空を開始資格にしない。
+HTTP/CEC/stdinの競合操作、policy/device/disc変更でcapture/resultを失効させ、release待ちの操作は
+未実行として手動再操作を返す。reader incarnationとdevice観測generationは別に保持する。
+probe/speed/spindown/ejectのdriveアクセスにもcaptureを含め、main-loop ownerのpoll/confirmでのみ確定する。
+
+read-only状態/結果API、有限start/cancel、typed拒否理由と既存generic409互換を追加した。
+Settingsは明示30分取得・取消と状態/解放待ち/結果位置を表示し、1秒pollはread-onlyかつpanel内だけ。
+旧応答/旧dialog・POST重複を抑止し、閉じただけでは新たな開始/取消を送らない。
+public manifestは一件・64 KiB以内、現在の全gate/identity一致時だけ返し、送信は既存4 KiB分割/同時8上限を使う。
+
+既存API/engineの個別試験と本番sessionのfake取得・manifest・取消/release待ち、
+実daemonのNo Discでの非自動取得/開始拒否、metadata非compile、Node操作回帰を実行した。
+途中のUI試験は空表示を空文字と期待して失敗し、既存`set()`のplaceholder（em dash）を期待する形へ修正した。
+初回multi-target buildはCMake再生成直後に新targetが未認識で停止したが、daemon自体のcompileは成功しており、
+再生成後のbuildで新targetを含め成功した。これらを試験成功へ読み替えず記録する。
+
+独立read-only backend reviewでP1/P2 findingはなく、後続の契約照合で古いA/Bのtest-only文言が残る指摘を受け、
+当時の段階と現在のproduction linkageを分けて修正した。reviewは実機検証や試験再実行ではない。
+最終点検では通常再生のregionがcaptureの75-frame/予約量制約を越す場合に開始可能と見える差を修正し、
+coreと状態表示で同じpure preflightを使い、consumer/factory/driveを呼ばず`policy_budget_unsupported`を返す。
+これは予約式を別layerへ複製したものではない。未知offset/非0の入力資格も変更しない。
+
+2026-10-20の再開後、最終sourceで次を確認した。新しいcorner caseや自動E2E基盤を必須化せず、
+既存のcore/worker/engine/HTTP/Node試験と、狭いowner統合試験を使った。
+
+| 検証 | 結果・境界 |
+| --- | --- |
+| 標準WPE Debug build/package | `PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build PICDPLAYER_BUILD_TYPE=Debug ./scripts/build-container.sh`成功。SDK recipe一致、stage install、package/profileを確認 |
+| 標準全CTest | Linux/aarch64、API/METADATA/WPE ON・PARANOIA OFF、network noneで72/72成功 |
+| 最小全CTest | API/METADATA/WPE OFFで再buildし42/42成功。正常STOPのreader退役も含む回帰 |
+| API ON/metadata非compile | daemonと対象をbuildしcore/consumer/worker/session/API/engine・実daemon/保存の対象8/8成功。enrichmentに依存しない |
+| ASan/UBSan | consumer・production session/fake reader・engineの3/3成功。kernel/ALSA/OpenSSL全体をinstrumentした証明ではない |
+| Node | controls/render成功。明示start/cancel payload、202後の状態確認、release待ち、拒否時非再試行、旧daemon/旧dialog応答とsemantic操作を確認 |
+| 本番owner接続 | `complete_pcm_session_test`61 checks成功。fake readerによる全域取得→実close→confirm→manifest、観測世代変更での公開拒否、blocked read取消とrelease待ち、手動再開始、開始不適格時factory/probe未呼出しを確認 |
+| 実daemon No Disc | 新GET/結果404、stale/不適格startと存在しないjob取消の拒否、job_id=0継続を実HTTPで確認。これは実driveでの正例ではない |
+| HTTP transport | strict body/profile/予算、202/409/413、64 KiB結果の4 KiB分割、従来6 navigation actionを確認。network noneで外部peer probeはskip |
+| Debian lifecycle | 標準scriptによるdisposable containerでの検査成功。Pi配備/systemd稼働確認ではない |
+
+最終candidateは`package-container/picdplayer_0.1.0_Debug_aarch64.deb`、SHA-256
+`47d1ce9ec226f05e5294ccba5d097fea8b2613e110fa6f1c19a22e7db1f09262`。
+stage daemonは`9b3427f3997c945d05963a3e6088506cbb0b073672205b612fb358eeeab4a491`、
+Player JSは`27911908a4fbe14a2d5c70531accd3e1ffc77600f520c29a3757f24742496a70`。
+stageのJS/HTMLとsourceのbyte一致も確認した。これは以前Piへ配備した`70e7800d…`とは別で、local完了時点では未配備だった。
+全diff/新規sourceと`git diff --check`を確認し、旧worktree・local master/同名origin/master・stashは変更しない。
+
+このlocal完了単位では追加のPi/実disc/ALSA/CEC/TV検証、配備、commit/push/PRやIssue closeを行わず、
+#238/#239をOpenのまま維持した。後述の配備は利用者の別承認による。
+このlocal区間はC/Dをtest-onlyから実session/API/Settingsへ接続したが、実disc全域取得、実I/Oの取消/解放、
+再生復帰と音声、TVでの新項目/物理リモコンは別承認の短い実機/探索的受入に残す。
+外部照合・cache独立性・C2 trustを実装/保証したという意味ではない。
+
+### 候補Pi配備と開始前状態（2026-10-20 15:35 UTC）
+
+利用者は実機へアクセス可能となり、候補のdeployと操作案内を依頼した。開発機なので旧deploy packageの
+追加backupは不要と明示したため、新たなpackage退避を行わず、既存private backupも削除しなかった。
+照合済みhost pinでread-only確認し、STOPPED/AUDIO_READY・SINGLE・背景OFF・両service active、
+旧版ではcomplete-pcm APIなし、read offset未指定であることを確認した。
+設定は変更せず標準deploy scriptをblocking shellで実行し、両serviceはactiveを維持した。
+
+15:35:26 UTCに実機package/daemon/HTTP Player JSが上記candidateの各hashと完全一致した。
+daemon PID15672、WPE PID15701、両service active/running・自動restart0、STOPPED/AUDIO_READY、
+SINGLE要求/実効・pendingなし、背景OFF/保存済み・source restoredを確認した。
+新APIはIDLE・job_id0・busy=false・reader_released=true・accepted frames/bytes0であり、
+自動取得を開始していない。can_start=false/start_rejection=offset_unknownは未指定設定に対応する。
+設定保存先は維持され、read offsetを勝手に0へ補完していない。
+ここでは新jobの取得/取消/再生復帰やTV/リモコン確認を合格にしていない。開始には別途、初期profileで扱う
+明示0の試験上の意味と必要な設定変更/再起動・操作予算を利用者と確認する。
+
+続く利用者のTV観測で、Read Policy/Artist Backgroundは見えるがLocal PCM説明の途中から画面外へ
+はみ出すと報告された。両取得buttonが無効なためsemantic focusで飛ばされ、末尾の状態説明へ到達できない
+経路を確認した。取得条件を緩めず、状態paragraphをtabindex=0のread-only focus点として追加し、
+既存scrollIntoViewと同じoutlineを使った。決定操作はno-opとし、新たなPOSTや取消を生成しない。
+Node試験で未知offset/両button無効でも到達・scrollでき、command数が変わらないことを確認した。
+mockのparagraphをbutton扱いしていたdisabled属性と、Tab巡回の期待を実DOM/新focus点へ合わせた。
+Node controls/render、標準build/package/profileと全CTest72/72が成功した。
+
+利用者からUI変更に毎回再buildが必要か指摘があり、実機の`--custom-ui`未指定を確認した。
+標準UIはconfigure時にbinaryへ埋め込むため、現行配備経路ではbinary更新を伴うが、UI試行ごとの
+全build/全CTestは過剰だった。外部`--custom-ui`ならC++再buildは不要で、現在は起動時snapshot読込なので
+asset反映にはdaemon再起動と画面再読込が必要である。設定の切替はまだ行わず、今後の短い確認方法として提示した。
+
+既に生成した修正版を追加buildせず標準deployで再配備した。旧packageの新規backupは作成していない。
+15:54:37 UTC、daemon PID16497/WPE PID16523、両service active/running・自動restart0、
+STOPPED/AUDIO_READY・capture IDLE/job0/busy=falseを確認した。read offsetは変更しておらず、
+直後のstart_rejectionはmedia_busyだった。取得/取消/再生はまだ実施していない。
+packageは`dd1b0c546dadf17a48576739559e1be3829a8635f354a9c2abcc0b90a20678b0`、
+daemonは`1137505a78862ad9c5de1be71cc0a99d1400e3bcebeb50efb579eae61a975f91`、
+JSは`d56867d8430229af2ee80d541576048bf93e7c9ba353749d68f50f37a1889e01`、
+CSSは`8776b12ebb9dc12c3cfc5165d1efe8d37d84ace582a9caef7aa6369ddee4b2c8`。
+実機HTTPのJS/CSS、package/daemonの一致とHTMLのread-only focus点を確認し、TVでの到達は利用者確認待ちとする。
+
+利用者は続いて「スクロールして読めたが、変なところが選択され、下側に余白がない」と報告し、
+screenshot確認を依頼した。既存`inspect-wpe.py`と一時loopback SSH forwardで現在の1920x1080を撮影した。
+PNGはrepository外の`private-pcm-ui-20261020/`へ0600、directory0700で保存し公開しない。
+実画像ではread-only状態行に入力欄状のoutlineが付き、surface bottom1060pxに対し状態行bottom1058.91pxだった。
+DOM観測はsurface scrollTop117/clientHeight1038/scrollHeight1241・padding上下38pxで、scroll余地が残っていた。
+
+再buildをせず一時UI previewを行い、状態行のoutlineを除き、説明blockのheadingへ強調を移し、
+scroll paddingを38pxに合わせて空のfeedbackを隠した。style tagによる試行は効かず、CSPを変更せずに
+CSSOM property/既存stylesheetの試行を使った。preview後はscrollTop155、状態行bottom1020.91px、
+surface bottom1060px、約39pxの下余白を確認した。private screenshotも撮り直した。
+このpreviewは現在pageの一時状態で、diskの配備物やdaemon設定の変更ではない。
+
+利用者が席を外し、手操作確認なしで可能な作業を進めるよう指示したため、同じ修正をlocalのHTML/CSS/JSへ反映した。
+native/pointer focusもread-only位置へ同期し、遅れたpolicy GETがfocusを奪わず、決定でPOSTを発生させない。
+空feedbackの非表示、heading強調、38px insetに連動するscroll paddingと併せNode controls/renderを確認した。
+独立read-onlyのUI reviewで具体的findingはなかった。mock DOMでaddEventListenerを省略するrender試験には、
+既存のoptional binding形式を使って対応した。今回のUI差分の確認では全build/全CTestを再実行していない。
+
+既存のbuild済みdaemonをLinux container内で`--custom-ui /src/ui/default`指定で起動し、最新sourceの
+HTML/JS/CSSがHTTPへ配信され、capture IDLE/job0のままであることを確認した。
+初回の補助呼出はaudio optionの誤記で起動しなかったが、既存試験と同じ`--audio-device null --no-cec`へ直して成功した。
+再buildせず外部UIを試せることの確認であり、Piの`--custom-ui`は依然未設定、read offsetも未変更である。
+再配備済みdd1b0c54…と、その後のlocal UI差分/一時previewを区別する。
+
+UI読込対象2/2（ui_bundle/ui_startup）も既存binaryのまま成功した。最初はtest logを書けないread-only mountで
+CTestが開始前に停止し、通常のuser/writable test-log条件へ直して2/2を実行した。C++再buildは行っていない。
+最新UIのHTTP配信hashはHTML `c70f4e1a177596a29513aedc80d8d1de7462f4a3f93003b7057b9212794a4514`、
+JS `34a44befac477ce72127f29dd4289b9c5c57c8d0c0e3f08e5775b4df7c806a9b`、
+CSS `d7a39dc05581905bd204687c01721b1a23ce3b476b9a576523f9e770594dc585`でlocal sourceとも一致した。
+UI-only archive（manifestとsourceのみ、PNG/設定/key/binaryなし）をrepository外へ準備し、
+SHA-256 `4303238dd3efc0ca43c7befab8e229c87f6a3a079735bdc95024d5e7fc9c52d2`を記録した。Piにはまだ導入していない。
+
+16:33:17 UTCのread-only再確認でSTOPPED/AUDIO_READY・SINGLE/pendingなし・背景OFF、
+capture IDLE/job0/busy=false/reader_released=true、offset_unknownによる開始不可を確認した。
+UI previewはfocus/見た目だけを変更し、producer開始・背景ON・再生や設定POSTは送っていない。
+最新の見た目を利用者が確認したという意味ではなく、再開時の手操作確認と外部UI/offset設定の承認は保留する。
+検査用のloopback Inspector転送は解除し、既存共有SSH masterを切断しないようclientだけ終了した。
+localの19223 listenerが残っていないことも確認した。page上の一時previewはreloadまで残る。
+
+## #238 Local SHA-256 consumer/profile（2026-10-19）
+
+利用者はintegrity機能をモンキーテスト直前まで進める方針の下、外部照合ではなく、
+明示全域取得とlocal SHA-256指紋を採用した。Cのconsumer/profileを先に実装・自動検証し、
+続けてD/#239の開始・取消・状態・結果を本番へ接続する単位に分けた。
+通常再生の必須機能と未採用の外部照合を混同せず、network・PCM保存・自動取得・実機読取は追加しない。
+master `c61faca`から`feature/238-local-pcm-sha256`を分離し、既存worktree/dirty/SDK/artifactを保持した。
+
+local差分は固定stateのdisc/track SHA-256 consumer、`local-pcm-sha256-v1` profile、
+既存coreからのcanonical入力/二段階完了接続試験、CMakeのtest targetと文書である。
+空入力、標準56-byte vector、百万a vector、4-byte分割の結果一致、最大99 track/入力/result上限、
+terminal consumer拒否、signed stereo S16LEとTOC track境界、reader未解放時の結果非公開、取消/失効を
+新試験の32 checksで確認した。algorithm vectorは完全取得receiptの成功ではない。
+canonicalの期待hashは別のPython hashlib計算とも照合し、provider互換性・外部MATCHを主張しない。
+
+consumerの所有stateは当該Linux/aarch64で21,408 bytes、resultは固定16 KiBである。
+OpenSSL 3.5.7の固定SHA256_CTXを使い、opaque provider allocationの上限を推測せず、独自hashも実装しない。
+low-level APIのdeprecated属性抑止は当該sourceだけとし、state/RSS/stack/library全体の保証を混同しない。
+test buildでOpenSSL Cryptoを明示検出し、Linux直接buildのlibssl-dev前提も文書へ反映した。
+
+| 検証 | 結果・境界 |
+| --- | --- |
+| 対象core/consumer/worker | Linux/aarch64、network noneで3/3成功 |
+| 最小構成全回帰 | API/METADATA/WPE OFFのDebugをbuildし42/42成功。新consumer実行で32 checks/stateサイズも確認 |
+| 標準WPE Debug | 標準build scriptでSDK cache一致・build/stage/package/profileを確認し成功。network noneの全CTest71/71成功 |
+| ASan/UBSan | 新consumer/core接続試験をinstrumentして1/1成功。OpenSSL自体の再build・instrumentや全libraryの安全証明ではない |
+| Debian lifecycle | 生成Debug packageをdisposable containerで検証して成功。Pi配備や実systemdの確認ではない |
+| 独立review | 新consumer/header/test/CMakeのread-only passで具体的findingなし。review自体はbuild/test再実行ではない |
+
+標準CTestの最初の呼出はworkdir誤記でprocess spawn前に停止し、正しいworkdirで71/71を実行した。
+新targetにwarningはなく、既存ApiCommand/fixtureのmissing-field initializer warningは本単位で修正しない。
+全diffと`git diff --check`も確認した。ここで生成したpackageは新しい取得機能の配備物ではない。
+
+このC単位の時点では新test executableだけへconsumerをcompile/linkし、cdplayerd/HTTP/UIへは接続しなかった。
+C部分だけを本番の全域取得完成やモンキーテスト準備完了とは扱わない。
+Cの後に実装する対象は実STOPPED/ALSA停止、playback reader解放、capture中のdrive access、全command ingressの取消と
+未実行理由、device観測世代、confirm前の有効条件、bounded manifestとした。後続Dでの接続・検証結果は上段に別記する。
+今回Pi・実disc・外部providerにはアクセスせず、compile/test以外のruntime変更も行っていない。
+source/文書は未commit・未push・未統合で、#238/#239はOpenのまま維持する。
+
 ## #257/#259 監査修正（2026-10-22）
 
 `c61faca`基準のlocal branch `fix/audit-257-259`で、設定読込をno-follow・nonblockingのopenと

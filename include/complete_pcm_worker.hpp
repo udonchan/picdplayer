@@ -65,6 +65,8 @@ public:
     bool start(const CompletePcmPlan& plan, std::unique_ptr<CompletePcmConsumer> consumer,
                const CompletePcmStartGate& gate);
     void cancel();
+    void invalidate();
+    CompletePcmWorkerStatus status() const;
     CompletePcmWorkerStatus poll(const CompletePcmIdentity& current, const CompletePcmStartGate& gate);
     bool confirm(const CompletePcmIdentity& current, const CompletePcmStartGate& gate);
     std::vector<std::uint8_t> result(const CompletePcmIdentity& current) const;

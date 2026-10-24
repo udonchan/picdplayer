@@ -24,6 +24,7 @@ void PlaybackEngine::reset_prebuffer_target() {
     prebuffer_blocks_ = worker_.startup_buffer_blocks();
 }
 void PlaybackEngine::synchronize() {
+    quiescent_ = false;
     last_tick_ = std::chrono::steady_clock::now();
     active_ = false;
     // A deliberate Play/Seek/Pause transition starts a new recovery budget.
@@ -42,7 +43,13 @@ void PlaybackEngine::synchronize() {
         start_ = *state.position_lba;
         generation_ = worker_.start(start_, end_);
         active_ = true;
+    } else if (state.playback == PlaybackState::stopped) {
+        worker_.discard_reader();
+        quiescent_ = true;
     }
+}
+bool PlaybackEngine::quiescent() const {
+    return quiescent_ && controller_.state().playback == PlaybackState::stopped;
 }
 void PlaybackEngine::tick() {
     if (!active_) return;
