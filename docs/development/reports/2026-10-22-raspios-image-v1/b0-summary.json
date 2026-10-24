@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "scope": "Official base image static inspection only; not a PiCDPlayer product image or hardware acceptance",
+  "base": {
+    "url": "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-10-06/2026-10-06-raspios-trixie-arm64-lite.img.xz",
+    "archive_bytes": 550466056,
+    "archive_sha256": "483db18a48da399b5b7022ffae9a07bc6d99daab30e593aedac09b69ff422843",
+    "image_bytes": 3078619136,
+    "image_sha256": "b8a393dc1c3701450b5fffbfe74368a98fb6eab7415ce456cc0cead886ea8780"
+  },
+  "partitions": [
+    { "index": 1, "mbr_type": 12, "start_bytes": 8388608, "bytes": 536870912 },
+    { "index": 2, "mbr_type": 131, "start_bytes": 545259520, "bytes": 2533359616 }
+  ],
+  "fat": {
+    "filesystem_bytes": 536868864,
+    "trailing_bytes": 2048,
+    "trailing_all_zero": true
+  },
+  "ext4": {
+    "block_bytes": 4096,
+    "block_count": 618496,
+    "free_blocks": 111084,
+    "reserved_blocks": 30924,
+    "free_bytes": 455000064,
+    "reserved_bytes": 126664704
+  },
+  "observations": {
+    "dpkg_status_records": 633,
+    "initial_selected_files": 47,
+    "supplementary_selected_files": 1,
+    "input_and_partition_hashes_rechecked": true,
+    "initial_selected_file_hashes_rechecked": true,
+    "supplementary_helper_package_md5_matches": true,
+    "root_mount_performed": false,
+    "target_execution_performed": false,
+    "product_image_generated": false,
+    "pi_hardware_verified": false
+  },
+  "receipts": {
+    "main_started_utc": "2026-10-22T15:04:45.940Z",
+    "main_completed_utc": "2026-10-22T15:11:51.729Z",
+    "supplement_completed_utc": "2026-10-22T15:20:47.330Z",
+    "primary_manifest_sha256": "a09f383eadacef23061e284fe51d5ac24a98190b1c4781c0b950efd70b4ee5b7",
+    "supplementary_manifest_sha256": "f35ebe24be0f6b81d881c5f7eff2812b6be231a766b3c296d294ac0bf2c1f40f",
+    "sampled_main_peak_rss_kib": 1426160,
+    "artifact_bytes_before_primary_manifest": 6725116643,
+    "source_worktree": "glitter-lychee",
+    "local_artifact_directory": "build-image-b0-20261022/"
+  },
+  "limits": [
+    "This versioned summary does not include the image, extracted OS files, full receipts, or local helper scripts.",
+    "Local artifact presence is not a durable backup or release-artifact guarantee.",
+    "Filesystem checks were header, listing, and selected-file checks; not a full fsck or complete secrets audit.",
+    "RAM was sampled at one-second intervals, not enforced by a kernel hard limit; short readers could finish before sampling.",
+    "Tool threads were limited; no host CPU quota was imposed.",
+    "Image HTTP payload was measured; metadata and TLS wire overhead were not completely measured.",
+    "No SSH authentication, boot, ALSA, CEC, DRM, sandbox isolation, update, or recovery acceptance was performed."
+  ]
+}

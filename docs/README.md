@@ -14,6 +14,7 @@ PiCDPlayerのドキュメントは日本語を正文とする。目的に合わ�
 | ローカルkeyでfanart.tv背景を検証したい | [fanart.tv PoC](development/fanart-tv-poc.md) |
 | 読み取り信頼性の要求と実装境界を確認したい | [読み取り信頼性の仕様](design/integrity-design.md) |
 | 次に取り組む作業を選びたい | [残課題とIssue一覧](development/backlog.md) |
+| 製品imageのv1.0方針を確認したい | [製品imageのv1.0方針と実施計画](development/appliance-image-plan.md)（Raspberry Pi OSベースに限定、Buildroot等はv2.0以降） |
 | 将来の設計候補を調べたい | [デジタル出力の拡張案](development/digital-audio-output.md)、[設定基盤の拡張案](development/user-configuration.md) |
 | Buildrootの保留中の検討成果を参照したい | [成果の保全・再開条件](development/backlog.md#buildrootの検討成果保全と採用保留) |
 | 設計が成立した過程を知りたい | [History：開発の流れ](history/README.md) |
