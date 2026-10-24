@@ -1,5 +1,60 @@
 # 残課題とIssue一覧
 
+## image検討の区切りと実機再開（2026-10-24）
+
+image検討は下記の方針・要件とB0静的検査までで区切り、文書と小さな[B0要約](reports/2026-10-22-raspios-image-v1/b0-summary.json)を
+現master基準へ統合する。製品コード・CI・systemdや旧候補実装は変更しない。image生成や家電UXの実機合格ではない。
+[引継ぎ](appliance-image-plan.md#8-検討の区切りと実機確認への引継ぎ2026-10-24)に従い、現行Debian/.deb・WPEの
+通常運転#184、物理リモコン#252、写真/TV/試聴#51へ戻れる。#46/#47のimage完成をその前提にしない。
+対象package/profileと安全条件・時間・復元は次sessionで改めて確認する。今回は実機操作を行っていない。
+Pending10件、#238/#239とDraft PR #256、既存branch/worktree/cacheは維持する。
+
+## 製品imageのv1.0方針（2026-10-22）
+
+[#46のv1.0方針と実施計画](appliance-image-plan.md)を参照する。
+これは再取得した現master `05a1a3e`と現在のIssue/PRを基準にした調査資料であり、
+調査作業に使用した旧候補branchの実装・一覧をimage開発の基準にはしない。
+本節より後のbacklogは現masterの一覧を保持しており、旧候補branchの一覧ではない。
+利用者指示によりv1.0は低リスク・実現性を優先してRaspberry Pi OSベースへ検討を限定する。
+既存WPE/systemd/.debを再利用する最小組込み工程を調べ、Buildroot等の代替方式と
+#198〜#200の追加probe/recipe修正/build、移行前提の#69はv2.0以降へ延期する。
+公式Imager一覧掲載・公開Imager repository運営は検討範囲外で、v2.0の予定にも追加しない。
+v1.0はbase標準の書込み可能FSを維持する基準案とし、新規read-only/overlay/A-B/独自OTAは追加しない。
+license/inventory、採用WPEの正式供給・安全更新、初期設定・復旧と実機受入は省略しない。
+#46/#47/#198〜#200/#220/#66〜#69/#45はOpenを維持し、今回build・実機操作・公開は行っていない。
+現行Mac + Docker + Debian/.deb開発経路と保存済み試作は変更しない。
+
+同日の後続作業として[WPE供給の再開差分調査](reports/2026-10-22-buildroot-wpe-restart/README.md)を追加した。
+保存試作・現Debian・公式Buildrootを机上比較し、2patch/sandbox/udev provider/launcher統合の差分を整理した。
+#200/#220の完了やbuild成功ではない。reportは保存資料とし、当時提案したBuildrootのrecipe修正も
+v2.0以降へ延期した。Raspberry Pi OS固定base候補と最小組込み手順の
+[V0仕様案とB0実体検査](reports/2026-10-22-raspios-image-v1/README.md)を記録した。
+続行指示を受け公式2026-10-06 Lite64/Trixie一つを取得し、SHA-256/xz/partition/選定47+1 fileを読取り確認した。
+既存Release `.deb`のoffline導入案は維持するが、root空き約434 MiBへWPE等が収まるとは未確認。
+初回userconfig/gettyとkiosk連携・追加容量等が残り、V0および#46全体は完了していない。
+利用者指定で初回もUSB keyboardなしを必須とする。さらに既存の家電UX方針を再確認し、keyboardを
+SSH/二file/credential生成へ置き換えただけの一般利用案は撤回する。導入時のImager書込みと通常利用を分離し、
+OS設定・SSH・手動service切替なしでPlayerへ至り、物理CDとTVリモコンで使う体験を基準にする。
+入力生成toolは次作業から外し、base初期化/汎用user対話/gettyと製品service自動起動の責務・unit/account/権限を静的整理する。
+技術的なheadless観測は履歴として保全し、mount/chroot/package導入・製品image生成/buildへ自動移行しない。
+家電UXという既存方針を取り落としたSSH必須案の訂正は#46/#47へ反映済み。以前の本文・ラベル・Open状態を保持した。
+長時間build・実機操作は未実施。
+
+### Issue整理とPendingラベル（2026-10-22）
+
+利用者指示によりGitHub本文へ現在の方針・保留理由・再開条件を追記し、`Pending`を新設・付与した。
+既存本文/checkbox/証拠は原文保存、既存ラベルとOpen状態は維持し、close・新Issue作成・PR操作は行っていない。
+
+| 区分 | Issue / 理由 |
+|---|---|
+| Pending付与 | #19（quiet boot延期）、#20（read-only追加設計延期）、#69（embedded移行時の候補）、#198/#199/#200（Buildroot追加研究はv2.0以降）、#254（既存V2 WPE hardening） |
+| 既存の明示的保留にもPending付与 | #42（Custom UI更新需要待ち）、#124（UI改修後の再確認待ち）、#250（既存V2 Integrity Monitor hardening）。#124をv2.0延期・修正済みにはしない |
+| v1.0方針を追記、Pendingなし | #46/#47/#220/#66/#67/#68/#45。後続入力待ちでもv1.0の要件・供給・安全性・compliance・正式公開条件として残す |
+| 今回変更しないもの | #147等の`hardware-test-deferred`は維持。#184/#252/#51の実機受入や、実装/統合中の#238/#239・Draft PR #256を一括延期しない |
+
+本文更新17件、Pending付与10件をGitHubから再取得して確認した。以前の「Issue未反映」は履歴であり、
+現在の先頭区分を優先する。詳細は[計画6節](appliance-image-plan.md#6-issueの分担と延期)を参照する。
+
 ## 監査修正（2026-10-22）
 
 [#257](https://github.com/udonchan/picdplayer/issues/257)で保存・WPE依存・統合状態の記述を
