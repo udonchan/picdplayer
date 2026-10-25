@@ -191,7 +191,7 @@ const backgroundButtons = [byId('background-off'), byId('background-on')];
 const pcmButtons = [byId('pcm-start'), byId('pcm-cancel')];
 const pcmStatusElement = byId('settings-pcm-status');
 const settingsCloseButton = byId('settings-close');
-const settingsActions = [...policyButtons, settingsCloseButton, ...backgroundButtons, ...pcmButtons];
+const settingsActions = [...policyButtons, ...backgroundButtons, ...pcmButtons, settingsCloseButton];
 let focusedControl = -1;
 let pendingCommand = null;
 let feedbackTimer;
@@ -473,7 +473,7 @@ function renderPolicySettings() {
     button.dataset.selected = String(valid && requested.mode === (index ? 'REPEAT' : 'SINGLE'));
     button.dataset.focused = String(settingsOpen && focusedPolicy === index);
   });
-  settingsCloseButton.dataset.focused = String(settingsOpen && focusedPolicy === 2);
+  settingsCloseButton.dataset.focused = String(settingsOpen && focusedPolicy === 6);
   setSettingsDisabled(settingsCloseButton, false);
   set('settings-region', valid ? `${requested.region_frames} CD frames` : '—');
   set('settings-matches', valid ? requested.required_matches : '—');
@@ -742,6 +742,7 @@ function openSettings() {
   pcmLoading = false;
   pcmAwaitingRelease = false;
   focusPolicy(0);
+  byId('settings-panel').querySelector('.settings-surface').scrollTop = 0;
   set('settings-policy-status', 'Loading read policy…');
   set('settings-persistence', 'Checking whether changes are saved…');
   void loadPolicySettings();
@@ -815,18 +816,25 @@ function handleNavigation(action) {
     if (action === 'back') closeSettings();
     else if (action === 'left' || action === 'up' || action === 'right' || action === 'down') {
       settingsFocusMoved = true;
-      const direction = action === 'left' || action === 'up' ? -1 : 1;
-      const enabled = settingsActions.map((button, index) => !button.disabled ? index : -1)
-        .filter((index) => index >= 0);
-      const position = enabled.indexOf(focusedPolicy);
-      if (enabled.length) focusPolicy(enabled[position < 0 ? (direction > 0 ? 0 : enabled.length - 1)
-        : (position + direction + enabled.length) % enabled.length]);
+      // Back is above three two-button rows; Tab keeps its separate linear order.
+      let next = focusedPolicy;
+      if (action === 'up') {
+        if (focusedPolicy < 6) next = focusedPolicy < 2 ? 6 : focusedPolicy - 2;
+        else next = 5;
+      } else if (action === 'down') {
+        if (focusedPolicy === 6) next = policyState?.requested?.mode === 'REPEAT' ? 1 : 0;
+        else if (focusedPolicy < 4) next = focusedPolicy + 2;
+        else next = 6;
+      } else if (focusedPolicy < 6) {
+        next = focusedPolicy - focusedPolicy % 2 + (action === 'right' ? 1 : 0);
+      }
+      focusPolicy(next);
     }
     else if (action === 'select') {
-      if (focusedPolicy === 2) closeSettings();
+      if (focusedPolicy === 6) closeSettings();
       else if (focusedPolicy < 2) void selectPolicy(focusedPolicy);
-      else if (focusedPolicy < 5) void selectBackground(focusedPolicy - 3);
-      else if (focusedPolicy < 7) void selectPcm(focusedPolicy - 5);
+      else if (focusedPolicy < 4) void selectBackground(focusedPolicy - 2);
+      else if (focusedPolicy < 6) void selectPcm(focusedPolicy - 4);
     }
     return;
   }
@@ -877,7 +885,7 @@ policyButtons.forEach((button, index) => button.addEventListener?.('click', (eve
 }));
 backgroundButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
   settingsFocusMoved = true;
-  focusPolicy(index + 3);
+  focusPolicy(index + 2);
   if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
   else void selectBackground(index);
 }));

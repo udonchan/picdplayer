@@ -284,7 +284,6 @@ main {
   box-shadow: 0 24px 70px #0009;
 }
 .settings-heading { display: flex; justify-content: space-between; gap: 20px; align-items: start; }
-.settings-heading h2 { margin: 0; font-size: clamp(25px, 4vw, 36px); }
 .settings-heading button,
 .settings-choices button {
   min-height: 42px;
@@ -299,7 +298,7 @@ main {
 .settings-choices button[data-focused='true'],
 .settings-heading button[data-focused='true'],
 .settings-choices button:focus-visible,
-.settings-heading button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.settings-heading button:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
 .settings-choices button:disabled,
 .settings-choices button[aria-disabled='true'] { opacity: .55; }
 .settings-note, .settings-unavailable p { color: var(--muted); font-size: 14px; }
@@ -308,6 +307,7 @@ main {
 .settings-details dt { color: var(--muted); }
 .settings-details dd { margin: 0; font-variant-numeric: tabular-nums; }
 .settings-unavailable { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.settings-heading h2,
 .settings-unavailable h3 { margin: 0; font-size: 16px; }
 .metadata-picker[hidden], .player-controls button[hidden] { display: none; }
 .metadata-picker {

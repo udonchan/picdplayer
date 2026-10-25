@@ -330,6 +330,13 @@ selectで実行、backでfocusを解除する。POST受理は状態確定では�
 標準PlayerのSettingsはRead PolicyのSINGLE/REPEAT選択と4つの詳細値の確認、Artist Backgroundの
 利用可否とsession限りのON/OFF操作を扱う。CEC方向で有効な選択肢とBackへ移動し、決定で
 変更を要求するか画面を閉じる。
+この開発差分のSettings方向キーは二軸で、上下は画面順のBack ↔ Read Policy ↔ Artist Background ↔
+Local PCMの行移動、左右は同じ行の2 button間の移動とする。上下では左右の列を維持し、
+Backから下は要求policyのbuttonへ戻る。Local PCMの両buttonから下はBackへループする。
+Backから上はLocal PCMのCancelへループし、左右端では停止する。利用不能でもfocus可能とする。
+Tab/Shift+TabはSingle/Repeat → Off/On → Acquire/Cancel → Backの7 buttonを順逆に巡回する。
+3項目の見出しの大きさを揃え、Settingsを開くたびに前回のscroll位置を引き継がず先頭を表示する。
+設定上の選択値（requested）と、今の決定対象である操作focusは異なる視覚表現で区別する。
 リモコンの戻るキーでもPlayerへ戻り、
 選択中も再生は継続する。画面は`GET /api/read-policy`のrequested/effective/pendingを再取得して
 結果を示し、API失敗時は再生を止めない。詳細値の編集は未実装である。Read Policyの任意保存は

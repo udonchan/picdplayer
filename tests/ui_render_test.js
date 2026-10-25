@@ -40,6 +40,7 @@ async function main() {
         remove(name) { writes.push(`${id}.class.remove`); classes.delete(name); },
       },
       removeAttribute(name) { writes.push(`${id}.remove.${name}`); delete this[name]; },
+      querySelector(selector) { assert.equal(selector, '.settings-surface'); return node('settings-surface'); },
     }, {
       set(target, key, value) {
         writes.push(`${id}.${key}`);
@@ -329,6 +330,7 @@ async function slideshowTests() {
         classList: { contains: (name) => classes.has(name), add: (name) => classes.add(name), remove: (name) => classes.delete(name) },
         removeAttribute(name) { delete this[name]; if (name === 'src') { this.complete = false; this.naturalWidth = 0; } },
         setAttribute() {}, addEventListener() {},
+        querySelector(selector) { assert.equal(selector, '.settings-surface'); return node('settings-surface'); },
       };
       nodes.set(id, new Proxy(value, { set(target, key, value) {
         if (key === 'src') srcWrites++;

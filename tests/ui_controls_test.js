@@ -87,9 +87,13 @@ async function main() {
     button.dataset.command = command;
     return button;
   });
-  const settingsIds = ['policy-single', 'policy-repeat', 'settings-close', 'background-off',
-    'background-on', 'pcm-start', 'pcm-cancel'];
+  const settingsIds = ['policy-single', 'policy-repeat', 'background-off',
+    'background-on', 'pcm-start', 'pcm-cancel', 'settings-close'];
   settingsIds.forEach((id) => { node(id).disabled = false; });
+  node('settings-panel').querySelector = (selector) => {
+    assert.equal(selector, '.settings-surface');
+    return node('settings-surface');
+  };
   vm.runInNewContext(source, {
     AbortController,
     addEventListener() {},
@@ -173,9 +177,12 @@ async function main() {
   assert.equal(controls[6].disabled, false);
   assert.equal(backgroundGets, 0); // Merely loading the Player never asks for background settings.
   assert.equal(pcmGets, 0);
+  node('settings-surface').scrollTop = 125;
   controls[6].onclick({ detail: 1 });
+  assert.equal(node('settings-surface').scrollTop, 0);
   assert.equal(controls[6].disabled, false);
   await new Promise(setImmediate);
+  assert.equal(node('settings-surface').scrollTop, 0); // Late initial GET keeps the heading visible.
   assert.equal(node('policy-single').dataset.selected, 'true');
   assert.match(node('settings-persistence').textContent, /session only/);
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Startup / Startup.');
@@ -216,8 +223,10 @@ async function main() {
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Session only / Restored.');
   navigation('back');
   assert.equal(node('settings-panel').hidden, true);
+  node('settings-surface').scrollTop = 200;
   controls[6].onclick({ detail: 1 });
   await new Promise(setImmediate);
+  assert.equal(node('settings-surface').scrollTop, 0); // Reopening does not retain lower-section scroll.
   assert.equal(node('policy-repeat').dataset.focused, 'true'); // Reopening follows requested mode.
   policyPostStatus = 409;
   node('policy-single').onclick({ detail: 1 });
@@ -325,29 +334,53 @@ async function main() {
   assert.equal(node('policy-repeat').dataset.selected, 'true'); // Old GET cannot replace it.
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Saved / Restored.');
   now += 300;
-  sockets[2].onmessage({ data: JSON.stringify({ action: 'right' }) });
+  navigation('up');
   assert.equal(node('settings-close').dataset.focused, 'true');
   sockets[2].onmessage({ data: JSON.stringify({ action: 'select' }) });
   assert.equal(node('settings-panel').hidden, true); // CEC can reach and activate Back.
   deferPolicyGet = false;
   controls[6].onclick({ detail: 1 });
   await new Promise(setImmediate);
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('settings-close'));
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('background-off')); // Focus stays inside the dialog.
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('background-on')); // Unavailable actions remain reachable.
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('pcm-start'));
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('pcm-cancel'));
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('policy-single'));
-  keys.keydown({ key: 'Tab', shiftKey: true, preventDefault() {} });
-  assert.equal(activeElement, node('pcm-cancel'));
-  keys.keydown({ key: 'Tab', shiftKey: true, preventDefault() {} });
-  assert.equal(activeElement, node('pcm-start'));
+  const beforeSettingsNavigation = posts.length + policyPosts.length + backgroundPosts.length + pcmPosts.length;
+  assert.equal(node('pcm-start').ariaDisabled, 'true');
+  assert.equal(node('pcm-cancel').ariaDisabled, 'true');
+  for (const input of ['semantic', 'keyboard']) {
+    node('policy-single').focus();
+    for (const [action, id] of [
+      ['left', 'policy-single'], ['down', 'background-off'], ['right', 'background-on'],
+      ['right', 'background-on'], ['down', 'pcm-cancel'],
+      ['left', 'pcm-start'], ['left', 'pcm-start'], ['up', 'background-off'],
+      ['up', 'policy-single'], ['right', 'policy-repeat'], ['down', 'background-on'],
+      ['up', 'policy-repeat'], ['up', 'settings-close'], ['up', 'pcm-cancel'], ['down', 'settings-close'],
+      ['left', 'settings-close'], ['right', 'settings-close'], ['down', 'policy-repeat'],
+      ['left', 'policy-single'],
+    ]) {
+      now += 300;
+      if (input === 'semantic') navigation(action);
+      else keys.keydown({ key: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' }[action], preventDefault() {} });
+      assert.equal(activeElement, node(id));
+      assert.equal(node(id).dataset.focused, 'true');
+      assert.equal(settingsIds.filter((item) => node(item).dataset.focused === 'true').length, 1);
+    }
+    for (const id of ['pcm-start', 'pcm-cancel']) {
+      node(id).focus();
+      now += 300;
+      if (input === 'semantic') navigation('down');
+      else keys.keydown({ key: 'ArrowDown', preventDefault() {} });
+      assert.equal(activeElement, node('settings-close'));
+      assert.equal(node('settings-close').dataset.focused, 'true');
+    }
+  }
+  node('policy-single').focus();
+  for (const reverse of [false, true]) {
+    const order = reverse ? settingsIds.slice(1).reverse() : settingsIds.slice(1);
+    for (const id of [...order, settingsIds[0]]) {
+      keys.keydown({ key: 'Tab', shiftKey: reverse, preventDefault() {} });
+      assert.equal(activeElement, node(id));
+      assert.equal(node(id).dataset.focused, 'true');
+    }
+  }
+  assert.equal(posts.length + policyPosts.length + backgroundPosts.length + pcmPosts.length, beforeSettingsNavigation);
   keys.keydown({ key: 'Escape', preventDefault() {} });
   policyGetStatus = 503;
   controls[6].onclick({ detail: 1 });
@@ -503,7 +536,15 @@ async function main() {
   const selectSetting = async (id) => {
     const enabledCount = settingsIds.filter((id) => !node(id).disabled).length;
     assert.equal(enabledCount, 7);
-    for (let step = 0; step < enabledCount && node(id).dataset.focused !== 'true'; step++) await semantic('right');
+    const target = settingsIds.indexOf(id);
+    const targetRow = target === 6 ? -1 : Math.floor(target / 2);
+    for (let step = 0; step < 4; step++) {
+      const current = settingsIds.findIndex((item) => node(item).dataset.focused === 'true');
+      const row = current === 6 ? -1 : Math.floor(current / 2);
+      if (row === targetRow) break;
+      await semantic(row < targetRow ? 'down' : 'up');
+    }
+    if (target < 6) await semantic(target % 2 ? 'right' : 'left');
     assert.equal(node(id).dataset.focused, 'true');
     await semantic('select');
   };
