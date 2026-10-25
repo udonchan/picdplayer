@@ -8,8 +8,8 @@
 [#258](https://github.com/udonchan/picdplayer/issues/258)は旧`13485ee`上の未commit候補だけを対象とする
 別branchの修正で、現行WPEや統合済みPR #244を再実装しない。今回の確認は
 [検証状況](verification.md)を参照し、実機受入・配備の成功とは区別する。
-PR #260でmaster `05a1a3e`へ統合された#257/#259を、このDraft PR #256にも取り込む。
-下表のC/D接続済み状態と未実施の実機受入を保持し、PR #256自体はmasterへ統合しない。
+PR #260でmaster `05a1a3e`へ統合された#257/#259は、このDraft PR #256にも取込済み。
+下表のC/D接続済み状態と未実施の実取得受入を保持し、PR #256自体はmasterへ統合しない。
 
 2026-09-26の一覧を基に、2026-10-17にIssue・merge済み実装・設計・検証範囲を再照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
@@ -54,7 +54,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | v1実装・代表確認を完了した統合単位 | #177/#178: 保存/実service復元とSettings表示/API回帰を完了し、承認済みPR/必須CI経由の統合で終了。物理受入は#252/#51、通常運転は#184に残す |
 | 利用者の実機操作待ち | #252: Player/Settingsの物理リモコン代表受入を一本化。#178/#51は同じrunを参照し重複試験しない |
 | V2以降・非blocking | #254: WPE失敗表示/復帰・DRM/child cleanup。#219のv1移行は完了し、独自の未完了復旧だけを移管。#250のIntegrity hardeningとは別所有 |
-| 機能開発の現単位 | #238/#239: 利用者採用のlocal SHA-256指紋と明示全域取得を本番session/API/Settingsへ接続しDraft PRへ保全。未merge・実取得未確認。候補配備/idle確認と全域取得は区別し、外部照合ではない |
+| 機能開発の現単位 | #238/#239: 利用者採用のlocal SHA-256指紋と明示全域取得を本番session/API/Settingsへ接続しDraft PRへ保全。2026-10-24にCustom UI反映・限定代表確認とCI候補のoffline検査を追加。未merge・実取得未確認を維持し、候補準備と実取得を区別する。外部照合ではない |
 | 将来の機能・設計 | #19: quiet boot、#20: read-only root、#42: Custom UI更新。外部provider互換profile/通信は未採用 |
 | 正式供給・配布枠 | #45/#66/#67: release/license/package inventory、#220: v1.0供給精査。#46方式選定後の#47/#68と#69は保留 |
 | 追加研究保留 | #198/#199/#200: Buildroot。#74の調査は完了、採用は未決定 |
@@ -102,7 +102,7 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#236 Implement complete PCM coverage and canonical input core](https://github.com/udonchan/picdplayer/issues/236) | A単位完了・Closed。PR #240でpure input coreとtest-only CMake対象を統合し、canonical全sample/channel、連続coverage、世代/取消/期限・consumer例外・二段階完了gateを自動検証済み。ASan/UBSan 71ケース、Linux標準67/67・最小39/39成功。[実装境界](../design/integrity-design.md#pure-core-implementation)と[当時の検証](verification.md#236-完全取得入力core2026-10-16)参照。当時はdaemon/reader/APIへ未接続だったが後続D開発差分でreuseする。実drive全域取得や外部照合確認済みとはしない。 |
 | [#237 Implement an exclusive complete PCM acquisition worker](https://github.com/udonchan/picdplayer/issues/237) | B単位完了・Closed。PR #241で注入readerの専用owner・coordinator排他・発行抑止・call/job予算・取消/解放待ち・旧結果拒否をtest-only workerへ統合。ASan/UBSan・TSan各57ケース、Linux標準68/68・最小40/40成功。[内部契約](../design/integrity-design.md#acquisition-worker-implementation)と[当時の検証](verification.md#237-排他的取得worker2026-10-17-jst)参照。当時はdaemon/APIへ未接続で、後続D開発差分から利用する。実drive/Pi・外部provider未確認と#88の物理受入を成功へ変えない。 |
 | [#238 Define and implement an approved incremental PCM checksum profile](https://github.com/udonchan/picdplayer/issues/238) | Open、C単位。利用者採用のnetwork不要local SHA-256を`feature/238-local-pcm-sha256`で実装しDから利用。固定state、disc/track digest、有界JSON、known vectorとcanonical/core接続を検証。利用者の2026-10-21指示でDraft PRへGit保存・CI確認し、未merge・実drive未確認を維持する。[採用profile](../design/integrity-design.md#local-pcm-sha-256-profile2026-10-19)参照。外部provider互換profile/通信は別採用で、#13のClosedも外部照合実装済みの意味ではない。 |
-| [#239 Integrate explicit complete PCM jobs with runtime validity and presentation](https://github.com/udonchan/picdplayer/issues/239) | Open、D単位。実session/raw factory・開始/取消/状態/結果API・Settingsへ接続済み。local fake/実daemon No Disc回帰と候補のPi配備/idle起動確認を行ったが、実取得/ALSA/物理releaseとは別。最新UIは7 buttonのfocus/操作可否を分離し、外部UI配置とconfig保存・未restartの利用者申告までで実反映未照合。[再開点と検証境界](verification.md#draft保存と実機再開点2026-10-21)を保全してDraft PR化し、merge/closeしない。起動/再生から自動取得せず、network/PCM保存は追加しない。 |
+| [#239 Integrate explicit complete PCM jobs with runtime validity and presentation](https://github.com/udonchan/picdplayer/issues/239) | Open、D単位。実session/raw factory・開始/取消/状態/結果API・Settingsへ接続済み。2026-10-24に7 buttonの二軸移動/上下ループ・初期scroll・見出し・focus識別を更新し、Custom UIのHTTP反映・実WPE合成・利用者の限定代表確認を記録した。最終配色は残課題。backendは旧Debugのままで、Release候補はoffline検査済み・未配備、offset未指定・実取得/取消/実reader解放/再生復帰は未実施。[保存点と再開境界](verification.md#pr-256保存点2026-10-25)を参照し、merge/closeしない。自動取得・外部照合・PCM保存は追加しない。 |
 | [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90は完了。#24正式化時に公開実装と再照合済み。 |
 | [#146 Validate physical optical-media faults and USB drive compatibility](https://github.com/udonchan/picdplayer/issues/146) | 傷・劣化媒体、read stall、別USB optical drive/bridgeの実機評価を集約する。音声/操作影響とAPI・警告・復元の整合を同じrun記録で確認する。physical hotplugは#88、特殊TOCは#39/#40が担当する。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
@@ -134,8 +134,8 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#28 Hide unwanted cursor in the current kiosk while preserving useful input](https://github.com/udonchan/picdplayer/issues/28) | v1完了。2026-10-19、利用者がWPE移行時の解消を報告しcloseを指示。Chromium/Cageはv1対応・受入対象外。旧Cage調査とWPE PoCのcursor残存観測は履歴として保全し、全状態・cold boot等の旧matrix成功へ読み替えない。[終了根拠](verification.md#28-wpe移行によるv1完了2026-10-19)参照。 |
 | [#124 Investigate unintended kiosk scrollbar display](https://github.com/udonchan/picdplayer/issues/124) | Open / Pending。2026-10-19の利用者方針により、まだIssue化していないv1向けUI改修後の再確認まで保留。旧TV目視/DOM overflow非検出を保全し、修正済み・解消済みとはしない。再開時は固定WPEのTV/PNG/DOMを照合する。#25全体のblocked-byは解除済み。 |
 | [#31 Add CEC-driven controls to the Player view](https://github.com/udonchan/picdplayer/issues/31) | Close済みの親Issue。[#54 loopback操作契約](https://github.com/udonchan/picdplayer/issues/54)、[#55 CEC navigation配信](https://github.com/udonchan/picdplayer/issues/55)、[#56 Player操作UI](https://github.com/udonchan/picdplayer/issues/56)に分割済み。#54はPR #168、#55はPR #167、#56はPR #169をmergeしてClose済み。Piで上下左右・決定・Back、再生/音声・一時停止・停止、右方向キー約2秒長押し後の選択停止を確認した。CECとChromium keydownの二重入力を#56で抑制した。別TV・入力切替時の挙動は未確認。metadata候補pickerは[#166](https://github.com/udonchan/picdplayer/issues/166)で別途扱う。 |
-| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | PR #253（`75df663`）でmaster統合済み、v1 Completed。PR #180/#223の画面へ背景自身の保存/未保存案内とpolicy保存後の再GETを追加。当時のsemantic入力だけのSettings→ON/OFF→Back/focus試験、実WebSocket6 actionとPi配備確認は物理CEC→Settingsの自動E2Eではない。物理リモコンの代表受入は未実施で#252へ集約し、完了扱いにしない。保存は#177、写真/TV/試聴は#51。 |
-| [#252 Complete v1 physical-remote acceptance for Player and Settings](https://github.com/udonchan/picdplayer/issues/252) | Open、利用者が実機近くで操作できる時に着手。2026-10-19の利用者指示で物理リモコンの唯一の代表受入記録先とする。Settings開閉/選択/Back/focus、短い再生/停止とpolicy pending、利用可能時ON/OFFを基本10分・初回＋修正一組で確認し、STOPPED/SINGLE/背景OFFへ戻す。#51同時runのCEC部分もここを参照。開始時に時間・操作・復元を再確認し、新自動化基盤や全TV matrixを追加しない。未実施を合格扱いにしない。 |
+| [#178 Add a CEC-accessible Player settings screen](https://github.com/udonchan/picdplayer/issues/178) | PR #253（`75df663`）でmaster統合済み、v1 Completed。PR #180/#223の画面へ背景自身の保存/未保存案内とpolicy保存後の再GETを追加。当時のsemantic入力だけのSettings→ON/OFF→Back/focus試験、実WebSocket6 actionとPi配備確認は物理CEC→Settingsの自動E2Eではない。v1物理受入は未完了で#252へ集約し、#256のSettings限定代表確認で全体完了にはしない。保存は#177、写真/TV/試聴は#51。 |
+| [#252 Complete v1 physical-remote acceptance for Player and Settings](https://github.com/udonchan/picdplayer/issues/252) | Open、利用者が実機近くで操作できる時に着手。2026-10-19の利用者指示で物理リモコンの唯一の代表受入記録先とする。Settings開閉/選択/Back/focus、短い再生/停止とpolicy pending、利用可能時ON/OFFを基本10分・初回＋修正一組で確認し、STOPPED/SINGLE/背景OFFへ戻す。#51同時runのCEC部分もここを参照。#256の2026-10-24 Settings限定代表確認は[同じ記録](verification.md#pr-256保存点2026-10-25)を参照し、本Issueの全scopeや音声の合格に拡張しない。開始時に時間・操作・復元を再確認し、新自動化基盤や全TV matrixを追加しない。未実施を合格扱いにしない。 |
 
 ### 過去の統合・配備経緯（2026-10-13時点）
 

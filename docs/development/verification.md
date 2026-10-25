@@ -1,6 +1,479 @@
 # 検証状況と残課題
 
-更新日: 2026-10-22。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-25。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## PR #256保存点（2026-10-25）
+
+利用者指示でUI実装/回帰試験/機能仕様を`e4d86e1`へ保存し、実機検証記録/backlogを別単位で保存する。
+保存前にMacでcontrols/renderの2 Node回帰、player/controls/renderの3 JS構文検査、`git diff --check`を再実行して成功した。
+今回C++全build・全CTest・新headのCI成功は確認しておらず、旧CI結果で代用しない。
+この保存作業ではPiへ接続せず、実機状態の最新確認は2026-10-24 18:00:49 UTCの記録である。
+Settingsの二軸移動・上下ループ・初期scroll・見出し統一・設定値と操作focusの分離を実装し、
+Node回帰、実WPE合成、利用者による限定代表確認を記録した。最終配色とv1全体の物理受入は未完了。
+実機UIはJS `48749538...`/CSS `3d418784...`を確認済みだが、backendは旧Debug package
+`dd1b0c54...`/install先daemon `1137505a...`のまま、offsetは未指定である。
+CI候補Release package `51723eb1...`は取得/offline検査済み・未配備。source tree一致を確認した対象は
+旧PR head `ec9fe964...`と候補merge commit `24c548...`であり、今回のUI保存後の新head全体ではない。
+Gate Cの配備/診断権限/offset0/取得・取消・実解放待ち・手動再生復帰は別承認で未実施。
+#238/#239はOpen、PR #256はDraft/master未統合を維持する。privateなpackage/設定/key/画像/helperはGitへ含めない。
+以下の「未commit」「未配備」等は各run時点の記録として保持し、後続の保存/反映と混同しない。
+
+## PR #256 scroll修正反映と下端ループの追加指示（2026-10-24）
+
+利用者がscroll修正の実機反映と継続を明示指示した。
+基準は`ec9fe964a9dcc31ac8cd26e1ced593c3d92f77e8`に未commit UI差分を加えたもの。
+15:15:29 UTCはSTOPPED/AUDIO_READY・offset null・SINGLE要求/実効/pending=false・背景OFF/saved、
+capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0・offset_unknownを再確認した。
+直前JS `98c343f8...`を既存upload内の`player.before-scroll-20261024-1515.js`へ非上書き保全し、hash一致を確認した。
+scroll修正JS `92b46dee4965a368fa03d5203e8233934e6332bd4b3130dbd2b30570a75c618b`だけを転送した。
+CSS `30a94864...`と他5 assetは不変で、7 assetの通常file・0644・hash/余分なentryなしと
+custom-ui一組・元引数保持・その他設定行不変を確認した。
+15:16:08 UTCのmedia_busyでは再起動しなかった。15:16:23 UTCの単発再観測は
+STOPPED・capture解放済み・offset_unknownであり、daemon再起動を1回実行した。
+HTTP HTML/CSS/JSの配置先とのbyte一致を確認後、kioskも1回再起動した。
+
+15:17:32 UTCから実WPE合成操作で初回open直後/GET完了後、PCM focus後の再open直後/GET完了後を確認した。
+4点ともscrollTop0・policy-single focus・見出し上端87.84px/surface上端20px・見出し可視だった。
+下部focusではscrollTop126になり、下部からの再表示を実際に通した上で0へ戻った。
+3見出し16pxも維持し、request観測は3 APIのGET各2件・POST0件。
+通信遅延の注入はせず、実際のGET完了後を観測した。人工的な遅延条件はローカル回帰と区別する。
+合成操作後はSettingsを閉じ、一時Inspector forwardを停止した。
+
+物理確認に対し利用者は「基本的に問題は無いが、最下部（Local PCM）の下側は最上部（Back）にループしてほしい」と回答した。
+scroll/基本操作の肯定を利用者観測として記録し、下端ループは追加要望として分ける。
+Local PCMの下入力だけBackへ戻し、Back上入力/左右端では停止する方針を明示して継続した。
+取得条件・offset・package/binaryの変更やPCM取得試験の承認とは扱わない。
+
+### 下端ループから上下双方向ループへの反映
+
+Local PCMの両buttonから下をBackへ送る最小差分を追加し、controls/render Node回帰・JS構文・diff検査は成功した。
+下端版JSは`3f04dafe2f5cfbc72e5a3239d66bd1c29c6b2c3f7a4c090fea5189954ae25c32`。
+15:22:17 UTCはSTOPPED/AUDIO_READY・offset null・capture IDLE/job0/busy=false/reader_released=true・
+accepted_frames0/offset_unknownだった。直前JS `92b46dee...`をupload内の
+`player.before-bottom-loop-20261024.js`へ非上書き保全した。
+15:22:55 UTCに7 assetのhash/通常file/0644と停止解放状態を確認してdaemon再起動を1回、
+HTTP HTML/CSS/JS一致確認後kiosk再起動を1回実行した。CSSと他5 assetは変更していない。
+15:23:55 UTCの実WPE合成確認では、Acquire/Cancelのどちらからも下入力でBack focus・scrollTop0・見出し可視となり、
+Backの上/左右は停止、下はpolicy-singleへ移動した。API GET3件/POST0件、終了時にSettingsを閉じる合成clickを行い、
+一時forwardを停止した。
+
+利用者は下方向のループを確認し、上方向がループしないと報告した。また、Gate Cは計画へ進むことだけを承認した。
+このためBackの上入力を並びの末尾Local PCM Cancelへ送る1行差分を追加した。
+左右端停止・行間の列保持・初期scroll reset・取得条件は維持する。controls/render Node回帰・JS構文・diff検査は成功した。
+双方向版JSは`4874953872f69b13ee47cf15767a404f59d4d87ed06f24c54267c2b71d24bb81`。
+15:29:58 UTCのcaptureはIDLE/job0/busy=false/reader_released=trueで、start_rejectionはmedia_busyだった。
+直前下端版JSを`player.before-bidirectional-loop-20261024.js`へ非上書き保全した。
+15:30:24 UTCのSTOPPED・解放済み・offset_unknownと7 asset整合確認後、daemonを1回再起動し、
+HTTP一致確認後kioskも1回再起動した。いずれもUI-onlyでありpackage/binaryは更新していない。
+
+15:31:18 UTCの実WPE合成確認は、policy-single → 上Back → 上pcm-cancel → 下Back → 下policy-single →
+下background-off → 下pcm-start → 下Backが期待どおりだった。Back到達時は全てscrollTop0・見出し可視。
+APIはread-policy/artist-background/complete-pcmのGET各1件・POST0件だった。
+終了時にSettingsを閉じる合成clickとNetwork domain無効化を行った。
+最新双方向版の物理入力確認と、最後の再起動後のservice/API終了snapshotは利用制限による中断前に未取得である。
+旧snapshotで代用せず未確認として残す。
+
+### 中断後の照合とGate C計画の前提
+
+17:26 UTC台の利用者再開指示後、保存worktreeとlive PRを再取得し、双方head `ec9fe964...`、
+PR OPEN/Draft、同headのCI SUCCESS、対象6ファイルの未commit差分を確認した。
+local JSは`48749538...`、CSSは`30a94864...`で中断直前の反映内容と一致する。
+中断で一時Inspector SSH forwardが残っていたため停止し、local listener不在を確認した。
+合成確認script自体は中断前に正常終了しており、中断中の継続計測は行っていない。
+Piの現在状態・最新UIの物理確認・利用可否は過去の観測で代用しない。
+
+Gate Cは計画だけが承認され、offset変更・取得・取消・取得用restartは未承認/未実施である。
+調査では、現配備package `dd1b0c54...`/daemon `1137505a...`は2026-10-20の未commit source由来で、
+正確なclean commit/immutable dirty-source manifestへの対応は未確定だった。
+checkpoint `997f866...`からhead `ec9fe964...`のsource差分はsettings読込のO_NONBLOCK追加だけだが、
+これを現配備binaryとcheckpointの同一性の証明にしてはならない。
+また、capture IDLE時のreader_released=trueはplayback readerの実解放の独立証明ではない。
+Gate C計画では対象backendのsource identityと実reader観測の可否を先に解決し、
+10秒のjob上限・早期cancel・有限release待ち・元のoffset未指定への復元・手動再生復帰を別承認する。
+HTTP202やowner状態だけで実reader取得/実解放の成功を主張しない。
+
+利用者は現在利用可能・接続変更なし・操作中ではないことを再確認した。
+17:30:14 UTCの既存pin厳格照合によるread-only観測ではSTOPPED/AUDIO_READY・offset null/source NONE、
+capture IDLE/job0/busy=false/reader_released=true/call_inflight=false/waiting_for_access=false・accepted frames/bytes0、
+can_start=false/offset_unknown・外部照合NOT_CHECKEDだった。
+ただしpolicy要求/実効はREPEAT・pending=false、背景要求/実効はON・savedへ変わっていた。
+中断前のSINGLE/OFFへは戻さず、今後の保全/復元基準は現在値として扱う。
+daemon PID37236（15:30:24 UTC起動）・kiosk PID37284（15:30:35 UTC起動）はともに
+service user picdplayer・active/running・NRestarts0、実processはcdplayerd/picdplayer-wpeだった。
+live daemonのcustom-ui一組・期待path・offset指定0組を確認した。
+7 assetはhash/通常file/0644/uid-gid1000一致・余分なentryなし、HTTP JS `48749538...`/CSS `30a94864...`も一致した。
+package `dd1b0c54...`、install先daemon `1137505a...`、profile Debugは不変であり、
+元引数・custom-ui一組・その他設定行不変もprivate比較で確認した。
+対象PIDのFD directoryを既存権限で観測する試みはPermissionErrorとなり、別identity/sudoで迂回していない。
+独立した実reader観測の可否は未解決である。再開後のrestart・設定変更・取得/取消は0回。
+
+### Gate C計画用の候補identityと資源確認
+
+ダウンロードはせず、run39688998298のartifact metadataだけを取得した。
+候補は`picdplayer-0.1.0-24c5485366d06abe01f11254db1491b0eee1fc4b`（artifact ID12388001225）、
+59,942,271 bytes、未失効、archive digestは
+`sha256:1518a3c927aee6924b2ee7ed241f4c0375083b390901406ffe7fdefd7758bfd6`だった。
+workflow/manual上で保持される候補はReleaseだけであり、Debugへ黙って読み替えない。
+候補sourceはPR headそのものではなくGitHubのmerge commit `24c548...`で、parentは05a1a3e.../ec9fe964...。
+GitHub commit metadataのtreeを両者で照合し、候補とPR headがともに
+`e61fc27a89fbf14b7e04dba7284174d383ed36aa`であることを確認した。
+これによりPR headと同一source treeのCI候補を選べるが、download後のarchive/manifest/package/payload検査と
+別承認の配備を行うまでは、現配備binaryのidentity問題が解決したとは扱わない。
+新規C++/SDK buildやPi compileを計画の既定にせず、この約60MB候補をprivateな一時保存先へ取得・検査する準備段階を先に提案する。
+候補準備はoffset追加・取得・診断権限変更の承認とは別にする。
+
+取得段階の案は明示`--read-offset-samples 0`（校正値ではない）とnormal restart、
+can_startとSTOPPED/output reset/queue取消/playback reader解放/media idle/pendingなしの確認後にstart1回。
+POSTは現行session_id/disc_generationとprofile `local-pcm-sha256-v1`、duration_ms10000を使う。
+10000は全域jobのdeadlineであり、10秒分のPCM取得指定ではない。sourceの許容範囲は1..10800000ms。
+実活動を観測した時点、遅くともstart後2秒で同じsession/job_idへcancelを1回送る案とする。
+先に完了/失敗した場合は取消正例とはせず、再試行しない。実活動が未観測なら実reader取得も未確認とする。
+その後は最大10秒の有限read-only観測でbusy=false/reader_released=true/call_inflight=false/waiting_for_access=falseを確認し、
+承認された範囲の独立FD観測と組み合わせる。解放不明・異常時はplay/eject/restartで帳尻を合わせず中断する。
+解放確認後に利用者が通常再生を一度手動操作し、進行と音声を確認して手動STOPする案とし、
+最後に元のoffset未指定へ戻し、必要なnormal restart後にnull/NONEとREPEAT/背景ON/最新custom UIの保全を確認する。
+この案全体は未実行/未承認であり、取得条件を満たしたという主張ではない。
+
+### 別承認された候補の取得・offline検査
+
+利用者は最新UIの双方向ループ/scrollについて問題なしと回答し、一方で選択項目の視認性を指摘した。
+追加確認では「設定値とfocusを混同する」という問題であり、別の未解決UI課題として保持する。
+Gate Cについては候補取得/offline検査だけを承認した。Pi配備・profile変更・権限変更・offset変更・取得/取消は含まない。
+
+private directory `pr256-gatec-preflight-20261024.PVL12v`（mode0700）を既存一時root内に新規作成した。
+最初の2回の起動はbackground wrapperのshell/Python改行解釈エラーでdownload前に終了した。
+private directory内の小さな取得helperへ切り替え、180秒timeout/64MiB file上限で55.4秒で取得した。
+archiveは59,942,271 bytesで、GitHub metadataのdigest `1518a3c9...`と一致した。
+ZIP内はmanifestとdebの2 regular fileだけで、path安全性/重複/保存容量上限を検査してから保存した。
+保存総量は120,252,887 bytesで256MiB未満。Docker image/SDKのdownloadやbuildはしていない。
+
+manifestはsource_commit `24c548...`/refs/pull/256/merge/source_dirty=false、Release/arm64/0.1.0、
+publication=not-approved/hardware_verified=falseだった。PR headとの同一tree確認は前節のmetadataによる。
+候補`picdplayer_0.1.0_Release_aarch64.deb`は60,302,100 bytes、SHA-256は
+`51723eb11b10dd942c9bb049e76632d4fe0d4d828acbe7231c75795d710b394c`でmanifestと一致した。
+Mac既存arとPython tar streamでcontrolのpackage/version/architecture/Dependsを照合し、
+全22 payloadのhash/mode/symlink targetがmanifestと完全一致した。
+regular payload 166,502,874 bytesはstreamで検査し、payload自体をfilesystemへ展開保存していない。
+package markerはRelease、wrapperはdiagnostics=0で、両実binaryはELF64 little-endian AArch64だった。
+daemon SHA-256は`35edfaf78bd60cdbac322b73213355d9b34f216bcc004e3cd99f93e64c5968ba`、
+WPE SHA-256は`08d77e05f4caa01a66c2698ab0d0879e2393d1fab44ef43280f43cebcdbd9bd6`。
+controlのInstalled-Sizeは481205 KiBであり、将来配備時のPi容量確認は別途必要である。
+package内の実行file/maintainer scriptは実行していない。binary profileの動的検証は既存CIの結果であり、
+今回のoffline検査をLinux実行/実機成功へ読み替えない。候補・helper・manifestはrepository外に保持した。
+一時directoryの存在を将来の保全保証にはせず、再利用/配備前には現物とhashを再照合する。
+候補は配備前で停止し、現配備package Debug `dd1b0c54...`を更新していない。
+
+視認性の指摘に対し、requestedの青い選択表示は維持し、操作focusだけ明るい3px外枠へ分けるCSS最小差分を作成した。
+JS/設定値/利用不能gate/POST動作は変更せず、controls/render Node回帰とdiff検査は成功した。
+CSS SHA-256は`3d4187843746ee739156c5a79c9af23f5e12c2e166fb75e79bbdd2237e5c6d64`。
+この時点では未配備で、候補Release packageの配備とは別のUI-only反映として扱う。
+
+### 別承認されたfocus CSS-only反映
+
+利用者はCSSだけの反映を承認した。17:51:11 UTCの停止assertが失敗したためbackup/転送/restart前で中断し、
+17:51:25 UTCのread-only再確認でPLAYINGを観測した。こちらからSTOP/cancelは送らず、
+利用者が通常操作で手動STOPしてから続行を指示した。
+17:52:53 UTCにSTOPPED・capture IDLE/job0/busy=false/reader_released=true/offset_unknownを確認した。
+旧CSS `30a94864...`をupload内の`player.before-focus-20261024.css`へ非上書き保全し、hash一致後にCSSだけ転送した。
+7 assetのhash/通常file/0644・余分なentryなしを再確認した。
+
+17:53:13/17:53:23 UTCのmedia_busy観測ではrestartを実行しなかった。
+その後、media_idleは取得開始gateであり、UI-only通常restartの必須条件とはしていないことを説明し、
+17:54:49 UTCのSTOPPED・capture IDLE/job0/解放済みを確認して承認済みnormal daemon restartを1回実行した。
+取得用gateや製品codeを緩和したのではなく、取得POSTは0回である。強制kill/電源断/繰返しrestartはしていない。
+HTTP HTML/CSS/JS一致後にkioskを1回restartし、JS `48749538...`と他5 assetは維持した。
+
+17:55:51 UTCから実WPEの合成focus操作で、requested REPEATは青rgb(130,184,239)の文字/境界線、
+別の操作対象Singleは明るいrgb(237,242,242)・solid 3px外枠/offset3pxとなることを確認した。
+初回の診断assertは非focus側のoutline-widthを0と仮定して失敗したが、WebKitはoutline-style:noneでも
+computed width3pxを返していた。UIを再変更せず、枠の有無をoutline-styleで判定して再確認に成功した。
+selected=true/focused=falseとselected=false/focused=trueを区別し、scrollTop0・GET3件/POST0件だった。
+合成操作後はSettingsを閉じ、Network domain無効化と一時SSH forward停止を行った。
+利用者は「色自体の良し悪しは残課題だが、今は区別できるのでこのまま進める」と回答した。
+物理視認性の現時点の肯定と、最終配色の残課題を分けて保持する。
+
+18:00:49 UTCの終了GETはSTOPPED/AUDIO_READY・offset null/NONE・REPEAT要求/実効/pending=false・背景ON/saved、
+capture IDLE/job0/busy=false/reader_released=true/call_inflight=false/waiting_for_access=false・accepted frames/bytes0・media_busy。
+daemon PID38060（17:54:49 UTC起動）・kiosk PID38105（17:55:00 UTC起動）はactive/running・NRestarts0。
+HTTP JS `48749538...`/CSS `3d418784...`を確認した。
+配備packageはDebug `dd1b0c54...`、install先daemon `1137505a...`のまま、
+元引数・custom-ui一組・他設定行不変・offset指定0組もprivate比較で確認した。
+候補ReleaseのPi配備・診断権限変更・offset0追加・取得/取消は未承認/未実施である。
+
+## PR #256 見出し統一・二軸反映と初期scroll不具合（2026-10-24）
+
+利用者がRead policyの見出しを他項目へ揃え、残りの確認も進めるよう指示した。
+Read policyだけの25-36px指定を除き、他2項目と同じ16pxのCSS規則へ統合した。
+HTMLのh2/h3階層・dialog labelは変えていない。
+controls/render Node回帰とJS構文・diff検査を先に成功させ、二軸JSとCSSの2 assetだけを反映した。
+source基準は`ec9fe964a9dcc31ac8cd26e1ced593c3d92f77e8`に下記の未commit差分を加えたもの。
+
+14:57:38 UTCはSTOPPED/AUDIO_READY・offset null・SINGLE要求/実効/pending=false・背景OFF/saved、
+capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0・offset_unknownだった。
+直前JS `88e89c4d...`を元のupload内の`player.before-2axis-20261024-1457.js`へ非上書き保全してhash一致を確認した。
+元のCSS `41e1a5e0...`と初期uploadの7 asset・設定保全fileも保持している。
+配置先7 assetの通常file・0644・hash、余分なentryなし、custom-ui一組・既存引数保持・その他設定行不変を確認した。
+14:59:33 UTCのSTOPPED・capture解放済み・offset_unknown確認後、daemonを1回、
+HTTP HTML/CSS/JSの配置先とのbyte一致確認後にkioskを1回再起動した。
+反映したJSは`98c343f8bd61f4d9281cf613a3e452f9ab3f71b6590746031ca5d1ff4f10ff76`、
+CSSは`30a94864f9ea34f287ae2d0af179af0b94f8804b2ca98fb09e77f7f330678dac`。
+他5 assetは下記Gate A表から不変で、package/binaryの更新はしていない。
+
+既存Inspectorへの一時forwardで実WPEの短い合成UI操作を行った。
+Settingsを開き、computed styleで3見出しとも16px/weight700/system-ui,sans-serifを確認した。
+can_start=false/busy=false/job0・両取得button aria-disabled=trueを確認してから、合成keydownの
+下/右/下/左がbackground-off/background-on/pcm-cancel/pcm-startへ移ることを確認した。
+利用不能なAcquire/Cancelを各1回合成clickし、offset_unknown/No active acquisitionの理由と
+「No request sent」を確認した。実request観測はread-policy/artist-background/complete-pcmのGET各1件、
+POST0件で、観測経路がGETを受信した上での限定無POST正例である。利用不能gateは緩めていない。
+feedback下端とsurface下端の余白は約38.8pxだった。操作後はBackでPlayerへ戻した。
+これは実WPEの合成操作であり、物理リモコンの操作や音声の成功とは区別する。
+request本文・key・画像は収集せず、Inspector設定やUI previewも変更していない。
+
+物理確認を案内したところ、利用者は「settingsを開いたときのスクロール位置がおかしい」と報告した。
+見出し/二軸/余白について独立した物理成功申告は得ておらず、Gate Bを未合格のまま保持する。
+追加restartはせず、read-only DOMを確認した時点ではSettingsは閉じていた。
+続く限定合成再現で、初回openのscrollTop125・policy-single focus・見出し上端-37.16px/surface上端20px、
+PCM focus後126、閉じて再open後125を観測した。初期buttonのnearest scrollだけでは先頭へ戻らず、
+前回位置が残ることで見出しが隠れる不具合を実WPEでも再現した。再現後はSettingsを閉じた。
+
+一時forwardは両回とも停止し、追加配備/restartをせずに実機runを終了した。
+返答待ちと限定再現を含め約10分枠を超え、終了GETは15:09:20 UTCとなった。
+終了状態はSTOPPED/AUDIO_READY・offset null・SINGLE要求/実効/pending=false・背景OFF/saved、
+capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0・offset_unknown。
+daemon PID35939（14:59:34 UTC起動）・実cdplayerd、kiosk PID35981（14:59:44 UTC起動）・実WPEで、
+両service active/running・NRestarts=0、live custom-ui一組・offset指定0組を確認した。
+package `dd1b0c546dadf17a48576739559e1be3829a8635f354a9c2abcc0b90a20678b0`、
+install先daemon `1137505a78862ad9c5de1be71cc0a99d1400e3bcebeb50efb579eae61a975f91`は不変。
+反映済み二軸JSと統一見出しCSSを維持し、復元はしていない。
+offset変更・PCM取得/取消・直接drive probe・provider操作・C++ build・全CTestは実施せず、Gate Cは別承認のまま。
+
+### 初期scrollのローカル修正
+
+`openSettings`で初期focusを置いた後にsurfaceのscrollTopを0へ戻す最小修正を加えた。
+controls試験で初回/再表示時の残留125/200が0になることと、非同期初期GET後も先頭を維持することを確認した。
+初回のrender試験は新たなquerySelectorにfixtureが未対応でTypeErrorとなったため、
+既存2箇所のDOM mockへ必要なselectorだけを追加した。製品側にtest用fallbackは追加していない。
+最終controls/render Node回帰、player/controls/renderの3 JS構文検査は成功した。
+resetだけをmemory上で除いた負例はcontrols182行で125 != 0のassert失敗となり、回帰を検出した。
+機能設計と全diffを点検し、`git diff --check`を確認した。
+修正版JSは`92b46dee4965a368fa03d5203e8233934e6332bd4b3130dbd2b30570a75c618b`で、未commit・未配備。
+PiのJSは`98c343f8...`、CSSは`30a94864...`のままであり、scroll修正の実機正例は未確認である。
+
+## PR #256 修正版UI反映と二軸navigationの指摘（2026-10-24）
+
+利用者の継続指示により、約10分・反映一組のGate Bを再開した。
+sourceは`ec9fe964a9dcc31ac8cd26e1ced593c3d92f77e8`に下記の未commit巡回順修正を加えたもの。
+14:24:52 UTCの読取でSTOPPED/AUDIO_READY・SINGLE要求/実効/pending=false・背景OFF/saved、
+capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0・offset nullを確認した。
+start_rejectionはこの時点ではmedia_busyで、続く観測ではoffset_unknownだった。
+custom-ui一組・既存引数保持・その他設定行不変、旧JS復元元の通常file/hashも再確認した。
+
+変更したのは配置先`/srv/picdplayer-ui-dev-20261020-aria/player.js`だけで、元のuploadは保持した。
+最初のrsyncはMacの2.6.9が`--chmod=F644`を拒否して転送前に終了した。
+同optionを外し、既存fileの権限を維持する転送で成功した。7 assetのhash・通常file・0644・
+uid/gid1000/1000と、余分なentryなしを確認した。JS以外の6 assetは下記Gate A表から不変。
+再起動直前のmedia_busy観測ではcommandを実行せず止め、次の観測でもbusyなら中断する旨を伝えた。
+14:26:30 UTCのSTOPPED・capture解放済み・offset_unknown観測後にdaemonを1回再起動した。
+HTTP HTML/CSS/JSの配置先とのbyte一致を確認してから、kioskも1回再起動した。
+修正版HTTP JS SHA-256は`88e89c4d06baf6838006640e81d665863bb0e031837b74c33c58f5b73295d6fd`。
+14:26:59 UTCにdaemon PID35479・kiosk PID35524、実process cdplayerd/picdplayer-wpe、
+両service active/running・NRestarts=0、live custom-ui一組・offset指定0組を確認した。
+package/binaryをPR headのbuildへ置換したという意味ではない。
+
+既存Inspectorへの一時forwardで、90秒限定のNetwork request method観測を行った。
+観測は90.124秒で正常終了したが、初期/終了DOMともSettingsは閉じており、API requestは0件だった。
+利用者の物理操作と観測窓の重なりを確認できず、0件を無POST成功には扱わない。
+request本文・key・画像は収集せず、screenshotやUI preview変更も行っていない。
+
+利用者は「上下キーでは各項目の移動、左右キーではボタン間の移動が自然」「上下キーで現在は
+ボタン間も移動」「Local PCMでは上下キーと左右キーで動作が異なる」と報告した。
+現行sourceは上下左右を同じ一列ringとして扱っている。順序修正だけでは要求を満たさず、
+二軸navigationの仕様指摘としてGate Bを未合格とする。Local PCMの差異の原因は未確定である。
+余白・理由表示・Back復帰・実機無POSTについて、個別の成功申告は得ていない。
+二軸仕様の端・列保持・Back到達を合意する前に、追加修正や再反映を行っていない。
+
+利用者の返答待ちを含み約10分枠を超え、終了read-only snapshotは14:42:16 UTCとなった。
+90秒observerは自動終了しており、返答待ち中の追加反映や取得操作は行っていない。
+終了時はSTOPPED/AUDIO_READY・offset null・SINGLE要求/実効/pending=false・背景OFF/saved、
+capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0・media_busy、
+両service active/running・同PID・NRestarts=0だった。
+package `dd1b0c546dadf17a48576739559e1be3829a8635f354a9c2abcc0b90a20678b0`と
+install先daemon `1137505a78862ad9c5de1be71cc0a99d1400e3bcebeb50efb579eae61a975f91`は不変。
+一時SSH forwardも停止した。修正版UIの反映を維持し、旧JSへの復元は実施していない。
+offset変更・PCM取得/取消・直接drive probe・provider操作・C++ build・全CTest・package配備は未実施。
+Gate Cは引き続き別承認であり、取得/取消/実release/再生復帰の正例は増えていない。
+
+### 合意後の二軸navigationローカル修正
+
+利用者は、上下の行移動時は左右の列を維持する案を採用した。
+上下はBack/Read Policy/Artist Background/Local PCMの行間、左右は行内button間、端では停止し、
+Backから下は要求policyのbuttonへ戻る。Tabは7 buttonの順逆巡回、物理戻るはPlayer復帰を維持する。
+Local PCMでの相違は「focusの移動先が違う」と追加回答されたが、実機の原因は未確定のまま扱う。
+この回答では追加実機反映を行わない旨を明示し、以後はローカル修正/検証だけを行った。
+
+`handleNavigation`のSettings方向入力だけを二軸へ変更し、選択/POST・取得条件・表示/scroll処理は変更しない。
+既存controls試験を行/列の意味に合わせ、semantic/keyboardで同じ代表経路、列保持、端での停止、
+利用不能PCMへの到達、Backから要求policyへの復帰、focusの一意性と移動時無POSTを確認した。
+Tab正逆巡回、背景/policyの決定先、取得/取消・無POST・遅いGET等の既存回帰も保持した。
+
+- `node tests/ui_controls_test.js`: 成功。
+- `node tests/ui_render_test.js`: 成功。
+- `node --check ui/default/player.js`、`node --check tests/ui_controls_test.js`: 成功。
+- 方向入力だけを直前の単一ringへmemory上で戻した負例は329行のassertで失敗し、旧操作を拒否した。
+  fileの書き戻しやPi操作はしていない。
+
+二軸修正版JS SHA-256は`98c343f8bd61f4d9281cf613a3e452f9ab3f71b6590746031ca5d1ff4f10ff76`。
+未commit・未配備であり、今回Piへ反映した単一ringの`88e89c4d...`と区別する。
+機能設計を合意した操作へ更新し、全diffと`git diff --check`を確認した。
+ローカルのsemantic/keyboard成功を、TV/物理リモコンの二軸動作や実機無POSTの成功へ読み替えない。
+
+## PR #256 Gate B巡回順の修正・再確認（2026-10-24）
+
+下記Gate Bの不具合と最小修正案を提示後、利用者が継続を指示した。
+対象をSettingsのpolicy2個 → background2個 → PCM2個 → Backの巡回順と対応回帰試験に限定し、
+UI-only再反映一組で確認する。取得条件・payload・C++ binary・offsetは変更しない。
+反映前のJS `2b16d64635daf6046ce2b5a130e5810abf22b035bc7d45c9589354f5448ebd53`は
+既存配置元`~/picdplayer-ui-upload-20261020-aria/player.js`に通常fileとして残り、復元元のhashを確認した。
+この配置元は今回上書きしない。
+
+既存Debug WPEのloopback Inspectorが有効なため、一時SSH forwardで接続した。
+有効化/設定変更/追加restartはしていない。最初の`/json`照会はHTTPErrorとなったが、これは
+Chromium型endpointの誤りであり、既存toolどおりroot `/`でWebPage targetを確認できた。
+既存`inspect-wpe.py`で1920x1080・ready complete・connection connectedを確認した。
+続くread-only DOMではSettingsが閉じていることを確認し、Network domainのenable/disableが成功した。
+さらにpageから明示read-only GETを1回送る観測器smokeで、complete-pcmのrequest methodがGETとして
+観測できることを確認した。取得POSTは送っていない。request本文・key・画像は収集しない。
+修正版の反映・物理操作結果は以下へ別途記録する。
+
+約10分枠の終了が近づいたため、未検証の修正版を実機へ反映せず、このrunの実機操作を終了した。
+今回のasset転送・設定変更・restartは0回であり、14:15:36 UTCのHTTP JSは引き続き
+`2b16d64635daf6046ce2b5a130e5810abf22b035bc7d45c9589354f5448ebd53`だった。
+同時点でSTOPPED/AUDIO_READY・offset null・SINGLE要求/実効/pending=false・背景OFF/saved、
+capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0、両service active/running・
+PID34661/34714・NRestarts=0を確認した。ただしstart_rejectionは`media_busy`であり、
+14:10:07 UTCの`offset_unknown`と区別する。media idleが継続したとは扱わない。
+一時Inspector SSH forwardは停止した。有効化設定やUI previewは変更していないため、その復元対象はない。
+修正版のHTTP/DOM/物理操作・余白/理由表示・実機無POSTは未確認、Gate Cは未承認/未実施のままである。
+
+### ローカル修正の最終点検
+
+担当処理は14:17 UTCに、JSの巡回順/関連indexと試験側のID列だけを変更し、試験未実行の状態で返却した。
+実機枠は延長せず、親がローカル差分と既存Node回帰だけを追加確認した。
+最初の`node tests/ui_controls_test.js`は旧順序を期待する329行でassert失敗した。
+既存のBack到達とTab期待を訂正し、同じ試験内で方向キー/Tabの正逆一巡・focusの一意性・
+移動だけではPOSTしないことを確認した。既存の利用不能なAcquire/Cancel決定時の無POST、
+policy/backgroundの決定先・遅いGET・取消/release待ち等の試験は保持した。
+これは既存UI試験の更新であり、新たな物理CEC E2E基盤や全状態matrixの追加ではない。
+
+- `node tests/ui_controls_test.js`: 最終成功。
+- `node tests/ui_render_test.js`: 最終成功。同値snapshot・metadata/artwork/background等の既存回帰を含む。
+- `node --check ui/default/player.js`、`node --check tests/ui_controls_test.js`: 成功。
+- 更新試験へGit HEADの旧`player.js`をmemory上だけで差し替えた負例は330行のassertで失敗し、
+  旧巡回順を拒否することを確認した。worktree fileは負例のために書き戻していない。
+
+修正はSingle/Repeat → Off/On → Acquire/Cancel → Backの巡回順と、それに依存するBack focus・
+semantic selectの振分け・background clickのfocus位置だけである。初期のrequested policy focus、
+利用不能buttonのfocus可能性、payload/取得条件は変更しない。
+修正版JS SHA-256は`88e89c4d06baf6838006640e81d665863bb0e031837b74c33c58f5b73295d6fd`。
+これは`ec9fe964...`からの未commit差分であり、PR headや実機HTTP hashとは区別する。
+ローカル修正/試験は実機枠を超えて終了したが、追加Pi接続・反映・restartは再開していない。
+機能設計に巡回順を追記し、最終全diffと`git diff --check`を確認した。
+
+## PR #256 UI-only反映 Gate B（2026-10-24）
+
+Gate A結果と約10分・反映一組の操作/終了/復元条件を提示後、利用者が「続けてください」と指示した。
+14:00:02 UTCにSTOPPED/AUDIO_READY・SINGLE要求/実効・pending=false・背景OFF/saved、
+capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0・offset null/offset_unknownを再確認。
+7 assetの配置元/配置先hash・0644権限と、custom-ui一組・既存引数保持・その他設定行不変も再照合した。
+source基準は`ec9fe964a9dcc31ac8cd26e1ced593c3d92f77e8`、UI 7 hashは下記Gate A表と同じ。
+
+承認済みの`systemctl restart picdplayer.service`、続いて`picdplayer-kiosk.service`を各1回実行した。
+daemonは14:00:19 UTC起動/PID34661、kioskは14:00:35 UTC起動/PID34714。
+14:00:29 UTCにHTTP `/player`・`/player.css`・`/player.js`が配置先/sourceの各hashとbyte一致した。
+14:00:48 UTCにlive daemonのcustom-ui一組と期待path、kioskの実process `picdplayer-wpe`、
+両service active/running・NRestarts=0を確認した。実行binaryの最新PR buildへの置換はしていない。
+
+TV/物理リモコンではSettings内の7 button一巡、利用不能な取得/取消での理由確認、Back復帰を案内した。
+policy/背景buttonの決定や取得可能時の取得は案内していない。
+利用者は「一巡できますが順番がおかしいです。Read policy -> Back -> Artist background のように移動します」と報告した。
+全項目への到達は利用者観測として記録するが、巡回順は不具合としてGate Bを合格にしない。
+source `ui/default/player.js` の`settingsActions`はpolicy2個・Back・background2個・PCM2個の固定順であり、
+報告と一致する。既存`tests/ui_controls_test.js`もその順序を期待していた。
+修正候補はpolicy/background/PCMを連続させてからBackへ巡回する最小変更だが、このrunで実装/再反映はしていない。
+余白・利用不能理由・無POST・Player復帰について独立した利用者確認は得られておらず、未確認のまま残す。
+Inspector/DOM/screenshot/HTTP request traceは取得していない。Node等の既存自動試験も今回再実行していない。
+
+14:04:13 UTCの終了GETではSTOPPED/AUDIO_READY・offset null、SINGLE要求/実効・pending=false、
+背景OFF/saved、capture IDLE/job0/busy=false/reader_released=true/accepted_frames=0・offset_unknown。
+両serviceは同PID・active/running・NRestarts=0を維持していた。
+package SHA-256 `dd1b0c546dadf17a48576739559e1be3829a8635f354a9c2abcc0b90a20678b0`、
+install先daemon `1137505a78862ad9c5de1be71cc0a99d1400e3bcebeb50efb579eae61a975f91`は不変。
+操作後job0の観測は、物理決定時にPOSTが送られなかったことの証明にはしない。
+
+巡回順の不具合を残して今回の一組は終了した。custom-uiは承認どおり反映状態を維持し、設定復元や
+追加restartは行っていない。Settingsが開いていれば物理BackでPlayerへ戻るよう案内したが、復帰完了は未確認。
+read offset変更・PCM取得/取消・直接drive probe・provider通信の操作は追加せず、Gate Cは未承認/未実施のまま。
+C++ build・全CTest・package再配備・commit/push・Issue closeも行っていない。
+
+## PR #256実機再開 Gate A（2026-10-24）
+
+live PRはOPEN/Draft、head `ec9fe964a9dcc31ac8cd26e1ced593c3d92f77e8`。
+保存worktree `issue238-local-pcm-sha256`は同head・同branchで、観測開始時はstaged/unstaged/untrackedなし。
+fetch後の`refs/remotes/origin/master`は`597cbca191f079af6714bb4836ae15d1fe9ff78f`で、
+取込済み監査修正`05a1a3e`以降は文書6ファイルだけだった。master取込・build・deployは行っていない。
+CI run39688998298のhead一致・SUCCESSと各step成功を再取得した。各72/72の件数はPR記録を参照し、
+今回CI生ログの再検算はしていない。#238/#239はOPENを維持する。
+
+利用者はPi/利用者とも利用可能・操作中でなく、前回から環境変更なしと回答した。
+既存の専用ED25519 pinを使い、strict照合・host-key更新無効・既存共有connection非使用で接続した。
+通常SSH設定の照合無効値は使用せず、設定自体も変更していない。接続先やkey/設定全文は記録しない。
+13:50:12 UTC以降の短いread-only観測で次を確認した。
+
+- daemon/kioskともactive/running、NRestarts=0。PIDは16497/16523、開始時刻は2026-10-20 15:53:49 UTC。
+- packageは`picdplayer 0.1.0 arm64 install ok installed`。配置済みpackage SHA-256は
+  `dd1b0c546dadf17a48576739559e1be3829a8635f354a9c2abcc0b90a20678b0`、
+  install先daemonは`1137505a78862ad9c5de1be71cc0a99d1400e3bcebeb50efb579eae61a975f91`。
+  15:54 UTCの旧配備記録と一致する。package markerとinstall先binaryの`--build-info`はDebug。
+  `/proc/16497/exe`のhash取得はPermissionErrorで未確認。権限を拡張せず、実行中binaryのbyte一致は断定しない。
+  live cmdlineからdaemonとWPEのprocess名は確認できた。最新PR headのbinary配備とは扱わない。
+- 開始状態はSTOPPED/AUDIO_READY、SINGLE要求/実効・pending=false・保存値restored。
+  背景は要求/実効OFF・saved。captureはIDLE/job_id=0/busy=false/reader_released=true、
+  waiting_for_access=false/call_inflight=false、accepted frames/bytes=0。
+  offsetはnull/source NONE、can_start=false/start_rejection=offset_unknown。
+- 配置元`~/picdplayer-ui-upload-20261020-aria`と配置先`/srv/picdplayer-ui-dev-20261020-aria`の
+  7 assetは全てregular file、uid/gid=1000/1000、mode0644。両者とPR sourceのhashが全件一致した。
+  配置先の余分なentryはなく、rootは通常directory・owner/group udonchan・0755、親`/srv`はroot/root・0755。
+- 保全設定`picdplayer.default.before-custom-ui`と現在設定をprivateに比較し、custom-ui一組だけの追加、
+  指定path一致、元の引数列保持、その他の設定行不変を確認した。全文や秘密を含み得るargv/Environmentは出力していない。
+- live daemonのcustom-ui指定は0組、read-offset指定も0組。HTTPのJS/CSSは旧配備hashのままで、
+  配置済み最新UIは未反映だった。過去の「未再起動」申告だけでなく、現在のprocess/HTTPで照合した。
+
+| UI asset | PR source / 配置元 / 配置先で一致したSHA-256 |
+| --- | --- |
+| manifest.json | `daf28cd2c46d23881344c213de258faec9a5241875602bc382771996fde26148` |
+| player.html | `22999923d7b0b6c454bfbab352a34cab47785a8101804648efe4cecc88899aad` |
+| player.css | `41e1a5e01199c84c43e5f264566c54f15179f656cd41b0fd75d114897aba0d74` |
+| player.js | `2b16d64635daf6046ce2b5a130e5810abf22b035bc7d45c9589354f5448ebd53` |
+| status.html | `32bec897f49bdba1e70050a460ad8b3e4aa3953f4152206551b3487b6c6d9049` |
+| status.css | `5510642566bdcedb1b11236521bb49d732e48c09fe20d033af8b1e41b1ca5ca9` |
+| status.js | `f8b4e2a61c2b4d480b6c029824cb96c74757565253fbfdb9d78ceede3a807d92` |
+
+観測時HTTPのHTMLは`ecf6ed8a8eb9ae3db154d463879ac0dd6e0cef433004168cb2cd093b99dde989`、
+JSは`d56867d8430229af2ee80d541576048bf93e7c9ba353749d68f50f37a1889e01`、
+CSSは`8776b12ebb9dc12c3cfc5165d1efe8d37d84ace582a9caef7aa6369ddee4b2c8`。
+
+操作列はservice/package照会、状態API GET、asset/hash/権限照会、設定のprivate比較、live引数の必要field確認だけ。
+STOP/cancel・設定変更・restart・deploy・offset追加・直接drive probe/ioctl・Inspector接続は実行していない。
+終了時も状態変更操作はなく、復元対象は作成していない。13:52:48 UTCの終了GETでは
+STOPPED/AUDIO_READY・offset null・SINGLE/pending=false・背景OFF/saved、capture IDLE/job0・
+busy=false/reader_released=true/accepted_frames=0と、両service active/running・同PID・NRestarts=0を確認した。
+ただし終了時のstart_rejectionは`media_busy`だった。開始時の`offset_unknown`とは時点を分けて保持し、
+media idleが継続した、あるいは全開始gateを満たすとは扱わない。直接probeや状態変更で解消させていない。
+TV目視・物理リモコン・音声・最新7-button UIの実画面・無POSTの実機正例は未確認である。
+Gate Bは約10分・反映一組の操作/終了/復元条件を別承認してから進める。
+Gate Cの明示offset0・取得/取消/実release/手動再生復帰は別承認・未実施のままとする。
+結果の意味はlocal_pcm_fingerprint・外部照合NOT_CHECKEDであり、外部MATCH等の根拠は増えていない。
 
 ## PR #260監査修正のDraftへの取込（2026-10-22）
 
