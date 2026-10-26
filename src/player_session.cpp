@@ -8,6 +8,7 @@
 #include "cec_device.hpp"
 #include "media_state.hpp"
 #include "media_worker.hpp"
+#include "player_media_dispatch.hpp"
 #include "drive_capabilities.hpp"
 #include "device_lifecycle.hpp"
 #ifdef ENABLE_API
@@ -338,7 +339,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
             !toc_needs_refresh && loaded_toc && media_state.state() == MediaLifecycleState::audio_ready &&
                 !api_eject_pending && !api_eject_inflight};
         context.toc = loaded_toc ? &*loaded_toc : nullptr;
-        context.media_idle = media_worker.idle();
+        context.media_activity = media_worker.activity();
+        context.media_idle = context.media_activity == "IDLE";
         context.policy_pending = read_policy_pending;
         context.disc_generation = disc_generation;
         context.observation_generation = device_observation.generation;
@@ -460,7 +462,13 @@ void run_player_session(const std::string& device, CddaBackend backend,
                         *capture_options = *direct_options;
                         capture_observation_generation->store(context.observation_generation);
                     }
-                    return capture->start(command, context);
+                    const auto* readiness = capture->start_rejection(context);
+                    const auto result = capture->start(command, context);
+                    log_notice("capture") << "start_decision accepted=" << result.accepted
+                        << " failure=" << static_cast<int>(result.failure)
+                        << " readiness=" << (readiness ? readiness : "ready")
+                        << " media_activity=" << context.media_activity;
+                    return result;
                 }
                 if (command.type == ApiCommandType::cancel_complete_pcm) return capture->cancel(command);
                 switch (command.type) {
@@ -749,19 +757,6 @@ void run_player_session(const std::string& device, CddaBackend backend,
             log_info("media") << "eject=started wait_ms=" << wait_ms;
         }
 #endif
-        if (now >= next_media) {
-            // Keep status ioctls off the drive while CD-DA reads are active.
-            // A read failure stops playback; polling then resumes and observes
-            // an opened tray or removed disc.
-            bool may_poll_media = may_access_device && drive_probe_finished &&
-                controller.state().playback != PlaybackState::playing;
-#ifdef ENABLE_API
-            may_poll_media = may_poll_media && !api_eject_pending && !api_eject_inflight;
-#endif
-            if (may_poll_media)
-                (void)media_worker.request(MediaWork::observe);
-            next_media = now + std::chrono::milliseconds(500);
-        }
         const auto playback = controller.state().playback;
 #ifdef ENABLE_API
         const bool eject_idle = !api_eject_pending && !api_eject_inflight;
@@ -1028,22 +1023,33 @@ void run_player_session(const std::string& device, CddaBackend backend,
             apply_device_observation(device_observer->reader_failed());
         }
         report_slow_stage("engine_tick", engine_started);
+        service_commands_before_media_poll(media_worker, next_media, [&] {
 #ifdef ENABLE_API
-        if (api_server) {
-            if (now >= next_api_snapshot) {
-                const auto snapshot_started = std::chrono::steady_clock::now();
-                if (publish_api_snapshot()) api_server->publish_state(api_state_json);
-                report_slow_stage("api_snapshot", snapshot_started);
-                next_api_snapshot = now + std::chrono::milliseconds(250);
+            if (api_server) {
+                if (now >= next_api_snapshot) {
+                    const auto snapshot_started = std::chrono::steady_clock::now();
+                    if (publish_api_snapshot()) api_server->publish_state(api_state_json);
+                    report_slow_stage("api_snapshot", snapshot_started);
+                    next_api_snapshot = now + std::chrono::milliseconds(250);
+                }
+                const auto api_started = std::chrono::steady_clock::now();
+                api_server->service();
+                report_slow_stage("api_service", api_started);
             }
-            const auto api_started = std::chrono::steady_clock::now();
-            api_server->service();
-            report_slow_stage("api_service", api_started);
-        }
-        // API cancellation is processed before confirmation. Later CEC/stdin
-        // commands revoke receipts before the next public response.
-        if (capture) capture->poll(capture_context());
+            // API cancellation is processed before confirmation. Later CEC/stdin
+            // commands revoke receipts before the next public response.
+            if (capture) capture->poll(capture_context());
 #endif
+        }, [&] {
+            // Commands may just have admitted capture, started playback or ejected.
+            bool may_poll_media = !device_io_retiring && device_context_current() &&
+                !capture_busy() && capture_released() && drive_probe_finished &&
+                controller.state().playback != PlaybackState::playing;
+#ifdef ENABLE_API
+            may_poll_media = may_poll_media && !api_eject_pending && !api_eject_inflight;
+#endif
+            return may_poll_media;
+        });
         pollfd fds[]{{signals.fd, POLLIN, 0}, {interactive ? STDIN_FILENO : -1, POLLIN, 0},
                      {use_cec ? cec.poll_fd() : -1, POLLIN, 0}};
         const auto poll_started = std::chrono::steady_clock::now();

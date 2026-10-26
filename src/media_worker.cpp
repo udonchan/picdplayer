@@ -49,8 +49,15 @@ void MediaWorker::invalidate(std::uint64_t generation) {
 }
 
 bool MediaWorker::idle() const {
+    return activity() == "IDLE";
+}
+
+std::string_view MediaWorker::activity() const {
     std::lock_guard lock(mutex_);
-    return !busy_ && !pending_ && results_.empty();
+    if (busy_) return "RUNNING";
+    if (pending_) return "PENDING";
+    if (!results_.empty()) return "RESULT_PENDING";
+    return "IDLE";
 }
 bool MediaWorker::retiring() const {
     std::lock_guard lock(mutex_);

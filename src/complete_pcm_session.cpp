@@ -185,6 +185,7 @@ ApiResponse CompletePcmSession::response(const CompletePcmContext& c, bool resul
         {"core_failure", core_failure_name(status_.core_failure)},
         {"uncertain_reads", status_.uncertain_reads}, {"recovered_reads", status_.recovered_reads},
         {"can_start", reason == nullptr}, {"start_rejection", reason ? Json(reason) : Json(nullptr)},
+        {"media_activity", c.media_activity},
         {"profile", {{"canonical", profile.canonical}, {"algorithm", profile.algorithm}, {"version", profile.version}}},
         {"external_verification", "NOT_CHECKED"}};
     return {200, "application/json", status.dump()};

@@ -57,6 +57,7 @@ def verify_background_api(port, available=False, reason="metadata_disabled"):
     assert capture["schema_version"] == 1 and capture["state"] == "IDLE"
     assert capture["job_id"] == 0 and not capture["busy"] and capture["reader_released"]
     assert not capture["can_start"] and capture["external_verification"] == "NOT_CHECKED"
+    assert capture["media_activity"] in {"IDLE", "PENDING", "RUNNING", "RESULT_PENDING"}, capture["media_activity"]
     assert request("complete-pcm/result")[0] == 404
     start = {"action": "start", "session_id": capture["session_id"], "disc_generation": 1,
              "duration_ms": 1000, "profile": "local-pcm-sha256-v1"}

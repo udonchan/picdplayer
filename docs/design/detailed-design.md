@@ -22,14 +22,20 @@ workerはmaskを継承し、mainのpollで停止要求を処理する。
 
 一回のloopは概ね次の順序で実行する。
 
-1. 停止境界でpending ReadPolicyを適用し、read eventを回収する。
-   pending ejectがあればreader解放を調べ、MediaWorkerへ投入を試す。
-2. 500 ms期限で、非PLAYINGかつeject待ちでなければmedia観測を要求。
+1. device観測/退役を反映し、必要な初期probe、停止境界のpending ReadPolicy適用、read event回収を行う。
+2. pending eject、設定済みspeed、idle stop等の既存条件を評価する。これらの処理中は取得開始を拒否し得る。
 3. media結果を回収し、TOC・controller・metadata世代を更新。
 4. metadata結果を回収し、世代とTOCが一致する場合だけ適用。
-5. 250 ms期限でCEC登録状態を確認する。`PlaybackEngine::tick()`は各loopで呼ぶ。
-6. API snapshotを250 ms期限で更新し、API serviceを呼ぶ。
-7. signalfd・CEC fd・任意のstdinを最大10 ms pollし、操作を適用。
+5. 250 ms期限でCEC登録状態を確認する。各loopで`PlaybackEngine::tick()`を呼び、reader失敗のdevice失効も反映する。
+6. API snapshotを250 ms期限で更新し、届いているAPI要求を処理する。取消処理後にcaptureのpoll/confirmを行う。
+7. `service_commands_before_media_poll`の後段で、その時点のdevice退役/現在性、capture busy/実解放、probe完了、
+   PLAYING、pending/in-flight ejectを再評価し、許可時だけ期限到来の定期media observeを要求する。
+   loop冒頭の可否を再利用しない。次の期限はAPI処理後の時刻+500 msとし、抑止時も期限を進める。
+8. signalfd・CEC fd・任意のstdinを最大10 ms pollし、操作を適用。
+
+この優先順は新しい定期observeより、既に届いた明示要求を先に評価するためのもの。
+実行中/受付済みmedia処理や遅れて完了した未回収結果を強制中断・破棄せず、取得startの予約や自動再試行は作らない。
+GETはidle窓を予約せず、その後やAPI service後に届いたPOSTは再評価で拒否され得る。
 
 CEC受信はqueueを空になるまで回収する。操作後に位置/状態が変わればengineをsynchronizeする。
 shutdownでは音声停止を先に行い、その後workerのdestructorがjoinする。

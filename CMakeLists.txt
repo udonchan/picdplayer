@@ -311,7 +311,7 @@ if(BUILD_TESTING)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
         add_executable(complete_pcm_session_test tests/complete_pcm_session_test.cpp
-            src/complete_pcm_session.cpp src/complete_pcm_worker.cpp src/complete_pcm_input.cpp
+            src/complete_pcm_session.cpp src/media_worker.cpp src/complete_pcm_worker.cpp src/complete_pcm_input.cpp
             src/complete_pcm_sha256.cpp src/read_offset.cpp src/disc_toc.cpp src/integrity_state.cpp
             src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
         target_include_directories(complete_pcm_session_test PRIVATE include)

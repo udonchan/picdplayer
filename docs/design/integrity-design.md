@@ -920,6 +920,12 @@ API名・field/versionは[公開契約](message-contract.md#explicit-local-pcm-j
   reader解放後の手動再操作だけを受ける。Stopは既にSTOPPEDでも取消する。無関係な未知stdin文字列では取消しない。
 - APIで受けた取消を先に処理してからownerがpoll/confirmする。後続のCEC/stdin操作も次の公開応答より前にreceiptを撤回する。
   GETは読取専用であり、取得進行・期限・confirmをGET頻度に依存させない。
+- media idleは実行中/受付待ち/未回収結果が全てないことを要求する。statusの`media_activity`は
+  同じ一回の観測による内訳であり、FD0をidleへ変換したり、結果を未適用のまま捨てたりはしない。
+  GETのidle表示と後続startの受付は別時点で再評価し、表示から予約/自動再試行は作らない。
+- ownerは既存media結果とengineの失効情報を適用した後、届いているAPI要求とcapture pollを新しい定期observeより先に処理する。
+  observe投入直前にはcaptureのbusy/実解放等を再取得し、同じ反復で受理したjobの解放前に媒体アクセスを増やさない。
+  既存のprobe/TOC/eject/speed/idle-stopや実行中/未回収結果は優先度のために破棄せず、開始gateを緩めない。
 - 現slotのmanifestだけをcacheし、現在context/全gate不一致では結果を返さない。完了後も新操作やdevice/policy/disc変更で撤回する。
   manifestは64 KiB以内、HTTP結果は既存の4 KiB分割/同時8 response上限を使う。PCMやmanifest履歴をdisk保存しない。
 - Settingsは30分上限を明示した取得/取消buttonと状態・release待ち・結果API位置を表示する。statusのread-only pollingは

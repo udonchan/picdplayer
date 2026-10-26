@@ -1,6 +1,7 @@
 #pragma once
 #include "api_server.hpp"
 #include "complete_pcm_worker.hpp"
+#include <string_view>
 
 // Values observed by the session owner, never inferred from presentation JSON.
 struct CompletePcmContext {
@@ -10,6 +11,7 @@ struct CompletePcmContext {
     std::uint64_t disc_generation = 0, observation_generation = 0, policy_revision = 0;
     std::optional<std::int32_t> offset_samples;
     ReadPolicy policy;
+    std::string_view media_activity = "UNKNOWN";
 };
 
 // Main-thread owner. No I/O until a successful explicit start. Worker teardown

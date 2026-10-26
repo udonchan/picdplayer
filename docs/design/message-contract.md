@@ -273,7 +273,7 @@ coreのC++型・receipt・result spanをそのまま公開せず、ownerが有�
 
 | method/path | 契約 |
 | --- | --- |
-| GET /api/complete-pcm | read-onlyのowner状態。schema_version=1、session_id、現在disc_generation、job_id/duration_ms（未開始0）、state、failure/core_failure、native_error、busy、reader_released、call_inflight、waiting_for_access、accepted_frames/bytes、uncertain/recovered_reads、reserved_bytes、can_start/start_rejection、profile、external_verificationを返す。GETでpoll/confirmやdrive I/Oを実行しない |
+| GET /api/complete-pcm | read-onlyのowner状態。schema_version=1、session_id、現在disc_generation、job_id/duration_ms（未開始0）、state、failure/core_failure、native_error、busy、reader_released、call_inflight、waiting_for_access、accepted_frames/bytes、uncertain/recovered_reads、reserved_bytes、can_start/start_rejection、media_activity、profile、external_verificationを返す。GETでpoll/confirmやdrive I/Oを実行しない |
 | POST /api/complete-pcm | loopback限定。startは下記5 field、cancelは下記3 fieldのみ。受理202は開始/取消要求の受理でありCOMPLETE/reader解放ではない。拒否は409で実行しない。無効body/profileは400、4096 bytes超は413、他methodは405、handlerなしは403 |
 | GET /api/complete-pcm/result | 現在の有効条件を満たすconfirmed COMPLETEだけをmanifestとして返す。なければ404。provider未設定は503。結果は64 KiB以内、送信は既存diagnostic経路の4 KiB分割・同時8 response上限を再利用 |
 
@@ -287,6 +287,16 @@ operatorが有限予算を明示し、最大3時間は既存workerの上限と�
 固有errorは`capture_busy`、`capture_releasing`、`capture_not_ready`、`capture_context_changed`、`capture_no_job`。
 開始不能の詳細はstatusのstart_rejection（device/audio未準備、非STOPPED、output未停止、reader解放待ち、
 media busy、policy pending、offset unknown/非0、policy/resource予算非対応等）で区別する。
+`media_activity`はmedia workerの一時点の状態を示すstringで、`IDLE`（処理/受付待ち/未回収結果なし）、
+`PENDING`（受付済み実行待ち）、`RUNNING`（worker処理中、coordinator待ちやcallback前後も含む）、`RESULT_PENDING`（結果回収待ち）、
+`UNKNOWN`（内部callerが内訳を供給しない）を取る。実sessionでは同じmutex下の一回の観測から
+この値とmedia idle gateを作り、判定の内訳だけを追加する。FDが閉じていても結果回収前はidleではない。
+このfieldは取得slotのbusyや実FD/物理driveの所有を直接測定した値ではなく、後続POSTの受付を予約もしない。
+`IDLE`でもSTOPPED/output/reader/policy/offset等の他gateを満たすとは限らない。
+既存の開始gate、schema version、POST body/error、result manifestには変更を加えない。
+owner内では適用可能な媒体結果/失効情報を先に反映し、届いている明示API要求を新しい定期observe投入より先に評価する。
+受理直後はcaptureのbusy/reader解放を再取得して定期observeを抑止するが、start要求そのものを待ち行列へ保管しない。
+既にmedia処理が残る場合やservice後の到着は従来どおり409になり得る。GETのcan_startを後続POSTの受付保証にしない。
 
 stateはIDLE/COLLECTING/PREPARED/COMPLETE/INCOMPLETE/INVALID。busyとreader_releasedは結果状態と独立し、
 取消/期限/失効後もin-flight I/Oから戻るまでbusy=trueになり得る。新startは拒否し、完了後の明示再操作だけを受ける。
