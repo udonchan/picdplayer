@@ -33,7 +33,17 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& read_history_provider,
                               const ApiStateProvider& artist_background_provider,
                               const ApiBackgroundArtworkProvider& background_artwork_provider,
-                              const ApiStateProvider& disc_map_provider) {
+                              const ApiStateProvider& disc_map_provider,
+                              const ApiCompletePcmProvider& complete_pcm_provider) {
+    if ((path == "/api/complete-pcm" && method == "GET") || path == "/api/complete-pcm/result") {
+        if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
+        if (!complete_pcm_provider)
+            return {503, "application/json", R"({"error":"complete_pcm_unavailable"})"};
+        auto response = complete_pcm_provider(path == "/api/complete-pcm/result");
+        if (response.body.size() > 64 * 1024)
+            return {500, "application/json", R"({"error":"diagnostics_too_large"})"};
+        return response;
+    }
     if (path.starts_with("/api/presentation/artwork/background/")) {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (background_artwork_provider) {
@@ -164,6 +174,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         if (path == "/api/read-policy") return ApiCommand{ApiCommandType::set_read_policy};
         if (path == "/api/artist-background") return ApiCommand{ApiCommandType::set_artist_background};
         if (path == "/api/metadata-selection") return ApiCommand{ApiCommandType::select_metadata_candidate};
+        if (path == "/api/complete-pcm") return ApiCommand{ApiCommandType::start_complete_pcm};
         return std::nullopt;
     }();
     if (!command)
@@ -173,6 +184,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
     if (!command_handler)
         return {HTTP_STATUS_FORBIDDEN, "application/json", R"({"error":"commands_disabled"})"};
     if (command->type == ApiCommandType::select_metadata_candidate ||
+        command->type == ApiCommandType::start_complete_pcm ||
         command->type == ApiCommandType::set_artist_background ||
         command->type == ApiCommandType::set_read_policy ||
         command->type == ApiCommandType::seek_relative || command->type == ApiCommandType::select_track) {
@@ -183,13 +195,46 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
             return {HTTP_STATUS_REQ_ENTITY_TOO_LARGE, "application/json", R"({"error":"body_too_large"})"};
         try {
             unsigned enabled_fields = 0;
+            unsigned complete_pcm_fields = 0;
             const auto json = nlohmann::json::parse(body,
                 [&](int depth, nlohmann::json::parse_event_t event, nlohmann::json& value) {
                     if (command->type == ApiCommandType::set_artist_background && depth == 1 &&
                         event == nlohmann::json::parse_event_t::key && value == "enabled") ++enabled_fields;
+                    if (command->type == ApiCommandType::start_complete_pcm && depth == 1 &&
+                        event == nlohmann::json::parse_event_t::key) ++complete_pcm_fields;
                     return true;
                 });
-            if (command->type == ApiCommandType::set_artist_background) {
+            if (command->type == ApiCommandType::start_complete_pcm) {
+                if (!json.is_object() || complete_pcm_fields != json.size() ||
+                    !json.contains("action") || !json["action"].is_string() ||
+                    !json.contains("session_id") || !json["session_id"].is_string())
+                    return {400, "application/json", R"({"error":"invalid_body"})"};
+                command->session_id = json["session_id"].get<std::string>();
+                if (command->session_id.empty() || command->session_id.size() > 64 ||
+                    command->session_id.find_first_not_of(
+                        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != std::string::npos)
+                    return {400, "application/json", R"({"error":"invalid_body"})"};
+                if (json["action"] == "start") {
+                    if (json.size() != 5 || !json.contains("disc_generation") ||
+                        !json["disc_generation"].is_number_unsigned() ||
+                        !json.contains("duration_ms") || !json["duration_ms"].is_number_unsigned() ||
+                        !json.contains("profile") || !json["profile"].is_string() ||
+                        json["profile"] != "local-pcm-sha256-v1")
+                        return {400, "application/json", R"({"error":"invalid_body"})"};
+                    command->disc_generation = json["disc_generation"].get<std::uint64_t>();
+                    const auto duration = json["duration_ms"].get<std::uint64_t>();
+                    if (command->disc_generation == 0 || duration == 0 || duration > 10800000)
+                        return {400, "application/json", R"({"error":"invalid_body"})"};
+                    command->duration_ms = static_cast<unsigned>(duration);
+                } else if (json["action"] == "cancel") {
+                    if (json.size() != 3 || !json.contains("job_id") || !json["job_id"].is_number_unsigned())
+                        return {400, "application/json", R"({"error":"invalid_body"})"};
+                    command->type = ApiCommandType::cancel_complete_pcm;
+                    command->job_id = json["job_id"].get<std::uint64_t>();
+                    if (command->job_id == 0)
+                        return {400, "application/json", R"({"error":"invalid_body"})"};
+                } else return {400, "application/json", R"({"error":"invalid_body"})"};
+            } else if (command->type == ApiCommandType::set_artist_background) {
                 if (!json.is_object() || json.size() != 1 || enabled_fields != 1 || !json.contains("enabled") ||
                     !json["enabled"].is_boolean())
                     return {400, "application/json", R"({"error":"invalid_body"})"};
@@ -259,9 +304,23 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
     } else if (!body.empty()) {
         return {HTTP_STATUS_BAD_REQUEST, "application/json", R"({"error":"unexpected_body"})"};
     }
-    if (!command_handler(*command))
-        return {HTTP_STATUS_CONFLICT, "application/json", R"({"error":"command_rejected"})"};
-    if (command->type == ApiCommandType::eject)
+    const auto result = command_handler(*command);
+    if (!result) {
+        const char* error = nullptr;
+        switch (result.failure) {
+        case ApiCommandFailure::command_rejected:
+            return {HTTP_STATUS_CONFLICT, "application/json", R"({"error":"command_rejected"})"};
+        case ApiCommandFailure::capture_releasing: error = "capture_releasing"; break;
+        case ApiCommandFailure::capture_not_ready: error = "capture_not_ready"; break;
+        case ApiCommandFailure::capture_context_changed: error = "capture_context_changed"; break;
+        case ApiCommandFailure::capture_no_job: error = "capture_no_job"; break;
+        case ApiCommandFailure::capture_busy: error = "capture_busy"; break;
+        }
+        return {HTTP_STATUS_CONFLICT, "application/json",
+            nlohmann::json{{"error", error}, {"executed", false}, {"retry", "manual"}}.dump()};
+    }
+    if (command->type == ApiCommandType::eject || command->type == ApiCommandType::start_complete_pcm ||
+        command->type == ApiCommandType::cancel_complete_pcm)
         return {202, "application/json", {}};
     return {HTTP_STATUS_NO_CONTENT, "application/json", {}};
 }
@@ -273,6 +332,7 @@ struct ApiServer::Implementation {
     ApiStateProvider state_provider;
     ApiStateProvider read_history_provider;
     ApiStateProvider disc_map_provider;
+    ApiCompletePcmProvider complete_pcm_provider;
     ApiStateProvider artist_background_provider;
     ApiBackgroundArtworkProvider background_artwork_provider;
     ApiCommandHandler command_handler;
@@ -320,7 +380,8 @@ struct ApiServer::Implementation {
         };
         return route_api_request(method, path, state_provider,
             local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry,
-            artwork_provider, read_history_provider, artist_background_provider, background_artwork_provider, disc_map_provider);
+            artwork_provider, read_history_provider, artist_background_provider, background_artwork_provider, disc_map_provider,
+            complete_pcm_provider);
     }
 
     static int send_response(lws* wsi, ApiResponse response, bool diagnostic = false) {
@@ -474,7 +535,7 @@ struct ApiServer::Implementation {
                 return 0;
             }
             return send_response(wsi, self->route(wsi, method_name, path, {}),
-                path == "/api/read-history" || path == "/api/disc-map");
+                path == "/api/read-history" || path == "/api/disc-map" || path == "/api/complete-pcm/result");
         } catch (...) {
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;
@@ -485,12 +546,13 @@ struct ApiServer::Implementation {
                    ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle,
                    ApiArtworkProvider artwork, ApiStateProvider history_provider,
                    ApiStateProvider background_provider, ApiBackgroundArtworkProvider background_artwork,
-                   ApiStateProvider map_provider)
+                   ApiStateProvider map_provider, ApiCompletePcmProvider capture_provider)
         : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
           command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)),
           artwork_provider(std::move(artwork)) {
         read_history_provider = std::move(history_provider);
         disc_map_provider = std::move(map_provider);
+        complete_pcm_provider = std::move(capture_provider);
         artist_background_provider = std::move(background_provider);
         background_artwork_provider = std::move(background_artwork);
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
@@ -520,12 +582,13 @@ ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
                      ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui,
                       ApiArtworkProvider artwork_provider, ApiStateProvider read_history_provider,
                       ApiStateProvider artist_background_provider, ApiBackgroundArtworkProvider background_artwork_provider,
-                      ApiStateProvider disc_map_provider)
+                      ApiStateProvider disc_map_provider, ApiCompletePcmProvider complete_pcm_provider)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
                                                         std::move(handler), std::move(policy_provider), std::move(ui),
                                                         std::move(artwork_provider), std::move(read_history_provider),
                                                         std::move(artist_background_provider),
-                                                        std::move(background_artwork_provider), std::move(disc_map_provider))) {}
+                                                        std::move(background_artwork_provider), std::move(disc_map_provider),
+                                                        std::move(complete_pcm_provider))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;

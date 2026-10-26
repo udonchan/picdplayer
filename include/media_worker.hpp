@@ -10,6 +10,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 
 enum class MediaWork { probe_drive, observe, read_toc, start_drive, stop_drive, set_drive_speed, eject };
@@ -49,6 +50,7 @@ public:
     bool pop(MediaWorkerResult& result);
     void invalidate(std::uint64_t observation_generation);
     bool idle() const;
+    std::string_view activity() const;
     bool retiring() const;
 
 private:

@@ -14,6 +14,20 @@ bool same_toc(const DiscToc& a, const DiscToc& b) {
 bool valid_name(const std::string& value) { return !value.empty() && value.size() <= 128; }
 }
 
+std::size_t complete_pcm_reservation(const ReadPolicy& policy, const CompletePcmProfile& profile) {
+    if (policy.mode != ReadVerificationMode::single && policy.mode != ReadVerificationMode::repeat)
+        throw std::invalid_argument("complete PCM read mode");
+    if (profile.state_bytes > complete_pcm_consumer_limit || !profile.maximum_result_bytes ||
+        profile.maximum_result_bytes > complete_pcm_result_limit)
+        throw std::invalid_argument("complete PCM consumer budget");
+    validate_read_policy(policy, 75);
+    // Conservative reader reservation for B, plus core/consumer/manifest space.
+    const auto bytes = (std::size_t(policy.maximum_attempts) + 2) * (std::size_t(policy.region_frames) + 75 + 1) * 2352
+        + complete_pcm_chunk_bytes + profile.state_bytes + 2 * complete_pcm_result_limit;
+    if (bytes > complete_pcm_memory_limit) throw std::invalid_argument("complete PCM memory budget");
+    return bytes;
+}
+
 CompletePcmInput::CompletePcmInput(const CompletePcmPlan& plan,
     std::unique_ptr<CompletePcmConsumer> consumer, SteadyNow now)
     : consumer_(std::move(consumer)), now_(std::move(now)) {
@@ -22,22 +36,16 @@ CompletePcmInput::CompletePcmInput(const CompletePcmPlan& plan,
     if (!consumer_ || !now_ || !valid_name(id.session_id) || !id.job_id || !id.disc_generation ||
         !id.reader_incarnation || !id.offset_samples || *id.offset_samples != 0 ||
         profile.canonical != complete_pcm_canonical_profile || !valid_name(profile.algorithm) ||
-        !valid_name(profile.version) || profile.state_bytes > complete_pcm_consumer_limit ||
-        !profile.maximum_result_bytes || profile.maximum_result_bytes > complete_pcm_result_limit ||
+        !valid_name(profile.version) ||
         profile != consumer_->profile() || plan.duration.count() <= 0 || plan.duration > complete_pcm_deadline_limit ||
-        plan.toc.tracks.empty() || plan.toc.tracks.size() > 99 ||
-        (plan.policy.mode != ReadVerificationMode::single && plan.policy.mode != ReadVerificationMode::repeat))
+        plan.toc.tracks.empty() || plan.toc.tracks.size() > 99)
         throw std::invalid_argument("ineligible complete PCM plan");
     std::array<std::int32_t, 99> starts{};
     for (std::size_t i = 0; i < plan.toc.tracks.size(); ++i) starts[i] = plan.toc.tracks[i].start_lba;
     toc_ = make_audio_toc(plan.toc.tracks.front().number,
                          std::span(starts).first(plan.toc.tracks.size()), plan.toc.leadout_lba);
     if (!same_toc(toc_, plan.toc)) throw std::invalid_argument("inconsistent complete PCM TOC");
-    validate_read_policy(plan.policy, 75);
-    // Conservative reader reservation for B, plus core/consumer/manifest space.
-    reserved_bytes_ = (plan.policy.maximum_attempts + 2) * (plan.policy.region_frames + 75 + 1) * 2352
-        + complete_pcm_chunk_bytes + profile.state_bytes + 2 * complete_pcm_result_limit;
-    if (reserved_bytes_ > complete_pcm_memory_limit) throw std::invalid_argument("complete PCM memory budget");
+    reserved_bytes_ = complete_pcm_reservation(plan.policy, profile);
     identity_ = id;
     policy_ = plan.policy;
     next_lba_ = toc_.tracks.front().start_lba;

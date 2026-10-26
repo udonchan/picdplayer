@@ -1,10 +1,17 @@
 #include "media_worker.hpp"
+#include "player_media_dispatch.hpp"
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
 #include <atomic>
 #include <future>
+
+struct OwnerClock {
+    using time_point = std::chrono::steady_clock::time_point;
+    static inline time_point current{};
+    static time_point now() { return current; }
+};
 
 void check(bool value) {
     if (!value) throw std::runtime_error("media worker test failed");
@@ -80,6 +87,60 @@ int main() {
         check(worker.request(MediaWork::eject));
         result = wait_for_result(worker);
         check(result.work == MediaWork::eject && !result.observation && !result.toc && result.error.empty());
+
+        {
+            Gate callback;
+            std::atomic<bool> device_open{false};
+            MediaWorker observed(std::make_shared<DriveAccessCoordinator>(), [&] {
+                device_open = true;
+                callback.pass();
+                device_open = false;
+                return MediaObservation::audio_disc;
+            }, [toc] { return toc; }, [] {});
+            ReleaseGate release{callback};
+            check(observed.activity() == "IDLE" && observed.idle());
+            check(observed.request(MediaWork::observe));
+            callback.reached();
+            check(device_open && observed.activity() == "RUNNING" && !observed.idle());
+            MediaWorkerResult pending{};
+            check(!observed.pop(pending));
+            callback.release();
+            wait_until([&] { return observed.activity() == "RESULT_PENDING"; });
+            check(!device_open && !observed.idle());
+            check(!observed.request(MediaWork::observe));
+            check(observed.pop(pending) && pending.observation == MediaObservation::audio_disc);
+            check(observed.activity() == "IDLE" && observed.idle());
+        }
+
+        {
+            std::atomic<int> observes{0};
+            MediaWorker scheduled(std::make_shared<DriveAccessCoordinator>(), [&] {
+                ++observes;
+                return MediaObservation::audio_disc;
+            }, [toc] { return toc; }, [] {});
+            OwnerClock::current = {};
+            auto next_media = OwnerClock::now();
+            bool allowed = true;
+            int services = 0, gate_checks = 0;
+            service_commands_before_media_poll<OwnerClock>(scheduled, next_media, [&] {
+                ++services;
+                OwnerClock::current += std::chrono::seconds(2);
+                allowed = false;
+            }, [&] { ++gate_checks; check(services == 1); return allowed; });
+            check(scheduled.idle() && observes == 0 && gate_checks == 1);
+            check(next_media == OwnerClock::now() + std::chrono::milliseconds(500));
+            service_commands_before_media_poll<OwnerClock>(scheduled, next_media,
+                [&] { ++services; }, [&] { ++gate_checks; return true; });
+            check(services == 2 && gate_checks == 1 && scheduled.idle());
+            OwnerClock::current = next_media;
+            service_commands_before_media_poll<OwnerClock>(scheduled, next_media,
+                [&] { ++services; check(scheduled.idle()); }, [] { return true; });
+            check(!scheduled.idle()); // Read-only service does not reserve the idle window.
+            check(wait_for_result(scheduled).work == MediaWork::observe && observes == 1);
+            service_commands_before_media_poll<OwnerClock>(scheduled, next_media,
+                [&] { ++services; }, [] { return true; });
+            check(scheduled.idle() && observes == 1 && services == 4);
+        }
 
         MediaWorker failing(
             std::make_shared<DriveAccessCoordinator>(),

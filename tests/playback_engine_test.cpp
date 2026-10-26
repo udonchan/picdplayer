@@ -71,6 +71,71 @@ public:
 
 int main() {
     try {
+        // Quiescence requires a successful stopped reset, not just an idle engine.
+        {
+            std::atomic<int> created{0};
+            PcmWorker worker([&] { ++created; return std::make_unique<FakeReader>(); });
+            PlayerController controller;
+            struct ResetOutput : FakeOutput {
+                bool fail_reset = false;
+                void reset() override {
+                    if (fail_reset) throw std::runtime_error("simulated reset failure");
+                    FakeOutput::reset();
+                }
+            } reset_output;
+            PlaybackEngine engine(controller, worker, reset_output, 300);
+            check(!engine.quiescent());
+            engine.synchronize();
+            check(!engine.quiescent()); // NO_DISC is never a capture boundary.
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 300));
+            check(!engine.quiescent());
+            engine.synchronize();
+            check(engine.quiescent());
+            wait_for([&] { return worker.device_released(); });
+            reset_output.fail_reset = true;
+            bool failed = false;
+            try { engine.synchronize(); } catch (const std::runtime_error&) { failed = true; }
+            check(failed && !engine.quiescent()); // A prior successful reset cannot leak through.
+            reset_output.fail_reset = false;
+            engine.synchronize();
+            check(engine.quiescent());
+            controller.play();
+            check(!engine.quiescent()); // Read-only accessor also checks the exact controller state.
+            engine.synchronize();
+            check(!engine.quiescent());
+            wait_for([&] { return worker.status().done; });
+            engine.tick();
+            check(reset_output.pending > 0 && engine.read_diagnostics().current_playback);
+            controller.pause(); engine.synchronize();
+            check(!engine.quiescent() && reset_output.pending == 0);
+            controller.stop(); engine.synchronize();
+            check(engine.quiescent() && reset_output.pending == 0 && worker.status().queued == 0 &&
+                  !engine.read_diagnostics().current_playback);
+            wait_for([&] { return worker.device_released(); });
+            check(created == 1);
+            controller.play(); engine.synchronize();
+            check(!engine.quiescent());
+            wait_for([&] { return worker.status().done; });
+            check(created == 2); // Play lazily reopens through the existing factory.
+        }
+        // Stop must not wait for an uninterruptible read to release its device.
+        {
+            auto gate = std::make_shared<Gate>();
+            PcmWorker worker([gate] { return std::make_unique<FakeReader>(gate); });
+            ReleaseReaderGate release{gate};
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, 300));
+            FakeOutput output;
+            PlaybackEngine engine(controller, worker, output, 300);
+            controller.play(); engine.synchronize();
+            wait_for([&] { std::lock_guard lock(gate->mutex); return gate->entered; });
+            controller.stop(); engine.synchronize();
+            check(engine.quiescent() && !worker.device_released());
+            { std::lock_guard lock(gate->mutex); gate->release = true; }
+            gate->cv.notify_all();
+            wait_for([&] { return worker.device_released(); });
+            check(engine.quiescent() && worker.status().queued == 0);
+        }
         // A failed output must not publish evidence from the cancelled stream.
         // 出力失敗後に旧streamの再生根拠を残さない。
         {
@@ -87,6 +152,7 @@ int main() {
             bool failed = false;
             try { engine.tick(); } catch (const std::runtime_error&) { failed = true; }
             check(failed);
+            check(!engine.quiescent());
             check(!engine.take_reader_failure());
             if (engine.read_diagnostics().current_playback)
                 throw std::runtime_error("stale current_playback after output failure");
@@ -104,6 +170,7 @@ int main() {
             controller.play();engine.synchronize();wait_for([&]{return !worker.status().error.empty();});
             bool failed=false;try{engine.tick();}catch(const std::runtime_error&){failed=true;}
             check(failed&&engine.take_reader_failure()&&!engine.take_reader_failure());
+            check(!engine.quiescent());
         }
         check(defaults.capacity_cd_frames == 750 && defaults.startup_cd_frames == 45);
         // An uninterruptible reader must not block the main loop indefinitely.
@@ -126,6 +193,7 @@ int main() {
                   diagnostics.last_read_stall_ms && *diagnostics.last_read_stall_ms >= 10 &&
                    diagnostics.read_stall_timeout_ms == 10 && !diagnostics.current_playback);
             check(engine.take_reader_failure()&&!engine.take_reader_failure());
+            check(!engine.quiescent());
             { std::lock_guard lock(gate->mutex); gate->release = true; }
             gate->cv.notify_all();
         }
@@ -531,14 +599,14 @@ int main() {
         a.fail = false;
         c.play(); engine.synchronize();
         wait_for([&] { return w.status().done; });
-        check(readers_created == 2); // Playback error invalidated the old device handle.
+        check(readers_created == 3); // Natural stop and playback error each retired a reader.
         a.underrun_delay = true;
         engine.tick();
         check(c.state().playback == PlaybackState::playing);
         a.underrun_delay = false;
         wait_for([&] { return w.status().done; });
         engine.tick(); engine.tick(); engine.tick();
-        check(readers_created == 3 && c.state().playback == PlaybackState::stopped);
+        check(readers_created == 4 && c.state().playback == PlaybackState::stopped);
         // A repeated XRUN may restart a bounded number of times, then fails
         // closed rather than keeping the drive and ALSA recovery loop alive.
         {

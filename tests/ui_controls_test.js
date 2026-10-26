@@ -12,6 +12,19 @@ async function main() {
   const posts = [];
   const policyPosts = [];
   const backgroundPosts = [];
+  const pcmPosts = [];
+  const pendingPcmGets = [];
+  const pendingPcmPosts = [];
+  let pcm = { schema_version: 1, session_id: 'pcm-session', disc_generation: 2, state: 'IDLE',
+    failure: 'NONE', busy: false, reader_released: true, job_id: 0, accepted_frames: 0, accepted_bytes: 0,
+    can_start: true, start_rejection: null, profile: { canonical: 's16le-44100-stereo-v1',
+      algorithm: 'sha256', version: 'local-pcm-sha256-v1' }, external_verification: 'NOT_CHECKED' };
+  let pcmGetStatus = 404;
+  let pcmPostStatus = 202;
+  let pcmGets = 0;
+  let deferPcmGet = false;
+  let deferPcmPost = false;
+  const pcmSignals = [];
   const pendingBackgroundGets = [];
   const pendingBackgroundPosts = [];
   let background = { requested: false, effective: false, available: false, unavailable_reason: 'runtime_unavailable' };
@@ -37,6 +50,8 @@ async function main() {
   let activeElement = null;
   const keys = {};
   const timers = [];
+  const cancelledTimers = new Set();
+  const timerDelays = new Map();
   const snapshot = {
     schema_version: 1, revision: 1,
     player: { state: 'STOPPED', track_number: 1, position_frames: 0, track_duration_frames: 4500 },
@@ -45,10 +60,16 @@ async function main() {
   };
   function element() {
     return {
-      textContent: '', style: {}, dataset: {}, hidden: false, disabled: true,
+      textContent: '', style: {}, dataset: {}, hidden: false, disabled: true, ariaDisabled: 'false',
       classList: { contains: () => false, add() {}, remove() {} },
       removeAttribute() {}, addEventListener(type, fn) { this[`on${type}`] = fn; },
-      focus() { this.focused = true; activeElement = this; }, blur() { this.focused = false; },
+      focus() {
+        this.focused = true;
+        if (activeElement !== this) {
+          activeElement = this;
+          this.onfocus?.();
+        }
+      }, blur() { this.focused = false; },
       setAttribute(name, value) { this[name] = value; },
       append(...children) { this.children = [...(this.children || []), ...children]; },
       replaceChildren(...children) { this.children = children; },
@@ -57,6 +78,7 @@ async function main() {
   function node(id) {
     if (nodes.has(id)) return nodes.get(id);
     const item = element();
+    if (id === 'settings-pcm-status') delete item.disabled; // A paragraph is not a disabled button.
     nodes.set(id, item);
     return item;
   }
@@ -65,8 +87,15 @@ async function main() {
     button.dataset.command = command;
     return button;
   });
-  node('settings-close').disabled = false; // Matches the always-enabled Back button in player.html.
+  const settingsIds = ['policy-single', 'policy-repeat', 'background-off',
+    'background-on', 'pcm-start', 'pcm-cancel', 'settings-close'];
+  settingsIds.forEach((id) => { node(id).disabled = false; });
+  node('settings-panel').querySelector = (selector) => {
+    assert.equal(selector, '.settings-surface');
+    return node('settings-surface');
+  };
   vm.runInNewContext(source, {
+    AbortController,
     addEventListener() {},
     ResizeObserver: class { observe() {} }, getComputedStyle: () => ({ fontSize: '20px' }),
     Date: class extends Date { static now() { return now; } },
@@ -82,6 +111,17 @@ async function main() {
     location: { protocol: 'http:', host: 'localhost' },
     fetch: async (url, options) => {
       if (url === '/api/state') return { ok: true, json: async () => snapshot };
+      if (url === '/api/complete-pcm') {
+        pcmSignals.push(options?.signal);
+        if (options?.method === 'POST') {
+          pcmPosts.push(JSON.parse(options.body));
+          if (deferPcmPost) return new Promise((resolve) => pendingPcmPosts.push(resolve));
+          return { status: pcmPostStatus, json: async () => ({ error: 'capture_releasing', executed: false, retry: 'manual' }) };
+        }
+        pcmGets += 1;
+        if (deferPcmGet) return new Promise((resolve) => pendingPcmGets.push(resolve));
+        return { ok: pcmGetStatus === 200, status: pcmGetStatus, json: async () => ({ ...pcm }) };
+      }
       if (url === '/api/read-policy') {
         if (options?.method === 'POST') {
           const body = JSON.parse(options.body);
@@ -123,7 +163,9 @@ async function main() {
       return { ok: true, status: 204, json: async () => ({}) };
     },
     WebSocket: class { constructor(url) { this.url = url; sockets.push(this); } close() { this.onclose?.(); } },
-    requestAnimationFrame() {}, setTimeout(fn) { timers.push(fn); return timers.length; }, clearTimeout() {},
+    requestAnimationFrame() {}, setTimeout(fn, delay) {
+      timers.push(fn); timerDelays.set(timers.length, delay); return timers.length;
+    }, clearTimeout(id) { cancelledTimers.add(id); },
   });
   for (let i = 0; i < 12; i++) await Promise.resolve();
   assert.equal(sockets.length, 2);
@@ -134,14 +176,18 @@ async function main() {
   const navigation = (action) => sockets.at(-1).onmessage({ data: JSON.stringify({ action }) });
   assert.equal(controls[6].disabled, false);
   assert.equal(backgroundGets, 0); // Merely loading the Player never asks for background settings.
+  assert.equal(pcmGets, 0);
+  node('settings-surface').scrollTop = 125;
   controls[6].onclick({ detail: 1 });
+  assert.equal(node('settings-surface').scrollTop, 0);
   assert.equal(controls[6].disabled, false);
   await new Promise(setImmediate);
+  assert.equal(node('settings-surface').scrollTop, 0); // Late initial GET keeps the heading visible.
   assert.equal(node('policy-single').dataset.selected, 'true');
   assert.match(node('settings-persistence').textContent, /session only/);
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Startup / Startup.');
-  assert.equal(node('background-on').disabled, true);
-  assert.equal(node('background-off').disabled, false);
+  assert.equal(node('background-on').ariaDisabled, 'true');
+  assert.equal(node('background-off').ariaDisabled, 'false');
   assert.equal(node('background-off').dataset.selected, 'true');
   assert.match(node('settings-background-status').textContent, /runtime image delivery/);
   assert.deepEqual(backgroundPosts, []);
@@ -177,8 +223,10 @@ async function main() {
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Session only / Restored.');
   navigation('back');
   assert.equal(node('settings-panel').hidden, true);
+  node('settings-surface').scrollTop = 200;
   controls[6].onclick({ detail: 1 });
   await new Promise(setImmediate);
+  assert.equal(node('settings-surface').scrollTop, 0); // Reopening does not retain lower-section scroll.
   assert.equal(node('policy-repeat').dataset.focused, 'true'); // Reopening follows requested mode.
   policyPostStatus = 409;
   node('policy-single').onclick({ detail: 1 });
@@ -263,7 +311,8 @@ async function main() {
   assert.equal(controls[0].dataset.focused, 'true'); // stale socket is ignored
   deferPolicyGet = true;
   controls[6].onclick({ detail: 1 });
-  assert.equal(node('policy-single').disabled, true); // No stale value before GET completes.
+  assert.equal(node('policy-single').ariaDisabled, 'true'); // No stale value before GET completes.
+  assert(settingsIds.every((id) => node(id).disabled === false));
   assert.equal(node('settings-policy-status').textContent, 'Loading read policy…');
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Unknown / Unknown.');
   now += 300;
@@ -271,7 +320,7 @@ async function main() {
   pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy,
     requested: { ...policy.requested, mode: 'SINGLE' } }) });
   await new Promise(setImmediate);
-  assert.equal(node('settings-close').dataset.focused, 'true'); // Skip disabled choices and preserve deliberate focus.
+  assert.equal(node('policy-repeat').dataset.focused, 'true'); // Unavailable choices remain reachable; late GET preserves focus.
   keys.keydown({ key: 'Escape', preventDefault() {} });
   controls[6].onclick({ detail: 1 });
   keys.keydown({ key: 'Escape', preventDefault() {} });
@@ -285,21 +334,53 @@ async function main() {
   assert.equal(node('policy-repeat').dataset.selected, 'true'); // Old GET cannot replace it.
   assert.equal(node('settings-policy-source').textContent, 'Source (requested/effective): Saved / Restored.');
   now += 300;
-  sockets[2].onmessage({ data: JSON.stringify({ action: 'right' }) });
+  navigation('up');
   assert.equal(node('settings-close').dataset.focused, 'true');
   sockets[2].onmessage({ data: JSON.stringify({ action: 'select' }) });
   assert.equal(node('settings-panel').hidden, true); // CEC can reach and activate Back.
   deferPolicyGet = false;
   controls[6].onclick({ detail: 1 });
   await new Promise(setImmediate);
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('settings-close'));
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('background-off')); // Focus stays inside the dialog, skips unavailable On.
-  keys.keydown({ key: 'Tab', preventDefault() {} });
-  assert.equal(activeElement, node('policy-single'));
-  keys.keydown({ key: 'Tab', shiftKey: true, preventDefault() {} });
-  assert.equal(activeElement, node('background-off'));
+  const beforeSettingsNavigation = posts.length + policyPosts.length + backgroundPosts.length + pcmPosts.length;
+  assert.equal(node('pcm-start').ariaDisabled, 'true');
+  assert.equal(node('pcm-cancel').ariaDisabled, 'true');
+  for (const input of ['semantic', 'keyboard']) {
+    node('policy-single').focus();
+    for (const [action, id] of [
+      ['left', 'policy-single'], ['down', 'background-off'], ['right', 'background-on'],
+      ['right', 'background-on'], ['down', 'pcm-cancel'],
+      ['left', 'pcm-start'], ['left', 'pcm-start'], ['up', 'background-off'],
+      ['up', 'policy-single'], ['right', 'policy-repeat'], ['down', 'background-on'],
+      ['up', 'policy-repeat'], ['up', 'settings-close'], ['up', 'pcm-cancel'], ['down', 'settings-close'],
+      ['left', 'settings-close'], ['right', 'settings-close'], ['down', 'policy-repeat'],
+      ['left', 'policy-single'],
+    ]) {
+      now += 300;
+      if (input === 'semantic') navigation(action);
+      else keys.keydown({ key: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' }[action], preventDefault() {} });
+      assert.equal(activeElement, node(id));
+      assert.equal(node(id).dataset.focused, 'true');
+      assert.equal(settingsIds.filter((item) => node(item).dataset.focused === 'true').length, 1);
+    }
+    for (const id of ['pcm-start', 'pcm-cancel']) {
+      node(id).focus();
+      now += 300;
+      if (input === 'semantic') navigation('down');
+      else keys.keydown({ key: 'ArrowDown', preventDefault() {} });
+      assert.equal(activeElement, node('settings-close'));
+      assert.equal(node('settings-close').dataset.focused, 'true');
+    }
+  }
+  node('policy-single').focus();
+  for (const reverse of [false, true]) {
+    const order = reverse ? settingsIds.slice(1).reverse() : settingsIds.slice(1);
+    for (const id of [...order, settingsIds[0]]) {
+      keys.keydown({ key: 'Tab', shiftKey: reverse, preventDefault() {} });
+      assert.equal(activeElement, node(id));
+      assert.equal(node(id).dataset.focused, 'true');
+    }
+  }
+  assert.equal(posts.length + policyPosts.length + backgroundPosts.length + pcmPosts.length, beforeSettingsNavigation);
   keys.keydown({ key: 'Escape', preventDefault() {} });
   policyGetStatus = 503;
   controls[6].onclick({ detail: 1 });
@@ -322,7 +403,7 @@ async function main() {
   assert.deepEqual(backgroundPosts, [{ enabled: false }]);
   background = { requested: false, effective: false, available: true, unavailable_reason: null };
   await reopenSettings();
-  assert.equal(node('background-on').disabled, false);
+  assert.equal(node('background-on').ariaDisabled, 'false');
   assert.equal(backgroundPosts.length, 1);
   node('background-on').onclick({ detail: 1 });
   node('background-on').onclick({ detail: 1 });
@@ -349,7 +430,7 @@ async function main() {
   node('background-on').onclick({ detail: 1 });
   await new Promise(setImmediate);
   assert.match(node('settings-background-state').textContent, /Unknown/); // Accepted is not an observed result.
-  assert.equal(node('background-on').disabled, true);
+  assert.equal(node('background-on').ariaDisabled, 'true');
   backgroundGetStatus = 200;
   background = { requested: false, effective: false, available: true, unavailable_reason: null };
   await reopenSettings();
@@ -364,39 +445,39 @@ async function main() {
     const valid = background;
     background = malformed;
     await reopenSettings();
-    assert.equal(node('background-on').disabled, true);
-    assert.equal(node('background-off').disabled, true);
+    assert.equal(node('background-on').ariaDisabled, 'true');
+    assert.equal(node('background-off').ariaDisabled, 'true');
     assert.match(node('settings-background-state').textContent, /Unknown \/ Unknown/);
-    assert.equal(node('policy-repeat').disabled, false);
+    assert.equal(node('policy-repeat').ariaDisabled, 'false');
     background = valid;
   }
   background = { requested: false, effective: false, available: false, unavailable_reason: 'private-provider-url-or-key' };
   await reopenSettings();
-  assert.equal(node('background-on').disabled, true);
-  assert.equal(node('background-off').disabled, false);
+  assert.equal(node('background-on').ariaDisabled, 'true');
+  assert.equal(node('background-off').ariaDisabled, 'false');
   assert(!node('settings-background-status').textContent.includes(background.unavailable_reason));
   for (const reason of ['key_missing', 'metadata_disabled', '__proto__']) {
     background.unavailable_reason = reason;
     await reopenSettings();
-    assert.equal(node('background-on').disabled, true);
+    assert.equal(node('background-on').ariaDisabled, 'true');
     assert(!node('settings-background-status').textContent.includes('__proto__'));
   }
   backgroundGetStatus = 503;
   await reopenSettings();
-  assert.equal(node('background-on').disabled, true);
-  assert.equal(node('policy-repeat').disabled, false);
+  assert.equal(node('background-on').ariaDisabled, 'true');
+  assert.equal(node('policy-repeat').ariaDisabled, 'false');
   assert.match(node('settings-background-state').textContent, /Unknown/);
   backgroundGetStatus = 200;
   policyGetStatus = 503;
   background = { requested: false, effective: false, available: true, unavailable_reason: null };
   await reopenSettings();
-  assert.equal(node('background-on').disabled, false);
-  assert.equal(node('policy-single').disabled, true);
+  assert.equal(node('background-on').ariaDisabled, 'false');
+  assert.equal(node('policy-single').ariaDisabled, 'true');
   policyGetStatus = 200;
   // A late GET from an earlier opening must not replace the current state.
   deferBackgroundGet = true;
   await reopenSettings();
-  assert.equal(node('background-on').disabled, true);
+  assert.equal(node('background-on').ariaDisabled, 'true');
   await reopenSettings();
   pendingBackgroundGets.pop()({ ok: true, json: async () => ({ ...background }) });
   await new Promise(setImmediate);
@@ -416,7 +497,7 @@ async function main() {
   pendingBackgroundPosts.shift()({ status: 204 });
   await new Promise(setImmediate);
   assert.equal(node('background-on').dataset.selected, 'true');
-  assert.equal(node('background-on').disabled, false);
+  assert.equal(node('background-on').ariaDisabled, 'false');
   deferBackgroundPost = false;
   // Tab and semantic navigation share focus, including background selection and Back.
   node('background-off').focus();
@@ -450,9 +531,20 @@ async function main() {
     now += 300;
     navigation(action);
     await new Promise(setImmediate);
+    assert(settingsIds.every((id) => node(id).disabled === false));
   };
   const selectSetting = async (id) => {
-    for (let step = 0; step < 5 && node(id).dataset.focused !== 'true'; step++) await semantic('right');
+    const enabledCount = settingsIds.filter((id) => !node(id).disabled).length;
+    assert.equal(enabledCount, 7);
+    const target = settingsIds.indexOf(id);
+    const targetRow = target === 6 ? -1 : Math.floor(target / 2);
+    for (let step = 0; step < 4; step++) {
+      const current = settingsIds.findIndex((item) => node(item).dataset.focused === 'true');
+      const row = current === 6 ? -1 : Math.floor(current / 2);
+      if (row === targetRow) break;
+      await semantic(row < targetRow ? 'down' : 'up');
+    }
+    if (target < 6) await semantic(target % 2 ? 'right' : 'left');
     assert.equal(node(id).dataset.focused, 'true');
     await semantic('select');
   };
@@ -474,6 +566,142 @@ async function main() {
   await selectSetting('settings-close');
   assert.equal(node('settings-panel').hidden, true);
   assert.equal(controls[6].dataset.focused, 'true');
+  // Explicit local acquisition: acceptance is never treated as completion or reader release.
+  // Unavailable acquisition buttons remain reachable and explain rejection without POSTing.
+  pcmGetStatus = 200;
+  pcm = { ...pcm, can_start: false, start_rejection: 'offset_unknown' };
+  let startScrolls = 0;
+  node('pcm-start').scrollIntoView = (options) => {
+    assert.equal(options.block, 'nearest');
+    startScrolls += 1;
+  };
+  let statusScrolls = 0;
+  node('settings-pcm-status').scrollIntoView = (options) => {
+    assert.equal(options.block, 'nearest');
+    statusScrolls += 1;
+  };
+  deferPolicyGet = true;
+  await reopenSettings();
+  node('pcm-start').focus();
+  deferPolicyGet = false;
+  assert.equal(pendingPolicyGets.length, 1);
+  pendingPolicyGets.shift()({ ok: true, json: async () => ({ ...policy }) });
+  await new Promise(setImmediate);
+  assert.equal(activeElement, node('pcm-start'));
+  assert.equal(node('pcm-start').dataset.focused, 'true'); // Late policy GET preserves native button focus.
+  const beforeStatusCommands = posts.length + policyPosts.length + backgroundPosts.length + pcmPosts.length;
+  assert.equal(node('pcm-start').ariaDisabled, 'true');
+  assert.equal(node('pcm-cancel').ariaDisabled, 'true');
+  await selectSetting('pcm-start');
+  assert(startScrolls > 0);
+  assert(statusScrolls > 0);
+  assert.match(node('settings-pcm-status').textContent, /offset_unknown/);
+  assert.match(node('settings-pcm-feedback').textContent, /offset_unknown/);
+  assert.equal(node('settings-pcm-feedback').hidden, false);
+  assert.equal(posts.length + policyPosts.length + backgroundPosts.length + pcmPosts.length, beforeStatusCommands);
+  assert.equal(node('settings-panel').hidden, false);
+  await semantic('right');
+  assert.equal(node('pcm-cancel').dataset.focused, 'true');
+  await semantic('select');
+  assert.match(node('settings-pcm-feedback').textContent, /No active acquisition to cancel/);
+  assert.equal(posts.length + policyPosts.length + backgroundPosts.length + pcmPosts.length, beforeStatusCommands);
+  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '../ui/default/player.html'), 'utf8'),
+    /id="settings-pcm-status"[^>]*tabindex=/);
+  assert.notEqual(node('settings-pcm-status').dataset.focused, 'true');
+  assert.notEqual(node('settings-pcm-region').dataset.focused, 'true');
+  await selectSetting('settings-close');
+  pcm = { ...pcm, can_start: true, start_rejection: null };
+  const pollPcm = async () => {
+    const id = [...timerDelays.keys()].reverse().find((id) => timerDelays.get(id) === 1000 && !cancelledTimers.has(id));
+    assert(id, 'one active read-only PCM poll');
+    cancelledTimers.add(id);
+    timers[id - 1]();
+    await new Promise(setImmediate);
+  };
+  pcmGetStatus = 200;
+  await reopenSettings();
+  assert.equal(node('pcm-start').ariaDisabled, 'false');
+  assert.equal(pcmPosts.length, 0); // Open and status reads do not acquire anything.
+  deferPcmGet = true;
+  await selectSetting('pcm-start');
+  node('pcm-start').onclick({ detail: 1 });
+  assert.deepEqual(pcmPosts, [{ action: 'start', session_id: 'pcm-session', disc_generation: 2,
+    duration_ms: 1800000, profile: 'local-pcm-sha256-v1' }]);
+  assert.equal(node('pcm-start').ariaDisabled, 'true');
+  assert.equal(node('settings-pcm-result').hidden, true);
+  assert.match(node('settings-pcm-feedback').textContent, /accepted.*waiting/);
+  pcm = { ...pcm, state: 'COLLECTING', busy: true, reader_released: false, job_id: 7,
+    can_start: false, start_rejection: 'capture_releasing' };
+  pendingPcmGets.shift()({ ok: true, json: async () => ({ ...pcm }) });
+  await new Promise(setImmediate);
+  deferPcmGet = false;
+  assert.equal(node('pcm-cancel').ariaDisabled, 'false');
+  pcm = { ...pcm, state: 'INCOMPLETE', failure: 'CANCELLED' };
+  await selectSetting('pcm-cancel');
+  assert.deepEqual(pcmPosts.at(-1), { action: 'cancel', session_id: 'pcm-session', job_id: 7 });
+  assert.match(node('settings-pcm-status').textContent, /INCOMPLETE.*Waiting for reader release/);
+  assert.match(node('settings-pcm-feedback').textContent, /Cancellation accepted.*waiting/);
+  assert.equal(node('settings-pcm-result').hidden, true);
+  pcm = { ...pcm, busy: false, reader_released: true, can_start: true, start_rejection: null };
+  await pollPcm();
+  assert.equal(node('pcm-cancel').ariaDisabled, 'true');
+  assert.match(node('settings-pcm-status').textContent, /Incomplete acquisition/);
+  assert(!node('settings-pcm-status').textContent.includes('Waiting for reader release'));
+  assert.match(node('settings-pcm-feedback').textContent, /confirmed.*reader released/);
+  pcmPostStatus = 409;
+  await selectSetting('pcm-start');
+  const rejectedCount = pcmPosts.length;
+  await pollPcm();
+  assert.equal(pcmPosts.length, rejectedCount); // Polling never retries the rejected POST.
+  assert.match(node('settings-pcm-feedback').textContent, /rejected \(409\).*manually/);
+  pcm = { ...pcm, state: 'COMPLETE', failure: 'NONE', can_start: false };
+  await pollPcm();
+  assert.equal(node('settings-pcm-result').hidden, false);
+  assert.match(node('settings-pcm-result').textContent, /\/api\/complete-pcm\/result.*NOT_CHECKED/);
+  // Old/no-provider daemons and malformed state affect only acquisition.
+  const validPcm = pcm;
+  for (const status of [404, 503, 200]) {
+    pcmGetStatus = status;
+    pcm = {};
+    await reopenSettings();
+    assert.equal(node('pcm-start').ariaDisabled, 'true');
+    assert.equal(node('pcm-cancel').ariaDisabled, 'true');
+    assert.equal(node('policy-single').ariaDisabled, 'false');
+    assert.equal(node('background-off').ariaDisabled, 'false');
+    assert.match(node('settings-pcm-status').textContent, /unavailable/);
+  }
+  // Close aborts the in-flight GET and removes its poll. Ignored aborts cannot mutate a new dialog.
+  deferPcmGet = true;
+  await reopenSettings();
+  const oldSignal = pcmSignals.at(-1);
+  navigation('back');
+  assert.equal(oldSignal.aborted, true);
+  assert.equal([...timerDelays.keys()].filter((id) => timerDelays.get(id) === 1000 && !cancelledTimers.has(id)).length, 0);
+  deferPcmGet = false;
+  await reopenSettings();
+  pendingPcmGets.shift()({ ok: true, json: async () => validPcm });
+  await new Promise(setImmediate);
+  assert.equal(node('settings-pcm-result').hidden, true);
+  assert.equal(node('pcm-start').ariaDisabled, 'true');
+  // A stale POST reply must not change a reopened dialog or duplicate its request.
+  pcm = { ...validPcm, state: 'IDLE', can_start: true, job_id: 0 };
+  await reopenSettings();
+  deferPcmPost = true;
+  node('pcm-start').onclick({ detail: 1 });
+  const oldPostSignal = pcmSignals.at(-1);
+  await reopenSettings();
+  assert.equal(oldPostSignal.aborted, true);
+  const pendingCount = pcmPosts.length;
+  node('pcm-start').onclick({ detail: 1 });
+  assert.equal(pcmPosts.length, pendingCount);
+  pendingPcmPosts.shift()({ status: 202 });
+  await new Promise(setImmediate);
+  assert.equal(node('settings-pcm-feedback').textContent, '—');
+  deferPcmPost = false;
+  await pollPcm();
+  assert.equal(node('pcm-start').ariaDisabled, 'false');
+  navigation('back');
+  assert.equal(pcmPosts.length, pendingCount); // Closing never cancels or starts a job.
   postStatus = 204;
   snapshot.revision = 6;
   snapshot.enrichment = { status: 'UNAVAILABLE', selection: {

@@ -94,11 +94,13 @@ if(ENABLE_METADATA)
     target_link_libraries(cdplayerd PRIVATE PkgConfig::DISCID CURL::libcurl nlohmann_json::nlohmann_json)
 endif()
 if(ENABLE_API)
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
     target_sources(cdplayerd PRIVATE src/daemon_snapshot_json.cpp src/presentation_json.cpp src/api_server.cpp src/read_policy_store.cpp src/read_diagnostics_publisher.cpp
-        src/ui_bundle.cpp)
+        src/ui_bundle.cpp src/complete_pcm_session.cpp src/complete_pcm_worker.cpp
+        src/complete_pcm_input.cpp src/complete_pcm_sha256.cpp)
     target_include_directories(cdplayerd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
     target_compile_definitions(cdplayerd PRIVATE ENABLE_API=1)
-    target_link_libraries(cdplayerd PRIVATE nlohmann_json::nlohmann_json PkgConfig::WEBSOCKETS)
+    target_link_libraries(cdplayerd PRIVATE nlohmann_json::nlohmann_json PkgConfig::WEBSOCKETS OpenSSL::Crypto)
 endif()
 target_compile_features(cdplayerd PRIVATE cxx_std_20)
 set_target_properties(cdplayerd PROPERTIES CXX_EXTENSIONS OFF)
@@ -229,6 +231,16 @@ if(BUILD_TESTING)
     target_compile_options(complete_pcm_input_test PRIVATE -Wall -Wextra -Wpedantic)
     add_test(NAME complete_pcm_input COMMAND complete_pcm_input_test)
     set_tests_properties(complete_pcm_input PROPERTIES TIMEOUT 15)
+    find_package(OpenSSL REQUIRED COMPONENTS Crypto)
+    add_executable(complete_pcm_sha256_test tests/complete_pcm_sha256_test.cpp
+        src/complete_pcm_sha256.cpp src/complete_pcm_input.cpp src/disc_toc.cpp src/integrity_state.cpp
+        src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
+    target_include_directories(complete_pcm_sha256_test PRIVATE include)
+    target_compile_features(complete_pcm_sha256_test PRIVATE cxx_std_20)
+    target_compile_options(complete_pcm_sha256_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_libraries(complete_pcm_sha256_test PRIVATE OpenSSL::Crypto)
+    add_test(NAME complete_pcm_sha256 COMMAND complete_pcm_sha256_test)
+    set_tests_properties(complete_pcm_sha256 PROPERTIES TIMEOUT 15)
     add_executable(complete_pcm_worker_test tests/complete_pcm_worker_test.cpp
         src/complete_pcm_worker.cpp src/complete_pcm_input.cpp src/read_offset.cpp
         src/disc_toc.cpp src/integrity_state.cpp src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
@@ -298,6 +310,16 @@ if(BUILD_TESTING)
                                                       nlohmann_json::nlohmann_json)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
+        add_executable(complete_pcm_session_test tests/complete_pcm_session_test.cpp
+            src/complete_pcm_session.cpp src/media_worker.cpp src/complete_pcm_worker.cpp src/complete_pcm_input.cpp
+            src/complete_pcm_sha256.cpp src/read_offset.cpp src/disc_toc.cpp src/integrity_state.cpp
+            src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
+        target_include_directories(complete_pcm_session_test PRIVATE include)
+        target_compile_features(complete_pcm_session_test PRIVATE cxx_std_20)
+        target_compile_options(complete_pcm_session_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(complete_pcm_session_test PRIVATE Threads::Threads OpenSSL::Crypto nlohmann_json::nlohmann_json)
+        add_test(NAME complete_pcm_session COMMAND complete_pcm_session_test)
+        set_tests_properties(complete_pcm_session PROPERTIES TIMEOUT 15)
         add_executable(diagnostic_isolation_test tests/diagnostic_isolation_test.cpp
             src/api_server.cpp src/logger.cpp src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp
             src/repeated_read_verifier.cpp src/pcm_worker.cpp src/integrity_state.cpp

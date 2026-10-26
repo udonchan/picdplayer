@@ -188,8 +188,10 @@ function renderReadConfiguration(read) {
 const controls = Array.from(document.querySelectorAll?.('.player-controls button[data-command]') || []);
 const policyButtons = [byId('policy-single'), byId('policy-repeat')];
 const backgroundButtons = [byId('background-off'), byId('background-on')];
+const pcmButtons = [byId('pcm-start'), byId('pcm-cancel')];
+const pcmStatusElement = byId('settings-pcm-status');
 const settingsCloseButton = byId('settings-close');
-const settingsActions = [...policyButtons, settingsCloseButton, ...backgroundButtons];
+const settingsActions = [...policyButtons, ...backgroundButtons, ...pcmButtons, settingsCloseButton];
 let focusedControl = -1;
 let pendingCommand = null;
 let feedbackTimer;
@@ -204,6 +206,14 @@ let backgroundStatus = '';
 let backgroundLoading = false;
 let backgroundRequestId = 0;
 let pendingBackground = false;
+let pcmState = null;
+let pcmFeedback = '';
+let pcmRequestId = 0;
+let pcmTimer;
+let pcmController;
+let pendingPcm = false;
+let pcmLoading = false;
+let pcmAwaitingRelease = false;
 let retiredBackgroundUrl = '';
 let pickerOpen = false;
 let pickerIndex = 0;
@@ -440,6 +450,14 @@ function controlFeedback(message) {
     if (label.textContent === message) label.textContent = '';
   }, 1800);
 }
+function setSettingsDisabled(button, disabled) {
+  // Unavailable settings remain focusable so their reason can be inspected.
+  button.disabled = false;
+  button.ariaDisabled = String(disabled);
+}
+function settingsDisabled(button) {
+  return !button || button.ariaDisabled === 'true';
+}
 function renderPolicySettings() {
   const requested = policyState?.requested;
   const effective = policyState?.effective;
@@ -451,11 +469,12 @@ function renderPolicySettings() {
     ['region_frames', 'required_matches', 'maximum_attempts', 'time_budget_ms']
       .every((key) => Number.isInteger(requested[key]) && requested[key] >= 0);
   policyButtons.forEach((button, index) => {
-    button.disabled = !valid || pendingPolicy;
+    setSettingsDisabled(button, !valid || pendingPolicy);
     button.dataset.selected = String(valid && requested.mode === (index ? 'REPEAT' : 'SINGLE'));
     button.dataset.focused = String(settingsOpen && focusedPolicy === index);
   });
-  settingsCloseButton.dataset.focused = String(settingsOpen && focusedPolicy === 2);
+  settingsCloseButton.dataset.focused = String(settingsOpen && focusedPolicy === 6);
+  setSettingsDisabled(settingsCloseButton, false);
   set('settings-region', valid ? `${requested.region_frames} CD frames` : '—');
   set('settings-matches', valid ? requested.required_matches : '—');
   set('settings-attempts', valid ? requested.maximum_attempts : '—');
@@ -468,11 +487,126 @@ function renderPolicySettings() {
     ? `Requested ${requested.mode}; effective ${effective?.mode || 'UNKNOWN'} until playback stops.`
     : `Effective ${effective?.mode || requested.mode}.`);
   renderBackgroundSettings();
+  renderPcmSettings();
+}
+function renderPcmSettings() {
+  pcmButtons.forEach((button, index) => {
+    setSettingsDisabled(button, pendingPcm || pcmLoading || !pcmState || (index === 0
+      ? !pcmState.can_start || pcmState.busy : !pcmState.busy || pcmState.job_id <= 0));
+    button.dataset.focused = String(settingsOpen && focusedPolicy === settingsActions.indexOf(button));
+  });
+  let status = 'Local PCM acquisition unavailable. Other settings are unaffected.';
+  if (pcmState) {
+    const release = !pcmState.reader_released ? ' Waiting for reader release.' : '';
+    status = `${pcmState.state} - ${pcmState.accepted_frames} accepted frames / ${pcmState.accepted_bytes} bytes.${release}`;
+    if (pcmState.state === 'INCOMPLETE') status += ' Incomplete acquisition; no complete result.';
+    if (!pcmState.busy && !pcmState.can_start && pcmState.start_rejection)
+      status += ` Start unavailable: ${pcmState.start_rejection}.`;
+    if (pcmState.failure && pcmState.failure !== 'NONE') status += ` Failure: ${pcmState.failure}.`;
+  }
+  set('settings-pcm-status', status);
+  set('settings-pcm-feedback', pcmFeedback);
+  setHidden(byId('settings-pcm-feedback'), !pcmFeedback);
+  const complete = !pendingPcm && !pcmLoading && pcmState?.state === 'COMPLETE' && !pcmState.busy && pcmState.reader_released;
+  setHidden(byId('settings-pcm-result'), !complete);
+  set('settings-pcm-result', complete ? 'Local fingerprint result: /api/complete-pcm/result (external verification: NOT_CHECKED).' : '');
+}
+function stopPcmRequests() {
+  clearTimeout(pcmTimer);
+  pcmController?.abort();
+  pcmController = null;
+  pcmRequestId += 1;
+}
+async function loadPcmSettings() {
+  if (!settingsOpen) return;
+  if (pendingPcm) {
+    clearTimeout(pcmTimer);
+    pcmTimer = setTimeout(() => { void loadPcmSettings(); }, 1000);
+    return;
+  }
+  stopPcmRequests();
+  const requestId = pcmRequestId;
+  const dialogId = settingsRequestId;
+  const current = () => settingsOpen && dialogId === settingsRequestId && requestId === pcmRequestId;
+  pcmLoading = true;
+  renderPcmSettings();
+  pcmController = typeof AbortController === 'function' ? new AbortController() : null;
+  try {
+    const response = await fetch('/api/complete-pcm', { signal: pcmController?.signal });
+    if (!response.ok) throw new Error('Acquisition unavailable');
+    const loaded = await response.json();
+    if (!loaded || loaded.schema_version !== 1 || typeof loaded.session_id !== 'string' || !loaded.session_id ||
+        !['IDLE', 'COLLECTING', 'PREPARED', 'COMPLETE', 'INCOMPLETE', 'INVALID'].includes(loaded.state) ||
+        !['disc_generation', 'job_id', 'accepted_frames', 'accepted_bytes'].every((key) =>
+          Number.isSafeInteger(loaded[key]) && loaded[key] >= 0) ||
+        !['busy', 'reader_released', 'can_start'].every((key) => typeof loaded[key] === 'boolean') ||
+        !['failure', 'start_rejection'].every((key) => loaded[key] === null || typeof loaded[key] === 'string') ||
+        loaded.profile?.canonical !== 's16le-44100-stereo-v1' || loaded.profile?.algorithm !== 'sha256' ||
+        loaded.profile?.version !== 'local-pcm-sha256-v1' || loaded.external_verification !== 'NOT_CHECKED')
+      throw new Error('Invalid acquisition state');
+    if (!current()) return;
+    pcmState = loaded;
+    if (pcmAwaitingRelease && !loaded.busy && loaded.reader_released) {
+      pcmAwaitingRelease = false;
+      pcmFeedback = 'Status confirmed by daemon; reader released.';
+    }
+  } catch {
+    if (!current()) return;
+    pcmState = null;
+  } finally {
+    if (current()) {
+      pcmController = null;
+      pcmLoading = false;
+      renderPcmSettings();
+      pcmTimer = setTimeout(() => { void loadPcmSettings(); }, 1000);
+    }
+  }
+}
+async function selectPcm(index) {
+  if (!settingsOpen || pendingPcm || pcmLoading) return;
+  if (settingsDisabled(pcmButtons[index]) || !pcmState) {
+    pcmFeedback = !pcmState ? 'Acquisition status unavailable. No request sent.'
+      : index === 0 ? `Start unavailable: ${pcmState.start_rejection || 'not_ready'}. No acquisition request sent.`
+      : 'No active acquisition to cancel. No request sent.';
+    renderPcmSettings();
+    byId('settings-pcm-feedback').scrollIntoView?.({ block: 'nearest' });
+    return;
+  }
+  const dialogId = settingsRequestId;
+  const body = index === 0 ? { action: 'start', session_id: pcmState.session_id,
+    disc_generation: pcmState.disc_generation, duration_ms: 1800000, profile: 'local-pcm-sha256-v1' }
+    : { action: 'cancel', session_id: pcmState.session_id, job_id: pcmState.job_id };
+  stopPcmRequests();
+  const requestId = pcmRequestId;
+  pendingPcm = true;
+  pcmFeedback = 'Sending explicit acquisition request...';
+  renderPcmSettings();
+  pcmController = typeof AbortController === 'function' ? new AbortController() : null;
+  try {
+    const response = await fetch('/api/complete-pcm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      signal: pcmController?.signal,
+    });
+    if (!settingsOpen || dialogId !== settingsRequestId || requestId !== pcmRequestId) return;
+    pcmAwaitingRelease = response.status === 202;
+    pcmFeedback = response.status === 202
+      ? `${index === 0 ? 'Acquisition' : 'Cancellation'} accepted; waiting for status and reader release confirmation.`
+      : `Acquisition request rejected (${response.status}). Retry manually only; no automatic retry.`;
+  } catch {
+    if (!settingsOpen || dialogId !== settingsRequestId || requestId !== pcmRequestId) return;
+    pcmFeedback = 'Acquisition request not confirmed. Check status; retry manually only.';
+  } finally {
+    pendingPcm = false;
+    if (settingsOpen && dialogId === settingsRequestId && requestId === pcmRequestId) {
+      pcmController = null;
+      void loadPcmSettings();
+    }
+  }
 }
 function renderBackgroundSettings() {
   const valid = backgroundState !== null;
   backgroundButtons.forEach((button, index) => {
-    button.disabled = !valid || backgroundLoading || pendingBackground || (index === 1 && !backgroundState.available);
+    setSettingsDisabled(button, !valid || backgroundLoading || pendingBackground || (index === 1 && !backgroundState.available));
     button.dataset.selected = String(valid && backgroundState.requested === Boolean(index));
     button.dataset.focused = String(settingsOpen && focusedPolicy === settingsActions.indexOf(button));
     button.setAttribute?.('aria-pressed', String(valid && backgroundState.requested === Boolean(index)));
@@ -533,7 +667,12 @@ async function loadBackgroundSettings() {
   }
 }
 async function selectBackground(index) {
-  if (!settingsOpen || pendingBackground || backgroundButtons[index]?.disabled) return;
+  if (!settingsOpen || pendingBackground || backgroundLoading) return;
+  if (settingsDisabled(backgroundButtons[index])) {
+    renderBackgroundSettings();
+    byId('settings-background-status').scrollIntoView?.({ block: 'nearest' });
+    return;
+  }
   const sessionId = settingsRequestId;
   pendingBackground = true;
   backgroundStatus = 'Applying background choice...';
@@ -587,6 +726,7 @@ function focusPolicy(index) {
   renderPolicySettings();
   settingsActions[index]?.focus?.({ preventScroll: true });
   settingsActions[index]?.scrollIntoView?.({ block: 'nearest' });
+  if (pcmButtons.includes(settingsActions[index])) pcmStatusElement.scrollIntoView?.({ block: 'nearest' });
 }
 function openSettings() {
   settingsOpen = true;
@@ -597,15 +737,22 @@ function openSettings() {
   backgroundStatus = 'Loading background availability...';
   backgroundLoading = true;
   setHidden(byId('settings-panel'), false);
+  pcmState = null;
+  pcmFeedback = '';
+  pcmLoading = false;
+  pcmAwaitingRelease = false;
   focusPolicy(0);
+  byId('settings-panel').querySelector('.settings-surface').scrollTop = 0;
   set('settings-policy-status', 'Loading read policy…');
   set('settings-persistence', 'Checking whether changes are saved…');
   void loadPolicySettings();
   void loadBackgroundSettings();
+  void loadPcmSettings();
 }
 function closeSettings() {
   settingsOpen = false;
   settingsRequestId += 1;
+  stopPcmRequests();
   setHidden(byId('settings-panel'), true);
   const index = controls.findIndex((button) => button.dataset.command === 'settings');
   if (index >= 0) focusControl(index);
@@ -613,7 +760,11 @@ function closeSettings() {
 }
 async function selectPolicy(index) {
   const requested = policyState?.requested;
-  if (!settingsOpen || pendingPolicy || policyButtons[index]?.disabled || !requested) return;
+  if (!settingsOpen || pendingPolicy || !requested) return;
+  if (settingsDisabled(policyButtons[index])) {
+    set('settings-policy-status', 'Read policy unavailable. No change request sent.');
+    return;
+  }
   const requestId = settingsRequestId;
   const mode = index ? 'repeat' : 'single';
   pendingPolicy = true;
@@ -665,17 +816,25 @@ function handleNavigation(action) {
     if (action === 'back') closeSettings();
     else if (action === 'left' || action === 'up' || action === 'right' || action === 'down') {
       settingsFocusMoved = true;
-      const direction = action === 'left' || action === 'up' ? -1 : 1;
-      const enabled = settingsActions.map((button, index) => !button.disabled ? index : -1)
-        .filter((index) => index >= 0);
-      const position = enabled.indexOf(focusedPolicy);
-      if (enabled.length) focusPolicy(enabled[position < 0 ? (direction > 0 ? 0 : enabled.length - 1)
-        : (position + direction + enabled.length) % enabled.length]);
+      // Back is above three two-button rows; Tab keeps its separate linear order.
+      let next = focusedPolicy;
+      if (action === 'up') {
+        if (focusedPolicy < 6) next = focusedPolicy < 2 ? 6 : focusedPolicy - 2;
+        else next = 5;
+      } else if (action === 'down') {
+        if (focusedPolicy === 6) next = policyState?.requested?.mode === 'REPEAT' ? 1 : 0;
+        else if (focusedPolicy < 4) next = focusedPolicy + 2;
+        else next = 6;
+      } else if (focusedPolicy < 6) {
+        next = focusedPolicy - focusedPolicy % 2 + (action === 'right' ? 1 : 0);
+      }
+      focusPolicy(next);
     }
     else if (action === 'select') {
-      if (focusedPolicy === 2) closeSettings();
+      if (focusedPolicy === 6) closeSettings();
       else if (focusedPolicy < 2) void selectPolicy(focusedPolicy);
-      else void selectBackground(focusedPolicy - 3);
+      else if (focusedPolicy < 4) void selectBackground(focusedPolicy - 2);
+      else if (focusedPolicy < 6) void selectPcm(focusedPolicy - 4);
     }
     return;
   }
@@ -726,11 +885,23 @@ policyButtons.forEach((button, index) => button.addEventListener?.('click', (eve
 }));
 backgroundButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
   settingsFocusMoved = true;
-  focusPolicy(index + 3);
+  focusPolicy(index + 2);
   if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
   else void selectBackground(index);
 }));
 settingsCloseButton.addEventListener?.('click', closeSettings);
+settingsActions.forEach((button, index) => button.addEventListener?.('focus', () => {
+  if (settingsOpen && focusedPolicy !== index) {
+    settingsFocusMoved = true;
+    focusPolicy(index);
+  }
+}));
+pcmButtons.forEach((button, index) => button.addEventListener?.('click', (event) => {
+  settingsFocusMoved = true;
+  focusPolicy(settingsActions.indexOf(button));
+  if (event?.detail === 0) handleNavigationInput('select', 'keyboard');
+  else void selectPcm(index);
+}));
 document.addEventListener('keydown', (event) => {
   if (settingsOpen && event.key === 'Tab') {
     event.preventDefault();

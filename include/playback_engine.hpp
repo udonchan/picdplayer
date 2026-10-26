@@ -24,6 +24,8 @@ public:
     void reset_prebuffer_target();
     // Call once after a position/state command; invalidates all old PCM.
     void synchronize();
+    // Successful stopped reset only; device release is checked separately on the worker.
+    bool quiescent() const;
     void tick();
     bool take_reader_failure() noexcept;
     ReadDiagnostics read_diagnostics(bool include_history = false, bool include_disc_map = false);
@@ -37,6 +39,7 @@ private:
     PcmBlock block_;
     std::size_t offset_ = 0;
     bool active_ = false, primed_ = false, draining_ = false;
+    bool quiescent_ = false;
     std::size_t prebuffer_blocks_ = 0;
     std::chrono::steady_clock::time_point prebuffer_started_at_{};
     std::optional<std::int64_t> last_prebuffer_wait_ms_;
