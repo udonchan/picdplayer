@@ -8,8 +8,9 @@
 [#258](https://github.com/udonchan/picdplayer/issues/258)は旧`13485ee`上の未commit候補だけを対象とする
 別branchの修正で、現行WPEや統合済みPR #244を再実装しない。今回の確認は
 [検証状況](verification.md)を参照し、実機受入・配備の成功とは区別する。
-PR #260でmaster `05a1a3e`へ統合された#257/#259は、このDraft PR #256にも取込済み。
-下表のC/D接続済み状態と未実施の実取得受入を保持し、PR #256自体はmasterへ統合しない。
+PR #260でmaster `05a1a3e`へ統合された#257/#259は、PR #256にも取込済み。
+2026-10-26の利用者指示でPR #256をmasterへ反映する。統合状態は対応PRを正本とし、
+開始/取消/解放の限定確認と、受理PCM・指紋生成・音声等の未確認を分けて保持する。#238/#239はOpenを維持する。
 
 2026-09-26の一覧を基に、2026-10-17にIssue・merge済み実装・設計・検証範囲を再照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
@@ -54,7 +55,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | v1実装・代表確認を完了した統合単位 | #177/#178: 保存/実service復元とSettings表示/API回帰を完了し、承認済みPR/必須CI経由の統合で終了。物理受入は#252/#51、通常運転は#184に残す |
 | 利用者の実機操作待ち | #252: Player/Settingsの物理リモコン代表受入を一本化。#178/#51は同じrunを参照し重複試験しない |
 | V2以降・非blocking | #254: WPE失敗表示/復帰・DRM/child cleanup。#219のv1移行は完了し、独自の未完了復旧だけを移管。#250のIntegrity hardeningとは別所有 |
-| 機能開発の現単位 | #238/#239: 利用者採用のlocal SHA-256指紋と明示全域取得を本番session/API/Settingsへ接続しDraft PRへ保全。2026-10-24にCustom UI反映・限定代表確認とCI候補のoffline検査を追加。未merge・実取得未確認を維持し、候補準備と実取得を区別する。外部照合ではない |
+| 機能開発の現単位 | #238/#239: local SHA-256と実session/API/Settings接続をPR #256でmaster反映対象とする。10月26日に実start/cancel受付・drive FD保持/終了・設定復元を限定確認したが、受理PCMは0で指紋生成/音声/再生復帰は未確認。#238/#239はOpenを維持し、配備・開始と取得完了を区別する。外部照合ではない |
 | 将来の機能・設計 | #19: quiet boot、#20: read-only root、#42: Custom UI更新。外部provider互換profile/通信は未採用 |
 | 正式供給・配布枠 | #45/#66/#67: release/license/package inventory、#220: v1.0供給精査。#46方式選定後の#47/#68と#69は保留 |
 | 追加研究保留 | #198/#199/#200: Buildroot。#74の調査は完了、採用は未決定 |
@@ -101,8 +102,8 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#160 Define complete-disc PCM capture for external verification](https://github.com/udonchan/picdplayer/issues/160) | 設計・作業分解完了としてClosed。PR #235で[入力契約](../design/integrity-design.md#complete-pcm-input)を統合し、A=#236/B=#237/C=#238/D=#239へ分割済み。子のproduction完成まで待つtracking Issueにはしない。[公開契約との境界](../design/message-contract.md#complete-pcm-input)と[当時の設計検証](verification.md#160-完全取得pcmの設計整理2026-10-16)参照。A/Bの限定test単位を経て、C/Dはlocal開発差分でsession/APIへ接続。外部provider・自動取得・PCM保存・実機全域取得の確認済みを意味しない。 |
 | [#236 Implement complete PCM coverage and canonical input core](https://github.com/udonchan/picdplayer/issues/236) | A単位完了・Closed。PR #240でpure input coreとtest-only CMake対象を統合し、canonical全sample/channel、連続coverage、世代/取消/期限・consumer例外・二段階完了gateを自動検証済み。ASan/UBSan 71ケース、Linux標準67/67・最小39/39成功。[実装境界](../design/integrity-design.md#pure-core-implementation)と[当時の検証](verification.md#236-完全取得入力core2026-10-16)参照。当時はdaemon/reader/APIへ未接続だったが後続D開発差分でreuseする。実drive全域取得や外部照合確認済みとはしない。 |
 | [#237 Implement an exclusive complete PCM acquisition worker](https://github.com/udonchan/picdplayer/issues/237) | B単位完了・Closed。PR #241で注入readerの専用owner・coordinator排他・発行抑止・call/job予算・取消/解放待ち・旧結果拒否をtest-only workerへ統合。ASan/UBSan・TSan各57ケース、Linux標準68/68・最小40/40成功。[内部契約](../design/integrity-design.md#acquisition-worker-implementation)と[当時の検証](verification.md#237-排他的取得worker2026-10-17-jst)参照。当時はdaemon/APIへ未接続で、後続D開発差分から利用する。実drive/Pi・外部provider未確認と#88の物理受入を成功へ変えない。 |
-| [#238 Define and implement an approved incremental PCM checksum profile](https://github.com/udonchan/picdplayer/issues/238) | Open、C単位。利用者採用のnetwork不要local SHA-256を`feature/238-local-pcm-sha256`で実装しDから利用。固定state、disc/track digest、有界JSON、known vectorとcanonical/core接続を検証。利用者の2026-10-21指示でDraft PRへGit保存・CI確認し、未merge・実drive未確認を維持する。[採用profile](../design/integrity-design.md#local-pcm-sha-256-profile2026-10-19)参照。外部provider互換profile/通信は別採用で、#13のClosedも外部照合実装済みの意味ではない。 |
-| [#239 Integrate explicit complete PCM jobs with runtime validity and presentation](https://github.com/udonchan/picdplayer/issues/239) | Open、D単位。実session/raw factory・開始/取消/状態/結果API・Settingsへ接続済み。2026-10-24に7 buttonの二軸移動/上下ループ・初期scroll・見出し・focus識別を更新し、Custom UIのHTTP反映・実WPE合成・利用者の限定代表確認を記録した。最終配色は残課題。backendは旧Debugのままで、Release候補はoffline検査済み・未配備、offset未指定・実取得/取消/実reader解放/再生復帰は未実施。[保存点と再開境界](verification.md#pr-256保存点2026-10-25)を参照し、merge/closeしない。自動取得・外部照合・PCM保存は追加しない。 |
+| [#238 Define and implement an approved incremental PCM checksum profile](https://github.com/udonchan/picdplayer/issues/238) | Open、C単位。network不要local SHA-256の固定state/disc-track digest/有界JSONとcanonical/core接続を実装し、known vector等を検証。実装経路はPR #256、統合状態は同PRを参照。実機の短いjobではPCM受理0のまま取消したため、指紋生成/全域完了は未確認でOpenを維持する。[採用profile](../design/integrity-design.md#local-pcm-sha-256-profile2026-10-19)参照。外部provider互換性/通信、#13のClosedを外部照合成功にしない。 |
+| [#239 Integrate explicit complete PCM jobs with runtime validity and presentation](https://github.com/udonchan/picdplayer/issues/239) | Open、D単位。実session/raw factory・API/Settingsへ接続し、明示要求優先・media_activity・判定logを追加した。PR #256のmaster反映と実機受入は区別する。10月24日のUI限定代表確認、26日のstart/cancel受理・owner解放と同PIDのdrive FD0・offset未指定復元/一時許可撤去を記録した。ただし最初のdrive call内訳やraw read完了は未特定、受理PCM0、指紋生成/取消後再生復帰/音声は未確認。配色も残課題。[最新runと境界](verification.md#pr-256-初回start受理取消解放2026-10-26)を参照し、Issueはcloseしない。自動取得・外部照合・PCM保存は追加しない。 |
 | [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90は完了。#24正式化時に公開実装と再照合済み。 |
 | [#146 Validate physical optical-media faults and USB drive compatibility](https://github.com/udonchan/picdplayer/issues/146) | 傷・劣化媒体、read stall、別USB optical drive/bridgeの実機評価を集約する。音声/操作影響とAPI・警告・復元の整合を同じrun記録で確認する。physical hotplugは#88、特殊TOCは#39/#40が担当する。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
@@ -111,7 +112,30 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#164 Finish Integrity Monitor state presentation after artist backgrounds](https://github.com/udonchan/picdplayer/issues/164) | Completed（v1）。PR #245のpolicy/strategy、PR #248の長文名の縮小/末尾省略、代表自動試験・通常実WPE/実背景1枚の限定確認を完了。2026-10-19の利用者方針により、深い組合せと検証器hardeningは#250へ延期して終了した。[終了判断](verification.md#164-v1完了とv2以降への移管)参照。旧matrixはFAIL・未評価のまま、未確認を成功へ変更していない。実写真/TVは#51、通常運転は#184等の独立受入を維持し、それら全体をv2や完了扱いにしない。 |
 | [#250 V2: Harden Integrity Monitor state combinations and fixture diagnostics](https://github.com/udonchan/picdplayer/issues/250) | Open、v2以降・非blocking・現時点では着手しない。#164固有の追加状態/背景/platform組合せ、非典型font/長文条件、fixture/network分類のhardeningだけを所有する。必要性とユーザー影響から小単位を選び、全直積・全OS/fontの保証を完了条件にしない。実写真#51、資源#49、通常運転#184、Settings#178、scrollbar#124、性能#83、保存#177の責務を重複させない。 |
 
+2026-10-25の#239離席中監査では、`media_busy`の内訳を示すread-only `media_activity`と境界回帰を追加した。
+標準WPE Release/Debug各72/72とprivate負例を検証後、同日の継続指示でdirty source snapshotを保全して診断版を配備した。
+offset未指定の10秒/83標本でIDLE59/RUNNING23/RESULT_PENDING1を観測し、恒常的busyではないことを確認したが、
+その後、利用者承認の一時offset0・単発startをownerへ渡したがHTTP409/capture_not_readyで受理されず、job0/cancel0のまま終了した。
+元設定/offset未指定へ復元し専用helper/ruleを撤去した。通常再生は204で受理されたが観測scriptの誤りで予定5秒を約53秒に逸脱し、
+STOP一度で停止を回復した。API進行測定/音声/取消後復帰は未検証で、製品側再生不具合とは断定しない。source/記録は未commitのまま、
+[監査](verification.md#pr-256-media_busy監査と診断差分2026-10-25)と[診断配備run](verification.md#pr-256-診断版配備とmedia-activity観測2026-10-25)を参照。
+
+その後の利用者指示で、明示APIを新しい定期observeより先に処理し、受理後の可否を再評価する調停を追加した。
+標準WPE Release/Debug各72/72、API無効smoke、順序/古い可否のprivate負例を検証したが、
+この優先順は同日23時台にsource snapshotを固定して通常配備し、設定/UI保持とread-only状態を確認した。
+その後、別承認の一時offset0・単発startもHTTP409で拒否され、前後のstatusはRUNNING/media_busy・job0だった。
+start1回/受理0・cancel0・play0で終了し、元設定/offset未指定へ復元、専用helper/ruleを撤去した。
+修正版の実取得/競合率改善は未確認。start予約/自動再試行/gate緩和は追加していない。
+[調停差分](verification.md#pr-256-明示要求優先の調停2026-10-25)と[配備境界](verification.md#pr-256-調停修正版の通常配備2026-10-25)を参照し、実取得成功とは区別する。
+
 ## 障害対応・機能改善
+
+#239の2026-10-26診断では、判定時点log付き候補を配備し、offset未指定で6回の有限拒否専用入力を行った。
+4POSTはmedia IDLE/offset_unknown、2POSTはRUNNING/media_busyで拒否され、恒常的POST拒否競合ではないことを確認した。
+その後のoffset0単発試験では初めてstartが受理され、job1/COLLECTING/drive FD保持、1.326秒でcancel、
+取消応答後約4.24秒でowner解放と同PIDのFD0を確認した。ただし受理PCMは0でfingerprint生成/再生復帰は未確認。
+元offset未指定への復元と専用helper/rule撤去は完了した。[初回受理run](verification.md#pr-256-初回start受理取消解放2026-10-26)を参照。
+[判定logと因果証拠の限界](verification.md#pr-256-判定時点logと拒否専用http診断2026-10-26)を参照する。
 
 | Issue | 主な範囲 |
 |---|---|

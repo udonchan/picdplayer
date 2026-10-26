@@ -1,6 +1,545 @@
 # 検証状況と残課題
 
-更新日: 2026-10-25。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-26。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## PR #256 master反映判断（2026-10-26）
+
+利用者がここまでの修正のmaster反映を明示指示したため、元のC/D実装と後続UI・診断・調停・記録を
+PR #256の同じfeature branchへ保存し、CI/reviewを経由して統合する。現在の統合状態は同PRを正本とする。
+後続runtime/診断/調停/回帰はba8b5df、対象を限定した実験機許可は27e6a92へ分けて保存した。
+保存基準head470ca4fのCI成功を、今回保存する新headの結果へ代用しない。
+統合準備時に現sourceのowner/対象testを再compileし、既存SDK・networkなしLinux/aarch64の
+標準WPE Release 72/72・Debug 72/72、hostのcontrols/render Node回帰と3 JS構文検査が成功した。
+PR全体のcore/runtime/UI差分を独立reviewへ分担し、元実装から統合対象に含めて確認する。
+確認時のrefs/remotes/origin/masterは597cbcaで、05a1a3e以後の追加はPR #261の文書6ファイルだけだった。
+それらを保持し、root checkoutの未commit成果や旧候補worktreeへは触れない。
+
+最新の実機正例は下記のstart202/job1/COLLECTING・同PIDのdrive FD保持・1.326秒でcancel202・
+取消応答後約4.24秒でowner解放/FD0が揃った標本である。
+ただし進行中だったdrive callがTOC probe/reader open/raw readのどれかは未特定で、受理PCMは0。
+これは指紋生成/全域完了/音声/取消後再生復帰の成功ではなく、#238/#239はOpenを維持する。
+通常再生試験のscript不備・約53秒への時間逸脱も消さずに保持する。
+実機の最後の確認は06:17:04 UTCで、offset未指定へbyte復元・一時helper/rule撤去済み。
+以後のcommit/push/CI/統合確認で、追加のPi接続・配備・再生/取得を実行しない。
+以下の各節のDraft/未merge/未commit/未配備等は各時点の履歴であり、この判断以後の状態へ上書きしない。
+
+## PR #256 初回start受理・取消・解放（2026-10-26）
+
+利用者が判定log版に固定した限定helperの対話sudo設置成功を報告し、試験を再開した。
+06:15:41 UTCにhelper root所有0755/既知hash・専用rule0440、配備daemon e176151...、
+STOPPED/offset未指定/job0/解放済み、FD0/race0と元設定一致を確認した。
+privateな単発scriptを整理し、fake APIで拒否時startのみ、受理時start/cancel各一度、
+FD観測例外でもcancel一度となることと2秒以内の取消を確認してから配置した。
+本番code/gateに追加変更はなく、helperでoffset0だけを一時追加して通常再起動した。
+
+06:16:08.515 UTCの前状態はSTOPPED/AUDIO_READY・明示offset0/USER_CONFIGURED、
+capture IDLE/job0/解放済み・media_activity IDLE/start_rejectionなし、PID47410のFD0/race0。
+温度58.534度・throttled flags0x0を確認した。
+06:16:08.537 UTCにstart HTTP202を受信した。判定時点logも
+`accepted=1 failure=0 readiness=ready media_activity=IDLE`であり、隣接GETだけの推測ではない。
+job1/COLLECTING・busy=true/reader_released=false/call_inflight=true・media IDLE、
+同PIDのdrive FD10（1件/race0）を2標本で観測した。accepted_frames/bytesは0だった。
+
+開始要求から1.3256秒でcancelを一度送り、06:16:09.865 UTCにHTTP202を受信した。
+直後は同job1 INCOMPLETE/CANCELLED・busy=true/reader_released=false/call_inflight=trueであり、
+受理202を解放完了としなかった。FD10も保持されていた。
+06:16:12.661 UTC標本でFD0を先に観測し、06:16:13.382 UTC標本でowner解放済みだがFD1、
+06:16:14.108 UTC標本で同PID/job1のbusy=false/reader_released=true/call_inflight=false/
+waiting_for_access=falseとFD0/race0を確認した。cancel応答から約4.24秒で有限10秒枠内だった。
+GETとFD観測は原子的ではなく、解放後のFD1は再開した通常media処理の可能性もあるため、
+同じFD番号が永続的にcapture所有を意味するとは扱わない。owner解放と同PIDのFD0が揃った標本を終了根拠とした。
+
+結果はstart1回/受理1・cancel1回/受理1、実drive FD保持と解放待ちの観測あり。
+受理PCMは0 frames/bytesのまま、結果はINCOMPLETE/CANCELLEDであり、PCM fingerprint生成の正例ではない。
+取消前に進行中だったdrive callの内訳やraw read完了はこの観測だけでは特定できない。
+実行中I/Oを強制中断せずに解放を待ち、kill/電源断/自動再試行/追加取得/再生POSTは行っていない。
+
+解放確認後に元のoffset未指定へ復元し、通常daemon/kiosk再起動を行った。
+06:17:04 UTCの終了状態はSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0/解放済み、
+REPEAT要求/実効・pending=false、背景ON/saved、元設定fileのbackupとのbyte一致を確認した。
+再起動後のjob0はsession resetであり、取得がなかったという記録にはしない。job1のprivate logを保持している。
+専用helper/ruleをcleanupで撤去し、両path不在を確認した。root/userのprivate保全物は残す。
+daemon PID47624/kiosk PID47650はactive/running・NRestarts0、温度60.686度・flags0x0。
+判定log版package c7e1e38.../daemon e176151...を維持した。音声/画面/物理入力と取消後の再生復帰は未確認。
+
+因果上の結論は、実機のstartが恒常的に拒否されるのではなく、判定瞬間にmedia処理が残る要求は拒否され、
+今回のmedia IDLE・全gate成立時は同じownerから受理されたことである。
+過去の全失敗が同じ原因だったこと、調停変更前後の定量的な改善率、全域取得/外部照合/bit-perfectは主張しない。
+このrunで短いstart/cancel/releaseの確認を一区切りとし、追加の音声再生や長い取得は別枠とする。
+今回のcode/AGENTS/記録は未commit・未push。private script/logや設定はrepositoryへ含めていない。
+
+## PR #256 判定時点logと拒否専用HTTP診断（2026-10-26）
+
+利用者は原因追究/実機試験を指示し、対象Piを再install可能な実験機として必要な破壊的変更を許可した。
+対象限定・host/成果保全・強制終了を解放成功としない境界をAGENTS.mdへ追記した。
+このrunでは破壊的変更を必要とせず、通常配備とoffset未指定の拒否専用診断だけを行った。
+中断後05:25 UTC台に保存worktree/差分を再照合した。head470ca4f、既存未commit差分は保持している。
+
+### 判定logと候補
+
+ownerのstart処理へ同じcontextから取得したreadiness/media_activityと、startのaccepted/failureだけをlog_noticeで追加した。
+要求body/session ID/設定/PCMを出力せず、gate・POST応答・実I/O・予約/再試行動作は変更していない。
+readinessは一般にはidentity不一致等より後の条件であるため、log名だけを常に実拒否理由と解釈しない。
+今回の同一identity/job0/capture_not_ready/non-null readinessの条件ではstartの実拒否gateと対応する。
+
+source snapshotはhead470ca4fとdirty patch
+`0877b0653f146369639c649e02feaaf17db73dacb7bbaadd4793f0a68abbae85`、新header6f1cb466...を含む
+provenance JSON `7ef8fa1229341e986da747a85a6a3cd1eee4a62c91c595941d3b8fa6981c2bfd`で固定した。
+既存arm64 image/SDK、networkなし、CPU2/memory2GiB、private出力でReleaseをcompileし、
+media_worker/api_server/complete_pcm_session/player_daemonの対象4/4が成功した。
+CMake install/CPackと正本artifact検査で全payload/Release profileを照合し、前後のsource一致を確認した。
+private総量約2.49GBで予算4GiB以内、download/SDK build/Pi compileはない。今回は全72試験の再実行はしていない。
+package SHA-256は`c7e1e38b74b8ff9154c746557e6b71c9b3df494d04d3c2281e93e3e89cbb3a3a`（60,301,336 bytes）、
+daemonは`e176151f2a3c9dd97dec6b994ff88331548fcb5439eb5460646795254c49634a`。
+
+05:27:12 UTCにSTOPPED/AUDIO_READY・offset null/NONE・job0/解放済みと既存journal読取権限を確認した。
+Piのprivate `picdplayer-decision-20261026`へ直前package007bb864...と設定を保全してから正本toolで通常配備した。
+active service維持・実WPE起動を確認し、候補identityも後続で照合した。新sudo権限は不要だった。
+
+### 有限の拒否専用試験
+
+offset未指定を負の安全条件として固定し、現在identity/profile/duration10000を使ったvalid startを6回だけ診断入力した。
+これは実取得の自動再試行ではなく、どのgateで拒否されるかを測る固定実験で、offset0や取得gate緩和は一切ない。
+各入力前にSTOPPED・offset null/NONE・job0・busy false/reader released/inflightなし/受理frame/bytes0と同一identityを検証した。
+guardはfake入力で0/非0 offset・busy/jobありを拒否することを先に確認した。
+順序はA/B/C/C/B/A。Aはfresh socketへheader/bodyを一つのsendall、Bはfresh http.client、
+CはGET後の同じsocketを再利用した。TCP segmentの境界を一つに保証した実験ではない。
+1標本3秒/全体30秒未満・最大6POSTと14GETの固定予算で、idle待ち/phase targeting/適応的retryは行わなかった。
+
+05:29:19.272～.648 UTCの6POSTは全て409/capture_not_readyで、約0.6秒で終了した。
+同PIDの判定log6件は順に、最初の4件（A/B/C/C）がoffset_unknown/IDLE、最後の2件（B/A）がmedia_busy/RUNNINGだった。
+5件目では直前GETはIDLEであったが、POST判定contextはRUNNINGであり、GETとPOSTの間の実状態差を確認できた。
+追加のsaved-log照合で6要求/6判定・固定順・全409・abort/skipなし・終了job0をassert確認した。
+request IDによる相関ではなく同PID/同window内の順序対応で、同時の別startがないことを前提とする。
+独立reviewはこの条件下のgate解釈に問題なしとしたが、ordinal相関と少数標本の限界を指摘した。
+
+結論: このrunの2POSTは実際のmedia busyで拒否され、4POSTはmedia idleを通過してoffset未指定で拒否された。
+POST全般が必ずbusyになること、特定HTTP送信方式だけが原因であることは支持されない。
+固定順と時刻は交絡しており、transport効果/占有時間率/過去runの判定瞬間を断定しない。
+別途source監査ではLWS service前のcancel wakeupは既にあり、単純なtimeout0ブロックは今回の根拠にならない。
+headersだけを処理してbody completion前に新pollが入る窓は存在するが、今回それが原因だったとまでは証明していない。
+
+### 安全な終了と次の境界
+
+05:30:37 UTCはSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0/受理frame/bytes0・解放済み、
+REPEAT要求/実効・pending=false・背景ON/saved。設定fileはbackupとbyte一致した。
+daemon PID46730/kiosk PID46755はactive/running・NRestarts0、HTTP JS48749538.../CSS3d418784...を保持した。
+新package/daemon hashは上記と一致し、直前の限定helper/ruleは撤去されたままだった。
+start診断6回/受理0/cancel0/play0、音声/画面/実取得/取消/実reader解放/再生復帰は未確認。
+
+offset0での実取得へ進むには、現binaryに固定した限定helperの対話sudo設置が必要である。
+privateに同じobserve/offset0/restore/cleanupの4操作sourceとbootstrapを準備/転送したがroot設置はしていない。
+helper SHA-256 `88463a08db4ab81017b92b249f800318838360dcf07d40f26b0c57936d78168b`、
+rule `4d5f02380120b3373e32b02d3737f8952cf01d7e030d7fbbead0b49a5a0dfe98`。
+対話認証の代替やsudoers迂回は行わず、この手順待ちで取得実行は保留する。
+source/記録/AGENTS変更は未commit・未push、private候補/log/helperをrepositoryへ含めていない。
+
+## PR #256 調停修正版の通常配備（2026-10-25）
+
+利用者の継続指示後、package化前に利用制限で中断し、23:15 UTC台の再開指示を受けた。
+保存worktreeはhead470ca4f・既存変更14 tracked fileと新header1件で、diff/logは保全されていた。
+動作中のbackground processはなく、Release/Debug各72/72・反復・負例のlogを現物で再照合した。
+live PRもhead470ca4f・OPEN/Draftのまま。利用者は実機利用可能・接続変更なし・操作中ではないと再確認した。
+23:19:37 UTCのread-only観測はSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0/解放済み・
+REPEAT/pending=false・背景ON/savedだった。旧配備db169795.../9da29d35...とactive service/NRestarts0を確認した。
+
+旧候補/SDK/生成物を残し、private Arbitration領域へ正本toolをbyte一致でコピーした。
+sourceはHEAD `470ca4f63bb60f908d786a82feb035b7ff5a0478`、dirty patch
+`62b365d27729c53dc67090ff98c7e0bf51dbee7b545b1f55c6808d0cb9c50efb`で固定した。
+未追跡`include/player_media_dispatch.hpp`も別のsource-extraへ保存し、SHA-256
+`6f1cb466b219c152e40249d4943c126702b1abbaaf7f6843a21f5d415f2b8179`を確認した。
+355 tracked fileと新headerの内容/modeを含むprovenance JSONは
+`4063208e8bf332cb94694267bd82a9dcc434719ec5347a58ebefb339016116da`。
+package作成前後に同一性を確認したsnapshotであり、以後の記録追記やCI成果物とは区別する。
+
+既存image/SDK・source/SDK read-only・networkなし・CPU2/memory2GiBで、CMake build/installとCPack、
+正本release-artifact.py/package_profile.pyを実行した。全22 payloadとstage、Release実CLI、依存同一性を検査した。
+SDK/imageのdownload/rebuildやPi compileは行わず、private保存総量は1,910,696,910 bytesで4GiB予算内だった。
+候補は60,300,644 bytes、source_dirty=true/publication=not-approved/hardware_verified=falseを保持した。
+package SHA-256は`007bb8642b32eb8027a524f39af39722ed2a873f73abdebb685bd5a5efba8ca8`、
+daemonは`2ecbcf92e38192c4847fe472110f39155563e5ab933d5bf0751e18e673c76869`。
+
+23:24:02 UTCに再びSTOPPED・capture IDLE/job0/解放済みを確認し、Pi上のprivate
+`picdplayer-arbitration-20261025-LYklke`へ旧package db169795...と設定を非上書き保全した。
+正本deploy toolの無変更コピーで通常配備し、active service維持と実WPE起動を確認した。
+配備後にpackage/daemon hash、設定fileのbackupとのbyte一致、HTTP JS48749538.../CSS3d418784...を照合した。
+
+23:26:11 UTC台からoffset未指定のまま10秒・83標本をread-only取得した。
+IDLE61/RUNNING22、拒否理由はoffset_unknown61/media_busy22で、PENDING/RESULT_PENDING/UNKNOWNは標本に現れなかった。
+これは有限標本であり未観測状態が存在しない保証でも、旧runとの因果的な改善率比較でもない。
+全標本job0/受理frame0、取得/取消/再生のPOSTは各0回。取得を予約/再試行していない。
+観測後もSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0・busy=false/reader_released=true・
+call_inflight=false/waiting_for_access=false/accepted frames/bytes0・外部照合NOT_CHECKEDだった。
+REPEAT要求/実効・pending=false、背景ON/saved、daemon PID44932（23:25:09 UTC起動）・
+kiosk PID44975（23:25:10 UTC起動）はactive/running・NRestarts0。温度58.534度を終了時点で観測した。
+
+このrunでoffset/既存引数/権限を変更せず、新たなhelper/ruleも設置していない。
+音声/画面/物理入力、修正版での実開始・競合率改善、取得/取消/取得reader解放/再生復帰は未確認のまま。
+旧package/設定とhostの候補/provenance/logはprivateに保持し、source/記録は未commit・未pushである。
+
+利用者はこの配備版での単発取得試験を別途承認した。新daemon2ecbcf92...へ固定した同じ4操作の
+限定helperをprivate準備/転送し、構文/hash/元引数保持を確認した。
+helper SHA-256は`3d9af36b3344acbb925a2d5dac06c098afc4103ffa9f93ea120313f86340f901`、
+ruleは`e81860ebb925fe66e6755c4d816163b3067f2cfb01c219f2fac88711e3995f77`。
+この時点は利用者の一度の対話sudoによる設置待ちで、offsetは未指定、取得POSTは0回のまま。
+受理時だけ2秒以内の取消/最大10秒の解放待ち、拒否時は再試行せず復元し、音声/画面は未確認として扱う。
+
+利用者の対話sudoで専用ruleの構文とhelper初期化が成功した。23:37:55 UTCにroot所有/mode/hash、
+限定observe成功（旧PID44932・drive FD0/race0）、温度59.072度・throttled flags0x0を確認した。
+元設定をprivate before-trialへ保全し、helperで明示offset0だけを追加、通常daemon/kiosk再起動を行った。
+0は校正値ではない。API再生は受理/解放後の別合図まで送らない条件を保持した。
+
+23:38:34.922 UTCの前状態はSTOPPED/offset0・capture IDLE/job0/解放済み、media_activity RUNNING/media_busy、
+PID45530のdrive FD0/race0だった。clientの別GETを予約とはせず、ownerが全gateを再評価する明示startを1回だけ送った。
+23:38:34.953 UTCにHTTP409/capture_not_readyで拒否され、同34.975 UTCのGETもRUNNING/media_busyだった。
+job0/受理frame0のままで、cancelや再試行は送らなかった。今回の前後の観測は既存media処理との競合と整合し、
+修正対象である「新しい定期pollより先にready要求を処理すること」が失敗したとは判定できない。
+POST判定瞬間の内訳は応答に含まれないため、原因や受理率改善をこの1要求で断定しない。
+実取得・取消・取得reader解放、2秒取消/10秒解放waitの実機正例は引き続き未検証。
+
+拒否時終了の合意どおり、元のoffset未指定へ復元し通常daemon/kiosk再起動を行った。
+23:40:32 UTCの終了確認はSTOPPED/track_number1/position_frames0/AUDIO_READY・offset null/NONE、
+capture IDLE/job0・busy=false/reader_released=true/call_inflight=false/waiting_for_access=false・accepted frames/bytes0・
+media_activity IDLE/start_rejection offset_unknown/外部照合NOT_CHECKEDだった。
+REPEAT要求/実効・pending=false、背景ON/saved、設定fileのbefore-trialとのbyte一致を確認した。
+終了FD0/race0は未取得の基線であり、取得readerの解放正例にはしない。
+専用helperのcleanupで今回のhelperとruleだけを撤去し、両path不在を確認した。private backup/code/logは保持した。
+package007bb864.../daemon2ecbcf92...・HTTP JS48749538.../CSS3d418784...を維持した。
+daemon PID45758/kiosk PID45789（23:39:59 UTC起動）はactive/running・NRestarts0、温度61.224度・flags0x0を観測した。
+start POST1回/受理0・cancel0・play0で終了し、音声/画面/物理入力と取消後再生復帰も未確認である。
+今回のsource/記録は未commit・未push、master/PR状態/Issueも変更していない。
+
+## PR #256 明示要求優先の調停（2026-10-25）
+
+利用者はキュー方式の検討に対し、既に届いた明示要求を新しい定期pollより優先し、
+busy中のstartは予約せず拒否する推奨方式の検討/実装を指示した。
+head470ca4fと既存の診断/実機記録差分を保持し、保存worktreeだけで実装・検証した。
+この作業ではPi接続・配備・取得/再生再試行・権限/設定変更・commit/pushを行っていない。
+
+### 実装範囲
+
+内部`player_media_dispatch.hpp`の本番調停を実ownerと回帰で共有し、テスト側だけの順序再現を避けた。
+既存のmedia結果適用・TOC/世代更新・engine失敗反映は移動せず、API serviceとcapture poll/confirmの後に
+期限到来の新しい定期observeだけを投入する。取消がconfirmより先という順序も維持する。
+投入可否はAPI後のdevice退役/現在性・capture busy/実解放・probe完了・PLAYING・eject待ち/実行中から再取得し、
+loop冒頭のcached may_access_deviceは流用しない。次回期限はservice後の時刻+500msで、抑止/受付不可でも進める。
+probe/TOC/既存pending eject/speed/idle stopは従来の順序であり、実行中/受付済み/未回収結果を破棄しない。
+開始gate、POST/manifest、per-call coordinator、slot数、予約/自動再試行の禁止は変更していない。
+既存処理が残る時やservice後に届いた要求はなお409になり得る。GETはidle窓を予約しない。
+
+### 回帰と検証
+
+- 実MediaWorker/CompletePcmSessionと共有coordinatorで、定期poll期限とready startが同じowner phaseに揃う条件を作った。
+  start受理後は定期observeが未実行なだけでなく、pendingとしても投入されないことを確認した。
+- readをblockしたcaptureの取消後もbusy/unreleased中はpollなし、reader破棄/実解放後だけ定期pollが再開する。
+  cleanup単体を別gateでblockした試験ではなく、worker側の既存close/consumer cleanup回帰と組み合わせた検証である。
+- 未回収結果での拒否、結果回収後の自動startなし、適用したno-discによる新要求拒否を確認した。
+  fake clockでAPI後の時刻/可否、非期限時もserviceすること、GETがpollを抑止/予約しないことを確認した。
+- 最初のcompileはfixtureのApiCommandResult初期化/cancel interface誤用で失敗した。
+  logを残し、既存の型/command enum/session.cancelへ訂正した。本番APIを試験に合わせて変更していない。
+- 既存image/SDK・networkなし・source/SDK read-only・CPU2/memory2GiB・private出力で、
+  今回の調停差分を含む標準WPE Release 72/72、Debug 72/72が成功した。
+  media_worker/complete_pcm_sessionの同じ2試験は両profileで各30回反復して成功した。
+- API/metadata/WPE無効のDebugもdaemonと共通workerをcompileし、media_worker/NO_DISC daemonの2/2が成功した。
+- private cloneでpollをserviceより先に戻す負例、API前の古い可否を保存して使う負例は、
+  それぞれcompile成功後に新しい2試験が失敗した。負例後の正の3対象再実行は3/3成功した。
+- 独立read-only reviewに追加指摘なし。回帰は実際の調停関数を呼ぶが、service/可否callbackと
+  no-disc適用はfixtureが供給するため、実player loop全体をhardware置換して実行した証拠ではない。
+
+詳細設計/API契約/integrity仕様を実装の順序に同期した。
+既存候補package/stage/logを保持し、private作業buildだけを増分更新した。SDK/imageのdownload/rebuildはない。
+この優先順変更は未package・未配備・未commit/未pushであり、最後に配備したdb169795.../9da29d35...には含まれない。
+実機での開始成功・競合率改善、取得/取消/取得reader解放/再生復帰、音声/画面は未確認のままである。
+
+## PR #256 診断版配備とmedia activity観測（2026-10-25）
+
+利用者は再生操作は可能だが音声確認はできないとして継続を指示した。
+09:01:39 UTCのread-only再確認はSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0・
+busy=false/reader_released=true/call_inflight=false/waiting_for_access=false・accepted_frames0だった。
+REPEAT要求/実効・pending=false・背景ON/saved、service active/running・NRestarts0を確認した。
+この時点の旧配備にはmedia_activity fieldはまだ存在していなかった。
+
+検証済みRelease buildからCMake install/CPackと正本release-artifact.py/package_profile.pyを使い、
+新しいprivate Diagnostic領域で候補を作成した。既存build/stage/package生成物は上書きしていない。
+標準WPE/Release・sourceとSDK read-only・networkなし・CPU2/memory2GiB、既存image/SDKのみで実施した。
+候補作成後のprivate保存総量は1,219,971,757 bytesで4GiB予算内。download/SDK再build/Pi compileは行っていない。
+
+未commit sourceはHEAD `470ca4f63bb60f908d786a82feb035b7ff5a0478`とdirty patchで固定した。
+patch SHA-256は`acea405827829fa77514c473dbc4cf252607ceb538f19d7ecc04935c6e121743`、
+355 tracked fileのhashを含むprovenance JSONは`a7e057dbc4f21134093536aa0afb90e4396a1efbc963cd2986019011ed1c3c73`。
+作成前後に一致を確認し、canonical manifestはsource_dirty=trueとした。新headのCI成果物とは扱わない。
+これらはpackage化時点のsnapshotであり、以後の検証記録追記まで含む現在のdirty tree全体とは区別する。
+候補は60,301,092 bytes、package SHA-256は
+`db1697956a5c75aa629fff91d4a9098c29edbad603c6f62b6cead149e242c60c`、
+daemonは`9da29d35a5e66e405a710e6a7057695d7a0b13806bbbd872ae07d9cfe8eed15e`。
+全22 payloadがCMake stageと一致し、Release実CLI profileと旧配備版とのDepends同一性も確認した。
+
+09:13:42 UTCに再度STOPPED・capture IDLE/job0/解放済みを確認し、Pi上のprivate
+`picdplayer-media-diag-20261025-LYklke`へ直前package51723eb1...と設定を非上書き保全した。
+正本deploy toolのbyte一致コピーから候補を通常配備し、active service維持と実WPE起動を検証した。
+配備後のpackage/daemon hash、HTTP JS48749538.../CSS3d418784...、設定fileのbackupとのbyte一致を確認した。
+offset変更・取得/取消・再生のPOST、新たなroot helper/ruleの設置はこのrunでは行っていない。
+
+09:16:31 UTCから10秒のread-only観測を行い、83標本でIDLE59/RUNNING23/RESULT_PENDING1を得た。
+media_busyは24標本、offset_unknownは59標本、PENDING/UNKNOWNは0標本だった。
+全標本job0/accepted_frames0で、取得を予約していない。標本間隔はsleep約100ms＋HTTP約15-26msであり、
+件数比を連続した占有時間比と解釈しない。RUNNINGは約500msの媒体確認周期と整合する。
+恒常的なbusyではなくidle窓があることと、結果回収待ちも実機で一度観測できた。
+operation種別や実driver I/O時間はfield単体では断定せず、過去の失敗時点のphaseを遡って確定もしない。
+
+09:25:35 UTCの終了GETはSTOPPED/AUDIO_READY・offset null/NONE・REPEAT要求/実効/pending=false・背景ON/saved、
+capture IDLE/job0・busy=false/reader_released=true/call_inflight=false/waiting_for_access=false・accepted frames/bytes0、
+media_activity=IDLE/start_rejection=offset_unknown/外部照合NOT_CHECKEDだった。
+daemon PID42414/kiosk PID42440は観測中active/running・NRestarts0。直前packageと設定のprivate backupは保持した。
+音声・画面/物理入力・実PCM受理/取消/取得reader解放/その後の再生復帰は未確認のままである。
+候補/provenance/code/logはrepository外、sourceと記録は未commit・未pushで保全している。
+
+利用者は次に単発start API試験へ進むことを明示承認した。別の事前GETだけで無送信終了する方式ではなく、
+既存ownerが全安全gateを再評価する明示startへ1回だけ渡し、拒否時は終了、受理時だけ早期取消/解放待ちを行う。
+backend gateの緩和、開始予約、自動再試行は追加しない。音声は未確認、再生は解放後の合図まで実行しない。
+新binary固定の4操作helperをprivateに準備/転送し、source hash/構文/元引数保持を確認した。
+helper SHA-256は`4478527af71e4cff43a77cf478e6ecbd07d40c292b397f6d4f51d59b715eb675`、
+ruleは`8266e4c25819eca2acd0427d32abba587674c465279fcfeb08aa353400ea6871`。
+設置は利用者の一度の対話sudo待ち。この時点ではoffset未指定のまま、start/cancel POSTは0回である。
+
+### 単発owner API試行と復元
+
+利用者の対話sudoで専用helper/ruleの設置が完了した。今回は専用ruleのvisudo構文だけを検証し、
+既知の既存deploy ruleのmode不整合を修正したり全体検証成功と扱ったりしていない。
+09:50:26 UTCにhelperのroot所有/0755/hashと専用rule0440・限定observeの成功を確認した。
+設定をprivate `config.before-trial`へ保全し、温度60.148度/throttled flags0x0を観測した。
+元引数を保持してhelperでoffset0だけを一時追加し、通常daemon/kiosk再起動を行った。
+
+承認された新手順では、read-only GETのcan_startやFD基線で開始を予約せず、通常再生STOPPED・AUDIO_READY・
+明示offset0・capture未開始/解放済み・profile一致を確認した上で、全安全gateを再評価するownerへstartを一度だけ渡した。
+既存worker admissionやmedia_idle条件を緩めたのではない。
+09:51:52.858 UTCの前状態はIDLE/job0・media_activity RUNNING/media_busy・FD0/race0だった。
+09:51:52.889 UTCにstartのHTTP409/capture_not_readyを受け、再試行もcancelも送らず終了した。
+約24ms後のGETはIDLE/job0・media_activity IDLE/can_start=trueだった。
+短いmedia処理との競合と整合するが、POST応答には判定瞬間のactivity内訳はなく、そこを遡って断定しない。
+このrunのstart POSTは1回、受理0回、cancel POST0回、job0/受理frame0のままである。
+実取得・取消・取得reader解放は未検証で、期限/取消/解放wait部分も実行していない。
+
+拒否時終了の合意に従いoffset未指定へ復元して通常再起動し、09:55:49 UTCにnull/NONE・STOPPED・
+capture IDLE/job0/解放済みと設定fileのprivate before-trialとのbyte一致を確認した。
+専用helperのcleanupで今回のhelper/ruleだけを撤去し、両path不在を確認した。保全物は保持している。
+
+### 通常API再生確認の手順不備
+
+利用者は、取消後復帰とは別の診断版通常再生について5秒のAPI進行確認を承認した。音声は確認不可。
+10:00:38.613 UTCのPOST /api/playは204で受理されたが、観測scriptが誤って202を期待して例外となり、
+その分岐で所有flagを解除したため予定のfinally STOPへ進まなかった。これは製品側APIの不具合ではなく試験手順の誤り。
+再生を再要求せず、10:01:31.506 UTCにPLAYINGを観測して承認済みSTOPを一度送信した。
+10:01:31.525 UTCのSTOP204、10:01:31.820 UTCのSTOPPEDを確認した。
+したがって予定5秒に対し約53秒のPLAYINGとなり、試験時間を逸脱した。成功扱いにせず、この失敗とlogを保持する。
+
+さらにscriptが内部serializerのplayer.track/position_lbaを参照していたため、null値を進行不能の根拠にしてはならない。
+公開契約はplayer.track_number/position_frames/track_duration_framesであり、進行測定自体が未成立だった。
+追加再生は行わず、privateな修正版で204の受理・公開field参照・観測例外時にもSTOP一度となることをfake APIだけで確認した。
+修正版をPiで再実行したという主張はしない。音声・実進行・取消後再生復帰は未検証である。
+
+10:06:20 UTCの最終確認はSTOPPED/track_number1/position_frames0/AUDIO_READY、offset null/NONE、
+capture IDLE/job0・busy=false/reader_released=true/call_inflight=false/waiting_for_access=false・accepted frames/bytes0・
+media_activity IDLE/start_rejection offset_unknown/外部照合NOT_CHECKEDだった。
+REPEAT要求/実効・pending=false・背景ON/saved、設定byte一致、helper/rule両path不在を再確認した。
+package db169795.../daemon9da29d35...・HTTP JS48749538.../CSS3d418784...を維持した。
+daemon PID43340（09:54:46 UTC起動）/kiosk PID43370（09:54:47 UTC起動）はactive/running・NRestarts0。
+温度61.762度/throttled flags0x0を終了時点で観測した。取得start1回/受理0・cancel0・通常play1/stop1で終了し、追加試行していない。
+source/記録は未commit・未pushであり、master/PR状態/Issueは変更していない。
+
+## PR #256 media_busy監査と診断差分（2026-10-25）
+
+利用者は手動再生開始は正常と報告し、離席中のsource監査と必要な修正を依頼した。
+この申告は通常再生経路の情報であり、取消後の復帰や音声/画面の正例とは区別する。
+監査基準は保存worktreeのhead470ca4fと既存記録差分。離席後はPi接続・配備・取得再試行・
+権限/設定変更・commit/pushを行っていない。08:42 UTCの中断後再開でも同じhead/差分と検証logを再照合した。
+
+### 監査結果と最小診断修正
+
+MediaWorkerのidle条件は実行中/受付待ち/未回収結果が全てないことであり、FDが閉じた後でも結果が残ればfalse。
+main loopは500ms間隔の媒体確認をAPI処理より前に要求し、結果回収後にAPIを処理する。
+worker完了とowner結果回収の時点差はあるが、mutex下で未回収結果をidleへ誤変換する破綻は見つからなかった。
+通常再生は同じmedia idle admissionを要求せずcoordinatorで直列化するため、再生成功と取得用media_busyは両立する。
+GET /api/complete-pcmは要求時のcontextを評価し、POSTも再評価する。GETの成功は予約ではない。
+永久的な開始不能、workerの排他/取消/解放破綻、drive故障はsourceと既存証拠からは立証できなかった。
+API前の新しい定期pollがidleを消費する経路はあるが、今回の実機ではPOST自体が未送信であり、
+それを根本原因と断定してschedulerを変更するだけの証拠はまだない。
+
+診断不足に対する最小差分としてread-only statusへ`media_activity`を追加した。
+IDLE/PENDING/RUNNING/RESULT_PENDINGを一回のmutex観測で取り、ownerは同じ値からmedia idle gateと説明値を作る。
+内部callerが内訳を供給しない場合はUNKNOWN。RUNNINGはcoordinator待ちやcallback前後も含む。
+元のidle判定（!busy && !pending && results.empty）、schema version、POST契約、result manifest、
+開始/取消、定期pollの順序/頻度、実I/Oは維持し、開始予約や自動再試行を追加していない。
+IDLEは他gateの充足や実FD/driveの所有の保証ではない。この診断差分は未配備であり、
+最後に配備確認したRelease package51723eb1.../daemon35edfaf7...には含まれない。
+
+### 回帰と負例
+
+- gated fake callbackと実MediaWorkerでRUNNING、callback終了後のRESULT_PENDING、pop後のIDLEを区別した。
+  fake deviceが閉じた後も結果回収前はidle=false/次request拒否となる。固定sleepを状態成立の証明にはしていない。
+- 実MediaWorker/CompletePcmSessionと共有coordinatorでowner drain後の未回収結果からmedia_busyを再現し、
+  capture factory/probe/job0のまま拒否、結果回収後もpoll/GETだけではjobが始まらず新しい明示startだけ成功することを確認した。
+- admitted captureのfake readをblockしたままmedia idleを失わせ、cleanup前はbusy/unreleasedを保持し、
+  cleanup後も結果非公開・idle復帰による自動再開なしを確認した。
+- 既存NO_DISC実daemon試験で、実ownerがUNKNOWN以外の新fieldを供給し、取得拒否を維持することも確認した。
+- private build cloneで未回収結果をIDLEへ変えた負例はcompile成功後に2試験が失敗し、
+  取得中のmedia競合失効だけを外した別負例もcompile成功後にsession試験が失敗した。
+  正のworktree/buildは変更せず、負例後の正の3対象再試験は3/3成功した。
+
+### Linux/aarch64検証と未確認
+
+既存image035cc877...とWPE SDK2.54.0を使用し、source/SDK read-only・networkなし・CPU2/memory2GiBで、
+private `pr256-media-audit-20261025.LYklke`へ標準WPE Release/Debugを別々に構成/buildした。
+既存build/stage/package/SDK生成物は変更せず、SDK/imageのdownloadや再buildもしていない。
+最初のRelease全回帰は71/72で、build_profileだけがcached imageのNinja欠如により前提不足で失敗した。
+既存profile検証imageから実Linux arm64 Ninja1.12.1をprivateへコピーし、architecture/hash/実行を確認して
+元imageへread-only供給した。試験をskip/緩和せず、元の失敗logも保存した。
+最終的に今回差分を含むRelease 72/72、Debug 72/72が成功した。
+media_worker/complete_pcm_sessionの同じ2試験は両profileで各30回反復して成功した。
+独立したread-only reviewでも実装/負例の追加指摘はなかった。未変更箇所のmissing-field-initializers警告は残る。
+出力/正負build/logの保存量は中断前の標本638,113,649 bytesで計画した4GiB未満。補助toolとlogはrepository外に保持した。
+再開後、共有component回帰の結果がcontextと同じobservation世代であることを明示した。
+最初はrequestの引数数を誤ったfixtureでcompile失敗したが、そのlogを残し、既存のinvalidate(generation)と
+request(work)へ訂正した。本番のrequest interfaceやgateは変更していない。
+この最終fixtureでもRelease/Debugを再compileし各72/72・境界2試験各30回反復・両負例の期待した失敗を再確認した。
+再開後のdu標本は637,516 KiBで同じ予算内。不要な再download、既存生成物の削除、実機操作は行っていない。
+今回のsource・回帰・契約・設計・検証記録は未commit/未pushである。
+全てhardware非依存の検証であり、実機の新field観測・根本原因特定・取得/取消/実reader解放/再生復帰は未検証のままとする。
+
+## PR #256 Gate C実機試行と復元（2026-10-25）
+
+今回の結論は、Release候補配備と明示offset0の適用/未指定への復元は確認できたが、
+2回の利用者合図後の直前確認がmedia_busyで止まり、取得POST0回/取消POST0回だった、である。
+実PCM受理・取得readerの取得/取消/実解放・その後の通常再生復帰は未検証のまま残す。
+画面/物理リモコンは後回し、音声も確認不可の枠であり、これらを成功扱いにしない。
+
+### 限定権限の設置確認とRelease配備
+
+利用者の対話sudoで専用helperの初期化と専用ruleの構文検証は成功したが、bootstrapの全体visudo検証は
+既存`picdplayer-deploy`のmode警告で停止した。bootstrapを再実行せず、read-onlyで状態を確認した。
+専用helperはroot/root・0755・既知hash、専用ruleはroot/root・0440で、限定observeは実行成功した。
+既存deploy ruleはroot/root・0640であり、変更していない。全体visudo検証は未成功のまま区別する。
+当初設定と旧Debug packageは未変更で、PID38060のdrive FD0/race0を独立に観測できた。
+
+01:33:02 UTCにSTOPPED/AUDIO_READY・capture IDLE/job0/解放済み・FD0/race0を再確認した。
+温度60.686度、vcgencmd throttled flags0x0だった。
+正本deploy.sh/package_profile.pyのbyte一致コピーをprivate stagingから実行し、
+既存containerでのRelease profile検査、候補upload/dpkg、active service維持と実WPE起動を確認した。
+元のpackage-container/Debug生成物は変更せず、新規build/downloadも行っていない。
+sourceは候補merge commit `24c5485366d06abe01f11254db1491b0eee1fc4b`、旧基準ec9fe964と同じtreeであり、
+現在head470ca4fの全source treeから作ったpackageとはしない。
+
+01:34:43 UTCの照合で、配備packageは
+`51723eb11b10dd942c9bb049e76632d4fe0d4d828acbe7231c75795d710b394c`、
+install先daemonは`35edfaf78bd60cdbac322b73213355d9b34f216bcc004e3cd99f93e64c5968ba`で一致した。
+HTTP JS `48749538...`/CSS `3d418784...`、REPEAT要求/実効・pending=false、背景ON/savedを保持し、
+設定fileはprivate backupとbyte一致した。helper観測対象は新daemon PID40393へ移っていた。
+この時点のmedia_busy/drive FD1は通常media処理もあるため、取得readerの観測とは扱わない。
+
+### 一時offset0と未送信の直前確認
+
+限定helperで元引数を保持したまま明示offset0だけを追加し、通常daemon/kiosk再起動を行った。
+01:35:49 UTCのAPIはSTOPPED/AUDIO_READY、offset0/USER_CONFIGURED、capture IDLE/job0、
+REPEAT/pending=false・背景ONを示した。0は校正済み値とは扱わない。
+この時点はmedia_busy・PID40731のdrive FD1であり、開始要求は送らなかった。
+
+開始を予約しない8秒上限のread-only観測を行い、01:37:01 UTC台の最初の標本で
+can_start=true・拒否理由なし・同PIDのFD0/race0・capture解放済みを観測した。
+利用者の合図後、01:46:18 UTCの直前確認はmedia_busyだったためguardで停止した。
+そのときFD0でもownerのmedia_idle不成立を無視せず、start/cancelは各0回だった。
+再びread-onlyで01:47:38 UTC台にcan_start=true/FD0/race0を観測し、その後の利用者は
+追加の手動要求を1回だけ、再度不成立なら復元終了する条件を承認した。
+02:05:14 UTCの直前確認もmedia_busy・FD0で、2回目もstart/cancel各0回のまま終了した。
+API202、job作成、取消時刻、実受理frame、取得reader解放の正例は一つも得ていない。
+観測窓の成立と後の要求直前の成立は別時点であり、前者を後者の保証にしてはならない。
+read-only標本はAPI→FDの順、直前guardはFD→state API→取得statusの順で、各標本全体に約0.66-0.72秒かかっている。
+同一時刻の原子的観測ではなく、この順序/時点差の影響も未確定の診断点として残す。
+予約・自動再試行・取得gateの緩和は行わなかった。
+
+privateな一回限りのscriptは10秒job/早期取消/有限解放待ち用だったが、実行は両回とも
+preflightで止まっており、取消/解放待ち部分の実機動作は未検証である。
+1回目のcode/logを保全した上で、2回目は別logへ保存した。root観測の実測時間を踏まえた
+観測timeout調整も行ったが、開始gate・2秒取消上限・POST回数制限は変更していない。
+生PCM、外部照合、予約jobや自動再生は追加しなかった。
+
+### 復元と終了状態
+
+合意どおりこれ以上試さず、限定helperで元のoffset未指定へ戻し、通常daemon/kiosk再起動を行った。
+02:07:50 UTCの最終APIはSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0・
+busy=false/reader_released=true/call_inflight=false/waiting_for_access=false・accepted frames/bytes0・
+offset_unknown/外部照合NOT_CHECKEDだった。
+REPEAT要求/実効・pending=false、背景ON/saved、HTTP JS `48749538...`/CSS `3d418784...`も維持した。
+daemon PID41322（02:06:33 UTC起動）・kiosk PID41352（02:06:34 UTC起動）はactive/running・NRestarts0。
+live offset指定0組、custom-ui一組、設定file全体のprivate backupとのbyte一致を確認した。
+温度62.300度、throttled flags0x0をこの終了時点で確認した。連続した温度/電源監視の保証ではない。
+終了FD1は通常mediaアクセスがあり得る基線として保持し、存在だけで取得readerとはしない。
+
+Release package `51723eb1...`/daemon `35edfaf7...`を維持し、旧Debug package `dd1b0c54...`のprivate backupも保持した。
+専用helperのcleanupで、自分のroot helperとsudoers ruleだけを撤去し、両path不在を確認した。
+root/userのprivate backupとcode/logは保持し、既存deploy ruleの0640警告は別課題として変更しなかった。
+取得/取消/再生のPOST合計は全て0回。音声、TV、物理入力、取消後の再生復帰は未確認である。
+今回の実機事前確認・権限手続き・利用者応答待ちは当初の短い枠を超えたが、取得jobは開始していない。
+新head470ca4fのCI run40148726750は終了時のmetadata再取得でSUCCESSだった。実機試験や旧候補の証拠とは別にする。
+
+次の診断点は、周期的media処理・公開can_start snapshot・要求直前の時点差を有限の同runで照合することである。
+FD0だけをmedia_idleやplayback解放の保証へ昇格させず、開始予約/自動再試行で回避しない。
+今回の記録は新たな未commit差分であり、追加commit/push・master統合・PR ready/merge・Issue closeは行っていない。
+
+## PR #256 Gate C事前確認と権限待ち（2026-10-25）
+
+利用者は画面/物理リモコンなしでの取得試験を依頼し、候補Release配備・既存sudoによるPID限定FD観測・
+一時offset0・10秒jobを一度/遅くとも2秒で一度取消/最大10秒の解放待ち・元offset未指定への復元を承認した。
+音声確認はできないため、解放後の再生復帰は別の合図でAPI進行だけを確認し、音声成功は主張しない。
+画面/物理入力は後回しのままとする。
+
+headは`470ca4f63bb60f908d786a82feb035b7ff5a0478`・開始時clean、PR OPEN/Draftを再取得した。
+新headのCI run40148726750は確認時IN_PROGRESSで、旧CIの成功で代用していない。
+候補ZIP `1518a3c9...`/Release deb `51723eb1...`の現物hash一致と、既存arm64検証image
+`sha256:035cc877b414fcfe36f7e1f279f67653433e5cf877240d30d2cacbe401b4d90d`の存在を確認した。
+新規download/buildは行っていない。候補は引き続き旧基準ec9fe964と同じsource treeである。
+
+01:04:49 UTCの既存pin厳格照合read-only観測はSTOPPED/AUDIO_READY・offset null/NONE、
+capture IDLE/job0/busy=false/reader_released=true/call_inflight=false/waiting_for_access=false/accepted_frames0・offset_unknown。
+REPEAT要求/実効・pending=false・背景ON/saved、daemon PID38060/kiosk PID38105ともactive/running/NRestarts0だった。
+旧package `dd1b0c54...`/install先daemon `1137505a...`は不変。Piのhomeと/usr/localは約45.8GB空きだった。
+
+既存生成物`package-container/`のDebug packageは動かさず、private directory
+`pr256-gatec-exec-20261025.flreD6`内へ正本deploy.sh/package_profile.pyをbyte一致でコピーし候補だけをstageした。
+一時SSH wrapperは既存pinを強制し、container wrapperは既存image/pullなし/networkなし/rootfs read-only・
+CPU2/memory1GiB/tmpfs512MiBで検証する計画とした。正本配備script本体は変更せず、まだ実行していない。
+
+01:12:30 UTCからPiのprivate `picdplayer-gatec-20261025-flreD6`（0700）へ現在設定のbyteコピーと
+旧packageを0600で保全した。後続のread-only照合で設定backupとliveの一致、旧packageのhash一致を確認した。
+`sudo -n -l`のcommand照会は成功したが、実際の承認済みroot FD観測は失敗した。
+FD操作を再実行せずsudo policyをprivateに照合したところ、dpkgにはNOPASSWD規則がある一方、
+findによる診断とinstallによる設定更新/復元にはNOPASSWD規則がなかった。許可対象であることを
+非対話実行可能と誤認してはならない。別identity/認証迂回やsudoers変更は行っていない。
+温度/電源の確認はその後に予定していたが、この失敗でそこまで実行しておらず未確認。
+
+並行するhost側profile再検証も失敗した。正本validatorの同条件診断で、展開先/tmpのcdplayerd実行が
+PermissionErrorとなることを確認した。候補CLIは実行前に止まっている。
+mount情報は/tmpがrw,nosuid,nodev,noexecであり、wrapperでexecを明示しなかった一時領域の制約だった。
+候補破損や再build必須とは判定せず、exec許可を自動追加して再試行もしていない。
+既存CIのprofile成功・前日のoffline検査と、今回の実行未確認を区別する。
+
+この時点では候補をPiへ転送/配備せず、offset変更・service restart・取得/取消・再生操作も0回。
+old Debugと元設定を維持したまま、限定診断/設定変更の認証方法と検証tmpfsのexec許可を再確認する。
+helper/ruleの恒久追加や一般sudo権限の拡大は行わない。失敗・未実施を成功に変更しない。
+
+利用者は、一度の対話sudoによる一時限定helper/ruleの設置手順と、検証tmpfsのexecだけを明示承認した。
+networkなし/rootfs read-only/capabilityなし/CPU2/memory1GiB/tmpfs512MiBを維持してexecを明示したところ、
+正本package_profile.pyによる実CLI検証は成功し、build_type=Release/profile=Release/version=0.1.0を確認した。
+新規buildやdownloadは行わず、Pi/hostで候補binaryを直接実行していない。
+
+repository外に一時helper `picdplayer-gatec-flreD6`と固定4 commandだけのsudoers source/設置scriptを準備した。
+許可対象は対象PIDのFD read-only観測、固定offset0の追加、保全した元設定への復元、自分の許可/実行fileの撤去だけ。
+root所有の保全先・設定hash一致guard・STOPPED/取得解放guardを持ち、任意path/offset/commandは受け付けない。
+private backupは撤去後も保持する。helperはsource treeへ追加せず、root所有に設置するまで有効なsudo許可はない。
+helper SHA-256は`68d9274bfac2a84f5c1dd4bc45b5d7928248c05440e3545d6591dc34a228e495`、
+rule SHA-256は`d59c7651c24f5d4cb1e446cef92f51adb93dc03db569dc64c762789cea59e356`。
+helper/設置scriptの構文、引用付き元引数保持と既存0/非0 offsetの拒否をローカルで確認し、
+Pi上では転送hash一致と実設定形式の純粋変換だけを非rootで確認した。実設定は書き換えていない。
+利用者の対話sudoによる設置待ちであり、候補配備・offset0適用・取得/取消は引き続き未実施。
 
 ## PR #256保存点（2026-10-25）
 
