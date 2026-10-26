@@ -148,6 +148,27 @@ In particular:
 
 Prefer reversible changes.
 
+### Experimental Raspberry Pi authorization (2026-10-25)
+
+The user has identified the current Raspberry Pi target as an experimental
+machine and explicitly permits destructive target-side changes needed for
+investigation and hardware tests. If its environment becomes unusable, the
+user can recover it by reinstalling the system. This exception applies only
+to this identified experimental Pi, not to other targets or the development
+host, repository, worktrees, or preserved artifacts.
+Before applying this exception in a later session, verify that the target
+is the same authorized experimental Pi; do not infer that from a checkout
+or a network address alone. This is development authorization, not a product
+requirement for end users to set up SSH.
+
+Use the smallest justified intervention and record what changed, the test
+result, and whether restoration succeeded or reinstallation is needed.
+Reinstallation is a recovery option, not an instruction to wipe the Pi.
+Prefer normal cancellation and shutdown; forced termination or power loss
+must never be reported as successful reader release or playback recovery.
+Keep secrets private, retain host-side evidence, and do not infer permission
+to commit, push, merge, publish, or change unrelated systems from this grant.
+
 ## 8. Handling ambiguity and inconsistencies
 
 If the issue description, implementation, documentation, tests, or this
