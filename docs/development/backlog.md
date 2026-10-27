@@ -64,8 +64,8 @@ OS設定・SSH・手動service切替なしでPlayerへ至り、物理CDとTVリ�
 別branchの修正で、現行WPEや統合済みPR #244を再実装しない。今回の確認は
 [検証状況](verification.md)を参照し、実機受入・配備の成功とは区別する。
 PR #260でmaster `05a1a3e`へ統合された#257/#259は、PR #256にも取込済み。
-2026-10-26の利用者指示でPR #256をmasterへ反映する。統合状態は対応PRを正本とし、
-開始/取消/解放の限定確認と、受理PCM・指紋生成・音声等の未確認を分けて保持する。#238/#239はOpenを維持する。
+2026-10-26の利用者指示でPR #256をmasterへ統合した。統合状態は対応PRを正本とし、
+少量PCM受理・開始/取消/解放、27日の全域local指紋生成の確認と、音声・取消後再生復帰等の未確認を分けて保持する。#238/#239はOpenを維持する。
 
 2026-09-26の一覧を基に、2026-10-17にIssue・merge済み実装・設計・検証範囲を再照合した作業一覧。
 実装の契約は[設計書](../README.md)、実測・確認範囲は[検証状況](verification.md)、
@@ -110,7 +110,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | v1実装・代表確認を完了した統合単位 | #177/#178: 保存/実service復元とSettings表示/API回帰を完了し、承認済みPR/必須CI経由の統合で終了。物理受入は#252/#51、通常運転は#184に残す |
 | 利用者の実機操作待ち | #252: Player/Settingsの物理リモコン代表受入を一本化。#178/#51は同じrunを参照し重複試験しない |
 | V2以降・非blocking | #254: WPE失敗表示/復帰・DRM/child cleanup。#219のv1移行は完了し、独自の未完了復旧だけを移管。#250のIntegrity hardeningとは別所有 |
-| 機能開発の現単位 | #238/#239: local SHA-256と実session/API/Settings接続をPR #256でmaster反映対象とする。10月26日に実start/cancel受付・drive FD保持/終了・設定復元を限定確認したが、受理PCMは0で指紋生成/音声/再生復帰は未確認。#238/#239はOpenを維持し、配備・開始と取得完了を区別する。外部照合ではない |
+| 機能開発の現単位 | #238/#239: local SHA-256と実session/API/Settings接続はPR #256でmaster統合。10月26日の少量受理/取消に続き、27日の90分上限・単発試験で14 track/242334 CD frameの全域local指紋生成、解放、元設定復元を実機確認した。音声/取消後再生復帰は未確認で#238/#239はOpen。外部照合/cache独立性の証明とはしない |
 | 将来の機能・設計 | #19: quiet boot、#20: read-only root、#42: Custom UI更新。外部provider互換profile/通信は未採用 |
 | 正式供給・配布枠 | #45/#66/#67: release/license/package inventory、#220: v1.0供給精査。#46方式選定後の#47/#68と#69は保留 |
 | 追加研究保留 | #198/#199/#200: Buildroot。#74の調査は完了、採用は未決定 |
@@ -154,11 +154,11 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#109 Provide deterministic Integrity scenarios for Player UI review](https://github.com/udonchan/picdplayer/issues/109) | クローズ済みの親Issue。#110のtest-only `ScriptedCddaReader`と#111のlocal harnessにより、clean、retry、RECOVERED、UNCERTAIN、mixed map、read-ahead、状態遷移を通常のworker/API/Player asset経路で確認できる。production daemon/CLI/packageと実drive挙動は変更せず、実機異常mediaは#146で追跡する。 |
 | [#12 Add bounded provenance and diagnostic event recovery](https://github.com/udonchan/picdplayer/issues/12) | #35/#36の実装と#89/#90の追加検証をPR #86/#87/#94/#95で整備。Docker36/36成功。全子Issue完了によりClose済み。実機異常系は#146、通常系の継続運転は#184、性能測定は#83へ分離する。 |
 | [#13 Add optional external PCM verification](https://github.com/udonchan/picdplayer/issues/13) | Closedだがprovider/checksum/transportは未実装。PR #161は制約整理で、本文・未完了条件を機能完成とは読まない。MusicBrainz metadataはPCM照合ではなく、AccurateRipへの無許可アクセスは行わない。CTDBの全disc前提を部分再生で代用しない。#160の入力契約と実装・profile適合が全域照合の前提。再openやprovider採用は今回の対象外。 |
-| [#160 Define complete-disc PCM capture for external verification](https://github.com/udonchan/picdplayer/issues/160) | 設計・作業分解完了としてClosed。PR #235で[入力契約](../design/integrity-design.md#complete-pcm-input)を統合し、A=#236/B=#237/C=#238/D=#239へ分割済み。子のproduction完成まで待つtracking Issueにはしない。[公開契約との境界](../design/message-contract.md#complete-pcm-input)と[当時の設計検証](verification.md#160-完全取得pcmの設計整理2026-10-16)参照。A/Bの限定test単位を経て、C/Dはlocal開発差分でsession/APIへ接続。外部provider・自動取得・PCM保存・実機全域取得の確認済みを意味しない。 |
+| [#160 Define complete-disc PCM capture for external verification](https://github.com/udonchan/picdplayer/issues/160) | 設計・作業分解完了としてClosed。PR #235で[入力契約](../design/integrity-design.md#complete-pcm-input)を統合し、A=#236/B=#237/C=#238/D=#239へ分割済み。子のproduction完成まで待つtracking Issueにはしない。[公開契約との境界](../design/message-contract.md#complete-pcm-input)と[当時の設計検証](verification.md#160-完全取得pcmの設計整理2026-10-16)参照。A/Bの限定test単位を経て、C/DはPR #256で実session/APIへ統合した。#160自体の完了は設計・作業分解の完了であり、後続の2026-10-27単発実機試験による全域local指紋生成は[全域完了run](verification.md#pr-256-全域local-pcm指紋の実機完了2026-10-27)を参照する。外部provider・自動取得・PCM本体保存の確認済みを意味しない。 |
 | [#236 Implement complete PCM coverage and canonical input core](https://github.com/udonchan/picdplayer/issues/236) | A単位完了・Closed。PR #240でpure input coreとtest-only CMake対象を統合し、canonical全sample/channel、連続coverage、世代/取消/期限・consumer例外・二段階完了gateを自動検証済み。ASan/UBSan 71ケース、Linux標準67/67・最小39/39成功。[実装境界](../design/integrity-design.md#pure-core-implementation)と[当時の検証](verification.md#236-完全取得入力core2026-10-16)参照。当時はdaemon/reader/APIへ未接続だったが後続D開発差分でreuseする。実drive全域取得や外部照合確認済みとはしない。 |
 | [#237 Implement an exclusive complete PCM acquisition worker](https://github.com/udonchan/picdplayer/issues/237) | B単位完了・Closed。PR #241で注入readerの専用owner・coordinator排他・発行抑止・call/job予算・取消/解放待ち・旧結果拒否をtest-only workerへ統合。ASan/UBSan・TSan各57ケース、Linux標準68/68・最小40/40成功。[内部契約](../design/integrity-design.md#acquisition-worker-implementation)と[当時の検証](verification.md#237-排他的取得worker2026-10-17-jst)参照。当時はdaemon/APIへ未接続で、後続D開発差分から利用する。実drive/Pi・外部provider未確認と#88の物理受入を成功へ変えない。 |
-| [#238 Define and implement an approved incremental PCM checksum profile](https://github.com/udonchan/picdplayer/issues/238) | Open、C単位。network不要local SHA-256の固定state/disc-track digest/有界JSONとcanonical/core接続を実装し、known vector等を検証。実装経路はPR #256、統合状態は同PRを参照。実機の短いjobではPCM受理0のまま取消したため、指紋生成/全域完了は未確認でOpenを維持する。[採用profile](../design/integrity-design.md#local-pcm-sha-256-profile2026-10-19)参照。外部provider互換性/通信、#13のClosedを外部照合成功にしない。 |
-| [#239 Integrate explicit complete PCM jobs with runtime validity and presentation](https://github.com/udonchan/picdplayer/issues/239) | Open、D単位。実session/raw factory・API/Settingsへ接続し、明示要求優先・media_activity・判定logを追加した。PR #256のmaster反映と実機受入は区別する。10月24日のUI限定代表確認、26日のstart/cancel受理・owner解放と同PIDのdrive FD0・offset未指定復元/一時許可撤去を記録した。ただし最初のdrive call内訳やraw read完了は未特定、受理PCM0、指紋生成/取消後再生復帰/音声は未確認。配色も残課題。[最新runと境界](verification.md#pr-256-初回start受理取消解放2026-10-26)を参照し、Issueはcloseしない。自動取得・外部照合・PCM保存は追加しない。 |
+| [#238 Define and implement an approved incremental PCM checksum profile](https://github.com/udonchan/picdplayer/issues/238) | Open、C単位。network不要local SHA-256の固定state/disc-track digest/有界JSONとcanonical/core接続をPR #256でmaster統合し、known vector等を検証。10月27日の単発実機試験で全14 track/242334 CD frame/569969568 bytesのfinalize済みdisc/track指紋とmanifest保存を確認した。[全域完了runと限界](verification.md#pr-256-全域local-pcm指紋の実機完了2026-10-27)・[採用profile](../design/integrity-design.md#local-pcm-sha-256-profile2026-10-19)参照。外部provider互換性/通信、cache独立性、#13のClosedを外部照合成功にしない。今回Issueはcloseしない。 |
+| [#239 Integrate explicit complete PCM jobs with runtime validity and presentation](https://github.com/udonchan/picdplayer/issues/239) | Open、D単位。実session/raw factory・API/Settings、調停・診断をPR #256でmaster統合。10月24日のUI限定確認、26日の少量受理/早期取消に続き、27日の全域local指紋生成・結果保存・owner/同PIDのFD0・元設定/offset未指定復元・専用許可撤去を確認した。取消後再生復帰/音声は未確認、配色も残課題。[最新runと境界](verification.md#pr-256-全域local-pcm指紋の実機完了2026-10-27)を参照し、Issueはcloseしない。自動取得・外部照合・PCM保存は追加しない。 |
 | [#92 Document the current playback and diagnostic message contracts](https://github.com/udonchan/picdplayer/issues/92) | 現行state/WS/詳細履歴のfield・型・単位・世代・順序・欠落・互換性を[メッセージ契約](../design/message-contract.md)へ整理済み。#89/#90は完了。#24正式化時に公開実装と再照合済み。 |
 | [#146 Validate physical optical-media faults and USB drive compatibility](https://github.com/udonchan/picdplayer/issues/146) | 傷・劣化媒体、read stall、別USB optical drive/bridgeの実機評価を集約する。音声/操作影響とAPI・警告・復元の整合を同じrun記録で確認する。physical hotplugは#88、特殊TOCは#39/#40が担当する。 |
 | [#97 Correct diagnostic buffer capacity and missing counter displays](https://github.com/udonchan/picdplayer/issues/97) | 診断画面の端数付きblock容量と欠損counterの0表示を修正。PR #95で回帰試験を追加しDockerで検証（Pi未再確認）。 |
@@ -191,6 +191,17 @@ start1回/受理0・cancel0・play0で終了し、元設定/offset未指定へ�
 取消応答後約4.24秒でowner解放と同PIDのFD0を確認した。ただし受理PCMは0でfingerprint生成/再生復帰は未確認。
 元offset未指定への復元と専用helper/rule撤去は完了した。[初回受理run](verification.md#pr-256-初回start受理取消解放2026-10-26)を参照。
 [判定logと因果証拠の限界](verification.md#pr-256-判定時点logと拒否専用http診断2026-10-26)を参照する。
+
+続く同日23時台の30秒job枠では、約3.97秒で75 CD frame/176400 bytesを初受理して早期cancelし、
+約2.28秒後にowner解放と同PIDのFD0が揃った標本を確認した。元設定/offset未指定へ復元し専用許可を撤去済み。
+これは全域指紋完成ではない。[初回PCM受理run](verification.md#pr-256-初回pcm受理の30秒予算試験2026-10-26)を参照し、前段の受理0を後から書き換えない。
+
+10月27日の別承認・90分上限の単発試験では全14 track/242334 CD frame/569969568 bytesを受理し、
+全域local SHA-256指紋とmanifest保存を実機確認した。start受理06:49:14.714 UTCから結果保存07:07:14.280 UTCまで約18分。
+controllerの期限内解放確認後に元設定を復元し、独立read-only観測でもoffset null/NONE・設定byte一致・
+REPEAT/背景ON・service稼働・専用helper/rule不在を確認した。
+[全域完了run](verification.md#pr-256-全域local-pcm指紋の実機完了2026-10-27)を参照する。
+要求2xは実測速度ではなく、cache独立性/外部照合/音声/取消後再生復帰の確認済みへ拡張しない。
 
 | Issue | 主な範囲 |
 |---|---|

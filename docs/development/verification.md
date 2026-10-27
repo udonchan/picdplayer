@@ -1,6 +1,165 @@
 # 検証状況と残課題
 
-更新日: 2026-10-26。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+更新日: 2026-10-27。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+
+## PR #256 全域local PCM指紋の実機完了（2026-10-27）
+
+下記の90分上限試験を、限定helperと一時offset0を用いて一度だけ実行した。
+06:46:21 UTCの開始前確認後、daemon判定logは06:49:14.714 UTCにstart accepted=1・
+readiness=ready・media_activity=IDLEを記録した。結果はCOMPLETE、failure/core_failure NONE・native_error0、
+全14 track・LBA `[0,242334)`・242334 CD frame・canonical569969568 bytesの全域受理だった。
+job予算5400000ms、REPEAT region75/matches2/attempts3/per-call10000ms、offset0を維持し、
+自動再試行・予約・gate緩和・再生は行わなかった。
+
+保存manifestはschema1/kind complete_pcm_manifest、profile local-pcm-sha256-v1、
+canonical s16le-44100-stereo-v1/SHA-256。controllerは開始時TOC/identityとの一致を検査し、
+COMPLETE検出直後、復元restartより前に保存した。privateなhostへ回収後も全coverage、
+連続TOC、14 trackのbyte数合計と各64桁lowercase digest、job/session identityを再検査した。
+disc fingerprintは`351b1612d704ce18edeb69246e27ad2b76efb76cbaf661b56aebc76bc67f8535`。
+manifestの観測値はread_calls3232/verified_calls3232、verification_attempts6464、
+verification_mismatches0、direct_retries0/recovered_reads0/uncertain_reads0だった。
+これはlocalな読取・比較結果であり、external_verification NOT_CHECKED、cache_independence NOT_PROVENのままである。
+
+Piのresult.json mtimeは07:07:14.279993 UTC（start受理から約17分59.566秒）、
+controller最終log mtimeは07:07:17.871978 UTC。mtimeは結果保存時刻であり、内部完了時刻そのものではない。
+要求2xの理想時間より短いが、実測current_speedは取得しておらず、要求速度どおりの物理読出しや
+cache独立性をこの所要時間から推定しない。90分は上限で、実行時間ではない。
+controller.jsonlはready1/final1/capture210の212行・15073 bytes、result.jsonは3312 bytes、双方0600。
+result.pendingは不在で、PCM本体は保存していない。manifest file SHA-256は
+`99bb4351184d96b41a7137d1d8f8accb9b7165ac953fa156506a088a84508efe`。
+privateなPi/hostの専用directoryへ結果とlogを保全し、Gitや公開artifactへ含めない。
+
+controllerは同job/session/disc generation/PIDについてowner非busy/released/非inflight/非waitingと
+FD0/race0を10秒以内に確認してから元設定を復元し、通常daemon/kiosk restartと15秒以内のreadback、
+専用helper/rule撤去を完了した。最終記録はbackendRelease=true/restored=true/unresolved=false。
+個々のFD/sensor標本やrelease所要時間はlogへ保存しない設計であり、独立した時系列測定とはしない。
+復元後の新session/job0の状態を、旧jobの解放証拠の代用にしない。
+
+07:13:29 UTC以降の独立read-only再確認で、元config.beforeとの設定file byte一致、offset null/NONE、
+STOPPED・capture IDLE/job0/非busy/released/非inflight/非waitingを確認した。
+REPEAT要求/実効・pending false・背景ON/saved、要求2x・current_speed nullを保持し、
+daemon PID51340/kiosk PID51369は07:07:15/16 UTC起動、active/running・NRestarts0だった。
+専用helper/ruleは両path不在、package c7e1e38.../daemon e176151...、HTTP JS48749538.../CSS3d418784...は一致した。
+終了確認時の温度58.534度、throttled=0x0。root/userのbackupは削除していない。
+
+このrunで全域local指紋生成を初めて実機確認したが、外部MATCH、原盤正当性、bit-perfect、
+cache独立性、音声/TV/物理リモコン、取消後の再生復帰は未確認である。
+短時間取消runのINCOMPLETEという歴史的結果は変更せず、#238/#239もOpenを維持する。
+製品codeの変更・再build・再deploy、commit/push/merge/Issue closeは行っていない。
+
+## PR #256 90分上限の全域試験準備（2026-10-27）
+
+利用者は最初のPCM受理確認後、90分上限の全域完了試験を別承認した。
+01:49:29 UTCの公開API read-only観測ではSTOPPED/AUDIO_READY、14 track、start_lba0/leadout242334、
+242334 CD frame・音声3231.12秒・canonical569969568 bytesだった。
+速度は要求2xが適用済みだが実測current_speedはnull。REPEAT region75/matches2/max_attempts3/budget10000ms・
+pending false・背景ON/saved・offset null/NONE・capture IDLE/job0/受理frame0/解放済みを確認した。
+理想的に2xで2回読むだけでも約53分51秒＋seek等を要し、90分完了を保証しない。
+
+設定・REPEAT・速度要求・背景ON・Custom UIは保持し、明示offset0だけを一時追加する計画である。
+start1回、job deadline5400000ms、完了/失敗/90分前の取消時点5390秒を上限とし、自動再試行・自動再生は行わない。
+60秒の進捗停滞、温度80度以上、電源/throttleの現flagや新しいsticky flagは早期中断条件とする。
+解放は同job/session/PIDのowner flagsとFD0/race0で最大10秒確認し、不明なら復元のrestartで回避しない。
+90分は取得jobの上限であり、解放確認と必要な元設定復元時間は別に記録する。
+完了時だけ全coverage/byte数/TOC/profile/14track digestを検査し、64KiB以内の結果JSONをprivate保存する。
+PCM自体約570MBを保存する計画ではなく、controller logは10MiB上限、外部照合はNOT_CHECKEDのまま。
+
+host private `pr256-pcmfull-20261027.jJvnSj`とPi `picdplayer-pcmfull-20261027-jJvnSj`へ準備し、元設定を0600で保全した。
+同じ4操作helperのSHA-256は`6252fb803bc63e97062c7a75980567957556eaeb7ae214714d0c75c351062520`、
+ruleは`b3ae116b03029281b2507c88a11bba5524c8fcf264c364ce003aee06ede9c957`。
+構文・転送hash・元引数保持の純粋offset0変換を確認したが、root設置/offset変更/startはまだ行っていない。
+private controllerはfake-clockの完了/invalid manifest/拒否/読取失敗/進捗停止/異常/応答喪失/未解放/割込み等で検証中。
+既存sudo認証では新しい限定許可を設置できないため、利用者の一度の対話sudoが必要である。
+
+独立reviewでcontrollerの完了結果保存順と期限後証拠の受入を実行blockerとして指摘されたため、開始せず修正した。
+COMPLETE検出直後およびstart応答喪失の回復経路でmanifestを先に検査/保存し、未保存の完了結果があればrestartしない。
+HTTP/helper/sensorへ残り時間を伝播し、release/readbackの期限後に得た証拠を成功扱いにしない。
+元helperのraw FD出力とpublic API/config hash/sensorのadapterを明示し、復元restart後には有限のreadiness確認を行う。
+誤ったinvalid-manifest時の復元期待やsensor-due fixtureも修正し、失敗logを消さずに8 fake試験を成功させた。
+90分上限でcancel一度、応答喪失時の結果保存、遅いrelease/readbackの拒否も検証し、再reviewで実行blockerの追加指摘はなかった。
+reviewで残った早期startup失敗は親が未開始状態を確認して回復する範囲とし、crash-proofとは主張しない。
+02:41:36 UTCのread-only照合では今回のhelper/rule/root stateは全て未設置、STOPPED/offset未指定/job0だった。
+設置確認dialogはdismissされ、認証成功とは扱わない。最終controllerはprivate配置したが、実機jobはまだ開始していない。
+
+利用者が今回のFULL READY実出力を提示した後、03:42:53 UTCにroot所有/mode/hash・限定FD観測・
+現在binary e176151...・元設定一致・未開始log/result不在を確認した。公開layout/policy契約も実データの純粋検査で確認した。
+温度57.996度・flags0x0。独立reviewのblockerを修正したcontrollerはSHA-256
+`a8b8784d06227aba77e065caed486896d11c67c515663ff3bda2dfbc9f877391`。
+限定helperでoffset0を一時適用し通常再起動、03:45:25 UTCにSTOPPED/AUDIO_READY・offset0/USER_CONFIGURED・job0/解放済みを確認した。
+この時点はmedia_busyであり、開始予約はせず、次のcontrollerから一度だけownerの全gate評価へ要求を渡す。
+長時間処理はprivate logを主記録とし、終了時の結果保存・解放確認・復元/専用許可撤去まで追跡する。
+
+## PR #256 初回PCM受理の30秒予算試験（2026-10-26）
+
+master統合後、利用者は最初の検証済みPCM受理を目標とする短い実機試験の継続を承認した。
+job上限30秒・受理PCMが増えれば早期cancel・未受理でも約29秒でcancel一度・解放確認最大10秒とする。
+REPEATのregion75/required_matches2/maximum_attempts3/per-call予算10000msは変えず、全域完了・音声を目標にしない。
+startは一度だけ、拒否時の再試行はなく、解放不明時はplay/restart/killで回避しない。
+
+18:31:43 UTCのread-only再確認はSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0・
+busy=false/reader_released=true/call_inflight=false/waiting_for_access=false/accepted frames/bytes0。
+REPEAT要求/実効・pending=false、背景ON/saved、配備package c7e1e38.../daemon e176151...、
+daemon PID47624/kiosk PID47650 active/running・NRestarts0を確認した。前回helper/ruleは撤去済みだった。
+
+旧成果を残し、private host `pr256-pcm30-20261026.bw2y3p`とPi `picdplayer-pcm30-20261026-bw2y3p`を新規作成した。
+設定をprivate0600で保全し、同じ4操作helperを現在daemonのhashへ固定して準備した。
+helper SHA-256は`248550125b25fa4740fe09a7b13202c52b51026893dff9d0da934d432312d63f`、
+ruleは`d495b28701de9303a1eea27e1f03c14d54c9231cf540443c7c7f63e05e059781`。
+script構文、転送hash、実設定の引数保持/純粋offset0変換を確認したが、この時点では適用していない。
+単発harnessはfake APIで409拒否、約8秒後受理、無受理の上限cancel、観測例外時cancel、
+start応答喪失後のjob同定/cleanup、解放timeoutを検証し、start/cancel回数制限と復元を阻む未解放結果を確認した。
+候補再build/配備、helperのroot設置、offset変更、実機start/play POSTはまだ行っていない。
+root設置は利用者の一度の対話sudo待ちであり、private領域の存在を将来の成果保全保証とはしない。
+
+READYの回答後、23:07:13 UTCに実helperを再確認したところ今回のpathが存在せず、操作前に停止した。
+23:08:00 UTCの追加read-only照合でも今回のhelper/rule/root state directoryは全て不在だった。
+private配置sourceのhashは一致し、実行結果log capture30.jsonlは未作成。設定はbeforeとbyte一致、
+STOPPED/AUDIO_READY・offset null/NONE・capture IDLE/job0/受理frame/bytes0/解放済みを確認した。
+申告だけを設置成功へ昇格させず、認証/設置の確認待ちとしてoffset変更・start/cancelを実行していない。
+利用者は再確認で現在terminal操作できないと回答したため、この準備単位は元設定のまま中断した。
+30秒の実取得・初回PCM受理・取消/解放の試験結果はまだなく、準備/fake検証を実機成功へ変更しない。
+
+### 実行と最初の検証済みPCM受理
+
+23:17 UTC台の利用者再開指示後も当初helper未設置を確認したため、認証を迂回せず設置手順を再提示した。
+利用者は今回のcommandの実出力（PCM30 READY）を提示し、23:20:10 UTCにroot所有/mode/hash、
+専用rule0440・限定observe成功、元設定一致、STOPPED/offset未指定/job0/解放済みを実測した。
+helperで明示offset0だけを追加し、通常daemon/kiosk再起動後に一回だけ取得を要求した。
+
+23:21:07.108 UTCの前状態はSTOPPED/AUDIO_READY・offset0/USER_CONFIGURED、全gate成立、
+PID49473のFD0/race0。温度59.072度・throttled flags0x0を確認した。
+23:21:07.130 UTCにstart HTTP202を受信し、判定時点logもaccepted=1/failure=0/readiness=ready/media_activity=IDLEだった。
+job1/COLLECTING・busy true/reader_released false/call_inflight trueと同PIDのFD10保持を観測した。
+今回も約2秒時点の受理量は0だったが、取消せず承認された30秒job予算内で観測を続けた。
+23:21:11.079 UTC（要求から約3.970秒）にaccepted_frames75/accepted_bytes176400、failure NONE/core_failure NONE/native_error0を初めて観測した。
+75 CD frameは44100 stereo sample frame、S16LE stereoで176400 bytes（音声1秒相当）であり、音声試聴ではない。
+REPEAT条件を維持したまま、coverage/offset/read verificationを通ったPCMがcanonical consumerへ渡り受理されたという正例である。
+個々のprobe/open/seek/readの内訳時刻、物理再読込やcache独立性までは測定していない。
+
+受理増加の観測直後、要求から3.9706秒でcancelを一度送信し、23:21:11.100 UTCにHTTP202を受信した。
+結果はINCOMPLETE/CANCELLEDで、途中75 frame/176400 bytesを保持したまま解放待ちを観測した。
+最初の解放標本はownerがまだbusy/unreleased、FD0で、次の標本はowner解放済みだが通常media処理RUNNING/FD1だった。
+23:21:13.379 UTC標本で同job/PIDのbusy=false/reader_released=true/call_inflight=false/waiting_for_access=falseとFD0/race0が揃った。
+cancel応答から約2.279秒で確認が揃い、10秒待ち枠内だった。GETとFD観測は原子的でなく、この差は実close処理時間そのものではない。
+追加start・自動再試行・play・強制kill/電源断は行っていない。
+
+今回の目標である最初の検証済みPCM受理は確認できたが、意図した取消により全域未完了で、finalizeされた指紋/manifestは生成していない。
+結果の意味はlocal_pcm_fingerprint/外部照合NOT_CHECKEDのまま。全域hashの正しさ、外部MATCH、原盤正当性、bit-perfectを主張しない。
+前回の約1.3秒取消で受理0だったことと今回約4秒で初回受理したことは、前回の枠が初回受理には短かった可能性を支持するが、
+別jobの準備/drive状態の差もあるため、過去のcall内訳を遡って確定しない。
+
+### 復元と終了確認
+
+解放確認後に元のoffset未指定へbyte復元し、通常daemon/kiosk再起動を実行した。
+23:23:07 UTCの終了APIはSTOPPED/AUDIO_READY・offset null/NONE、capture IDLE/job0/解放済み・accepted frames/bytes0。
+これは再起動による新sessionの状態であり、直前job1の75 frame受理を否定する値ではない。
+REPEAT要求/実効・pending false・背景ON/saved、HTTP JS48749538.../CSS3d418784...、元設定とのbyte一致を確認した。
+同じpackage c7e1e38.../daemon e176151...を維持し、daemon PID49718/kiosk PID49745（23:21:47 UTC起動）はactive/running・NRestarts0。
+今回のroot helper/ruleはcleanupで撤去し、両path不在を確認した。privateなroot/user backup・script・logは保持した。
+温度59.072度・flags0x0を終了時点で確認した。音声/画面/物理入力と取消後再生復帰は今回も未確認。
+保存済みlogを再読し、start/cancel各1回・受理75/176400・同job解放の最終result一致をassert確認した。
+private capture log SHA-256は`4d279f89f26f98ee9b75ccd952c8b633aa10300fabd2e34462bc5c78c7fe5602`。
+コード再build/再配備や追加取得はせず、検証記録/backlogだけを新しい未commit差分として保持する。
 
 ## PR #256 master反映判断（2026-10-26）
 
