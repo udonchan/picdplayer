@@ -1,6 +1,8 @@
 # 検証状況と残課題
 
-更新日: 2026-10-27。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+最新追記: 2026-10-31。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
+以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
 ## PR #256 全域local PCM指紋の実機完了（2026-10-27）
 
@@ -2469,6 +2471,74 @@ map endpointはhistoryなしの200、history endpointは初回/世代変更後50
 13:57 UTCに利用者から「無事に再生できている」と報告を受けた。通常再生の利用者確認として記録し、
 時間・操作列・背景ON時の負荷等が未指定のため長期試験や全条件の受入完了とはしない。
 同時に背景ONの永続化を要望されたが、現行はdaemon session内の設定のみで、保存・復元は#177の残課題として扱う。
+<a id="pr256-readonly-20261031"></a>
+## PR #256 実機read-only再照合と休止点（2026-10-31追記）
+
+利用者の再開指示に従い、2026-10-24 snapshotを現在状態と推定せず、GitHub/Git/Piを別々に照合した。
+PR #256は最終head`ce1b7e0a2eb25938d78e447c187b9bb4e648c777`、2026-10-26のmerge
+`a17e6e016d0eafa0598b41e45427d5037ffdebaa`で統合済みだった。後続の文書PR #262も統合済みで、
+今回取得したlive masterは`6c871f67cd1b333bdfd84f19862d67b88c45300e`だった。
+#238/#239はOpen。過去のDraft/未commit/未統合という記録を現在の実装状態へ読み替えない。
+
+指定の保存worktreeは存在せずGit登録にもなかった。残存feature branch先端`779bfc5`と最終PR headの
+差分はbacklog/verificationの2文書だけだったが、消失worktreeの未commit成果やprivate証跡の残存は保証しない。
+復元・checkout・merge/rebase・stash/reset、root checkoutや旧候補の変更は行っていない。
+Mac更新後のSSH設定解析成功を確認し、利用者がconsole由来として提示したED25519指紋と
+取得公開鍵の完全一致後、repository外の専用known-hostsへ保存して厳格照合で接続した。
+秘密鍵・設定全文・全Environment/argv・private画像は公開していない。
+
+### Gate Aの観測
+
+2026-10-31 12:49:09〜12:50:23 UTC（日本時間21:49〜21:50）の有限read-only観測で、
+daemon/kioskはactive/running・NRestarts0。PIDは51340/51369、実機時計の起動時刻は
+10月27日07:07:15/16 UTCだった。WPE WebProcessも存在し、Chromium processは観測しなかった。
+Pi上の保存package SHA-256は`c7e1e38b74b8ff9154c746557e6b71c9b3df494d04d3c2281e93e3e89cbb3a3a`、
+配置daemonは`e176151f2a3c9dd97dec6b994ff88331548fcb5439eb5460646795254c49634a`、
+installed profileはRelease/version0.1.0・package statusはinstalled/arm64だった。
+稼働PIDの`/proc/.../exe`経由のhash取得はPermissionErrorで未確認であり、配置fileのhashと区別する。
+これらを最終PR headのCI package配備の証明にはしない。
+
+開始/終了の再生状態はSTOPPED/track1/position0・AUDIO_READY/14 track、offset null/NONE。
+REPEAT要求/実効一致、region75/matches2/attempts3/time_budget10000ms、pending false。
+captureはIDLE/job0・busy false/reader_released true/call_inflight false/waiting_for_access false・受理量0。
+最初の標本はmedia RUNNING/media_busy、終了標本はIDLE/offset_unknownで、取得を予約していない。
+背景の保存設定はconfigured/saved、source restoredを確認したが、今回背景ON/OFFを操作していない。
+
+Custom UI指定は`/srv/picdplayer-ui-dev-20261020-aria`一組、live argvと設定の追加引数は一致した。
+元backupとのprivate比較で、custom-ui一組以外のEXTRA_ARGS保持とoffset引数なしを確認した。
+7 fileは通常file・symlinkなし・owner/group udonchan・0644、配置directory0755で、
+全7 fileとHTTP応答のSHA-256は最終PR headのsourceと一致した。
+HTMLは`22999923d7b0b6c454bfbab352a34cab47785a8101804648efe4cecc88899aad`、
+JSは`4874953872f69b13ee47cf15767a404f59d4d87ed06f24c54267c2b71d24bb81`、
+CSSは`3d4187843746ee739156c5a79c9af23f5e12c2e166fb75e79bbdd2237e5c6d64`だった。
+manifest/statusの4 assetも一致した。初回は誤った`/player/assets/...`へ照会してHTTPエラーになったが、
+正しい`/player/...`で200/hash一致を確認した。これは実機file修正ではない。
+旧upload元のCSS/JSは配置先と不一致であり、再コピーに使用しない。
+
+### Capabilityと履歴の限界
+
+13:17:30 UTCの既存API読取では、能力6項目はUNKNOWN/source NONE、
+`probe_error`は`open /dev/sr0: Permission denied`、node観測はPRESENT、playerはSTOPPEDだった。
+probeを新たに発行せず、権限・group・service制限の原因までは確定していない。
+未実装の能力評価経路も別に残るため、権限エラー解消だけを全能力完成としない。
+
+利用者は最後の実機操作が10月23日深夜頃だったと記憶しており、10月26〜27日の保存記録と食い違った。
+今回のPID/起動時刻/package/daemon/UIは後続記録と一致するが、それだけで過去の全域取得成功や
+利用者の操作日を独立に証明しない。元の記録は消さず、今回のlive観測と区別して保持する。
+
+### 休止と再開条件
+
+今回のPOST start/cancel/play/stopは全て0回。deploy、restart、offset変更、直接probe/ioctl、
+権限変更、Inspector有効化、TV/物理リモコン/音声試験は行わず、取得jobや一時実機設定を残していない。
+終了時も同PID・NRestarts0・STOPPED・capture解放済み・offset未指定で、今回の復元操作は不要だった。
+UI配置とHTTP反映は確認済みなので、その確認だけのための再配備/restartは不要。
+
+利用者はCapabilityの全表示項目をv1必須とし、理由のUI説明量は別議論とした。
+現在は文書/Issue監査と次の実装へ切り替える安全な休止点とする。
+再開時はPi/利用者の利用可否とlive identity/状態を再取得し、UI代表受入とPCM取得を別承認で行う。
+#252の物理入力受入を同runで参照し、過去の限定focus確認を全受入へ拡張しない。
+PCM取得/取消後再生復帰・音声等の未確認は保持し、offset0・有限job・取消/解放/復元条件を事前合意する。
+今回の文書追記は実装完了・Issue close・master統合を意味しない。
 
 ## #88 Device lifecycle（2026-10-17 JST）
 
