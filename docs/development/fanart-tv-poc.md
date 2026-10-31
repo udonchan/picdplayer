@@ -160,6 +160,31 @@ JPEG規格全体の準拠判定やpixel/metadataの完全decodeではない。�
 Annex B/F/Gと[libjpeg 2.1.5 documentation](https://github.com/libjpeg-turbo/libjpeg-turbo/blob/2.1.5/libjpeg.txt)。
 fixture生成・native decode・回帰/修復/mutationは[検証記録](verification.md#jpeg-admission-20261031)を参照する。
 
+<a id="resource-boundaries-49"></a>
+### 実装済み境界と残る資源条件
+
+寸法admissionだけで#49全体をcloseせず、以下を分けて追跡する。
+この整理は静的source監査であり、PiのRSS・GPU・音声や異常入力耐性の実測ではない。
+
+| 層 | 実装根拠のある境界 | 未保証・次の確認 |
+|---|---|---|
+| 取得入力 | 1画像8 MiB、HTTP受信callbackも最大bytesで停止。libcurlにconnect 5秒/total 15秒を設定 | allocator容量・library領域・OS呼出しを含む総memoryや厳密なwall-clock保証ではない |
+| 本体geometry | 各辺4096・総画素8,388,608、対応static profileを本体から確認 | full pixel/圧縮metadata/ICC/Exifのdecode・意味は未保証。RGBA換算32 MiB/面は算術値だけ |
+| server保持 | 最大3枚・encoded合計16 MiB、重複除外と世代/候補再照合 | 取得中/result・API response copy・View/GPUを合計した予算ではない |
+| worker | active1/pending最新1/result1、serial失効後の結果を不採用 | 協調取消。callbackやdecoderの即時終了、総CPU時間をworker自身は保証しない |
+| runtime cache | 候補/画像とも空cache path、画像disk cacheは未採用 | file-cache部品のpolicyをruntimeのdisk/RSS保証へ転用しない |
+| 未採用file cache | read前のsize検査・fresh/stale共通admission・30日fresh/64 MiB policy | 厳密quotaではない。削除失敗後write、tmp併存、列挙件数、size-check後に伸びるfileの読取、stale保持期限は採用前の残条件 |
+| HTTP配信 | 現行参照だけを値で返し、送信headerで`Cache-Control: no-store`を付与 | 通常画像はdiagnostic用8件guardの対象外。lws送信buffer・複数socketのinflight memory/即時回収は未評価 |
+| View | artist用img2個、次の1枚をload/decode、epoch/tokenで旧完了を不採用 | fade後previous srcは再利用/resetまで残る。browser cache/GPU copy/peakと即時解放は未確認 |
+
+根拠は`artist_background_image.cpp`、`http_client.cpp`、`artist_background_image_worker.cpp`、
+`enrichment_service.cpp`、`metadata_cache.cpp`、`api_server.cpp`、標準Playerの背景lifecycleを正とする。
+APIの`count_threads=1`/header pool4は画像応答memoryの上限ではなく、`no-store`も送信済みbytesを取り消さない。
+圧縮metadata・decoder/browserの残条件と計測は#49/#83、実写真・TV・音声は#51、
+継続運転は#184、正式供給/sandbox/security updateは#220へ分け、他Issueの完了を流用しない。
+file cacheをruntimeへ採用する場合は別判断とし、先にhard boundaryを確定する。
+#250/#254の延期matrixを再開せず、具体的な新しい不具合や必要な資源条件を所有Issueで小単位に扱う。
+
 公開modelは同一originの不透明URLだけを渡す。API契約は[メッセージ契約](../design/message-contract.md)を正とする。
 標準UIは1枚なら静止、複数ならshuffleで45秒滞在・4秒crossfadeする。
 追加画像の到着・同じsnapshotでは現在画像やtimerを最初からやり直さない。
