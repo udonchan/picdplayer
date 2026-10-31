@@ -4,6 +4,47 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="webp-admission-20261031"></a>
+## #49 WebP構造・寸法admissionの限定単位（2026-10-31）
+
+基準はPNG PR #268統合のmaster`f58a25f`。RIFF/chunk、VP8/VP8L実寸法とVP8X canvas、static-only profileを
+共通MIME判定に追加し、network/fresh/staleへ同条件を適用した。PNGの上限predicateは意味を変えず共通化した。
+JPEG・既存URL/HTTP/取消/cache・公開APIは置換せず、新しいruntime依存も追加していない。
+仕様と一般規格/製品方針の区別は[WebP限定契約](fanart-tv-poc.md#webp-admission-49)を正とする。
+
+fixture 14件は合成黒画像（alpha例は128/255）を既存SDK builderのlibwebp/libwebpmux 1.5.0でencode/muxした。
+VP8、VP8L、alpha、VP8X+合成XMPの2×2、および4096×1、1×4096、4096×2048、2048×4096、3840×2160、
+4097×1、1×4097、4096×2049を使う。全14件をmacOS ImageIOでWebP→PNG変換し、出力寸法を確認した。
+後半の超過3件もcodecとしてdecode可能であり、寸法だけを偽装した正例や破損画像の代用ではない。
+構造変異の負例、alpha hint/metadata配置等の構造試験は、nativeで全画像decodeした14 fixtureとは分ける。
+
+generator sourceと生成済みWebPは`tests/fixtures/artist-background-webp/`に保存し、通常CTestは生成済みdataだけを読む。
+再生成は同directoryをmountし、既存`picdplayer-wpe-source-probe:2.54.0-trixie` image
+`sha256:9b593daab298d9ee0b8e2c50154263b3b844aa4d3591d843f45a75e8eef5ce46`で次を実行した。
+
+```sh
+g++ -std=c++20 generate.cpp -o /tmp/webp-fixture-generator $(pkg-config --cflags --libs libwebp libwebpmux)
+/tmp/webp-fixture-generator
+```
+
+containerは`--rm --pull never --network none --cpus 2 --memory 2g --user "$(id -u):$(id -g)"`、
+fixture directoryだけを`/fixtures`にmountした。追加install/download・SDK再buildは行わず、generator実行とimageの
+将来の可用性を同一視しない。既存app build imageに新しいlibwebp依存を加えていない。
+代表SHA-256は`lossless-2x2.webp`が`b7f505f2fad2c2a8cbe2454847120ede073131ca2a4d1f6f0377d516334e93c0`、
+`4096x2048.webp`が`1ede27042737f2d82efb3c521c4f64b19e3ee351b7d91ab65af241b4dde4adaf`。
+
+Linux/aarch64の既存app build imageで、同じnetwork/CPU/memory制限と独立したignored build treeを使い、
+編集後に再configure/buildしてからimage/WebP/workerの3対象を実行した。18:06 UTCの通常は3/3（1.15秒）、
+18:08 UTCのASan/UBSanは3/3（1.40秒）で、LastTest.logと実command・configure/rebuild出力を照合した。
+PNG 228ケースを維持し、WebP専用試験は584ケースに加えfresh/stale無効化・offline・取消・MIMEを検証した。
+WPE無効の限定構成で登録72件のうち3件だけを実行した結果であり、全72件や過去の標準WPE CIへ読み替えない。
+WebP専用CTestはCMakeで1件追加しているため、標準構成の件数もこのPRの実logで確認する。
+独立read-only reviewに具体的findingなし。規格・fixture・差分を親が照合し、修復passは不要だった。
+
+この単位でもpixel/ALPH/ICC/Exifの完全decode・意味、全decoder/browser/GPU memoryを保証しない。
+JPEGの同等admission、横断回帰とmemory-only/file-cacheの保証範囲、#51実写真/TV/音声は残るため#49はOpenを維持する。
+Pi接続・deploy・権限/設定/offset変更・再起動・再生/PCM取得・provider通信は行っていない。
+
 <a id="png-admission-20261031"></a>
 ## #49 PNG構造・寸法admissionの限定単位（2026-10-31）
 

@@ -231,6 +231,10 @@ source/tests差分0とnative syntax exit0を確認した。次は有効fixture�
 既存入口から適用した。[PNG検証記録](verification.md#png-admission-20261031)には228ケース、実decode境界、
 通常/ASan/UBSan各2/2とreview修正・mutationの失敗/復元を分けて記録する。
 JPEG/WebPの同等検査、圧縮ancillary展開等の残資源リスク、#51実写真/TV/音声は未完了で#49をOpenに保つ。
+PNG PR #268は`f58a25f`で統合済み。次のWebP単位でRIFF/chunk・本体frame/VP8X canvasの寸法と静止画profileを
+同じ入口に追加した。[WebP検証記録](verification.md#webp-admission-20261031)には実decode済み14画像、
+584ケース、通常/ASan/UBSan各3/3を記録し、CMakeでWebP専用試験を1件追加した。
+JPEGの同等検査と残資源リスクは引き続き未完了であり、#49はcloseしない。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

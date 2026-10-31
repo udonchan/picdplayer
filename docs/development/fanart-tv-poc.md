@@ -75,18 +75,18 @@ percent escapeは拒否する。keyは画像取得へ渡さず、redirect/public
 既存cache部品へ空pathを渡す。新たなディスクcacheの採否・保持期間・削除方針は決めない。
 候補JSONは512 KiB、最大32候補。重複画像を除き、画像は1枚8 MiB以下、保持は最大3枚・合計16 MiB。
 これは圧縮bytesの上限であり、完全decode後のmemoryやbrowser/GPU memory上限ではない。
-JPEG/PNG/WebPの外形とMIMEを検査し、PNGは以下の本体構造/寸法検査も行う。実decodeはViewが確認する。
+JPEG/PNG/WebPの外形とMIMEを検査し、PNG/WebPは以下の本体構造/寸法検査も行う。実decodeはViewが確認する。
 provider寸法を画像本体の検証結果とは扱わない。
 
 <a id="image-admission-49"></a>
-### #49の限定修正契約（2026-10-31、PNG先行・他形式未完了）
+### #49の限定修正契約（2026-10-31、PNG/WebP先行・JPEG未完了）
 
 画像本体の寸法を公開前に検査する。圧縮上限だけではdecode時の資源を制限できないため、
 JPEG/PNG/WebPの単一静止画について各辺1〜4096、総画素8,388,608以下を受入上限とする。
 3840×2160を含むが、4 bytes/pixel換算では1面最大32 MiB相当であり、decoder一時領域、
 browser cache、複数画像・crossfade・GPUのcopyを含むprocess全体のmemory上限ではない。
 runtimeのencoded上限8 MiB/枚・最大3枚/合計16 MiBは維持する。
-この共通目標のうち、現行実装はPNGだけに適用する。JPEG/WebPの外形確認を同等の寸法admissionとみなさない。
+この共通目標のうち、現行実装はPNG/WebPに適用する。JPEGの外形確認を同等の寸法admissionとみなさない。
 
 provider metadataではなく実byte列を判定の正とする。寸法を取得できない、0/上限超過、
 切断・不正な長さ、重複/矛盾する寸法、未対応の画像構造は拒否し、decode結果を推定して通さない。
@@ -121,6 +121,26 @@ PNG規格全体への準拠判定やfull decodeではなく、`iCCP`/`zTXt`/`iTX
 根拠は[PNG Third Edition](https://www.w3.org/TR/2025/REC-png-3-20250624/)の
 §5（chunk構造/CRC/順序）、§11.2（critical）、§11.3.6（animation）、§13（decoder/security）。
 実decodeした境界fixture、回帰・sanitizer・mutation確認は[検証記録](verification.md#png-admission-20261031)を参照する。
+
+<a id="webp-admission-49"></a>
+### WebP限定単位の実装と方針
+
+RIFFの宣言全長との完全一致、chunk境界、odd-length payload後の0 paddingを要求する。
+VP8 key frameまたはVP8Lを1つだけ受け入れ、実bitstreamの寸法を評価する。VP8Xがあれば先頭・一意の
+10-byte headerとcanvasを確認し、本体frameと一致を要求する。VP8Lの`alpha_is_used`はhintとして可否に使わない。
+ALPHはVP8より前で一意、VP8Lと併用しない。headerの圧縮/前処理範囲と、raw形式のplane長を確認する。
+ICCP/EXIF/XMPは対応flagと存在の一致を要求し、重複を拒否する。ICCPはimage/ALPHより前に限る。
+unknown chunkは境界を確認してskipするが、VP8Xのない画像の先頭に置く未対応layoutは拒否する。
+
+animation flag・ANIM/ANMF、VP8X/ALPH reserved値、VP8の非表示frame・version4以降・scale指定を拒否する。
+これらや末尾data・重複metadataの拒否は対応profileを絞る製品方針で、一般readerのignore許容規定と混同しない。
+pixel/ALPH/ICC/EXIF等のpayload全体はdecodeせず、full decodeや全process資源の保証をしない。
+根拠は[WebP container](https://developers.google.com/speed/webp/docs/riff_container)、
+[VP8L bitstream](https://developers.google.com/speed/webp/docs/webp_lossless_bitstream_specification)、
+[VP8 frame header](https://www.rfc-editor.org/rfc/rfc6386.html#section-9.1)を参照する。
+fixtureは`tests/fixtures/artist-background-webp/generate.cpp`から既存libwebp/muxで生成した合成画像で、
+generatorは通常build/CTestの依存にしない。再生成・native decode・Linux試験の条件は
+[検証記録](verification.md#webp-admission-20261031)に記載する。
 
 公開modelは同一originの不透明URLだけを渡す。API契約は[メッセージ契約](../design/message-contract.md)を正とする。
 標準UIは1枚なら静止、複数ならshuffleで45秒滞在・4秒crossfadeする。

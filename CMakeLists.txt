@@ -502,6 +502,14 @@ if(BUILD_TESTING)
         target_compile_options(artist_background_image_test PRIVATE -Wall -Wextra -Wpedantic)
         target_link_libraries(artist_background_image_test PRIVATE CURL::libcurl)
         add_test(NAME artist_background_image COMMAND artist_background_image_test)
+        add_executable(artist_background_webp_test tests/artist_background_webp_test.cpp
+            src/artist_background_image.cpp src/metadata_cache.cpp src/http_client.cpp src/http_security_policy.cpp)
+        target_include_directories(artist_background_webp_test PRIVATE include)
+        target_compile_features(artist_background_webp_test PRIVATE cxx_std_20)
+        target_compile_options(artist_background_webp_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(artist_background_webp_test PRIVATE CURL::libcurl)
+        add_test(NAME artist_background_webp COMMAND artist_background_webp_test
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/artist-background-webp")
         add_executable(artist_background_image_worker_test tests/artist_background_image_worker_test.cpp
             src/artist_background_image_worker.cpp src/artist_background_image.cpp
             src/metadata_cache.cpp src/http_client.cpp src/http_security_policy.cpp)
