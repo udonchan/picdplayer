@@ -4,6 +4,49 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+## 小さな文書PRの同期（2026-10-31）
+
+利用者の続行指示により、文書だけの変更も実装完了まで溜めず、独立PR/CIを経てmasterへ統合した。
+root checkoutや保存済みfeature branchは変更せず、この専用作業branchだけを最新masterへ載せ直した。
+競合したverificationは過去runと今回のread-only記録を両方保持した。
+
+| 文書PR | 検証したhead / CI run | 観測した結果 / master統合 |
+|---|---|---|
+| [#263](https://github.com/udonchan/picdplayer/pull/263): v1能力要件・31件監査・休止点 | `a9b9c0c` / [41207677826](https://github.com/udonchan/picdplayer/actions/runs/41207677826) | 標準WPE Release/Debug各72/72、package lifecycle・候補検査成功。独立文書reviewで具体的findingなし。`e2174a9`で統合 |
+| [#265](https://github.com/udonchan/picdplayer/pull/265): #49限定契約・#264とIssue訂正の同期 | `30f2047` / [41208860159](https://github.com/udonchan/picdplayer/actions/runs/41208860159) | 標準WPE Release/Debug各72/72、package lifecycle・候補検査成功。契約reviewでblockerなし。`42a05a2`で統合 |
+
+全件成功というCI表示だけでなくlogの実CTest数とpackage結果、PRのhead/対象file/merge状態を確認した。
+両PRとも製品code変更なしであり、後続#49の実装や実機動作を検証した結果ではない。
+MacのDocker socketは不在だったため、daemon起動や代替環境導入をせず既存の標準CIを使用した。
+契約reviewの指摘に従い、構造から検出できる切断/不正長とfull decodeの保証を区別する文言を補足する。
+privateな設定/key/画像/package/SDKは含めず、この同期単位で実機操作・Issue closeは行っていない。
+
+### #49の未完成試行と品質停止
+
+同日の実装委譲で、既存loader/URL検査/cache経路の欠落、公開headerの必要型宣言欠落、
+JPEG marker解釈の誤り、WebP部の未定義変数・C++ではない記述を含む途中差分を確認した。
+親のmacOS `clang++ -std=c++20 -fsyntax-only -Iinclude src/artist_background_image.cpp`はexit1・
+20 compiler errorsで停止した。これはnative syntax検査でありLinux/aarch64 buildや実行試験ではない。
+この試行を修正済みとせず、追加実装/修復を停止するよう指示した。
+公開header/sourceの途中差分はrepository外へpatchとして保全し、commit/push/PRへ含めていない。
+一時領域のpatchの存在を永続保全の保証にはせず、親の観測・失敗と未確認をここに残す。
+
+14:50 UTCの安全な再開時に、旧workerから編集停止の応答を得た。変更は公開header/sourceの2fileのみで、
+現在差分と保全patchのSHA-256はともに`af425ed2c417d0bccf9c3684cb792e09c4f0f9b472a9cca8a4d211197a7fd308`だった。
+親が今回の2fileだけをcommit済みの内容へ戻し、`git diff --exit-code HEAD --`で対象source/testsの差分0を確認した。
+同じnative syntax commandはexit0へ戻った。これは元実装の復元確認であって、新しいadmissionの成功ではない。
+文書3fileの未commit追記は保持し、root checkout・保存branch・既存設定は変更していない。
+worker自身はbuild/test未実施と報告した。Kilo設定変更とターン中断の因果関係は独立に確認できていない。
+
+文書PR #263/#265の成功はこのsource試行の成功ではない。fixture更新・新検査の実行成功・
+Linux/aarch64 CI・実機写真/音声の受入はなく、#49はOpen・未完了のままである。
+次の実装は既存取得/安全境界を保持できる小単位に再分割し、形式ごとの有効fixtureと構造解析を
+先に検証する。今回の不成立な独自parserを微修正だけで製品経路へ投入しない。
+最初の単位はJPEG/PNG/WebPの有効な小さいfixtureと既存試験の意味の保持だけとし、
+画像decoderでのfixture検証と再build後の試験を行う。形式別の境界/構造試験を揃え、
+全形式とnetwork/fresh/stale経路が適合するまでproductionのadmission有効化を完了としない。
+設定変更後という理由だけで旧workerを自動再開せず、後続の委譲には新しい小単位・上限・試験契約を渡す。
+
 ## PR #256 全域local PCM指紋の実機完了（2026-10-27）
 
 下記の90分上限試験を、限定helperと一時offset0を用いて一度だけ実行した。

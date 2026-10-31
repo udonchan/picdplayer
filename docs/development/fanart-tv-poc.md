@@ -91,6 +91,7 @@ provider metadataではなく実byte列を判定の正とする。寸法を取�
 JPEGは8-bitのbaseline/extended sequential/progressive、PNGは8-bit以下、WebPは静止画を対象とする。
 APNG/WebP animationとJPEGの途中寸法変更等は、frame数や展開予算を保証できないため今回は拒否する。
 これは独自の画像decoder追加ではなく構造/寸法のadmissionであり、完全decodeと表示失敗の確認はViewに残す。
+切断・不正長の拒否は構造/headerから検出可能な範囲であり、圧縮payload全体の正当性を保証するものではない。
 対応形式の安全な構造解析が確定できない場合は、先に契約を見直してから実装する。
 
 network応答、fresh cache、stale/offline fallbackの全経路に同じ検査を適用する。
