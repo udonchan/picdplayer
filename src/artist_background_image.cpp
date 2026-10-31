@@ -3,6 +3,7 @@
 #include "http_security_policy.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <chrono>
 #include <cstdint>
@@ -39,6 +40,167 @@ std::uint32_t png_u32(std::string_view bytes, std::size_t offset) {
     for (std::size_t i = 0; i < 4; ++i)
         value = (value << 8) | static_cast<unsigned char>(bytes[offset + i]);
     return value;
+}
+
+unsigned jpeg_u16(std::string_view bytes, std::size_t offset) {
+    return (static_cast<unsigned char>(bytes[offset]) << 8) |
+        static_cast<unsigned char>(bytes[offset + 1]);
+}
+
+bool admitted_jpeg(std::string_view bytes) {
+    if (bytes.size() < 4 || bytes.size() > image_limit || bytes.substr(0, 2) != "\xff\xd8") return false;
+    struct Component { unsigned id, h, v, q; };
+    std::array<Component, 4> components{};
+    std::array<bool, 4> quant{}, quant_used{};
+    std::array<std::array<unsigned char, 64>, 4> quant_values{};
+    std::array<bool, 8> huffman{};
+    std::array<std::array<int, 64>, 4> planes;
+    for (auto& plane : planes) plane.fill(-1);
+    unsigned count = 0, process = 0, scans = 0, restart = 0, next_restart = 0;
+    bool entropy = false, segment_data = false;
+    std::size_t offset = 2;
+    while (offset < bytes.size()) {
+        if (entropy && static_cast<unsigned char>(bytes[offset]) != 255) {
+            segment_data = true;
+            ++offset;
+            continue;
+        }
+        if (static_cast<unsigned char>(bytes[offset++]) != 255) return false;
+        unsigned fill = 0;
+        while (offset < bytes.size() && static_cast<unsigned char>(bytes[offset]) == 255) {
+            ++offset;
+            ++fill;
+        }
+        if (offset == bytes.size()) return false;
+        const auto marker = static_cast<unsigned char>(bytes[offset++]);
+        if (entropy && marker == 0) {
+            if (fill != 0) return false; // Only FF00 is a stuffed data byte.
+            segment_data = true;
+            continue;
+        }
+        if (entropy && marker >= 0xd0 && marker <= 0xd7) {
+            if (!restart || !segment_data || marker != 0xd0 + next_restart) return false;
+            next_restart = (next_restart + 1) % 8;
+            segment_data = false;
+            continue;
+        }
+        if (entropy) {
+            if (!segment_data) return false;
+            entropy = false;
+        }
+        if (marker == 0xd9) {
+            if (!process || !scans || offset != bytes.size()) return false;
+            for (unsigned i = 0; i < count; ++i) if (planes[i][0] < 0) return false;
+            return true;
+        }
+        if (marker == 0 || marker == 0xd8 || marker == 0xdc || marker == 0xde || marker == 0xdf ||
+            marker == 1 || (marker >= 0xd0 && marker <= 0xd7)) return false;
+        if (bytes.size() - offset < 2) return false;
+        const auto length = jpeg_u16(bytes, offset);
+        if (length < 2 || length > bytes.size() - offset) return false;
+        const auto payload = bytes.substr(offset + 2, length - 2);
+        offset += length;
+        if (marker == 0xc0 || marker == 0xc1 || marker == 0xc2) {
+            if (process || payload.size() < 6 || payload[0] != 8) return false;
+            count = static_cast<unsigned char>(payload[5]);
+            if ((count != 1 && count != 3 && count != 4) || payload.size() != 6 + 3 * count ||
+                !admitted_dimensions(jpeg_u16(payload, 3), jpeg_u16(payload, 1))) return false;
+            std::array<bool, 256> ids{};
+            for (unsigned i = 0; i < count; ++i) {
+                const auto id = static_cast<unsigned char>(payload[6 + 3 * i]);
+                const unsigned sampling = static_cast<unsigned char>(payload[7 + 3 * i]);
+                const auto q = static_cast<unsigned char>(payload[8 + 3 * i]);
+                if (ids[id] || (sampling >> 4) == 0 || (sampling >> 4) > 4 ||
+                    (sampling & 15) == 0 || (sampling & 15) > 4 || q > 3) return false;
+                ids[id] = true;
+                components[i] = {id, sampling >> 4, sampling & 15, q};
+            }
+            process = marker;
+        } else if (marker == 0xdb) {
+            if (payload.empty()) return false;
+            for (std::size_t p = 0; p < payload.size();) {
+                if (payload.size() - p < 65) return false;
+                const auto table = static_cast<unsigned char>(payload[p++]);
+                if (table > 3) return false; // Product profile: only 8-bit quantizers.
+                std::array<unsigned char, 64> values{};
+                for (auto& value : values) {
+                    value = static_cast<unsigned char>(payload[p++]);
+                    if (value == 0) return false;
+                }
+                if (process == 0xc2 && quant_used[table] && quant_values[table] != values) return false;
+                quant[table] = true;
+                quant_values[table] = values;
+            }
+        } else if (marker == 0xc4) {
+            if (payload.empty()) return false;
+            for (std::size_t p = 0; p < payload.size();) {
+                if (payload.size() - p < 17) return false;
+                const auto table = static_cast<unsigned char>(payload[p++]);
+                if ((table >> 4) > 1 || (table & 15) > 3) return false;
+                unsigned symbols = 0;
+                int available = 1;
+                for (unsigned i = 0; i < 16; ++i) {
+                    const auto codes = static_cast<unsigned char>(payload[p++]);
+                    available = available * 2 - codes;
+                    symbols += codes;
+                    if (available < 0) return false;
+                }
+                if (available == 0 || symbols == 0 || symbols > 256 || symbols > payload.size() - p) return false;
+                p += symbols;
+                huffman[(table >> 4) * 4 + (table & 15)] = true;
+            }
+        } else if (marker == 0xdd) {
+            if (payload.size() != 2) return false;
+            restart = jpeg_u16(payload, 0);
+        } else if (marker == 0xda) {
+            if (!process || payload.size() < 6) return false;
+            const unsigned n = static_cast<unsigned char>(payload[0]);
+            if (n == 0 || n > count || payload.size() != 4 + 2 * n) return false;
+            const auto ss = static_cast<unsigned char>(payload[1 + 2 * n]);
+            const auto se = static_cast<unsigned char>(payload[2 + 2 * n]);
+            const auto approx = static_cast<unsigned char>(payload[3 + 2 * n]);
+            const unsigned ah = approx >> 4, al = approx & 15;
+            if (process == 0xc2) {
+                if (ss > se || se > 63 || (ss == 0 ? se != 0 : n != 1) || ah > 13 || al > 13 ||
+                    (ah != 0 && al + 1 != ah)) return false;
+            } else if (ss != 0 || se != 63 || approx != 0) return false;
+            unsigned previous = 0, blocks = 0;
+            for (unsigned i = 0; i < n; ++i) {
+                const auto id = static_cast<unsigned char>(payload[1 + 2 * i]);
+                const auto tables = static_cast<unsigned char>(payload[2 + 2 * i]);
+                unsigned component = 0;
+                while (component < count && components[component].id != id) ++component;
+                if (component == count || (i != 0 && component <= previous)) return false;
+                previous = component;
+                blocks += components[component].h * components[component].v;
+                const unsigned dc = tables >> 4, ac = tables & 15;
+                const unsigned limit = process == 0xc0 ? 1 : 3;
+                if (dc > limit || ac > limit || !quant[components[component].q]) return false;
+                if ((process != 0xc2 || (ss == 0 && ah == 0)) && !huffman[dc]) return false;
+                if ((process != 0xc2 || ss != 0) && !huffman[4 + ac]) return false;
+                auto& plane = planes[component];
+                if (process == 0xc2) {
+                    if (ss != 0 && plane[0] < 0) return false;
+                    for (unsigned k = ss; k <= se; ++k) {
+                        if (ah == 0 ? plane[k] != -1 : plane[k] != static_cast<int>(ah)) return false;
+                        plane[k] = static_cast<int>(al);
+                    }
+                } else {
+                    if (plane[0] != -1) return false;
+                    plane.fill(0);
+                }
+                quant_used[components[component].q] = true;
+            }
+            if (n > 1 && blocks > 10) return false;
+            ++scans;
+            entropy = true;
+            segment_data = false;
+            next_restart = 0;
+        } else if (!(marker >= 0xe0 && marker <= 0xef) && marker != 0xfe) {
+            return false;
+        }
+    }
+    return false;
 }
 
 std::uint32_t png_crc(std::string_view bytes) {
@@ -193,10 +355,7 @@ bool admitted_webp(std::string_view bytes) {
 }
 
 std::optional<std::string> image_mime(std::string_view bytes) {
-    if (bytes.size() >= 4 && static_cast<unsigned char>(bytes[0]) == 0xff &&
-        static_cast<unsigned char>(bytes[1]) == 0xd8 &&
-        static_cast<unsigned char>(bytes[bytes.size() - 2]) == 0xff &&
-        static_cast<unsigned char>(bytes.back()) == 0xd9) return "image/jpeg";
+    if (admitted_jpeg(bytes)) return "image/jpeg";
     if (admitted_png(bytes)) return "image/png";
     if (admitted_webp(bytes)) return "image/webp";
     return std::nullopt;

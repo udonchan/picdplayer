@@ -415,10 +415,11 @@ album artistの表示名からMBIDを推測しない。MBIDは現段階でUI契�
 ON時は選択済み単一Artist MBIDのfanart.tv候補JSONを別workerで取得し、画像workerで候補を順に試す。
 現行世代・artist・候補に一致する画像を段階的にopaqueな同一origin参照で公開する。
 重複候補を除き、保持は最大3枚・圧縮bytes合計16 MiB、各画像8 MiB以下とする。
-PNG/WebPは公開前に実byte列の構造と寸法を検査し、各辺1〜4096・総画素8,388,608以下の静止画に制限する。
+JPEG/PNG/WebPは公開前に実byte列の構造と寸法を検査し、各辺1〜4096・総画素8,388,608以下の静止画に制限する。
 PNGは8-bit以下、CRCとcritical chunkを確認し、APNG・CRC不一致・IEND後bytesを製品方針として拒否する。
 WebPはRIFF/chunkとVP8/VP8Lの寸法、VP8X canvasとの一致を確認し、animationや対応外profileを拒否する。
-JPEGの同等の寸法検査は#49の残作業であり、全形式のdecode資源やbrowser/GPU memoryを保証しない。
+JPEGは8-bit Huffman DCTのSOF0/1/2、8-bit quantizer、1/3/4 componentを対象とし、全scanのmarker構造を確認する。
+後続SOF・DNL・hierarchyや対応外profileを拒否するが、全形式のdecode資源やbrowser/GPU memoryは保証しない。
 候補JSONと画像は空cache pathで一時的に取得・保持し、ディスク保存の採否は別途設計する。
 OFFではworkerを生成・要求せず、作成済みworkerは取消して保持結果を消す。CD再生と通常metadataは維持する。
 明示key fileを優先し、未指定時だけローカル開発用`FANART_TV_API_KEY`を読む。
