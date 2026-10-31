@@ -2471,6 +2471,7 @@ map endpointはhistoryなしの200、history endpointは初回/世代変更後50
 13:57 UTCに利用者から「無事に再生できている」と報告を受けた。通常再生の利用者確認として記録し、
 時間・操作列・背景ON時の負荷等が未指定のため長期試験や全条件の受入完了とはしない。
 同時に背景ONの永続化を要望されたが、現行はdaemon session内の設定のみで、保存・復元は#177の残課題として扱う。
+
 <a id="pr256-readonly-20261031"></a>
 ## PR #256 実機read-only再照合と休止点（2026-10-31追記）
 
@@ -2482,7 +2483,7 @@ PR #256は最終head`ce1b7e0a2eb25938d78e447c187b9bb4e648c777`、2026-10-26のme
 
 指定の保存worktreeは存在せずGit登録にもなかった。残存feature branch先端`779bfc5`と最終PR headの
 差分はbacklog/verificationの2文書だけだったが、消失worktreeの未commit成果やprivate証跡の残存は保証しない。
-復元・checkout・merge/rebase・stash/reset、root checkoutや旧候補の変更は行っていない。
+このread-only観測単位では復元・checkout・merge/rebase・stash/reset、root checkoutや旧候補の変更は行っていない。
 Mac更新後のSSH設定解析成功を確認し、利用者がconsole由来として提示したED25519指紋と
 取得公開鍵の完全一致後、repository外の専用known-hostsへ保存して厳格照合で接続した。
 秘密鍵・設定全文・全Environment/argv・private画像は公開していない。
