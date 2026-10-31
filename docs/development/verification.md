@@ -4,6 +4,47 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="image-resource-capability-handoff-20261031"></a>
+## #49残条件と#264調査の境界（2026-10-31）
+
+3形式の単位を次の独立PRとしてmasterへ統合した。各headと実logを照合し、以前の件数を流用していない。
+
+| 単位 | head / master merge | 標準WPE Release・Debug / CI |
+|---|---|---|
+| PNG [#268](https://github.com/udonchan/picdplayer/pull/268) | `5e4a861` / `f58a25f` | 各72/72、[41217654470](https://github.com/udonchan/picdplayer/actions/runs/41217654470) |
+| WebP [#269](https://github.com/udonchan/picdplayer/pull/269) | `63f408a` / `ff300ac` | 各73/73、[41228649560](https://github.com/udonchan/picdplayer/actions/runs/41228649560) |
+| JPEG [#270](https://github.com/udonchan/picdplayer/pull/270) | `a7e3f16` / `48ab7c8` | 各74/74、[41233145790](https://github.com/udonchan/picdplayer/actions/runs/41233145790) |
+
+いずれもpackage lifecycle・candidate検査が成功し、SDKはcache再利用だった。WebP/JPEGの専用CTest各1件追加が
+件数差の理由である。独立reviewと修復・失敗runは各節へ保持し、候補を正式releaseや実機配備済みpackageとは扱わない。
+CI中は次形式の仕様/fixture・残資源・Capability source調査を並行し、sourceを別PRへ混ぜなかった。
+
+3形式の共通入口を静的に点検し、network/fresh/stale、取消・fallbackの限定回帰と、
+実装済みgeometry/bytes/slot数と未保証の総資源を[資源境界表](fanart-tv-poc.md#resource-boundaries-49)へ整理した。
+runtimeは空cache pathでmemory-only。未採用file-cache部品の削除/読取競合やquotaの限界を、
+runtimeがdisk cacheを採用済みという説明や厳密な64 MiB/RSS上限へ読み替えない。
+HTTP受信callbackのbytes確認とlibcurl timeout設定をsourceで確認したが、全worker/decoderの期限証明ではない。
+API送信headerの`no-store`は確認した一方、normal画像はdiagnostic用8件guardの対象外だった。
+inflight copy/lws bufferやViewのprevious src・decoded/GPU cacheを含む総memoryは未計測であり、#49はOpenを維持する。
+
+#264のPermission deniedは実機へ接続せず、現masterと同じsourceから調査した。
+観測文字列とこのsource経路の対応を示すもので、稼働binaryの由来・現在の資格/権限やerror取得時点は未確認である。
+`probe_kernel_capabilities`の最初の`open(O_RDONLY|O_NONBLOCK|O_CLOEXEC)`が失敗すると、
+kernel ioctlと後続MMC C2 queryへ進まずidentity/UNKNOWN/probe_errorを返す。これはdriveの非対応reportではない。
+player sessionは排他・reader/capture解放と現在世代を確認して一度だけprobeし、同世代で自動再試行しない。
+失敗結果も世代へbindされ得るため、保存errorと現在時点の新しいopen失敗を同一視しない。
+unit templateには既に`SupplementaryGroups=video cdrom audio`があり、sourceだけでは
+稼働unit/drop-in・process資格・node mode/owner/ACLやnamespaceと一致するかを確認できない。
+group不足、drive故障、root化で解決するといった原因・修正を推測していない。
+
+次はPiと利用者の利用可否を再確認してから、既存pinでserviceの選択field・process UID/GID/groups・
+package/profile・配置/稼働daemonのidentity、device metadataと既存APIの世代/状態をread-only照合する。
+key・設定全文・Environment/argv全文は出力せず、
+直接open/probe/ioctl・STOP/cancel・restart・権限/udev変更はこのread-only枠に含めない。
+これは開発診断の接続手順であり、一般利用者にSSH準備を要求する製品案ではない。
+今回のGoalではPi未接続のままで、利用状況が未確認のためlive原因の確定や修正は実施していない。
+表示済みCapability全項目のv1実装要件は維持し、このsource調査だけを取得/評価経路の完成にしない。
+
 <a id="jpeg-admission-20261031"></a>
 ## #49 JPEG構造・寸法admissionの限定単位（2026-10-31）
 

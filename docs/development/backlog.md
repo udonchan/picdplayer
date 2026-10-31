@@ -98,8 +98,8 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 
 | 順位・区分 | Issueと所有範囲 |
 |---|---|
-| 直近1（文書統合後） | #49: 画像本体の寸法/pixel数とdecode資源の受入境界を狭く修正する。根拠は[10月31日監査](#issue-audit-20261031)参照 |
-| 直近2 | [#264](https://github.com/udonchan/picdplayer/issues/264): 表示済みDrive capability全項目のv1実装。取得/評価経路とUNKNOWN理由を整え、既存probeの権限エラーを別に原因調査する |
+| 直近1（admission後） | #49: JPEG/PNG/WebPの寸法/pixel数admissionはPR #268/#269/#270で統合済み。残るdecode/HTTP/総資源・実機条件を[資源境界表](fanart-tv-poc.md#resource-boundaries-49)で分離し、IssueはOpenを維持する |
+| 直近2 | [#264](https://github.com/udonchan/picdplayer/issues/264): 表示済みDrive capability全項目のv1実装。sourceのopen失敗/世代保持経路は確認済みだが、live原因は利用可否再確認後のread-only照合待ち。権限変更を推測で先行させない |
 | 直近3 | #121: PR #243で限定診断修正は統合済み。固定packageでの限定受入と過去control/CEC観測の分類を残し、一括解決扱いしない |
 | 直近4 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない。#252/#51の同run観測を参照する |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
@@ -240,6 +240,12 @@ WebP PR #269は`ff300ac`で統合し、標準WPE Release/Debug各73/73とpackage
 [JPEG検証記録](verification.md#jpeg-admission-20261031)には16実画像のdecode、7429ケース、通常/ASan/UBSan各4/4、
 reviewの試験不足を1回修復した4 mutationの期待失敗と復元を記録する。
 3形式が揃ってもfull decode・圧縮metadata等の残資源リスクと#51実機受入は未完了で、#49はOpenを維持する。
+JPEG PR #270は`48ab7c8`で統合し、同headの標準WPE Release/Debug各74/74とpackage/candidate検査成功を確認した。
+3形式の横断回帰と静的点検は[引継ぎ記録](verification.md#image-resource-capability-handoff-20261031)、
+実装済みと未保証の区分は[資源境界表](fanart-tv-poc.md#resource-boundaries-49)へ整理した。
+#264はkernel open失敗でC2問合せ前に止まることと、同世代で失敗が保存されるsource経路を確認した段階。
+live原因には利用可否の再確認とread-only照合が必要で、権限変更やdriver故障と断定しない。
+Capabilityの未実装経路を完成扱いにせず、実機への無断接続・再probeを先行させない。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 
