@@ -75,16 +75,18 @@ percent escapeは拒否する。keyは画像取得へ渡さず、redirect/public
 既存cache部品へ空pathを渡す。新たなディスクcacheの採否・保持期間・削除方針は決めない。
 候補JSONは512 KiB、最大32候補。重複画像を除き、画像は1枚8 MiB以下、保持は最大3枚・合計16 MiB。
 これは圧縮bytesの上限であり、完全decode後のmemoryやbrowser/GPU memory上限ではない。
-JPEG/PNG/WebPの外形とMIMEを検査し、実decodeはViewが確認する。provider寸法を画像本体の検証結果とは扱わない。
+JPEG/PNG/WebPの外形とMIMEを検査し、PNGは以下の本体構造/寸法検査も行う。実decodeはViewが確認する。
+provider寸法を画像本体の検証結果とは扱わない。
 
 <a id="image-admission-49"></a>
-### #49の次の限定修正契約（2026-10-31、実装前）
+### #49の限定修正契約（2026-10-31、PNG先行・他形式未完了）
 
 画像本体の寸法を公開前に検査する。圧縮上限だけではdecode時の資源を制限できないため、
 JPEG/PNG/WebPの単一静止画について各辺1〜4096、総画素8,388,608以下を受入上限とする。
 3840×2160を含むが、4 bytes/pixel換算では1面最大32 MiB相当であり、decoder一時領域、
 browser cache、複数画像・crossfade・GPUのcopyを含むprocess全体のmemory上限ではない。
 runtimeのencoded上限8 MiB/枚・最大3枚/合計16 MiBは維持する。
+この共通目標のうち、現行実装はPNGだけに適用する。JPEG/WebPの外形確認を同等の寸法admissionとみなさない。
 
 provider metadataではなく実byte列を判定の正とする。寸法を取得できない、0/上限超過、
 切断・不正な長さ、重複/矛盾する寸法、未対応の画像構造は拒否し、decode結果を推定して通さない。
@@ -102,6 +104,23 @@ network応答、fresh cache、stale/offline fallbackの全経路に同じ検査�
 重複・矛盾、animation、fresh/stale cache、取消、MIME/URL/encoded上限の既存回帰を含める。
 実際に対応形式として有効なfixtureを使い、失敗条件以外を壊して成功したことにしない。
 CIのLinux/aarch64 build/CTestと、実写真・TV・音声の#51受入は分離し、この修正だけで#49全体をcloseしない。
+
+<a id="png-admission-49"></a>
+### PNG限定単位の実装と方針
+
+本体を最後までchunk単位で走査し、名前・長さ・CRC、先頭で一意の13-byte IHDR、legalなcolor/depth、
+compression/filter/interlace、PLTEの要否/長さ/順序、連続したIDAT、空で最後のIENDを確認する。
+0-length IDATは有効dataと連続している場合に許容し、全IDATの結合が空の場合は拒否する。
+未知critical chunkは拒否し、ancillaryは境界/名前/CRCを検査するがpayloadの意味や展開は検査しない。
+`acTL`/`fcTL`/`fdAT`をchunk typeとして検出した場合は、one-frameや孤立chunkも含めて拒否する。
+同じ文字列が通常のancillary payloadに含まれるだけではanimationと判定しない。
+
+CRC不一致・IEND後のbytes・16-bit・animationの拒否は、この製品の保守的なadmission方針である。
+全てを一般PNG規格の不正とは呼ばず、APNGのstatic fallbackも本製品では採用しない。
+PNG規格全体への準拠判定やfull decodeではなく、`iCCP`/`zTXt`/`iTXt`等の展開資源はpixel数上限では保証しない。
+根拠は[PNG Third Edition](https://www.w3.org/TR/2025/REC-png-3-20250624/)の
+§5（chunk構造/CRC/順序）、§11.2（critical）、§11.3.6（animation）、§13（decoder/security）。
+実decodeした境界fixture、回帰・sanitizer・mutation確認は[検証記録](verification.md#png-admission-20261031)を参照する。
 
 公開modelは同一originの不透明URLだけを渡す。API契約は[メッセージ契約](../design/message-contract.md)を正とする。
 標準UIは1枚なら静止、複数ならshuffleで45秒滞在・4秒crossfadeする。

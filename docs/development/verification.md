@@ -4,6 +4,42 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="png-admission-20261031"></a>
+## #49 PNG構造・寸法admissionの限定単位（2026-10-31）
+
+基準はfixture PR #267統合のmaster`aa8e6a5`。PNGの共通MIME判定だけを強化し、JPEG/WebP・
+既存URL/HTTP/取消/cache実装、公開header、CMake/依存package、API/UIは置き換えていない。
+critical構造・CRC・本体寸法・static-only方針は[限定契約](fanart-tv-poc.md#png-admission-49)と設計文書を正とする。
+file cache部品のfresh/staleでも同じ判定を行い、不適合の実PNGを破棄して再公開しないことを試験した。
+現行runtimeのmemory-only方針は変えていない。
+
+fixture生成はゼロscanlineのstored-DEFLATE stream、Adler-32とchunk CRCを含む実PNGを作る。
+IHDRだけを上限値へ変更した正例ではなく、4096×1、1×4096、4096×2048、2048×4096、3840×2160の
+実pixel dataを持つ正例を使用した。4097×1、1×4097、4096×2049、16-bit、one-frame APNGも
+decoderで読めるが製品方針で拒否する例として分けた。構造だけの不正例は完全decode可能な画像と呼ばない。
+macOS ImageIO（`sips`）で27画像をPNG→TIFFに変換し、全て期待寸法の出力を確認した。
+palette画像をBMPへ出力する経路はexit13（Unable to write image）で失敗した。原因は断定せず、
+同一fixtureを変更せずTIFFでdecode/再encode成功したことを確認した。失敗をfixture修正で隠していない。
+生成PNGは全て合成データで、外部写真・private画像は用いていない。
+
+Linux/aarch64の既存`picdplayer-build` image、networkなし・2 CPU/2 GiB、Debug/metadata/API有効・WPE無効で
+`build-49-fixtures/`の対象2つを編集後に再buildした。`artist_background_image`は228 PNGケースを含み、
+通常CTestは2/2成功した。別の`build-49-png-sanitize/`でも新規configure/buildし、ASan/UBSan有効の2/2が成功した。
+sanitizerは`-fsanitize=address,undefined -fno-omit-frame-pointer`とlink flagを使い、検査無効化optionは使用していない。
+登録71件のうち対象2件だけの限定構成で、標準WPEや実機受入の証拠ではない。
+
+独立reviewはproductionの具体的defectなし、PLTE配置負例のmaskingを1件指摘した。
+indexed画像ではpalette欠損で先に拒否されていたため、truecolor画像のoptional PLTEをIDAT後へ置く形へ修正した。
+sourceのlate-PLTE guardだけを一時的に外し、再build後の選択1試験が期待どおりexit8で失敗し、
+`PNG case failed: PLTE after IDAT (90 bytes)`を観測した。guardを復元してから通常・sanitizerの両対象を再buildした。
+最終通常2/2（1.12秒）、ASan/UBSan 2/2（1.34秒）をLastTest.logで照合し、mutationは製品差分へ残していない。
+review修復はこの1回に限定し、失敗したmutation runを通常合格やCI結果へ混ぜない。
+
+8 MiBのencoded境界、各辺/総画素、critical chunk/CRC/順序、APNG policy、fresh/stale/取消と既存回帰を検証した。
+pixelや圧縮ancillary payloadの完全decode・意味検証、全decoder/browser/GPU memory上限は保証しない。
+JPEG/WebPの同等admissionと実写真/TV/音声は残り、#49はOpenのままで#264の実装へ先行しない。
+Pi接続・deploy・権限/設定/offset変更・再起動・再生/PCM取得・provider通信は行っていない。
+
 <a id="image-fixtures-20261031"></a>
 ## #49 有効画像fixtureの限定単位（2026-10-31）
 

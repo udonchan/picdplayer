@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace artist_background_image_fixtures {
 // Static 1x1 images, decoded with macOS ImageIO before inclusion. JPEG and PNG
@@ -99,4 +102,50 @@ inline constexpr unsigned char webp_bytes[] = {
     0x03, 0x70, 0x00, 0x00, 0x00, 0x00
 };
 inline const std::string webp{reinterpret_cast<const char*>(webp_bytes), sizeof webp_bytes};
+
+inline std::string png_u32(std::uint32_t value) {
+    std::string bytes;
+    for (int shift = 24; shift >= 0; shift -= 8)
+        bytes.push_back(static_cast<char>((value >> shift) & 255));
+    return bytes;
+}
+
+inline std::string png_chunk(std::string_view type, std::string_view payload) {
+    std::string body(type);
+    body.append(payload);
+    std::uint32_t crc = 0xffffffffU;
+    for (const unsigned char byte : body) {
+        crc ^= byte;
+        for (int bit = 0; bit < 8; ++bit)
+            crc = (crc >> 1) ^ ((crc & 1U) ? 0xedb88320U : 0U);
+    }
+    return png_u32(static_cast<std::uint32_t>(payload.size())) + body + png_u32(~crc);
+}
+
+// All-zero scanlines with uncompressed DEFLATE blocks make real boundary
+// images without introducing a codec dependency or forging IHDR dimensions.
+inline std::string make_png(std::uint32_t width, std::uint32_t height,
+                            unsigned depth = 1, unsigned color = 0) {
+    const unsigned channels = color == 2 ? 3 : color == 4 ? 2 : color == 6 ? 4 : 1;
+    const auto raw_size = ((static_cast<std::size_t>(width) * channels * depth + 7) / 8 + 1) * height;
+    std::string compressed("\x78\x01", 2);
+    for (std::size_t left = raw_size; left != 0;) {
+        const auto block = std::min<std::size_t>(left, 65535);
+        compressed.push_back(left == block ? '\x01' : '\0');
+        compressed.push_back(static_cast<char>(block & 255));
+        compressed.push_back(static_cast<char>(block >> 8));
+        compressed.push_back(static_cast<char>((block ^ 65535) & 255));
+        compressed.push_back(static_cast<char>((block ^ 65535) >> 8));
+        compressed.append(block, '\0');
+        left -= block;
+    }
+    compressed += png_u32(static_cast<std::uint32_t>((raw_size % 65521) << 16) | 1U);
+    auto header = png_u32(width) + png_u32(height);
+    header.push_back(static_cast<char>(depth));
+    header.push_back(static_cast<char>(color));
+    header.append(3, '\0');
+    return std::string("\x89PNG\r\n\x1a\n", 8) + png_chunk("IHDR", header) +
+        (color == 3 ? png_chunk("PLTE", std::string("\0\0\0\xff\xff\xff", 6)) : std::string{}) +
+        png_chunk("IDAT", compressed) + png_chunk("IEND", {});
+}
 }
