@@ -77,6 +77,31 @@ percent escapeは拒否する。keyは画像取得へ渡さず、redirect/public
 これは圧縮bytesの上限であり、完全decode後のmemoryやbrowser/GPU memory上限ではない。
 JPEG/PNG/WebPの外形とMIMEを検査し、実decodeはViewが確認する。provider寸法を画像本体の検証結果とは扱わない。
 
+<a id="image-admission-49"></a>
+### #49の次の限定修正契約（2026-10-31、実装前）
+
+画像本体の寸法を公開前に検査する。圧縮上限だけではdecode時の資源を制限できないため、
+JPEG/PNG/WebPの単一静止画について各辺1〜4096、総画素8,388,608以下を受入上限とする。
+3840×2160を含むが、4 bytes/pixel換算では1面最大32 MiB相当であり、decoder一時領域、
+browser cache、複数画像・crossfade・GPUのcopyを含むprocess全体のmemory上限ではない。
+runtimeのencoded上限8 MiB/枚・最大3枚/合計16 MiBは維持する。
+
+provider metadataではなく実byte列を判定の正とする。寸法を取得できない、0/上限超過、
+切断・不正な長さ、重複/矛盾する寸法、未対応の画像構造は拒否し、decode結果を推定して通さない。
+JPEGは8-bitのbaseline/extended sequential/progressive、PNGは8-bit以下、WebPは静止画を対象とする。
+APNG/WebP animationとJPEGの途中寸法変更等は、frame数や展開予算を保証できないため今回は拒否する。
+これは独自の画像decoder追加ではなく構造/寸法のadmissionであり、完全decodeと表示失敗の確認はViewに残す。
+対応形式の安全な構造解析が確定できない場合は、先に契約を見直してから実装する。
+
+network応答、fresh cache、stale/offline fallbackの全経路に同じ検査を適用する。
+不適合cacheを破棄し、古いcacheという理由で再公開しない。拒否は写真候補の失敗として扱い、
+既存の次候補・cover/default fallbackを使う。自動retry、追加provider、disk cacheのruntime採用は追加しない。
+
+受入試験は正常な静止画、各辺/総画素の境界と超過、申告と本体の不一致、0/切断/不正長、
+重複・矛盾、animation、fresh/stale cache、取消、MIME/URL/encoded上限の既存回帰を含める。
+実際に対応形式として有効なfixtureを使い、失敗条件以外を壊して成功したことにしない。
+CIのLinux/aarch64 build/CTestと、実写真・TV・音声の#51受入は分離し、この修正だけで#49全体をcloseしない。
+
 公開modelは同一originの不透明URLだけを渡す。API契約は[メッセージ契約](../design/message-contract.md)を正とする。
 標準UIは1枚なら静止、複数ならshuffleで45秒滞在・4秒crossfadeする。
 追加画像の到着・同じsnapshotでは現在画像やtimerを最初からやり直さない。
