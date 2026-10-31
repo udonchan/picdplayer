@@ -4,6 +4,49 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="jpeg-admission-20261031"></a>
+## #49 JPEG構造・寸法admissionの限定単位（2026-10-31）
+
+基準はWebP PR #269統合のmaster`ff300ac`。JPEGだけを共通MIME判定へ追加し、PNG/WebP・既存loader/URL/HTTP/cache/取消、
+公開APIとruntime依存は置き換えていない。SOF0/1/2、sample precision8と8-bit DQTのprofileは
+[JPEG限定契約](fanart-tv-poc.md#jpeg-admission-49)を正とし、先頭SOFだけではなくEOIまでの構造とscan履歴を確認する。
+
+fixtureは`tests/fixtures/artist-background-jpeg/generate.cpp`を既存SDK builder（libjpeg 2.1.5）でcompile/runして生成した。
+resourceはWebPと同じpull禁止/networkなし・2 CPU/2 GiB・fixture directoryだけのmountで、追加install/SDK buildは行っていない。
+baseline・Huffman table 2を使うSOF1（8-bit DQT）・progressive・gray/CMYK・restart/stuffing・寸法境界など16件を保存した。
+16件ともmacOS ImageIOでJPEG→PNG（CMYKのみTIFF）にdecode/再encodeし、期待寸法を確認した。
+4096×2048等の境界、4097×1等の超過例も実pixel dataを持つcodec出力で、SOF寸法だけを書き換えた正例ではない。
+16-bit DQTを持つ低品質例はSOF1・sample precision8でnative decoderに受理されたが、今回のprofileでは拒否する。
+この例のcoarse quantization警告を保持し、decoderの受理をT.81への適合や製品受入成功と読み替えていない。
+生成utilityを通常build/CTestのcodec依存にせず、CMakeのJPEG専用試験は生成済みdataを読む。
+
+通常のLinux/aarch64 Debug/metadata/API有効・WPE無効構成では既存3対象と新JPEG対象を再buildし、
+4/4成功した。JPEGは7429ケースに加えfresh/stale無効化・offline・取消・MIMEを検証し、PNG228・WebP584ケースも維持した。
+独立reviewはproductionの具体的defectなし、quantizer/refinement/DC依存/MCU上限の試験不足を1件にまとめて指摘した。
+同じfixtureを正例controlに保ち、1回のgrouped修復で4負例を追加した。各guardだけを一時的に外して選択JPEG対象を
+再buildし、4回とも期待どおりCTest exit8となり、次の対応labelを観測した。
+
+```text
+changed used progressive quantizer
+refinement with wrong coefficient history
+AC before initial DC
+interleaved eleven blocks
+```
+
+各guardを次のmutation前に復元し、最後に4 guard全てとmutationが残っていないことを照合した。
+follow-up reviewは指摘解消・恒久的なguard弱体化なしと確認した。
+委譲executorの最終reportは空で返り、全command完了とは扱わず利用を一旦停止した。
+通常LastTest.logは新4件成功だった一方、sanitizer logは以前の3件のままだったため、古い結果を流用していない。
+親が同じ有限commandでsanitizerをconfigure/rebuild/testし、通常も直接再build/testして証跡を得た。
+最終通常4/4（1.19秒）、ASan/UBSan 4/4（1.63秒）。sanitizer無効化optionは使用していない。
+原因がモデルか実行基盤かは断定せず、空のTask reportをbuild成功や品質評価の根拠にはしない。
+
+限定構成は登録73件のうち4件だけを実行した結果であり、標準WPEや実機受入ではない。
+JPEG専用CTestを1件追加しており、標準CIもこのheadの実件数で確認する。過去の73/73結果を新headへ流用しない。
+header/table/scan整合のadmissionで、entropyやmetadata全体のdecode、全decoder/browser/GPU memoryを保証しない。
+3形式の横断回帰と残資源リスク、#51実写真/TV/音声は別に残し、寸法検査だけで#49をcloseしない。
+Pi接続・deploy・権限/設定/offset変更・再起動・再生/PCM取得・provider通信は行っていない。
+
 <a id="webp-admission-20261031"></a>
 ## #49 WebP構造・寸法admissionの限定単位（2026-10-31）
 

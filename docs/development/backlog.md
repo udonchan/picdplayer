@@ -235,6 +235,11 @@ PNG PR #268は`f58a25f`で統合済み。次のWebP単位でRIFF/chunk・本体f
 同じ入口に追加した。[WebP検証記録](verification.md#webp-admission-20261031)には実decode済み14画像、
 584ケース、通常/ASan/UBSan各3/3を記録し、CMakeでWebP専用試験を1件追加した。
 JPEGの同等検査と残資源リスクは引き続き未完了であり、#49はcloseしない。
+WebP PR #269は`ff300ac`で統合し、標準WPE Release/Debug各73/73とpackage/candidate検査を確認した。
+次のJPEG単位でSOF0/1/2・8-bit quantizer profileとscan末尾までの構造/履歴検査を追加した。
+[JPEG検証記録](verification.md#jpeg-admission-20261031)には16実画像のdecode、7429ケース、通常/ASan/UBSan各4/4、
+reviewの試験不足を1回修復した4 mutationの期待失敗と復元を記録する。
+3形式が揃ってもfull decode・圧縮metadata等の残資源リスクと#51実機受入は未完了で、#49はOpenを維持する。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 
