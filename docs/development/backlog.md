@@ -240,7 +240,7 @@ WebP PR #269は`ff300ac`で統合し、標準WPE Release/Debug各73/73とpackage
 [JPEG検証記録](verification.md#jpeg-admission-20261031)には16実画像のdecode、7429ケース、通常/ASan/UBSan各4/4、
 reviewの試験不足を1回修復した4 mutationの期待失敗と復元を記録する。
 3形式が揃ってもfull decode・圧縮metadata等の残資源リスクと#51実機受入は未完了で、#49はOpenを維持する。
-JPEG PR #270は`48ab7c8`で統合し、同headの標準WPE Release/Debug各74/74とpackage/candidate検査成功を確認した。
+JPEG PR #270は`48ab7c8`で統合し、PR head `a7e3f16`の標準WPE Release/Debug各74/74とpackage/candidate検査成功を確認した。
 3形式の横断回帰と静的点検は[引継ぎ記録](verification.md#image-resource-capability-handoff-20261031)、
 実装済みと未保証の区分は[資源境界表](fanart-tv-poc.md#resource-boundaries-49)へ整理した。
 #264はkernel open失敗でC2問合せ前に止まることと、同世代で失敗が保存されるsource経路を確認した段階。
