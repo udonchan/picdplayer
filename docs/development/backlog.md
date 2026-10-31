@@ -99,7 +99,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | 順位・区分 | Issueと所有範囲 |
 |---|---|
 | 直近1（文書統合後） | #49: 画像本体の寸法/pixel数とdecode資源の受入境界を狭く修正する。根拠は[10月31日監査](#issue-audit-20261031)参照 |
-| 直近2 | 表示済みDrive capability全項目のv1実装。取得/評価経路とUNKNOWN理由を整え、既存probeの権限エラーを別に原因調査する |
+| 直近2 | [#264](https://github.com/udonchan/picdplayer/issues/264): 表示済みDrive capability全項目のv1実装。取得/評価経路とUNKNOWN理由を整え、既存probeの権限エラーを別に原因調査する |
 | 直近3 | #121: PR #243で限定診断修正は統合済み。固定packageでの限定受入と過去control/CEC観測の分類を残し、一括解決扱いしない |
 | 直近4 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない。#252/#51の同run観測を参照する |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
@@ -160,7 +160,8 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 
 本要件はv1必須であり、v2以降の追加UI hardeningを扱う#250へ延期しない。
 物理異常媒体/別driveの#146、device lifecycleの#88とは責務を分ける。
-後続の実装単位・Issue割当は未整理で、この追記ではGitHub Issue作成・再open・closeや実機変更を行わない。
+監査後の続行指示で[#264](https://github.com/udonchan/picdplayer/issues/264)を作成し、本要件の所有先とした。
+実装単位の詳細はそこで追跡する。既存Issueの再open・closeや実機変更は行っていない。
 
 <a id="issue-audit-20261031"></a>
 ### Open Issue再照合と推奨順序（2026-10-31）
@@ -202,6 +203,8 @@ provider metadataで最大16384であること。16384角・4 bytes/pixelなら1
 取得・評価・理由保持、固定packageでの#121/#184/#252/#51代表受入、安定後の#83測定とする。
 新しいCapability v1要件を所有するIssueはまだないため、既存#7の完了を取り消さず、
 全項目の受入表を持つ1件の追跡Issueを作成する案とする。Issue作成・本文更新・closeはこの監査では実施しない。
+後続の続行指示で#264を作成し、#238/#239/#88の明確に古い現況文を、以前の本文と受入条件を
+原文保持して訂正した。再取得でOpenと本文保持を確認した。その他の訂正候補は未変更で、closeは0件。
 正式公開時の#66/#67/#68/#220/#45等の条件は、開発順序を後にしたことで免除されない。
 
 文書統合時は、古いcheckoutのbranch全体をそのままmasterへ統合せず、最新masterの記録を保持して
@@ -210,6 +213,10 @@ provider metadataで最大16384であること。16384角・4 bytes/pixelなら1
 push/PR/CI/通常mergeと、小さな文書PRを都度統合する方針が承認された。
 実装・検証状況やIssue整理の変化も、後続の実装完了まで溜めず独立した文書PRで同期する。
 実機の安全な休止点は[2026-10-31のread-only記録](verification.md#pr256-readonly-20261031)を参照する。
+文書PR #263はCI run41207677826のRelease/Debug各72/72・package検査と独立review後、
+`e2174a9`でmaster統合済み。次の#49は[限定修正契約](fanart-tv-poc.md#image-admission-49)の
+画像本体admissionを対象とし、入力上限をWPE全体のmemory保証へ一般化しない。
+MacのDocker daemonは未起動だったため、host設定を変更せず標準Linux/aarch64 CIで検証する。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 
