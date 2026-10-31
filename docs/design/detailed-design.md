@@ -326,7 +326,7 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | [MetadataWorker::request/pop](../../src/metadata_worker.cpp) | pending最新1件、結果1件。worker内でlookup例外をERROR結果へ変換 |
 | [MetadataSession::begin/invalidate/apply](../../src/metadata_session.cpp) | 世代更新、TOC保存、世代と全TOC一致時だけ結果適用 |
 | [ArtistBackgroundWorker](../../src/artist_background_worker.cpp) | main threadのArtistBackgroundPolicyをEnrichmentServiceへ参照で渡す。既定OFFではworkerを生成・要求しない。ONかつ単一Artist MBIDがある時にlazy生成し、空cache pathで候補を取得する。世代とartist一致時だけ採用。OFF handlerは即時取消・画像と参照消去し、再生停止を待たない |
-| [load_artist_background_image](../../src/artist_background_image.cpp) | 候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得。runtimeは空cache pathを渡す。外形とContent-Typeを照合し、PNGは実chunkの構造/CRC/寸法を公開前に検査する。JPEG/WebPの寸法検査とfull decodeの保証は含まない |
+| [load_artist_background_image](../../src/artist_background_image.cpp) | 候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得。runtimeは空cache pathを渡す。外形とContent-Typeを照合し、PNG/WebPは実構造/寸法を公開前に検査する。JPEGの寸法検査とfull decodeの保証は含まない |
 | [ArtistBackgroundImageWorker](../../src/artist_background_image_worker.cpp) | PR #223でruntime統合済み。実行中1件・最新pending1件・result1件を保持し、serialの変更で失効結果を格納しない。mainはeffective・世代・Artist MBID・候補ID/URLを再照合し、重複を除いて成功/失敗とも次候補を試す。画像8 MiB、保持最大3枚・合計16 MiBを上限とし、nonce+sequenceの参照を段階公開する。全参照をOFF/世代変更で失効する。Viewのfull decodeは代替しない |
 
 PNG検査はloader内の共通MIME判定から呼び、network応答・fresh cache・stale/offline fallbackで同じ条件を使う。
@@ -335,6 +335,10 @@ chunk境界とCRC、IHDR/PLTE/IDAT/IENDのcritical構造を走査し、pixel buf
 APNG用chunk typeは位置やframe数を問わず拒否する。圧縮pixel/ancillary payloadの展開や全ancillary意味検証は行わない。
 CRC不一致とIEND後bytesの厳格拒否は一般PNG decoderの義務とは区別した製品方針である。
 範囲と根拠は[PNG限定単位](../development/fanart-tv-poc.md#png-admission-49)を参照する。
+WebPも同じMIME判定入口でRIFF全長・chunk境界/0 padding、単一VP8/VP8L frame、VP8X canvasを評価する。
+canvasと本体frameの寸法は一致を要求し、ALPHの位置・headerとraw plane長、metadata flagの整合も確認する。
+VP8Lのalpha hintは可否の根拠にしない。pixel/alpha/profile/Exif等のpayload decode・意味の保証は含まない。
+対応する静止画profileと保守的拒否条件は[WebP限定単位](../development/fanart-tv-poc.md#webp-admission-49)を参照する。
 
 候補workerと画像workerはいずれもthread memberをmutex・condition variable・状態memberより後に
 宣言する。constructorで開始するthreadが未構築の状態へアクセスしないための順序である。
