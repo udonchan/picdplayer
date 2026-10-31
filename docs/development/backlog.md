@@ -224,6 +224,9 @@ MacのDocker daemonは未起動だったため、host設定を変更せず標準
 14:50 UTCの再開で旧workerの停止応答と差分hash一致を確認し、今回のsource2fileだけを元へ戻した。
 source/tests差分0とnative syntax exit0を確認した。次は有効fixtureと既存試験の保持を独立単位にし、
 形式別の解析・全経路接続を一度に大きく委譲しない。#49の実装完了や実機受入にはまだ到達していない。
+復旧文書PR #266は`8a6695d`で統合済み。その次の[有効fixture単位](verification.md#image-fixtures-20261031)では、
+合成した小画像等を実decoderで確認して2試験のpositive画像を置換し、既存assertionを保持した。
+変更前後の限定Linux/aarch64試験は各2/2。productionは未変更で、寸法/pixel数admissionと実機受入は未完了。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

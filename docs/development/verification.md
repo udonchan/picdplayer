@@ -4,6 +4,55 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="image-fixtures-20261031"></a>
+## #49 有効画像fixtureの限定単位（2026-10-31）
+
+復旧後の最初の単位として、`artist_background_image_test`と`artist_background_image_worker_test`の
+positive画像を共有header`tests/artist_background_image_fixtures.hpp`へ集約した。
+SOI+文字列+EOI、signature/IENDだけのPNG、RIFF envelopeだけのWebPを、実画像へ置き換えた。
+productionのsource/header、CMake、依存package、画像上限・cache・API/UIは変更していない。
+
+| 形式 | byte数 / pixel寸法 | 埋込byte列のSHA-256 |
+|---|---|---|
+| JPEG | 773 / 1×1 | `27386ce4dfbda46cde1440ffb06e3dd0d2b44dbc7e27a9598976759e351bef3f` |
+| PNG | 162 / 1×1 | `7ffa93f63abeed157b9d4eef41847fb041fe5aaad45b923fff4f0d5334cac098` |
+| WebP | 42 / 1×1 | `c90cff659645a312a28804965f3dbc34061338f7234ff5d6ddb2c57e9eadec15` |
+
+JPEG/PNGは合成した黒1pixelのPPMをmacOS `sips`でencodeした。WebPは小さい静止VP8 byte列を使った。
+3形式ともImageIOを使う`sips`で別形式へ変換し、出力が1×1であることを確認した。
+寸法metadataを読んだだけではなく、JPEG/WebP→PNG、PNG→BMPのdecode/再encodeを行った。
+共有headerをincludeする一時C++ exporterをcompileし、出力をdecode確認済みの元fileと`cmp`して全一致を確認した。
+外部写真・private screenshot・key・端末設定はfixtureに使っていない。
+
+既存のURL/MIME/取消/cache/encoded上限のassertionは保持した。JPEG切断の負例は有効fixtureの
+実EOIを除く形にし、PNG/WebP正例はoptional存在・MIME・返却bytes一致を確認する。
+worker注入callbackの8 MiBちょうどの`'x'`等はdecode試験ではなくresult上限の試験として保持する。
+候補の1920×1080 metadata等のfixture既定値も変更せず、これを本体pixel寸法の根拠にはしない。
+
+利用者がDockerを再開した後、既存build image
+`sha256:035cc877b414fcfe36f7e1f279f67653433e5cf877240d30d2cacbe401b4d90d`のLinux/arm64 containerで
+変更前15:10 UTCと変更後15:16 UTCに対象試験を実行し、それぞれ2/2成功した。
+共通条件は`--rm --network none --cpus 2 --memory 2g --user "$(id -u):$(id -g)"`、
+このworktreeだけを`/src`へmountする。出力はGit ignore済みの`build-49-fixtures/`だけとした。
+container内で次を順に実行し、変更後も2対象を再compile/linkしてからCTestを実行した。
+
+```sh
+cmake -S . -B build-49-fixtures -DCMAKE_BUILD_TYPE=Debug -DENABLE_METADATA=ON -DENABLE_API=ON -DENABLE_WPE_KIOSK=OFF -DBUILD_TESTING=ON
+cmake --build build-49-fixtures --target artist_background_image_test artist_background_image_worker_test -j2
+ctest --test-dir build-49-fixtures --output-on-failure -R '^artist_background_image(_worker)?$'
+```
+
+各commandはexit0。変更後のCTestは0.04秒、LastTest.logと両objectの新header依存も照合した。
+独立したread-only reviewに具体的findingなし。`git diff --check`とproduction差分0も確認した。
+この構成は文書のmetadata/API Linux補助手順に基づき、WPEを無効にした限定検証である。
+登録71件のうち2件だけを実行しており、全71件や標準WPE構成の合格にはしない。
+worktreeにSDK exportと既定cache volumeがなかったため、SDK build/downloadを自動開始していない。
+標準WPEの全体build/test/packageはPR CIの別結果として扱い、このローカルrunには含めない。
+
+これは試験基盤の改善のみで、新しい寸法/pixel数admissionはまだ実装していない。
+#49はOpenで、形式別構造/境界・network/fresh/stale全経路と#51の実写真/TV/音声は残る。
+Pi接続・deploy・再起動・再生・PCM取得・provider通信は行っていない。
+
 ## 小さな文書PRの同期（2026-10-31）
 
 利用者の続行指示により、文書だけの変更も実装完了まで溜めず、独立PR/CIを経てmasterへ統合した。
@@ -14,9 +63,10 @@ root checkoutや保存済みfeature branchは変更せず、この専用作業br
 |---|---|---|
 | [#263](https://github.com/udonchan/picdplayer/pull/263): v1能力要件・31件監査・休止点 | `a9b9c0c` / [41207677826](https://github.com/udonchan/picdplayer/actions/runs/41207677826) | 標準WPE Release/Debug各72/72、package lifecycle・候補検査成功。独立文書reviewで具体的findingなし。`e2174a9`で統合 |
 | [#265](https://github.com/udonchan/picdplayer/pull/265): #49限定契約・#264とIssue訂正の同期 | `30f2047` / [41208860159](https://github.com/udonchan/picdplayer/actions/runs/41208860159) | 標準WPE Release/Debug各72/72、package lifecycle・候補検査成功。契約reviewでblockerなし。`42a05a2`で統合 |
+| [#266](https://github.com/udonchan/picdplayer/pull/266): 未完成試行と復旧・次の小単位 | `04d6a81` / [41212418961](https://github.com/udonchan/picdplayer/actions/runs/41212418961) | 標準WPE Release/Debug各72/72、package lifecycle・候補検査成功。独立文書reviewで具体的findingなし。`8a6695d`で統合 |
 
 全件成功というCI表示だけでなくlogの実CTest数とpackage結果、PRのhead/対象file/merge状態を確認した。
-両PRとも製品code変更なしであり、後続#49の実装や実機動作を検証した結果ではない。
+いずれのPRも製品code変更なしであり、後続#49の実装や実機動作を検証した結果ではない。
 MacのDocker socketは不在だったため、daemon起動や代替環境導入をせず既存の標準CIを使用した。
 契約reviewの指摘に従い、構造から検出できる切断/不正長とfull decodeの保証を区別する文言を補足する。
 privateな設定/key/画像/package/SDKは含めず、この同期単位で実機操作・Issue closeは行っていない。
@@ -38,7 +88,7 @@ JPEG marker解釈の誤り、WebP部の未定義変数・C++ではない記述�
 文書3fileの未commit追記は保持し、root checkout・保存branch・既存設定は変更していない。
 worker自身はbuild/test未実施と報告した。Kilo設定変更とターン中断の因果関係は独立に確認できていない。
 
-文書PR #263/#265の成功はこのsource試行の成功ではない。fixture更新・新検査の実行成功・
+文書PR #263/#265の成功はこのsource試行の成功ではない。この未完成試行ではfixture更新・新検査の実行成功・
 Linux/aarch64 CI・実機写真/音声の受入はなく、#49はOpen・未完了のままである。
 次の実装は既存取得/安全境界を保持できる小単位に再分割し、形式ごとの有効fixtureと構造解析を
 先に検証する。今回の不成立な独自parserを微修正だけで製品経路へ投入しない。

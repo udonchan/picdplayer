@@ -1,4 +1,5 @@
 #include "artist_background_image.hpp"
+#include "artist_background_image_fixtures.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -19,7 +20,9 @@ HttpResponse response(long status, std::string mime = {}, std::string body = {})
     return result;
 }
 constexpr auto artist = "0383dadf-2a4e-4d10-a46a-e9e041da8eb3";
-const std::string jpeg = std::string("\xff\xd8", 2) + "fixture" + std::string("\xff\xd9", 2);
+using artist_background_image_fixtures::jpeg;
+using artist_background_image_fixtures::png;
+using artist_background_image_fixtures::webp;
 ArtistBackgroundCandidate candidate(std::string name = "photo.jpg") {
     return {"123", std::string("https://assets.fanart.tv/fanart/music/") + artist +
         "/artistbackground/" + name, 1920, 1080};
@@ -83,22 +86,21 @@ int main() {
         check(!load_artist_background_image(artist, candidate(), {}, {}, mismatch));
         ArtistImageHttpGet truncated = [](std::string_view, std::size_t,
                                           const std::function<bool()>&) {
-            return response(200, "image/jpeg", std::string("\xff\xd8truncated", 11));
+            return response(200, "image/jpeg", jpeg.substr(0, jpeg.size() - 2));
         };
         check(!load_artist_background_image(artist, candidate(), {}, {}, truncated));
-        const std::string png = std::string("\x89PNG\r\n\x1a\n", 8) +
-            std::string("\0\0\0\0IEND\0\0\0\0", 12);
         ArtistImageHttpGet png_get = [&](std::string_view, std::size_t,
                                          const std::function<bool()>&) {
             return response(200, "image/png", png);
         };
-        check(load_artist_background_image(artist, candidate(), {}, {}, png_get)->mime_type == "image/png");
-        const std::string webp = std::string("RIFF", 4) + std::string("\x04\0\0\0", 4) + "WEBP";
+        const auto png_image = load_artist_background_image(artist, candidate(), {}, {}, png_get);
+        check(png_image && png_image->mime_type == "image/png" && png_image->bytes == png);
         ArtistImageHttpGet webp_get = [&](std::string_view, std::size_t,
                                           const std::function<bool()>&) {
             return response(200, "image/webp", webp);
         };
-        check(load_artist_background_image(artist, candidate(), {}, {}, webp_get)->mime_type == "image/webp");
+        const auto webp_image = load_artist_background_image(artist, candidate(), {}, {}, webp_get);
+        check(webp_image && webp_image->mime_type == "image/webp" && webp_image->bytes == webp);
         check(!load_artist_background_image(artist, candidate(), {}, [] { return true; }, image_get));
         bool rejected = false;
         try {

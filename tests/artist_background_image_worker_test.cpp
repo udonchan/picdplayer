@@ -1,4 +1,5 @@
 #include "artist_background_image_worker.hpp"
+#include "artist_background_image_fixtures.hpp"
 #include <atomic>
 #include <chrono>
 #include <iostream>
@@ -11,7 +12,7 @@
 namespace {
 constexpr auto artist_a = "0383dadf-2a4e-4d10-a46a-e9e041da8eb3";
 constexpr auto artist_b = "89ad4ac3-39f7-470e-963a-56509c546378";
-const std::string jpeg = std::string("\xff\xd8", 2) + "synthetic" + std::string("\xff\xd9", 2);
+using artist_background_image_fixtures::jpeg;
 ArtistBackgroundImageRequest request(std::uint64_t generation, std::string artist = artist_a,
                                      std::string id = "123") {
     const auto url = "https://assets.fanart.tv/fanart/music/" + artist + "/artistbackground/fixture.jpg";
@@ -145,6 +146,7 @@ int main() {
         }
         check(closing_seen);
 
+        // Injected loader results below test worker bounds, not image decoding.
         ArtistBackgroundImageWorker failures([](const auto& input, const auto&) -> std::optional<ArtistBackgroundImage> {
             switch (input.generation) {
             case 1: throw std::runtime_error("synthetic failure");
