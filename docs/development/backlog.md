@@ -227,6 +227,10 @@ source/tests差分0とnative syntax exit0を確認した。次は有効fixture�
 復旧文書PR #266は`8a6695d`で統合済み。その次の[有効fixture単位](verification.md#image-fixtures-20261031)では、
 合成した小画像等を実decoderで確認して2試験のpositive画像を置換し、既存assertionを保持した。
 変更前後の限定Linux/aarch64試験は各2/2。productionは未変更で、寸法/pixel数admissionと実機受入は未完了。
+次のPNG単位では共通MIME判定に本体chunk構造/CRC・寸法/静止画検査を追加し、network/fresh/staleの
+既存入口から適用した。[PNG検証記録](verification.md#png-admission-20261031)には228ケース、実decode境界、
+通常/ASan/UBSan各2/2とreview修正・mutationの失敗/復元を分けて記録する。
+JPEG/WebPの同等検査、圧縮ancillary展開等の残資源リスク、#51実写真/TV/音声は未完了で#49をOpenに保つ。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 
