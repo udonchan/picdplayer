@@ -17,7 +17,8 @@
 | 実装済み | 先読み容量・開始閾値、drive access直列化、single/repeat、ReadPolicyの停止境界でのruntime適用 |
 | 実装済み | direct backendのC2 pointer opt-in、capabilityに応じたsingle/repeat strategy選択とdowngrade reason公開 |
 | 実装済み | 明示read offsetとsample補正・playable window・端coverage。物理校正/試聴は別確認 |
-| 未実装/未確認の要求 | cache軽減を伴う独立性、C2 trust評価、追加mode、外部照合。local checksum/明示jobは開発差分で本番接続済みだが未統合・実機未確認 |
+| 実装済み・受入範囲を分離 | local checksum/明示jobはPR #256でmaster統合済み。過去の取得記録と今回のlive照合・残受入は[検証状況](../development/verification.md#pr256-readonly-20261031)で区別する |
+| 未実装/未確認の要求 | cache軽減を伴う独立性、C2 trust評価、追加mode、外部照合。表示済み能力の実装は下記v1完成条件に従う |
 | 未確定の詳細 | cache対策手順、mode既定値、照合サービス・依存library |
 
 現在の公開型は[ReadEvidence / ReadDiagnostics](../../include/integrity_state.hpp)、
@@ -28,6 +29,8 @@ device/disc generation、policy revision、128件の詳細履歴、stream covera
 
 未実装項目の着手・進捗・完了条件は[残課題一覧](../development/backlog.md)で追跡する。
 phase番号は段階の対応付けであり、phaseの一部分を実装しただけで全体を完了とはしない。
+Drive capabilityの表示済み項目には、後述の[v1完成条件](#drive-capability-v1-completion)を適用する。
+上記の未実装という現況記録は、それらをv1後へ延期してよいことを意味しない。
 
 ## 1. 目的と原則
 
@@ -251,6 +254,51 @@ read failureからのfallbackではない。予定window終端の正常drainと�
 追加fallbackは採用せず、実装・配備・実機試験を追加したものではない。
 
 ## 7. NO DISCでの能力probe
+
+<a id="drive-capability-v1-completion"></a>
+### Drive capabilityのv1完成条件（2026-10-31採用）
+
+利用者の指示により、現在の標準PlayerのDrive capabilityに表示している全項目について、
+値を取得・評価し、根拠と不明理由を扱う経路の実装をv1完成の必須条件とする。
+未実装の項目を固定のUNKNOWN/null/NOT AVAILABLEで表示するだけでは完成としない。
+表示名の変更や項目の非表示だけで、この実装条件を満たしたことにしない。
+これは要求の追加であり、以下の現行probeや過去の検証記録を実装済みへ変更するものではない。
+
+| 対象項目 | v1で必要な処理と意味の境界 |
+|---|---|
+| DAE | デジタル音声抽出の対応情報・読取実績を根拠と条件付きで評価する。アナログ再生commandの対応を代用しない |
+| C2 support | drive reportの取得・解釈と失敗理由を扱う。reportの対応可否と実際のC2取得・精度を分ける |
+| C2 trust | 条件・範囲を定めた信頼性評価経路を実装する。support=YESや通常CDでC2非検出だけをtrustの証明にしない |
+| Read cache | cacheに関する取得・評価経路とその根拠を実装する。cacheの報告と物理再読込の独立性は別とする |
+| Accurate stream | 連続性に関する取得・評価経路と適用条件を実装する。小区間一致だけから無条件に対応と推定しない |
+| Speed control / Speed request | 対応照会、明示要求、受理・失敗・未要求を区別する。要求受理を実速度の測定結果にしない |
+| Speed observed | 実速度の報告・観測を取得する経路を実装する。要求倍速やjob全体の所要時間から実速度を代入しない |
+| Read offset | 明示入力の取得・適用・根拠と未設定を区別する。未指定を0にせず、明示0も校正済みと扱わない |
+
+全項目を常にYES/NOや数値で埋めることは要求しない。実装された経路でも、対象drive/bridgeが必要情報を
+提供しない、取得が失敗した、評価条件が揃わない等の場合にはUNKNOWNを維持する。
+未実装を「driveが情報を提供しない」と読み替えてはならない。根拠のある非対応だけをNOとし、
+失敗・欠損・未設定からNOや既定の数値を作らない。実装済みだが未評価である状態と、評価経路自体の未実装も区別する。
+
+UNKNOWNの理由は、取得待ち、未設定、評価未実施・根拠不足、drive/bridgeから必要情報を取得不能、
+権限・I/O・応答形式の失敗、観測世代の失効等を、分かる範囲で区別して説明可能にする。
+値・根拠・取得/評価状態・理由を混同せず、既知の失敗を単なる「不明」で消さない。
+原因が特定できない場合は、その限界を示し、ドライブ故障や非対応と断定しない。
+API/診断で理由を追跡できることを要求するが、新しいfield名・enum・wire schemaはこの節では確定しない。
+
+理由を画面でどこまで常時表示するか、詳細表示への導線、文言・配置・可読性は別のUI検討とする。
+UIの説明量が未決定でもbackendの取得・評価・理由保持を延期せず、全項目の実装条件も緩めない。
+probe/評価は既存のdrive排他・世代失効・有限予算を守り、追加読取や設定変更が必要な試験は別途合意する。
+この要件採用だけで自動取得、校正、追加の実機I/Oや権限変更を承認したことにはしない。
+
+受入では、各項目の実経路と公開結果を照合し、取得・評価成功、根拠付き非対応、取得失敗、
+未設定/未評価、失効について適用するケースを検証する。固定UNKNOWNでの穴埋めを検出し、
+自動試験と対象Piでの確認範囲を分けて記録する。全driveで値を確定できる保証は要求しない。
+
+通常再生の小区間を再読して一致を取るREPEAT検証と、disc全域を対象にlocal SHA-256指紋を生成する
+明示PCM取得jobは別の機能である。どちらの成功も、能力全項目の評価完了や外部MATCHの代わりにしない。
+
+### 現行probeの実装範囲
 
 現行probeはread-onlyかつ任意失敗可能。discなしでも取得できる情報だけを返す。
 probe failureはcapability NOではなくUNKNOWN+error。probe成功を再生可能化の条件にしない。

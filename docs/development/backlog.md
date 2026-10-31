@@ -98,8 +98,10 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 
 | 順位・区分 | Issueと所有範囲 |
 |---|---|
-| 直近1 | #121: PR #243で限定診断修正は統合済み。固定packageでの限定受入と過去control/CEC観測の分類を残し、一括解決扱いしない |
-| 直近2 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない |
+| 直近1（文書統合後） | #49: 画像本体の寸法/pixel数とdecode資源の受入境界を狭く修正する。根拠は[10月31日監査](#issue-audit-20261031)参照 |
+| 直近2 | 表示済みDrive capability全項目のv1実装。取得/評価経路とUNKNOWN理由を整え、既存probeの権限エラーを別に原因調査する |
+| 直近3 | #121: PR #243で限定診断修正は統合済み。固定packageでの限定受入と過去control/CEC観測の分類を残し、一括解決扱いしない |
+| 直近4 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない。#252/#51の同run観測を参照する |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
 | 完了したv1表示 | #164: policy/strategy・長文表示と代表確認を完了してCompleted。追加hardeningは#250でv2以降へ延期 |
 | 実装済み・限定受入待ち | #10: 補正試聴/TV端表示、#88: 観測可能な物理hotplug、#51: 実写真と音声/TV。物理リモコンは#252 |
@@ -110,7 +112,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | v1実装・代表確認を完了した統合単位 | #177/#178: 保存/実service復元とSettings表示/API回帰を完了し、承認済みPR/必須CI経由の統合で終了。物理受入は#252/#51、通常運転は#184に残す |
 | 利用者の実機操作待ち | #252: Player/Settingsの物理リモコン代表受入を一本化。#178/#51は同じrunを参照し重複試験しない |
 | V2以降・非blocking | #254: WPE失敗表示/復帰・DRM/child cleanup。#219のv1移行は完了し、独自の未完了復旧だけを移管。#250のIntegrity hardeningとは別所有 |
-| 機能開発の現単位 | #238/#239: local SHA-256と実session/API/Settings接続はPR #256でmaster統合。10月26日の少量受理/取消に続き、27日の90分上限・単発試験で14 track/242334 CD frameの全域local指紋生成、解放、元設定復元を実機確認した。音声/取消後再生復帰は未確認で#238/#239はOpen。外部照合/cache独立性の証明とはしない |
+| 実装済み・残受入を休止 | #238/#239: local SHA-256と実session/API/Settings接続はPR #256でmaster統合。10月26日の少量受理/取消と27日の全域local指紋生成は過去の記録として保持。10月31日はUI配置/配信とlive identityだけを再照合し、全域取得を再検証していない。音声/取消後再生復帰は未確認でOpenを維持する。[休止点](verification.md#pr256-readonly-20261031)から別承認で再開する |
 | 将来の機能・設計 | #19: quiet boot、#20: read-only root、#42: Custom UI更新。外部provider互換profile/通信は未採用 |
 | 正式供給・配布枠 | #45/#66/#67: release/license/package inventory、#220: v1.0供給精査。#46方式選定後の#47/#68と#69は保留 |
 | 追加研究保留 | #198/#199/#200: Buildroot。#74の調査は完了、採用は未決定 |
@@ -138,6 +140,78 @@ Integrity Monitor固有の追加hardeningだけを#250としてv2以降へ移管
 | [#6 Benchmark CD-DA backends and read policies](https://github.com/udonchan/picdplayer/issues/6) | クローズ済み（採用見送り）。`PICDPLAYER_ENABLE_PARANOIA=ON`でのDocker/aarch64 package生成とCTest 39件は確認済みだが、Pi上の同条件backend比較・試聴は未実施。ライセンス・再配布条件の確認が必要なためparanoiaは公式配布へ採用せず、標準運用はdirectを維持する。依存監査は#66、現行構成の速度要求に関する定量比較は#83、継続運転は#184で追跡する。 |
 
 ## integrity仕様の実装
+
+### Drive capabilityのv1必須残作業（2026-10-31）
+
+利用者は、標準Playerで現在表示するDrive capabilityの全項目について、v1完成までの実装を要求した。
+仕様は[Drive capabilityのv1完成条件](../design/integrity-design.md#drive-capability-v1-completion)を正とする。
+未実装を固定UNKNOWNで置くことは受入不可であり、実装された経路で判断不能な場合のUNKNOWNは維持する。
+これは#7の初期probe完了とは別の追加要件であり、既存の完了記録を取り消すものではない。
+
+- DAE、C2 support/trust、Read cache、Accurate stream、Speed control/request/observed、Read offsetの取得・評価経路を点検し、未実装部分を完成させる。
+- 値と根拠に加え、取得待ち・未設定・未評価/根拠不足・対象から取得不能・権限等の失敗・失効を可能な範囲で区別する。未実装をdrive要因やNOへ置き換えない。
+- 各項目の正負例・失敗・失効を自動検証し、対象Piでの確認と限界を別に記録する。UNKNOWNが残ることだけを不合格にはしないが、未実装を残してv1完了としない。
+- 理由の画面上の説明量・導線・文言・配置は別議論とする。UI未決定をbackend実装の延期理由にしない。
+
+2026-10-31のread-only API観測では能力6項目がUNKNOWN/source NONEで、
+`probe_error`は`open /dev/sr0: Permission denied`だった。これは原因調査の入口であり、
+現在の権限構成の原因確定やdrive非対応の証明ではない。権限変更・再probe・再生/取得試験は未実施。
+現行sourceには取得・評価が未実装の項目もあり、権限エラーだけを解消して全項目完成とはしない。
+
+本要件はv1必須であり、v2以降の追加UI hardeningを扱う#250へ延期しない。
+物理異常媒体/別driveの#146、device lifecycleの#88とは責務を分ける。
+後続の実装単位・Issue割当は未整理で、この追記ではGitHub Issue作成・再open・closeや実機変更を行わない。
+
+<a id="issue-audit-20261031"></a>
+### Open Issue再照合と推奨順序（2026-10-31）
+
+GitHubのOpen Issue全31件、Open PR 0件、live master
+`6c871f67cd1b333bdfd84f19862d67b88c45300e`を照合した。
+Issue本文・comments、関連PRの統合状態と同commitの文書/sourceを根拠とし、
+古いlocal checkoutの一覧を現在のIssue状態へ読み替えていない。
+下表は今回の監査時点の判断であり、Issueのclose・再open・本文変更を実行した記録ではない。
+無条件にCompletedとして閉じられるOpen Issueは見つからなかった。
+未確認の受入を消して件数を減らさず、古い実装状況の訂正と残作業の終了条件の明確化を優先する。
+
+| Issue | 監査結果と次の扱い |
+|---|---|
+| [#49](https://github.com/udonchan/picdplayer/issues/49) | 最初の技術的優先。取得経路は実装済みだが、画像本体の寸法/pixel数とdecode資源の受入境界が不足する。圧縮byte数やprovider申告寸法だけではWPEの展開memoryを制限できない。狭い安全性修正をCapability拡張より先に扱う |
+| [#238](https://github.com/udonchan/picdplayer/issues/238)、[#239](https://github.com/udonchan/picdplayer/issues/239) | 本文の未commit/未push/未統合は現況として古い。PR #256は`a17e6e0`、後続記録PR #262は`6c871f6`で統合済み。local consumerの実装完了とruntime実機受入を分離して本文を更新する候補。音声/取消後再生復帰等は未確認で、closeは別指示待ち |
+| [#10](https://github.com/udonchan/picdplayer/issues/10) | 明示offset補正はPR #233で統合済み。残る補正条件の試聴・TV端除外表示は固有の受入として維持。未設定を0にする実装や物理校正済みという主張を追加しない |
+| [#88](https://github.com/udonchan/picdplayer/issues/88)、[#146](https://github.com/udonchan/picdplayer/issues/146) | 観測softwareと物理受入を分離した現scopeを維持。#88本文の「#239は未実装」は更新候補。消失/再接続/異常媒体/別driveは別承認・安全条件が必要で、通常CDや後続の正常flagを過去の異常受入へ代用しない |
+| [#121](https://github.com/udonchan/picdplayer/issues/121)、[#184](https://github.com/udonchan/picdplayer/issues/184) | 診断修正はPR #243、保存はPR #253で統合済み。未統合/背景保存未実装という現況文は訂正候補。残る固定packageの音声・通常運転受入を維持し、実際の音声異常が再現した場合はCapabilityより優先する |
+| [#252](https://github.com/udonchan/picdplayer/issues/252)、[#51](https://github.com/udonchan/picdplayer/issues/51) | 部分的なfocus/写真確認はあるが全受入未完了。物理リモコンは#252の同runへ集約し、#51の実写真切替/TV可読性/音声と重複試験しない。写真取得の安全性は#49が所有する |
+| [#83](https://github.com/udonchan/picdplayer/issues/83)、[#3](https://github.com/udonchan/picdplayer/issues/3) | 現WPEの比較可能な性能/起動測定が残る。旧Chromium/Cageの測定値や完了したdedup修正を現WPE全体の合格へ代用しない。機能packageが安定してから有限範囲で測定する |
+| [#124](https://github.com/udonchan/picdplayer/issues/124) | UI改修後の固定WPE/TV/PNG/DOM再確認待ちを維持。意図したSettingsスクロールの改善を、旧Playerの意図しないscrollbar解消とみなさない |
+| [#14](https://github.com/udonchan/picdplayer/issues/14) | CEC消失後の再open/登録復旧・claim期限の実装/受入が残る。初回device待ちと非exclusive方針は既存実装。通常の物理リモコン受入と異常復旧を混同せず、通常利用の再現bugがなければ安全性/Capabilityの後に扱う |
+| [#66](https://github.com/udonchan/picdplayer/issues/66)、[#67](https://github.com/udonchan/picdplayer/issues/67) | 正式公開前のlicense/notice/package照合を維持。paranoia警告はPR #142、control inventoryはPR #212で実装済みで、古い未実装文は訂正候補。Apache-2.0案を採用済みとせず、限定tool完了をIssue全体の完了にしない |
+| [#220](https://github.com/udonchan/picdplayer/issues/220)、[#68](https://github.com/udonchan/picdplayer/issues/68) | WPEの正式供給・sandbox/更新条件と、最終image実体のcomplianceは公開前の残条件。開発runtime供給やpackage inventoryで完了とはしない。実配布内容に存在しないCage/Chromiumの旧前提は更新候補 |
+| [#46](https://github.com/udonchan/picdplayer/issues/46)、[#47](https://github.com/udonchan/picdplayer/issues/47)、[#45](https://github.com/udonchan/picdplayer/issues/45) | image詳細要件、生成/実機受入、正式公開を別所有で維持。OS選定と候補artifact経路は既に進んでおり、旧「方式未選定」「版付き候補手順なし」は訂正候補。PR #261の文書/B0は製品image完成ではない。一般利用者にSSH準備を要求する案を復活させない |
+| [#147](https://github.com/udonchan/picdplayer/issues/147) | 専用安全環境での異version/展開後中断復旧が未確認。通常package lifecycleで代用せず、運用Piに意図的障害を起こさない。製品が保証する更新方式に対応した受入として別枠にする |
+| [#198](https://github.com/udonchan/picdplayer/issues/198)、[#199](https://github.com/udonchan/picdplayer/issues/199)、[#200](https://github.com/udonchan/picdplayer/issues/200)、[#69](https://github.com/udonchan/picdplayer/issues/69) | Buildroot採用/比較の再承認まで保留。古い生成/build開始を最終build・Pi受入へ昇格しない。v1の先行依存にせず、旧成果と未確認を保全する |
+| [#250](https://github.com/udonchan/picdplayer/issues/250)、[#254](https://github.com/udonchan/picdplayer/issues/254)、[#19](https://github.com/udonchan/picdplayer/issues/19)、[#20](https://github.com/udonchan/picdplayer/issues/20) | 明示したV2/保留方針を維持。深いUI matrix、WPE異常復旧、quiet boot、read-only rootを今回の必須作業へ戻さない |
+| [#42](https://github.com/udonchan/picdplayer/issues/42) | Custom UIの原子的更新/復元は具体的需要待ち。既存の起動時静的検証/fallbackを再実装せず、v1必須の新updaterにはしない |
+
+#49の静的根拠は、監査基準commitの`src/artist_background_image.cpp`がMIME相当の外形とencoded上限を
+検査する一方、画像本体の寸法/pixel数を解釈しないこと、`src/artist_background_parser.cpp`の寸法が
+provider metadataで最大16384であること。16384角・4 bytes/pixelなら1面だけでも1 GiB相当になる。
+これは許容入力の資源安全性の不足であり、今回PiでOOMや音声障害を観測したという意味ではない。
+修正時の上限・対応形式・拒否時fallbackと試験条件は別途具体化し、包括的V2 hardeningへ拡張しない。
+
+推奨順序は、今回の要件/監査/休止点の文書統合、#49の狭い資源安全性修正、表示済みCapabilityの
+取得・評価・理由保持、固定packageでの#121/#184/#252/#51代表受入、安定後の#83測定とする。
+新しいCapability v1要件を所有するIssueはまだないため、既存#7の完了を取り消さず、
+全項目の受入表を持つ1件の追跡Issueを作成する案とする。Issue作成・本文更新・closeはこの監査では実施しない。
+正式公開時の#66/#67/#68/#220/#45等の条件は、開発順序を後にしたことで免除されない。
+
+文書統合時は、古いcheckoutのbranch全体をそのままmasterへ統合せず、最新masterの記録を保持して
+今回の文書追記だけを適用・検証する。
+監査時点ではGit/GitHubの変更を行わず、13:52 UTCの追加指示で文書のcommit・最新masterへの載せ直し・
+push/PR/CI/通常mergeと、小さな文書PRを都度統合する方針が承認された。
+実装・検証状況やIssue整理の変化も、後続の実装完了まで溜めず独立した文書PRで同期する。
+実機の安全な休止点は[2026-10-31のread-only記録](verification.md#pr256-readonly-20261031)を参照する。
+
+### 既存Issue一覧（下記は以前の整理時点を含む）
 
 | Issue | 主な範囲 |
 |---|---|
