@@ -142,6 +142,15 @@ fixtureは`tests/fixtures/artist-background-webp/generate.cpp`から既存libweb
 generatorは通常build/CTestの依存にしない。再生成・native decode・Linux試験の条件は
 [検証記録](verification.md#webp-admission-20261031)に記載する。
 
+### 次のJPEG単位の受入profile（実装前）
+
+SOF0/1/2の8-bit Huffman DCTを対象とし、quantization tableも8-bit版だけに限定する。
+sample precisionとquantizer precisionは別の値であり、16-bit DQTを12-bit画像と誤分類しない。
+低品質のlibjpeg出力がnative decoderで読めても、T.81(09/92) B.2.4.1との区別をせず規格適合の証明にしない。
+広いquantizerの互換受入は今回採用せず、SOF1正例はHuffman table 2と8-bit DQTを使って生成・decode確認する。
+後続SOF/DNL/hierarchyと非8-bit processを拒否し、progressiveの複数SOS・DHT再定義・entropy stuffing/RSTを
+構造試験へ含める。この段階ではJPEGの製品検査はまだ実装していない。
+
 公開modelは同一originの不透明URLだけを渡す。API契約は[メッセージ契約](../design/message-contract.md)を正とする。
 標準UIは1枚なら静止、複数ならshuffleで45秒滞在・4秒crossfadeする。
 追加画像の到着・同じsnapshotでは現在画像やtimerを最初からやり直さない。
