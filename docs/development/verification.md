@@ -4,6 +4,41 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="capability-live-20261031T2330"></a>
+## #264 開発優先方針とread-only再照合（2026-10-31 23:30 UTC）
+
+23:25 UTCの利用者指示で、指定開発Piは開発最優先・操作ごとの承認待ち不要へ更新された。
+撤回までこの対象に適用し、identity・現在状態・有限予算・正常終了/復元の確認は維持する。
+hostや他target、Git/公開、強制終了を成功とみなすことへ拡張しない。方針はAGENTS.mdへ保存した。
+以下の過去の「利用可否確認待ち」は当時の休止条件として残し、今回の指示で承認待ちだけを解除した。
+
+既存ED25519 pinをconsole由来の値と照合し、厳格なhost-key検証で同じ接続先へ接続した。
+boardはRaspberry Pi 3 Model B Rev 1.2。machine/board識別値はprivateに扱い、keyや生serialをrepositoryへ含めない。
+このrunはservice選択field・process資格・node metadataと既存APIの読取だけで、drive open/probe/ioctlは追加していない。
+
+| 項目 | 観測 |
+|---|---|
+| daemon | active/running、PID51340、NRestarts0、User/Group picdplayer、実UID999/GID985 |
+| groups / node | process groups24/29/44/985、cdrom=24。`/dev/sr0`はblock11:0、root:cdrom、0660、symlinkなし |
+| unit制約 | NoNewPrivileges=yes、PrivateDevices=no、DevicePolicy=auto、RootDirectory/RootImage/drop-inなし |
+| 配置identity | package0.1.0 arm64、Release、daemon SHA-256 `e176151f2a3c9dd97dec6b994ff88331548fcb5439eb5460646795254c49634a` |
+| 稼働exe / ACL | `/proc/PID/exe`読取はPermissionError、getfacl未導入。未確認を一致/ACLなしに補完しない |
+| device観測 | generation21、PRESENT、SIGNATURE_CHANGED、sampled=true、revalidating/retiring_io=false |
+| 能力 | C2 support=YES/DRIVE_REPORTED、speed control=YES/KERNEL_REPORTED、probe_error空 |
+| 他の能力 | DAE/C2 trust/read cache/accurate streamはUNKNOWN/NONE・detail空。取得/評価実装の残りでありdrive故障としない |
+| 再生 / capture | STOPPED、track1/position0、AUDIO_READY。capture IDLE/job0、busy/inflight/access待ちfalse、reader_released=true、media IDLE |
+| policy / offset | REPEATの要求/実効一致、75 frame/2一致/最大3回/10000ms、pendingなし。offset null、開始不可理由offset_unknown |
+
+以前のgeneration9のPermission deniedは現在APIでは非再現で、同じPIDとrestart数のまま新世代の成功reportがある。
+現資格とnodeのgroup/modeも整合する。新しい権限修正・daemon root化・restartは不要で、実施していない。
+ただし過去のopen失敗の原因や成功probeの正確な時刻は断定せず、以前の失敗記録を正常へ上書きしない。
+配置hashは以前の配備identityと一致するが、新しいmasterのbuildや稼働exe hash一致の証明にはしない。
+新しい画像admission修正・#264の機能はこのrunで配備していない。
+
+targetにはsg_modes/sg_raw/cd-infoがなく、sudoコマンドは存在した（非対話権限は未確認）。
+次のread-only protocol調査は、既存drive排他と正常stop/restore・有限command予算を計画してから進める。
+承認待ち不要でも、同時drive操作や未評価のC2 trust、要求速度を実速度とする主張は行わない。
+
 <a id="image-resource-capability-handoff-20261031"></a>
 ## #49残条件と#264調査の境界（2026-10-31）
 

@@ -99,7 +99,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | 順位・区分 | Issueと所有範囲 |
 |---|---|
 | 直近1（admission後） | #49: JPEG/PNG/WebPの寸法/pixel数admissionはPR #268/#269/#270で統合済み。残るdecode/HTTP/総資源・実機条件を[資源境界表](fanart-tv-poc.md#resource-boundaries-49)で分離し、IssueはOpenを維持する |
-| 直近2 | [#264](https://github.com/udonchan/picdplayer/issues/264): 表示済みDrive capability全項目のv1実装。sourceのopen失敗/世代保持経路は確認済みだが、live原因は利用可否再確認後のread-only照合待ち。権限変更を推測で先行させない |
+| 直近2 | [#264](https://github.com/udonchan/picdplayer/issues/264): 開発優先・承認待ち不要の指示後に[23:30 UTCのread-only再照合](verification.md#capability-live-20261031T2330)を実施。現在はC2/speed report成功・probe_error空で権限修正は不要。未実装の取得/評価経路を分割して進め、過去エラーの原因を推測しない |
 | 直近3 | #121: PR #243で限定診断修正は統合済み。固定packageでの限定受入と過去control/CEC観測の分類を残し、一括解決扱いしない |
 | 直近4 | #184: 固定構成・時間・操作列での通常系受入。短時間成功を長期/全操作成功にしない。#252/#51の同run観測を参照する |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
@@ -246,6 +246,10 @@ JPEG PR #270は`48ab7c8`で統合し、PR head `a7e3f16`の標準WPE Release/Deb
 #264はkernel open失敗でC2問合せ前に止まることと、同世代で失敗が保存されるsource経路を確認した段階。
 live原因には利用可否の再確認とread-only照合が必要で、権限変更やdriver故障と断定しない。
 Capabilityの未実装経路を完成扱いにせず、実機への無断接続・再probeを先行させない。
+23:25 UTCの利用者指示により、この開発Piの操作ごとの承認待ちは解除された。AGENTS.mdへ継続方針を保存し、
+23:30 UTCのpin付きread-only観測ではgeneration21のC2/speed report成功とprobe_error空を確認した。
+以前の失敗の起因は未確定のまま保持し、group/udev/root化による修正はしていない。
+DAE/C2 trust/cache/accurate stream/実速度の残実装と根拠の区別を進める。現在状態・排他・有限予算・復元の確認は維持する。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

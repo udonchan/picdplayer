@@ -169,6 +169,21 @@ must never be reported as successful reader release or playback recovery.
 Keep secrets private, retain host-side evidence, and do not infer permission
 to commit, push, merge, publish, or change unrelated systems from this grant.
 
+### Development priority on the identified Pi (2026-10-31)
+
+The user has made development the highest priority on this development Pi
+until they explicitly change that premise. Per-operation user approval or
+confirmation that the user is available is not required on this target.
+Verify the pinned target identity and observe current playback/capture/I/O
+state before acting; do not assume it is still idle from an earlier run.
+Plan bounded operations, normal cancellation/shutdown, and restoration, and
+record actual changes and results. This does not authorize speculative
+privilege expansion, treating forced termination as successful release,
+altering other targets or host configuration, destroying repository work,
+or publishing releases. The existing separate Git/GitHub authorization
+boundaries still apply. This is not a product requirement for end users
+to configure SSH. Keep a later withdrawal or narrowing of this grant.
+
 ## 8. Handling ambiguity and inconsistencies
 
 If the issue description, implementation, documentation, tests, or this
