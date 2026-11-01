@@ -97,7 +97,8 @@ if(ENABLE_API)
     find_package(OpenSSL REQUIRED COMPONENTS Crypto)
     target_sources(cdplayerd PRIVATE src/daemon_snapshot_json.cpp src/presentation_json.cpp src/api_server.cpp src/read_policy_store.cpp src/read_diagnostics_publisher.cpp
         src/ui_bundle.cpp src/complete_pcm_session.cpp src/complete_pcm_worker.cpp
-        src/complete_pcm_input.cpp src/complete_pcm_sha256.cpp)
+        src/complete_pcm_input.cpp src/complete_pcm_sha256.cpp
+        src/c2_reference_assessment.cpp src/c2_assessment_run.cpp src/c2_assessment_session.cpp)
     target_include_directories(cdplayerd PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
     target_compile_definitions(cdplayerd PRIVATE ENABLE_API=1)
     target_link_libraries(cdplayerd PRIVATE nlohmann_json::nlohmann_json PkgConfig::WEBSOCKETS OpenSSL::Crypto)
@@ -310,6 +311,16 @@ if(BUILD_TESTING)
                                                       nlohmann_json::nlohmann_json)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
+        add_executable(c2_assessment_api_test tests/c2_assessment_api_test.cpp src/api_server.cpp src/logger.cpp
+            src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp src/repeated_read_verifier.cpp
+            src/c2_assessment_session.cpp src/c2_reference_assessment.cpp src/media_worker.cpp
+            src/drive_capabilities.cpp src/disc_toc.cpp)
+        target_include_directories(c2_assessment_api_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
+        target_compile_features(c2_assessment_api_test PRIVATE cxx_std_20)
+        target_compile_options(c2_assessment_api_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(c2_assessment_api_test PRIVATE PkgConfig::WEBSOCKETS Threads::Threads nlohmann_json::nlohmann_json)
+        add_test(NAME c2_assessment_api COMMAND c2_assessment_api_test)
+        set_tests_properties(c2_assessment_api PROPERTIES TIMEOUT 15)
         add_executable(complete_pcm_session_test tests/complete_pcm_session_test.cpp
             src/complete_pcm_session.cpp src/media_worker.cpp src/complete_pcm_worker.cpp src/complete_pcm_input.cpp
             src/complete_pcm_sha256.cpp src/read_offset.cpp src/disc_toc.cpp src/integrity_state.cpp
@@ -386,6 +397,27 @@ if(BUILD_TESTING)
     target_compile_options(drive_capabilities_test PRIVATE -Wall -Wextra -Wpedantic)
     target_link_options(drive_capabilities_test PRIVATE -Wl,--wrap=ioctl)
     add_test(NAME drive_capabilities COMMAND drive_capabilities_test)
+    add_executable(c2_reference_assessment_test tests/c2_reference_assessment_test.cpp src/c2_reference_assessment.cpp)
+    target_include_directories(c2_reference_assessment_test PRIVATE include)
+    target_compile_features(c2_reference_assessment_test PRIVATE cxx_std_20)
+    target_compile_options(c2_reference_assessment_test PRIVATE -Wall -Wextra -Wpedantic)
+    add_test(NAME c2_reference_assessment COMMAND c2_reference_assessment_test)
+    add_executable(c2_assessment_run_test tests/c2_assessment_run_test.cpp src/c2_assessment_run.cpp src/c2_reference_assessment.cpp)
+    target_include_directories(c2_assessment_run_test PRIVATE include)
+    target_compile_features(c2_assessment_run_test PRIVATE cxx_std_20)
+    target_compile_options(c2_assessment_run_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_libraries(c2_assessment_run_test PRIVATE OpenSSL::Crypto Threads::Threads)
+    add_test(NAME c2_assessment_run COMMAND c2_assessment_run_test)
+    set_tests_properties(c2_assessment_run PROPERTIES TIMEOUT 10)
+    add_executable(c2_assessment_session_test tests/c2_assessment_session_test.cpp
+        src/c2_assessment_session.cpp src/c2_reference_assessment.cpp src/media_worker.cpp
+        src/drive_capabilities.cpp src/disc_toc.cpp)
+    target_include_directories(c2_assessment_session_test PRIVATE include)
+    target_compile_features(c2_assessment_session_test PRIVATE cxx_std_20)
+    target_compile_options(c2_assessment_session_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_libraries(c2_assessment_session_test PRIVATE Threads::Threads nlohmann_json::nlohmann_json)
+    add_test(NAME c2_assessment_session COMMAND c2_assessment_session_test)
+    set_tests_properties(c2_assessment_session PROPERTIES TIMEOUT 10)
     add_executable(drive_access_test tests/drive_access_test.cpp)
     target_include_directories(drive_access_test PRIVATE include)
     target_compile_features(drive_access_test PRIVATE cxx_std_20)

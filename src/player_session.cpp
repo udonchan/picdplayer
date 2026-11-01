@@ -22,6 +22,7 @@
 #ifdef ENABLE_API
 #include "api_server.hpp"
 #include "complete_pcm_session.hpp"
+#include "c2_assessment_session.hpp"
 #include "read_policy_store.hpp"
 #include "presentation_model.hpp"
 #include "presentation_json.hpp"
@@ -208,6 +209,45 @@ void run_player_session(const std::string& device, CddaBackend backend,
                      buffer_config, drive_access,
                      initial_read_policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
                      initial_block_frames);
+    MediaWorker::AssessC2 assess_c2;
+#ifdef ENABLE_API
+    assess_c2 = [device, device_observer, accepted_device_generation](const C2Reference& reference,
+        const std::function<bool()>& current) {
+        C2ReferenceAssessment validate(reference);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(4000);
+        const auto generation = accepted_device_generation->load();
+        const auto valid = [current, generation, device_observer, accepted_device_generation] {
+            return current() && generation != 0 && generation == accepted_device_generation->load() &&
+                device_observer->permits(generation);
+        };
+        if (!reference.expected_toc || !valid())
+            throw std::runtime_error("C2 reference context unavailable before TOC");
+        if (std::chrono::steady_clock::now() >= deadline) return C2AssessmentRunResult{C2AssessmentRunState::timed_out, {}, {}, {}};
+        if (!same_toc(*reference.expected_toc, read_cd_toc(device)) || !valid())
+            throw std::runtime_error("C2 reference TOC context changed before assessment");
+        auto result = run_c2_assessment_raw(reference, [device, valid] {
+            if (!valid()) throw std::runtime_error("C2 assessment context changed before open");
+            auto reader = make_device_epoch_reader(make_cdda_reader(CddaBackend::direct, device,
+                {0, true, C2Status::not_checked, true, 1000}), valid);
+            if (!valid()) throw std::runtime_error("C2 assessment context changed during open");
+            return reader;
+        }, valid, [] { return std::chrono::steady_clock::now(); }, deadline);
+        if (result.state == C2AssessmentRunState::complete && !valid()) {
+            result.state = C2AssessmentRunState::cancelled; result.assessment = {}; return result;
+        }
+        if (result.state == C2AssessmentRunState::complete && std::chrono::steady_clock::now() >= deadline) {
+            result.state = C2AssessmentRunState::timed_out; result.assessment = {}; return result;
+        }
+        if (result.state == C2AssessmentRunState::complete &&
+            (!same_toc(*reference.expected_toc, read_cd_toc(device)) || !valid()))
+            throw std::runtime_error("C2 reference TOC context changed after assessment");
+        if (result.state == C2AssessmentRunState::complete && std::chrono::steady_clock::now() >= deadline) {
+            result.state = C2AssessmentRunState::timed_out;
+            result.assessment = {};
+        }
+        return result;
+    };
+#endif
     MediaWorker media_worker(
         drive_access,
         [device] { return read_cd_media(device).observation; },
@@ -222,7 +262,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
         [device] { request_cd_stop(device); },
         [device_observer, accepted_device_generation](std::uint64_t generation) {
             return generation == accepted_device_generation->load() && device_observer->permits(generation);
-        });
+        }, std::move(assess_c2));
     ArtistBackgroundPolicy artist_background_policy(false, "metadata_disabled");
 #ifdef ENABLE_METADATA
     std::string artist_background_key;
@@ -328,6 +368,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
     bool api_eject_inflight = false;
     std::chrono::steady_clock::time_point api_eject_requested_at{};
     std::unique_ptr<CompletePcmSession> capture;
+    std::unique_ptr<C2AssessmentSession> c2_assessment;
     auto capture_options = std::make_shared<DirectOptions>();
     auto capture_options_mutex = std::make_shared<std::mutex>();
     auto capture_observation_generation = std::make_shared<std::atomic<std::uint64_t>>(0);
@@ -349,9 +390,20 @@ void run_player_session(const std::string& device, CddaBackend backend,
         context.policy = effective_read_policy;
         return context;
     };
-    const auto capture_interrupt = [&] { return capture && capture->interrupt(); };
-    const auto capture_busy = [&] { return capture && capture->busy(); };
-    const auto capture_released = [&] { return !capture || capture->released(); };
+    const auto c2_context = [&] {
+        return C2AssessmentContext{capture_context(), backend == CddaBackend::direct,
+            drive_probe_complete && drive_capabilities.c2_supported.value == Knowledge::yes,
+            !capture || (!capture->busy() && capture->released())};
+    };
+    const auto capture_interrupt = [&] {
+        const bool pcm = capture && capture->interrupt();
+        const bool c2 = c2_assessment && c2_assessment->interrupt();
+        return pcm || c2;
+    };
+    const auto capture_busy = [&] { return (capture && capture->busy()) || (c2_assessment && c2_assessment->busy()); };
+    const auto capture_released = [&] {
+        return (!capture || capture->released()) && (!c2_assessment || c2_assessment->released());
+    };
     auto publish_api_snapshot = [&] {
         MetadataResult metadata;
         std::optional<std::uint64_t> metadata_generation;
@@ -363,6 +415,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #endif
         const auto state = controller.state();
         auto published_drive = drive_capabilities;
+        if (c2_assessment) published_drive.c2_trustworthy = c2_assessment->flag(c2_context());
         published_drive.observation = device_observation;
         published_drive.observation_revalidating = !device_context_ready && device_observation.presence != DevicePresence::absent;
         published_drive.observation_retiring_io = device_io_retiring;
@@ -435,6 +488,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 if (!capture_current()) throw std::runtime_error("capture context changed during TOC");
                 return toc;
             }, drive_access);
+        c2_assessment = std::make_unique<C2AssessmentSession>(diagnostic_session_id, media_worker);
         diagnostic_publisher = std::make_unique<ReadDiagnosticsPublisher>();
         const auto serialize_read_policy = [&] {
             const auto policy_json = [](const ReadPolicy& value) {
@@ -454,7 +508,17 @@ void run_player_session(const std::string& device, CddaBackend backend,
                    ",\"persistence_configured\":" + (settings_file.empty() ? "false" : "true") + '}';
         };
         ApiCommandHandler command_handler = [&](const ApiCommand& command) -> ApiCommandResult {
+                if (command.type == ApiCommandType::start_c2_assessment || command.type == ApiCommandType::cancel_c2_assessment) {
+                    const auto result = command.type == ApiCommandType::start_c2_assessment ?
+                        c2_assessment->start(command, c2_context()) : c2_assessment->cancel(command);
+                    if (result) {
+                        publish_api_snapshot();
+                        if (api_server) api_server->publish_state(api_state_json);
+                    }
+                    return result;
+                }
                 if (command.type == ApiCommandType::start_complete_pcm) {
+                    if (c2_assessment->busy()) return ApiCommandFailure::c2_busy;
                     if (capture->busy()) return ApiCommandFailure::capture_busy;
                     const auto context = capture_context();
                     if (!capture->start_rejection(context)) {
@@ -476,7 +540,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 case ApiCommandType::next: case ApiCommandType::previous: case ApiCommandType::seek_relative:
                 case ApiCommandType::select_track: case ApiCommandType::eject: case ApiCommandType::set_read_policy:
                     if (capture_interrupt() && command.type != ApiCommandType::stop)
-                        return ApiCommandFailure::capture_releasing;
+                        return c2_assessment->busy() ? ApiCommandFailure::c2_releasing : ApiCommandFailure::capture_releasing;
                     break;
                 default: break;
                 }
@@ -601,6 +665,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                 case ApiCommandType::set_artist_background: return false; // handled above
                 case ApiCommandType::start_complete_pcm: return false;
                 case ApiCommandType::cancel_complete_pcm: return false;
+                case ApiCommandType::start_c2_assessment: return false;
+                case ApiCommandType::cancel_c2_assessment: return false;
                 case ApiCommandType::select_metadata_candidate: return false; // handled above
                 case ApiCommandType::decline_metadata_candidates: return false; // handled above
                 case ApiCommandType::eject: break;
@@ -643,7 +709,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                             ",\"persistence_state\":\"" + state + "\",\"requested_source\":\"" + background_source + "\"}";
                     },
                                                   std::move(background_artwork_provider), [&] { return diagnostic_response(false); },
-                                                  [&](bool result) { return capture->response(capture_context(), result); });
+                                                  [&](bool result) { return capture->response(capture_context(), result); },
+                                                  [&] { return c2_assessment->response(c2_context()); });
         auto line = log_notice("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';
@@ -787,6 +854,12 @@ void run_player_session(const std::string& device, CddaBackend backend,
         }
         MediaWorkerResult media_result{};
         while (media_worker.pop(media_result)) {
+#ifdef ENABLE_API
+            if (media_result.work == MediaWork::assess_c2) {
+                if (c2_assessment) c2_assessment->offer(media_result);
+                continue;
+            }
+#endif
             if (media_result.observation_generation != device_observation.generation || !device_context_current()) continue;
             if (media_state.state() == MediaLifecycleState::ejecting &&
                 media_result.work != MediaWork::eject &&
@@ -1039,6 +1112,7 @@ void run_player_session(const std::string& device, CddaBackend backend,
             // API cancellation is processed before confirmation. Later CEC/stdin
             // commands revoke receipts before the next public response.
             if (capture) capture->poll(capture_context());
+            if (c2_assessment) c2_assessment->poll(c2_context());
 #endif
         }, [&] {
             // Commands may just have admitted capture, started playback or ejected.

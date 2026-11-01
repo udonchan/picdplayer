@@ -18,7 +18,8 @@
 | 実装済み | direct backendのC2 pointer opt-in、capabilityに応じたsingle/repeat strategy選択とdowngrade reason公開 |
 | 実装済み | 明示read offsetとsample補正・playable window・端coverage。物理校正/試聴は別確認 |
 | 実装済み・受入範囲を分離 | local checksum/明示jobはPR #256でmaster統合済み。過去の取得記録と今回のlive照合・残受入は[検証状況](../development/verification.md#pr256-readonly-20261031)で区別する |
-| 未実装/未確認の要求 | cache軽減を伴う独立性、C2 trust評価、追加mode、外部照合。表示済み能力の実装は下記v1完成条件に従う |
+| 実装済み・実機未確認 | 明示reference付きC2評価APIとproduction reader経路。下記の条件付きsector評価に限定し、独立reference/challengeの実機成功は未確認 |
+| 未実装/未確認の要求 | cache軽減を伴う独立性、C2 trust実機評価、追加mode、外部照合。表示済み能力の実装は下記v1完成条件に従う |
 | 未確定の詳細 | cache対策手順、mode既定値、照合サービス・依存library |
 
 現在の公開型は[ReadEvidence / ReadDiagnostics](../../include/integrity_state.hpp)、
@@ -49,7 +50,7 @@ playback continuity、quiet operation、extensibility、UI simplicityとする�
 ## 2. 現行実装と追加要求の境界
 
 観測core、technical status、先読み設定、drive access直列化、任意の反復一致は現行設計へ統合した。
-追加要求の中心はC2 trust評価、cache独立性、追加mode、外部照合である。offsetの実装は後述#10を参照する。direct C2 pointerは
+追加要求の中心はC2 trust実機評価、cache独立性、追加mode、外部照合である。offsetの実装は後述#10を参照する。direct C2 pointerは
 明示opt-inで、capabilityに応じた現行single/repeat strategy選択とdowngrade reasonを公開する。
 ReadPolicyの稼働中切替は実装・自動試験済みで、
 通常CDでPLAYING/PAUSED中の保留とSTOPPED境界での適用を確認した。現在の小さなReadPolicyと、
@@ -58,6 +59,23 @@ ReadPolicyの稼働中切替は実装・自動試験済みで、
 初期の依存調査では観測coreへの新規libraryは不要だった。MMC/C2/cacheはLinux UAPIと
 drive/bridgeの挙動を確認してから選び、外部照合のprotocol・利用条件は着手時に再調査する。
 追加要求の統合だけを理由に既存reader、ALSA、CEC、metadataを再設計しない。
+
+### 明示reference付きC2評価
+
+`c2-sector-reference-v1`はoperatorが独立性とalignmentを明示assertしたreferenceに対する
+conditional sector-clean-filter評価である。referenceの真正性を認証する機能ではない。
+現在のdiscのaudio領域内の最大2 LBAについて各3回、最大6回だけ単一sectorのstrict direct C2 readを行う。
+各sectorの2352 byteをcanonical S16LEでSHA-256化し、指定されたraw-LBA digestと比較する。
+offsetは明示0だけを受理し、校正済みと解釈しない。provider照合、自動取得、PCM保存は追加しない。
+
+全attemptが完全かつC2既知で、C2 CLEANかつreference一致のcontrolがある場合だけ判定する。
+CLEANなのにreferenceと異なるsampleがあればNO/TESTED、これがなくC2 REPORTEDかつ異なるchallengeが
+あればYES/TESTED。それ以外（control/challengeなし、部分read、C2不明、取消、期限超過）はUNKNOWN/NONE。
+反復一致、CLEAN、support=YES、local fingerprintだけではYESを作らない。
+TESTEDもそのreference・LBA・contextに限定し、drive全体、pointer byte位置精度、cache独立性、
+原盤正当性、bit-perfect再生を証明しない。実在する独立reference/challengeによる実機positiveは未確認。
+APIの受付・失効条件は[メッセージ契約](message-contract.md#c2-reference-api)、所有権は
+[詳細設計](detailed-design.md#c2-assessment-ownership)を参照する。
 
 ## 3. 目標構成と所有権
 

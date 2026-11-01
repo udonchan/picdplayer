@@ -5,7 +5,7 @@ private helperを全件転記する代わりに、機能境界と不具合に関
 
 ReadResult、PcmBlock、DaemonSnapshotにはread evidence、集計、DriveCapabilities、bounded event、
 ALSA再生headの根拠推定を持たせる。反復一致検証とtechnical statusも実装済みである。
-専用diagnostic event stream、C2 trust実測/cache対策などの未実装要求は
+専用diagnostic event stream、C2 trustの実機受入/cache対策などの残要求は
 [読み取り信頼性の仕様](integrity-design.md)を参照する。区間と世代の対応、試行・memory上限、
 失効した結果の破棄、診断によるaudio backpressureの防止を拡張時も維持する。
 新しい型・公開field・protocolは実装時に確定し、既存snapshot互換性を検証する。
@@ -39,6 +39,23 @@ GETはidle窓を予約せず、その後やAPI service後に届いたPOSTは再�
 
 CEC受信はqueueを空になるまで回収する。操作後に位置/状態が変わればengineをsynchronizeする。
 shutdownでは音声停止を先に行い、その後workerのdestructorがjoinする。
+
+<a id="c2-assessment-ownership"></a>
+## C2評価の所有権
+
+`C2AssessmentSession`はmain threadが所有する明示job controllerで、`MediaWorker`と既存
+`DriveAccessCoordinator`を使う。start時にserver-owned TOCとdisc/observation/policy世代を束縛する。
+production callbackはreference検査後にcurrent contextとTOCを確認し、strict direct reader
+（C2必須、ordinary audio fallback禁止、packet timeout1000 ms）を生成する。
+開始から共通4秒deadlineでread前後・最終TOC・reader破棄後を検査し、最大2 LBA×3回だけ読む。
+deadlineはkernel I/Oの強制中断や4秒以内の解放を保証せず、超過後に追加read/成功公開をしない境界である。
+
+workerの結果はreader退役後にstageし、mainのAPI処理後の`poll()`でcontextを再確認して公開する。
+cancelとworkerの結果publicationは同じmutexで直列化し、cancel後の結果再queueを防ぐ。
+cancel中は実解放までbusyを保持し、captureと同時開始しない。定期media observeは評価中に投入しない。
+HTTP/CEC/stdinのplay/seek/track/eject/policy操作は先に実行中評価を取り消し、未解放なら操作を
+実行せず手動再操作とする。完了済みscoped receiptは通常playで保持し、context失効/cancelで撤回する。
+既存CaptureはPCM/trackだけを受け取るconsumerのままで、評価のC2根拠に流用しない。
 
 ## UI生成・選択・配信
 

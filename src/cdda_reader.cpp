@@ -96,7 +96,8 @@ void require_cdda_backend(CddaBackend backend) {
 LinuxIoctlReader::LinuxIoctlReader(AudioRead transport, DirectOptions options,
                                    C2AudioRead c2_transport)
     : transport_(std::move(transport)), options_(options), c2_transport_(std::move(c2_transport)) {
-    if (!transport_ || options.retries > 10 ||
+    if (!transport_ || options.retries > 10 || options.c2_timeout_ms == 0 || options.c2_timeout_ms > 5000 ||
+        (options.require_c2_pointers && !options.request_c2_pointers) ||
         (options.request_c2_pointers && !c2_transport_) ||
         (!options.request_c2_pointers && options.inactive_c2_status != C2Status::not_checked &&
          options.inactive_c2_status != C2Status::not_available))
@@ -130,6 +131,13 @@ ReadResult LinuxIoctlReader::read(std::span<std::int16_t> pcm) {
                            c2_result.c2_status == C2Status::reported)) {
                 block_c2 = c2_result.c2_status;
             } else {
+                if (options_.require_c2_pointers) {
+                    result.c2_status = C2Status::unknown;
+                    result.status = ReadStatus::read_error;
+                    result.native_error = error ? error : EPROTO;
+                    positioned_ = false;
+                    return result;
+                }
                 // A malformed success is no more meaningful than a packet
                 // failure. Use normal audio extraction without claiming C2.
                 block_c2 = C2Status::unknown;
@@ -188,10 +196,13 @@ struct DeviceFd {
 std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     const std::string& device, DirectOptions options) {
     require_cdda_backend(backend);
-    if (options.retries > 10) throw std::invalid_argument("direct retries must be 0..10");
+    if (options.retries > 10 || options.c2_timeout_ms == 0 || options.c2_timeout_ms > 5000 ||
+        (options.require_c2_pointers && !options.request_c2_pointers))
+        throw std::invalid_argument("invalid direct reader options");
 #ifdef ENABLE_PARANOIA
     if (backend == CddaBackend::paranoia) {
-        if (options.retries != 0) throw std::invalid_argument("direct retries cannot be used with paranoia");
+        if (options.retries != 0 || options.require_c2_pointers || options.c2_timeout_ms != 5000)
+            throw std::invalid_argument("direct options cannot be used with paranoia");
         return make_paranoia_reader(device);
     }
 #endif
@@ -215,10 +226,10 @@ std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     };
     C2AudioRead c2_read;
     if (options.request_c2_pointers) {
-        c2_read = make_mmc_c2_audio_read([fd](std::span<const std::uint8_t> command,
+        c2_read = make_mmc_c2_audio_read([fd, timeout = options.c2_timeout_ms](std::span<const std::uint8_t> command,
                                              std::span<std::uint8_t> data,
                                              std::span<std::uint8_t> sense, std::size_t& transferred) {
-            return picdplayer_detail::read_mmc_packet(fd->value, command, data, sense, transferred, 5000);
+            return picdplayer_detail::read_mmc_packet(fd->value, command, data, sense, transferred, timeout);
         });
     }
     return std::make_unique<LinuxIoctlReader>(std::move(audio_read), options, std::move(c2_read));
