@@ -256,6 +256,9 @@ page 0x2aの2 flagと転送長/失敗理由を実装し、62 MODEケース＋8 a
 PR #273は`c32c2aa`で統合済み。次の[raw速度report単位](verification.md#raw-read-speed-20261101)では、
 同じqueryからraw/source/detailを追加I/Oなしで取得し、旧xと分離した。限定通常/sanitizer各2/2とUI試験成功。
 実機精度とcache policy/C2 trustは未完了で、#264全体の完成とはしない。
+次の[current cache policy単位](verification.md#read-cache-policy-20261101)はRCDのenabled/disabled reportを実装し、
+物理cache有無・CD-DA適用・独立性とは分離した。labelとAPI説明を明確にし、限定通常/ASan各2/2とUI試験成功。
+37 cacheケースと既存67 mode/8 SG_IO結果を保持し、C2 trustと実機確認は引き続き未完了である。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

@@ -312,7 +312,7 @@ probe failureはcapability NOではなくUNKNOWN+error。probe成功を再生可
 | DAE | MODE SENSE(10) CD/DVD capability page 0x2aのCDDA_CSをDRIVE_REPORTEDとして取得。analog Audio play bitを代用しない。read実績のTESTED評価とは分ける |
 | C2 support | MMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）のC2 Flagsを`CDROM_SEND_PACKET`で読む。成功時だけDRIVE_REPORTEDのYES/NO。実測trustおよびread時のC2観測とは別管理 |
 | accurate stream | 同pageのCDDA_SAをDRIVE_REPORTEDとして取得。PCM連続性の実測・cache独立性とは別管理 |
-| read cache | 取得/評価経路は残実装。buffer sizeやRCDの意味を物理cache有無/独立性と混同しない |
+| read cache | current Caching page0x08のRCDをreported enabled policyへ投影。buffer sizeやdisabled報告を物理cache不存在/再読独立性と混同しない |
 | speed control | CDC_SELECT_SPEEDはkernel report。実際の設定可否・効果は別途確認 |
 | current speed | 同page14-15のraw kB/sをDRIVE_REPORTEDとして公開。max8-9・要求値・CD/DVD共通x換算を代用せず継続実測とはしない |
 | read offset | 未指定はUNKNOWN。起動時の明示値だけUSER_CONFIGUREDで適用。vendor/modelから推定せず、校正/database取得は未実装 |
@@ -337,6 +337,10 @@ probe_errorは従来のkernel/C2段階の理由で、空でも追加queryや全�
 raw速度は同じqueryのfield長を確認して読むため追加I/Oはない。0 reportとfield欠損を区別し、0を有効速度へ補完しない。
 offset根拠は[cdrdaoのdriveInfo](https://github.com/cdrdao/cdrdao/blob/master/dao/GenericMMC.cc)で照合したlibrary sourceで、
 firmware精度・物理回転やCD/DVD倍率を保証しない。
+cache policyは同じ有界mode-page parserでcurrent page0x08のbyte2 bit0 RCDを読む。
+RCD=0をreported enabledのYES、1をreported disabledのNOとし、未取得/不正をNOにしない。
+物理cache有無やCD-DAへの適用/独立性を判定した値ではないため、read strategyのCACHE_POSSIBLEを解除しない。
+追加MODE queryは1回/世代、allocation512/timeout1500ms設定でretryなし。独立なpage失敗で他の成功値を消さない。
 
 probeはMediaWorkerで逐次実行し、drive I/OはPCM readerと直列化する。
 待機中はUNKNOWNを公開する。hotplug/reset時の能力snapshot無効化・再取得、driveなしとdiscなしの
