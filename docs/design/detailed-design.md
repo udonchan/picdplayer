@@ -244,6 +244,8 @@ DRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを報告できる�
 CDDA_CS/SAはbyte5 bit0/1で、byte4のanalog Audio playを代用しない。追加query失敗は両flag.detailへ理由を残し、
 C2/kernelの既存成功値やprobe_errorを上書きしない。追加commandはread-only/512 bytes/timeout1500ms設定である。
 C2 trust、cacheは残実装で、offset値もprobeでは取得しない。
+pageが16 byte以上なら14-15をraw current-read-speedとして保持し、JSONのraw/source/detailへ公開する。
+legacy current_speed_xは残して倍率を合成しない。short/失敗と実zero reportを区別し、標準UIは正のreported値だけをkB/s表示する。
 明示起動offsetはsession側で保持し、probe完了後の公開値にも再適用する。probeはMediaWorkerで
 非同期に実行し、probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
 probeの遅延は後続のmedia観測を遅らせ得る。#88ではread-only node/sysfs観測を別ownerへ置き、

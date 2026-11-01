@@ -117,7 +117,10 @@ metadata/artworkの到着は再生開始とは独立し、再生状態だけか�
 | 上記flag.detail | string | 根拠の説明。空になり得る |
 | requested_speed_x | number? | ioctlが成功した要求CD倍速。実測値ではない |
 | speed_request_error | string | 明示された速度要求を適用しなかった最後の理由（ioctl失敗または能力非対応/不明）。未指定・成功時は空 |
-| current_speed_x | number? | drive速度の観測値。継続実測は未実装 |
+| current_speed_x | number? | legacyの観測倍率。要求/最大速度やraw reportから合成しない |
+| current_read_speed_kbytes_per_second | int? | last capability probeのdrive-reported current read speed。未返却はnull、実zero reportは0として区別 |
+| current_speed_source | string | raw report取得時DRIVE_REPORTED、未取得NONE |
+| current_speed_detail | string | 失敗/未返却/zero reportや回転・throughput実測ではないことの説明 |
 | read_offset_samples | int? | stereo sample frame単位の明示起動値。未指定はnull、明示0とは区別。source/detailは[Read Offset](#read-offset)参照 |
 | observation | object? | [device観測context](#device-lifecycle-observation)。null/旧payloadで欠損は未取得でありABSENTではない |
 
@@ -129,6 +132,8 @@ kernelがspeed制御対応と報告したことは、速度変更成功や実測
 `digital_audio_extraction`/`accurate_stream`は、MODE SENSE(10) page 0x2aのCDDA_CS/SAを
 DRIVE_REPORTEDのYES/NOへ投影する。抽出・連続性を実測したTESTEDとは区別する。
 追加queryの失敗/欠損/不正時はUNKNOWNで各flag.detailへ理由を残す。probe_error空は全項目の成功を意味しない。
+current read speedは同pageの14-15をraw kB/sとして公開する。max8-9や要求値を代用せず、CD/DVD共通x換算もしない。
+標準UIはDRIVE_REPORTEDの正整数1..65535だけをkB/s REPORTED表示し、0/欠損/不正値はNOT AVAILABLEとする。
 
 ### Device Lifecycle Observation
 

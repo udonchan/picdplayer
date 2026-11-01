@@ -86,6 +86,8 @@ Drive capabilityは枠を目立たせない補助情報とし、Read observation
 DAEとaccurate streamは、取得できたdrive reportをDRIVE_REPORTEDのYES/NOとして公開する。
 analog再生対応、C2 support、通常CDの成功だけから抽出品質やC2 trust・cache独立性を推定しない。
 report取得失敗/欠損はUNKNOWNとし、backendの既存detailへ理由を残す。理由の画面説明量は別検討を維持する。
+current speedはraw kB/sをREPORTEDと明示できる。0/未取得はNOT AVAILABLEを維持し、要求倍率・最大速度を
+観測値へ補完しない。物理回転・音声throughputの実測表示ではない。
 block bufferは正の`read_block_frames`と容量から上式が算出できる場合だけmeterで補助表示し、常に
 `queued_blocks / block_capacity blocks`の正確なテキストを併記する。他の値に推測上の比率を作らない。
 `read_stall`はin-flight/last timeoutとlimitの診断値で、ioctlを中断したこと、PCMの回復、drive故障を意味しない。

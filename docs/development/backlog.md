@@ -253,6 +253,9 @@ DAE/C2 trust/cache/accurate stream/実速度の残実装と根拠の区別を進
 PR #272は`83583aa`で統合済み。次の[DAE/accurate-stream report単位](verification.md#cdda-mode-reports-20261101)では
 page 0x2aの2 flagと転送長/失敗理由を実装し、62 MODEケース＋8 adapter結果と従来回帰の限定通常/ASan/UBSan各1/1を確認した。
 このsourceはまだPi未配備で、cache・実速度・C2 trustと評価/実機条件は引き続き未完了である。
+PR #273は`c32c2aa`で統合済み。次の[raw速度report単位](verification.md#raw-read-speed-20261101)では、
+同じqueryからraw/source/detailを追加I/Oなしで取得し、旧xと分離した。限定通常/sanitizer各2/2とUI試験成功。
+実機精度とcache policy/C2 trustは未完了で、#264全体の完成とはしない。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

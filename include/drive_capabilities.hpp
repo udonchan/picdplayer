@@ -32,8 +32,11 @@ struct DriveCapabilities {
     // A successfully submitted CDROM_SELECT_SPEED request, not a measurement.
     std::optional<int> requested_speed_x;
     std::string speed_request_error;
-    // A measured/reported current speed. No current-speed query exists yet.
+    // Legacy multiples; never synthesized from a requested or maximum speed.
     std::optional<int> current_speed_x;
+    std::optional<int> current_read_speed_kbytes_per_second;
+    CapabilityEvidenceSource current_speed_source = CapabilityEvidenceSource::none;
+    std::string current_speed_detail;
     std::optional<int> read_offset_samples;
     std::string probe_error;
     std::optional<DeviceObservationSnapshot> observation{};

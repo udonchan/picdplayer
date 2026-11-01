@@ -109,6 +109,7 @@ void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransp
         const auto detail = "MMC MODE SENSE(10) CD/DVD page: " + reason;
         result.digital_audio_extraction.detail = detail;
         result.accurate_stream.detail = detail;
+        result.current_speed_detail = detail;
     };
     if (!transport) { unavailable("transport unavailable"); return; }
     std::array<std::uint8_t, 10> command{};
@@ -147,6 +148,16 @@ void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransp
         CapabilityEvidenceSource::drive_reported, "MMC CD/DVD page CDDA_CS (digital commands, not Audio play)"};
     result.accurate_stream = {page[5] & 2 ? Knowledge::yes : Knowledge::no,
         CapabilityEvidenceSource::drive_reported, "MMC CD/DVD page CDDA_SA (drive report, not measured continuity)"};
+    if (page.size() < 16) {
+        result.current_speed_detail = "MMC CD/DVD page current-read-speed field not returned";
+    } else {
+        const auto rate = be16(page.data() + 14);
+        result.current_read_speed_kbytes_per_second = rate;
+        result.current_speed_source = CapabilityEvidenceSource::drive_reported;
+        result.current_speed_detail = rate == 0 ?
+            "MMC current read speed reported zero; no physical speed inferred" :
+            "MMC current read speed at capability probe, kB/s report; not spindle/throughput measurement or CD/DVD x";
+    }
 }
 
 void probe_c2_feature(DriveCapabilities& result, const DrivePacketTransport& transport) {
@@ -258,6 +269,7 @@ DriveCapabilities probe_drive_capabilities(const std::string& device,
     if (!probe_kernel_capabilities(result)) {
         result.digital_audio_extraction.detail = "Not queried: " + result.probe_error;
         result.accurate_stream.detail = result.digital_audio_extraction.detail;
+        result.current_speed_detail = result.digital_audio_extraction.detail;
         return result;
     }
     probe_c2_feature(result, linux_packet_transport(device));

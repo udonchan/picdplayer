@@ -88,6 +88,20 @@ int main() {
         check(json["drive"]["requested_speed_x"] == 4);
         check(json["drive"]["speed_request_error"] == "");
         check(json["drive"]["current_speed_x"].is_null());
+        check(json["drive"]["current_read_speed_kbytes_per_second"].is_null());
+        check(json["drive"]["current_speed_source"] == "NONE");
+        auto reported_drive = drive;
+        reported_drive.current_read_speed_kbytes_per_second = 3528;
+        reported_drive.current_speed_source = CapabilityEvidenceSource::drive_reported;
+        reported_drive.current_speed_detail = "drive report, not measured throughput";
+        const auto reported = nlohmann::json::parse(serialize_daemon_snapshot(make_daemon_snapshot(42,
+            {PlaybackState::playing, 1, 75}, MediaLifecycleState::audio_ready, toc, metadata,
+            {}, read, {event}, reported_drive)));
+        check(reported["drive"]["requested_speed_x"] == 4);
+        check(reported["drive"]["current_speed_x"].is_null());
+        check(reported["drive"]["current_read_speed_kbytes_per_second"] == 3528);
+        check(reported["drive"]["current_speed_source"] == "DRIVE_REPORTED");
+        check(reported["drive"]["current_speed_detail"] == reported_drive.current_speed_detail);
         check(json["recent_events"][0]["sequence"] == 7);
         check(json["recent_events"][0]["type"] == "READ_OBSERVED");
         check(json["read"]["event_window"]["first_sequence"] == 7);
