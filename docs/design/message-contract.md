@@ -134,6 +134,9 @@ DRIVE_REPORTEDのYES/NOへ投影する。抽出・連続性を実測したTESTED
 追加queryの失敗/欠損/不正時はUNKNOWNで各flag.detailへ理由を残す。probe_error空は全項目の成功を意味しない。
 current read speedは同pageの14-15をraw kB/sとして公開する。max8-9や要求値を代用せず、CD/DVD共通x換算もしない。
 標準UIはDRIVE_REPORTEDの正整数1..65535だけをkB/s REPORTED表示し、0/欠損/不正値はNOT AVAILABLEとする。
+`read_cache`はcurrent Caching mode page0x08のreported enabled policyを表す。RCD=0はYES、RCD=1はNOで
+sourceはDRIVE_REPORTED。これはphysical cache存在/不存在、CD-DAへの適用範囲、媒体再読の独立性の証明ではない。
+未返却/短い/不正/取得失敗はUNKNOWN+detailとし、NOへ変換しない。UI labelはRead cache enabledとする。
 
 ### Device Lifecycle Observation
 

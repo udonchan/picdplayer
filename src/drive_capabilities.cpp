@@ -11,6 +11,7 @@
 #include <sys/ioctl.h>
 #include <system_error>
 #include <unistd.h>
+#include <vector>
 
 namespace {
 constexpr std::uint8_t get_configuration = 0x46;
@@ -104,46 +105,60 @@ DriveModeSenseTransport linux_mode_transport(const std::string& device) {
     };
 }
 
-void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransport& transport) {
-    const auto unavailable = [&](const std::string& reason) {
-        const auto detail = "MMC MODE SENSE(10) CD/DVD page: " + reason;
-        result.digital_audio_extraction.detail = detail;
-        result.accurate_stream.detail = detail;
-        result.current_speed_detail = detail;
-    };
-    if (!transport) { unavailable("transport unavailable"); return; }
+struct ModePageResult {
+    std::vector<std::uint8_t> page;
+    std::string error;
+};
+
+ModePageResult read_mode_page(std::uint8_t requested, const DriveModeSenseTransport& transport) {
+    const auto unavailable = [](std::string reason) -> ModePageResult { return {{}, std::move(reason)}; };
+    if (!transport) return unavailable("transport unavailable");
     std::array<std::uint8_t, 10> command{};
     command[0] = 0x5a;
     command[1] = 0x08; // DBD, page control=current, subpage=0.
-    command[2] = 0x2a;
+    command[2] = requested;
     command[7] = static_cast<std::uint8_t>(mode_response_bytes >> 8);
     command[8] = static_cast<std::uint8_t>(mode_response_bytes);
     std::array<std::uint8_t, mode_response_bytes> data{};
     std::array<std::uint8_t, sizeof(request_sense)> sense{};
     std::size_t transferred = 0;
     const auto error = transport(command, data, sense, transferred);
-    if (error) { unavailable(std::strerror(error)); return; }
-    if (transferred < 8 || transferred > data.size()) { unavailable("transfer length invalid"); return; }
+    if (error) return unavailable(std::strerror(error));
+    if (transferred < 8 || transferred > data.size()) return unavailable("transfer length invalid");
     const auto total = static_cast<std::size_t>(be16(data.data())) + 2;
-    if (total < 8 || total > transferred) { unavailable("response header is truncated"); return; }
+    if (total < 8 || total > transferred) return unavailable("response header is truncated");
     const auto descriptors = static_cast<std::size_t>(be16(data.data() + 6));
-    if (descriptors > total - 8) { unavailable("block descriptors are truncated"); return; }
+    if (descriptors > total - 8) return unavailable("block descriptors are truncated");
     std::span<const std::uint8_t> page;
     for (std::size_t offset = 8 + descriptors; offset < total;) {
-        if (total - offset < 2) { unavailable("page header is truncated"); return; }
+        if (total - offset < 2) return unavailable("page header is truncated");
         const bool subpage = (data[offset] & 0x40) != 0;
         const std::size_t header = subpage ? 4 : 2;
-        if (total - offset < header) { unavailable("subpage header is truncated"); return; }
+        if (total - offset < header) return unavailable("subpage header is truncated");
         const auto length = header + (subpage ? static_cast<std::size_t>(be16(data.data() + offset + 2))
                                              : static_cast<std::size_t>(data[offset + 1]));
-        if (length > total - offset) { unavailable("page payload is truncated"); return; }
-        if ((data[offset] & 0x3f) == 0x2a) {
-            if (!page.empty() || subpage) { unavailable("ambiguous CD/DVD page layout"); return; }
+        if (length > total - offset) return unavailable("page payload is truncated");
+        if ((data[offset] & 0x3f) == requested) {
+            if (!page.empty() || subpage) return unavailable("ambiguous requested page layout");
             page = std::span<const std::uint8_t>(data.data() + offset, length);
         }
         offset += length;
     }
-    if (page.size() < 6) { unavailable(page.empty() ? "CD/DVD page not returned" : "CD/DVD flags not returned"); return; }
+    if (page.empty()) return unavailable("requested page not returned");
+    return {std::vector<std::uint8_t>(page.begin(), page.end()), {}};
+}
+
+void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransport& transport) {
+    const auto response = read_mode_page(0x2a, transport);
+    const auto& page = response.page;
+    if (!response.error.empty() || page.size() < 6) {
+        const auto detail = "MMC MODE SENSE(10) CD/DVD page: " +
+            (response.error.empty() ? "CD/DVD flags not returned" : response.error);
+        result.digital_audio_extraction.detail = detail;
+        result.accurate_stream.detail = detail;
+        result.current_speed_detail = detail;
+        return;
+    }
     result.digital_audio_extraction = {page[5] & 1 ? Knowledge::yes : Knowledge::no,
         CapabilityEvidenceSource::drive_reported, "MMC CD/DVD page CDDA_CS (digital commands, not Audio play)"};
     result.accurate_stream = {page[5] & 2 ? Knowledge::yes : Knowledge::no,
@@ -158,6 +173,20 @@ void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransp
             "MMC current read speed reported zero; no physical speed inferred" :
             "MMC current read speed at capability probe, kB/s report; not spindle/throughput measurement or CD/DVD x";
     }
+}
+
+void probe_cache_report(DriveCapabilities& result, const DriveModeSenseTransport& transport) {
+    const auto response = read_mode_page(0x08, transport);
+    if (!response.error.empty() || response.page.size() < 3) {
+        result.read_cache.detail = "MMC MODE SENSE(10) caching page: " +
+            (response.error.empty() ? "RCD field not returned" : response.error);
+        return;
+    }
+    const bool disabled = (response.page[2] & 1) != 0;
+    result.read_cache = {disabled ? Knowledge::no : Knowledge::yes,
+        CapabilityEvidenceSource::drive_reported,
+        disabled ? "Current caching policy RCD=1: reported disabled; not hardware-cache absence or read independence" :
+                   "Current caching policy RCD=0: reported enabled; not hardware-cache size or read independence"};
 }
 
 void probe_c2_feature(DriveCapabilities& result, const DrivePacketTransport& transport) {
@@ -270,10 +299,12 @@ DriveCapabilities probe_drive_capabilities(const std::string& device,
         result.digital_audio_extraction.detail = "Not queried: " + result.probe_error;
         result.accurate_stream.detail = result.digital_audio_extraction.detail;
         result.current_speed_detail = result.digital_audio_extraction.detail;
+        result.read_cache.detail = result.digital_audio_extraction.detail;
         return result;
     }
     probe_c2_feature(result, linux_packet_transport(device));
     probe_cd_audio_report(result, linux_mode_transport(device));
+    probe_cache_report(result, linux_mode_transport(device));
     return result;
 }
 
@@ -292,6 +323,7 @@ DriveCapabilities probe_drive_capabilities(const std::string& device,
     auto result = identity_from_sysfs(device, sysfs_root);
     probe_c2_feature(result, packet_transport);
     probe_cd_audio_report(result, mode_transport);
+    probe_cache_report(result, mode_transport);
     return result;
 }
 

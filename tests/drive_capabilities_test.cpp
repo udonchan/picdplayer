@@ -48,8 +48,10 @@ DriveModeSenseTransport mode_transport(std::vector<std::uint8_t> response,
                                        std::size_t transferred, int error = 0) {
     return [response = std::move(response), transferred, error](std::span<const std::uint8_t> command,
         std::span<std::uint8_t> data, std::span<std::uint8_t> sense, std::size_t& received) {
-        check(command.size() == 10 && command[0] == 0x5a && command[1] == 0x08 && command[2] == 0x2a);
+        check(command.size() == 10 && command[0] == 0x5a && command[1] == 0x08);
         check(command[3] == 0 && command[7] == 2 && command[8] == 0 && command[9] == 0);
+        if (command[2] == 0x08) { received = 0; return ENOTSUP; }
+        check(command[2] == 0x2a);
         check(data.size() == 512 && !sense.empty() && response.size() <= data.size());
         std::copy(response.begin(), response.end(), data.begin());
         received = transferred;
@@ -57,6 +59,7 @@ DriveModeSenseTransport mode_transport(std::vector<std::uint8_t> response,
     };
 }
 unsigned ioctl_scenario = 0, mode_ioctl_calls = 0;
+unsigned cache_ioctl_calls = 0;
 int mode_fd = -1;
 } // namespace
 
@@ -83,8 +86,10 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...) {
         auto* packet = va_arg(args, sg_io_hdr_t*);
         va_end(args);
         check(packet->interface_id == 'S' && packet->dxfer_direction == SG_DXFER_FROM_DEV);
-        check(packet->cmd_len == 10 && packet->cmdp[0] == 0x5a && packet->cmdp[1] == 8 && packet->cmdp[2] == 0x2a);
+        check(packet->cmd_len == 10 && packet->cmdp[0] == 0x5a && packet->cmdp[1] == 8);
         check(packet->dxfer_len == 512 && packet->timeout == 1500 && packet->mx_sb_len > 0);
+        if (packet->cmdp[2] == 8) { ++cache_ioctl_calls; errno = ENOTSUP; return -1; }
+        check(packet->cmdp[2] == 0x2a);
         const auto response = audio_page(3);
         std::copy(response.begin(), response.end(), static_cast<std::uint8_t*>(packet->dxferp));
         packet->resid = static_cast<int>(packet->dxfer_len - response.size());
@@ -294,10 +299,61 @@ int main() {
             check(fcntl(mode_fd, F_GETFD) == -1 && errno == EBADF);
         }
         check(mode_ioctl_calls == 8);
+        check(cache_ioctl_calls == 8);
+
+        unsigned cache_cases = 0;
+        const auto cache_result = [&](std::vector<std::uint8_t> response, std::size_t count, int error = 0) {
+            ++cache_cases;
+            return probe_drive_capabilities("/synthetic/fake", root, c2_transport(true),
+                [response = std::move(response), count, error, audio = mode_transport(valid, valid.size())]
+                (auto command, auto data, auto sense, std::size_t& received) {
+                    check(command.size() == 10);
+                    if (command[2] == 0x2a) return audio(command, data, sense, received);
+                    check(command.size() == 10 && command[0] == 0x5a && command[1] == 8 && command[2] == 8);
+                    check(command[3] == 0 && command[7] == 2 && command[8] == 0 && command[9] == 0);
+                    check(data.size() == 512 && response.size() <= data.size());
+                    std::copy(response.begin(), response.end(), data.begin());
+                    received = count;
+                    return error;
+                });
+        };
+        std::vector<std::uint8_t> caching(28, 0);
+        caching[1] = 26;
+        caching[8] = 8;
+        caching[9] = 18;
+        for (const bool disabled : {false, true}) {
+            caching[10] = disabled ? 1 : 0;
+            const auto result = cache_result(caching, caching.size());
+            check(result.read_cache.value == (disabled ? Knowledge::no : Knowledge::yes));
+            check(result.read_cache.source == CapabilityEvidenceSource::drive_reported);
+            check(result.read_cache.detail.find("not hardware-cache") != std::string::npos);
+            check(result.digital_audio_extraction.value == Knowledge::yes && result.c2_supported.value == Knowledge::yes);
+        }
+        const auto cache_unknown = [&](const auto& data, std::size_t count, int error = 0) {
+            const auto result = cache_result(data, count, error);
+            check(result.read_cache.value == Knowledge::unknown && result.read_cache.source == CapabilityEvidenceSource::none);
+            check(!result.read_cache.detail.empty() && result.probe_error.empty());
+            check(result.digital_audio_extraction.value == Knowledge::yes && result.c2_supported.value == Knowledge::yes);
+        };
+        for (std::size_t count = 0; count < caching.size(); ++count) cache_unknown(caching, count);
+        cache_unknown(caching, 513);
+        for (const auto error : {EIO, EACCES, ENOTSUP}) cache_unknown(caching, caching.size(), error);
+        auto wrong_cache = caching;
+        wrong_cache[8] = 0;
+        cache_unknown(wrong_cache, wrong_cache.size());
+        auto short_cache = caching;
+        short_cache.resize(10);
+        short_cache[1] = 8;
+        short_cache[9] = 0;
+        cache_unknown(short_cache, short_cache.size());
+        auto duplicate_cache = caching;
+        duplicate_cache.insert(duplicate_cache.end(), caching.begin() + 8, caching.end());
+        duplicate_cache[1] = static_cast<std::uint8_t>(duplicate_cache.size() - 2);
+        cache_unknown(duplicate_cache, duplicate_cache.size());
 
         std::filesystem::remove_all(root);
         std::cout << "PASS: C2/speed compatibility, " << mode_cases
-                  << " bounded CDDA mode reports and 8 mocked SG_IO outcomes\n";
+                  << " bounded CDDA mode reports, " << cache_cases << " cache reports and 8 mocked SG_IO outcomes\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n'; return 1;
     }

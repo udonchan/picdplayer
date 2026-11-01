@@ -4,6 +4,23 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="read-cache-policy-20261101"></a>
+## #264 current read-cache policy単位（2026-11-01）
+
+raw速度reportの後を基準に、shared mode-page parserでpage0x08 byte2 bit0 RCDを取得する。
+read_cacheはreported enabled policyとして定義し、RCD=0/1をDRIVE_REPORTED YES/NOへ投影する。
+disabledは物理cache不存在やCD-DAへの適用/独立性の証明ではなく、CACHE_POSSIBLEや比較条件を変えていない。
+両標準画面のlabelだけをRead cache enabledへ明確化し、既存field型/ID/format/layoutを維持した。
+追加queryはread-only/PC=current/subpage0/allocation512/timeout1500ms設定、1回/世代・retryなし。
+有効mode pageの返却範囲を最後まで確認してから公開し、short/duplicate/wrong page/transport errorはUNKNOWN+detailとする。
+
+既存MODE2a fixtureは追加08要求にENOTSUPを返し、元の2a CDB/assertionを保持した。
+通常/ASan/UBSanのparser/JSONを編集後に再buildし各2/2成功、Nodeの既存UI試験も成功した。
+67 CDDA modeケース、37 cache policyケース、8既存SG_IO結果と追加8 cache queryの分離を親がLastTest.logとsourceで照合した。
+独立read-only reviewに具体的findingなし。label/API説明と実queryの両方を実装し、名称変更だけを完了としない。
+この結果は限定Linux/aarch64・WPE無効構成であり、standard全体・Piでのquery成功/画面/音声の証拠ではない。
+このsourceはPi未配備で、追加packet/stop/restart・権限/offset変更・PCM取得はしていない。C2 trustは残実装。
+
 <a id="raw-read-speed-20261101"></a>
 ## #264 raw current-read-speed report単位（2026-11-01）
 

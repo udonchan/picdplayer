@@ -26,7 +26,7 @@ struct DriveCapabilities {
     CapabilityFlag digital_audio_extraction;
     CapabilityFlag c2_supported;
     CapabilityFlag c2_trustworthy;
-    CapabilityFlag read_cache;
+    CapabilityFlag read_cache; // Reported current caching policy, not physical-cache absence/independence.
     CapabilityFlag accurate_stream;
     CapabilityFlag speed_control;
     // A successfully submitted CDROM_SELECT_SPEED request, not a measurement.
