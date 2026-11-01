@@ -250,6 +250,9 @@ Capabilityの未実装経路を完成扱いにせず、実機への無断接続�
 23:30 UTCのpin付きread-only観測ではgeneration21のC2/speed report成功とprobe_error空を確認した。
 以前の失敗の起因は未確定のまま保持し、group/udev/root化による修正はしていない。
 DAE/C2 trust/cache/accurate stream/実速度の残実装と根拠の区別を進める。現在状態・排他・有限予算・復元の確認は維持する。
+PR #272は`83583aa`で統合済み。次の[DAE/accurate-stream report単位](verification.md#cdda-mode-reports-20261101)では
+page 0x2aの2 flagと転送長/失敗理由を実装し、62 MODEケース＋8 adapter結果と従来回帰の限定通常/ASan/UBSan各1/1を確認した。
+このsourceはまだPi未配備で、cache・実速度・C2 trustと評価/実機条件は引き続き未完了である。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

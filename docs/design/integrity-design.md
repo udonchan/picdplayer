@@ -309,9 +309,10 @@ probe failureはcapability NOではなくUNKNOWN+error。probe成功を再生可
 |---|---|
 | vendor/model/firmware | 現行はsysfs device/vendor, model, revから取得。欠落は不明として扱う |
 | kernelが公開する機能 | CDROM_GET_CAPABILITY。driver/interface側の根拠として保持 |
-| DAE | 後続phaseでMMCのreportを調査。成功したAudio readはTESTEDとしてその条件を記録 |
+| DAE | MODE SENSE(10) CD/DVD capability page 0x2aのCDDA_CSをDRIVE_REPORTEDとして取得。analog Audio play bitを代用しない。read実績のTESTED評価とは分ける |
 | C2 support | MMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）のC2 Flagsを`CDROM_SEND_PACKET`で読む。成功時だけDRIVE_REPORTEDのYES/NO。実測trustおよびread時のC2観測とは別管理 |
-| accurate stream/cache | 後続phaseでMMC inquiry/mode page等を調査。reportと実測trustを別管理 |
+| accurate stream | 同pageのCDDA_SAをDRIVE_REPORTEDとして取得。PCM連続性の実測・cache独立性とは別管理 |
+| read cache | 取得/評価経路は残実装。buffer sizeやRCDの意味を物理cache有無/独立性と混同しない |
 | speed control | CDC_SELECT_SPEEDはkernel report。実際の設定可否・効果は別途確認 |
 | supported/current speed | 未取得ならUNKNOWN。要求2xやread所要時間からcurrent speed=2xと断定しない |
 | read offset | 未指定はUNKNOWN。起動時の明示値だけUSER_CONFIGUREDで適用。vendor/modelから推定せず、校正/database取得は未実装 |
@@ -323,6 +324,16 @@ C2 supportの初期probeは`CDROM_SEND_PACKET`で読み取り専用の`GET CONFI
 feature descriptor一覧を取得する。command failureまたは不正な応答はUNKNOWN+`probe_error`にし、NOへ
 変換しない。Featureが不在という有効な応答だけはDRIVE_REPORTEDのNOにする。応答が上限を超える場合も
 UNKNOWNとして扱う。generic packet対応だけで全MMC機能が使えるとはしない。
+
+DAE/accurate streamの追加queryはMODE SENSE(10)、DBD・PC=current・subpage0・allocation512。
+Linuxではread-only SG_IOのstatus/residualから実転送長を取り、mode header・block descriptor・全page境界を
+その範囲内で検査してから一意の通常page 0x2aのbyte5 bit0/1を読む。未転送の初期化0からNOを作らない。
+失敗・欠損・短い/曖昧な応答はUNKNOWNと既存flag.detailに理由を残し、C2/kernelの成功値を消さない。
+probe_errorは従来のkernel/C2段階の理由で、空でも追加queryや全項目の成功を意味しない。
+追加command timeoutは1500ms設定。MediaWorkerの逐次処理を維持するが、厳密wall-clock上限やdisc認識無遅延の保証ではない。
+根拠は[sdparmのpage定義](https://github.com/doug-gilbert/sdparm/blob/master/src/sdparm_data.c)と
+[sg3_utilsのMODE SENSE実装](https://github.com/hreinecke/sg3_utils/blob/master/lib/sg_cmds_basic2.c)を照合したlibrary sourceであり、
+一次MMC規格の全適合を確認したものではない。page 0x2aは後期MMCではobsoleteで、取得不能ならNOではなくUNKNOWNとする。
 
 probeはMediaWorkerで逐次実行し、drive I/OはPCM readerと直列化する。
 待機中はUNKNOWNを公開する。hotplug/reset時の能力snapshot無効化・再取得、driveなしとdiscなしの
