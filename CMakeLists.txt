@@ -403,6 +403,7 @@ if(BUILD_TESTING)
     target_include_directories(cdda_reader_test PRIVATE include src)
     target_compile_features(cdda_reader_test PRIVATE cxx_std_20)
     target_compile_options(cdda_reader_test PRIVATE -Wall -Wextra -Wpedantic)
+    target_link_options(cdda_reader_test PRIVATE -Wl,--wrap=ioctl)
     add_test(NAME cdda_reader COMMAND cdda_reader_test)
     add_executable(repeated_read_verifier_test tests/repeated_read_verifier_test.cpp
                    src/repeated_read_verifier.cpp)

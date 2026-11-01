@@ -1,5 +1,6 @@
 #include "cdda_reader.hpp"
 #include "linux_ioctl_reader.hpp"
+#include "mmc_read_transport.hpp"
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -38,14 +39,13 @@ void put_be32(std::uint8_t* destination, std::int32_t value) {
 }
 }
 
-C2AudioRead make_mmc_c2_audio_read(DrivePacketTransport transport) {
+C2AudioRead make_mmc_c2_audio_read(DriveReadPacketTransport transport) {
     if (!transport) throw std::invalid_argument("C2 packet transport is required");
     return [transport = std::move(transport)](std::int32_t lba, std::span<std::int16_t> pcm) {
         if (lba < 0 || pcm.empty() || pcm.size() % cdda_samples_per_frame)
             return C2AudioReadResult{EINVAL, C2Status::unknown};
         const auto frames = pcm.size() / cdda_samples_per_frame;
-        if (frames > 0x00ffffff || frames >
-            (std::numeric_limits<std::size_t>::max() / (cdda_bytes_per_frame + c2_pointer_bytes_per_frame)))
+        if (frames > 75 || frames > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max() - lba))
             return C2AudioReadResult{EINVAL, C2Status::unknown};
         std::array<std::uint8_t, read_cd_cdb_bytes> command{};
         command[0] = read_cd;
@@ -55,13 +55,21 @@ C2AudioRead make_mmc_c2_audio_read(DrivePacketTransport transport) {
         command[9] = 0x12; // user data plus C2 error pointers
         std::vector<std::uint8_t> response(frames * (cdda_bytes_per_frame + c2_pointer_bytes_per_frame));
         std::array<std::uint8_t, sizeof(request_sense)> sense{};
-        const auto error = transport(command, response, sense);
+        std::size_t transferred = 0;
+        const auto error = transport(command, response, sense, transferred);
         if (error) return C2AudioReadResult{error, C2Status::unknown};
+        if (transferred != response.size()) return C2AudioReadResult{EMSGSIZE, C2Status::unknown};
         bool reported = false;
+        // Same little-endian MMC audio assumption as the ordinary path; the
+        // host contract is normalized, not evidence of drive byte-order tests.
         for (std::size_t frame = 0; frame < frames; ++frame) {
             const auto offset = frame * (cdda_bytes_per_frame + c2_pointer_bytes_per_frame);
-            std::memcpy(pcm.data() + frame * cdda_samples_per_frame,
-                        response.data() + offset, cdda_bytes_per_frame);
+            for (std::size_t sample = 0; sample < cdda_samples_per_frame; ++sample) {
+                const auto low = response[offset + 2 * sample];
+                const auto high = response[offset + 2 * sample + 1];
+                pcm[frame * cdda_samples_per_frame + sample] =
+                    std::bit_cast<std::int16_t>(static_cast<std::uint16_t>(low | (static_cast<unsigned>(high) << 8)));
+            }
             const auto c2 = std::span(response).subspan(offset + cdda_bytes_per_frame,
                                                          c2_pointer_bytes_per_frame);
             reported = reported || std::any_of(c2.begin(), c2.end(), [](std::uint8_t value) { return value != 0; });
@@ -209,22 +217,8 @@ std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     if (options.request_c2_pointers) {
         c2_read = make_mmc_c2_audio_read([fd](std::span<const std::uint8_t> command,
                                              std::span<std::uint8_t> data,
-                                             std::span<std::uint8_t> sense) {
-            if (command.size() > CDROM_PACKET_SIZE) return EINVAL;
-            request_sense request_sense_data{};
-            cdrom_generic_command request{};
-            std::memcpy(request.cmd, command.data(), command.size());
-            request.buffer = data.data();
-            request.buflen = static_cast<unsigned int>(data.size());
-            request.sense = &request_sense_data;
-            request.data_direction = CGC_DATA_READ;
-            request.quiet = 1;
-            request.timeout = 5000;
-            const int result = ioctl(fd->value, CDROM_SEND_PACKET, &request);
-            const int error = result < 0 ? errno : 0;
-            const auto bytes = std::min(sense.size(), sizeof(request_sense_data));
-            std::memcpy(sense.data(), &request_sense_data, bytes);
-            return error;
+                                             std::span<std::uint8_t> sense, std::size_t& transferred) {
+            return picdplayer_detail::read_mmc_packet(fd->value, command, data, sense, transferred, 5000);
         });
     }
     return std::make_unique<LinuxIoctlReader>(std::move(audio_read), options, std::move(c2_read));

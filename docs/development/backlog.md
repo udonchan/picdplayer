@@ -262,6 +262,9 @@ PR #273は`c32c2aa`で統合済み。次の[raw速度report単位](verification.
 2026-11-01の[08:15 UTC実機run](verification.md#capability-hardware-20261101T0815)で検証済みReleaseを配備し、
 DAE/accurate-stream/cache policyのYESとraw1764 kB/sを実機APIで確認した。7 UI配置/HTTP hash・設定保持・正常lifecycleも確認。
 TV/物理入力/音声とC2 trust/READ CD transfer evidenceは未確認/残実装で、#264全体を完成扱いにしない。
+利用者の08:48指示で旧binaryへ戻す試験は不要とし、最新検証済みをPiに残す。
+次の[READ CD転送長単位](verification.md#c2-transfer-evidence-20261101)とC2評価経路を優先し、
+TV/物理remote/音声は[共通代表試験](verification.md#combined-manual-acceptance)を準備して後日同runで確認する。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

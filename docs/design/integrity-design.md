@@ -121,6 +121,11 @@ RegionIntegrityは一次元scoreにせず、次の軸を独立に持つ。
 | c2_status | UNKNOWN / NOT_AVAILABLE / NOT_CHECKED / CLEAN / REPORTED |
 | sample_origin | READ / SILENCE / INTERPOLATED。置換した区間を明示 |
 
+C2付きREAD CDはread-only SG_IOの実転送長とstatus/residualを検査する。要求した2352+294 byte/sectorが
+全て返った場合だけPCMをdecodeしCLEAN/REPORTEDを付け、不完全な成功はUNKNOWN/errorとして通常audio fallbackへ渡す。
+packetは1〜75sector、CD-DA user+C2・subchannelなし/control0のlayoutに限定し、追加subchannelを要求して
+小さいbufferをfull replyとみなさない。block単位のC2観測であり、drive-wide trustやpointer位置精度を証明しない。
+
 C2非対応、C2取得を行っていない、取得したが非検出、を区別する。
 paranoiaのverify/fixup callback件数をMULTIPLE_MATCHや訂正sector数に直接変換しない。
 現行のBACKEND_REPORTEDは「libraryがこの種類のcallbackを報告した」までをevidenceとする。

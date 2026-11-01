@@ -18,7 +18,7 @@ using C2AudioRead = std::function<C2AudioReadResult(std::int32_t,
 // Builds an MMC READ CD transport that requests CD-DA user data and C2 error
 // pointers. This remains an internal seam so the CDB and payload parsing can
 // be tested without an optical drive.
-C2AudioRead make_mmc_c2_audio_read(DrivePacketTransport transport);
+C2AudioRead make_mmc_c2_audio_read(DriveReadPacketTransport transport);
 class LinuxIoctlReader final : public CddaReader {
 public:
     explicit LinuxIoctlReader(AudioRead transport, DirectOptions options = {},

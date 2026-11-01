@@ -1,4 +1,5 @@
 #include "drive_capabilities.hpp"
+#include "mmc_read_transport.hpp"
 
 #include <array>
 #include <cerrno>
@@ -75,7 +76,7 @@ DrivePacketTransport linux_packet_transport(const std::string& device) {
     };
 }
 
-DriveModeSenseTransport linux_mode_transport(const std::string& device) {
+DriveReadPacketTransport linux_mode_transport(const std::string& device) {
     return [device](std::span<const std::uint8_t> command, std::span<std::uint8_t> data,
                     std::span<std::uint8_t> sense, std::size_t& transferred) -> int {
         transferred = 0;
@@ -83,25 +84,9 @@ DriveModeSenseTransport linux_mode_transport(const std::string& device) {
             data.size() > mode_response_bytes || sense.size() > 255) return EINVAL;
         const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (fd < 0) return errno;
-        sg_io_hdr_t request{};
-        request.interface_id = 'S';
-        request.dxfer_direction = SG_DXFER_FROM_DEV;
-        request.cmd_len = static_cast<unsigned char>(command.size());
-        request.cmdp = const_cast<unsigned char*>(command.data());
-        request.dxfer_len = static_cast<unsigned>(data.size());
-        request.dxferp = data.data();
-        request.mx_sb_len = static_cast<unsigned char>(sense.size());
-        request.sbp = sense.data();
-        request.timeout = mode_timeout_ms;
-        const int result = ioctl(fd, SG_IO, &request);
-        const int error = result < 0 ? errno : 0;
+        const auto error = picdplayer_detail::read_mmc_packet(fd, command, data, sense, transferred, mode_timeout_ms);
         close(fd);
-        if (error) return error;
-        if (request.status || request.host_status || request.driver_status ||
-            (request.info & SG_INFO_OK_MASK) != SG_INFO_OK) return EIO;
-        if (request.resid < 0 || static_cast<std::size_t>(request.resid) > data.size()) return EMSGSIZE;
-        transferred = data.size() - static_cast<std::size_t>(request.resid);
-        return 0;
+        return error;
     };
 }
 
@@ -110,7 +95,7 @@ struct ModePageResult {
     std::string error;
 };
 
-ModePageResult read_mode_page(std::uint8_t requested, const DriveModeSenseTransport& transport) {
+ModePageResult read_mode_page(std::uint8_t requested, const DriveReadPacketTransport& transport) {
     const auto unavailable = [](std::string reason) -> ModePageResult { return {{}, std::move(reason)}; };
     if (!transport) return unavailable("transport unavailable");
     std::array<std::uint8_t, 10> command{};
@@ -148,7 +133,7 @@ ModePageResult read_mode_page(std::uint8_t requested, const DriveModeSenseTransp
     return {std::vector<std::uint8_t>(page.begin(), page.end()), {}};
 }
 
-void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransport& transport) {
+void probe_cd_audio_report(DriveCapabilities& result, const DriveReadPacketTransport& transport) {
     const auto response = read_mode_page(0x2a, transport);
     const auto& page = response.page;
     if (!response.error.empty() || page.size() < 6) {
@@ -175,7 +160,7 @@ void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransp
     }
 }
 
-void probe_cache_report(DriveCapabilities& result, const DriveModeSenseTransport& transport) {
+void probe_cache_report(DriveCapabilities& result, const DriveReadPacketTransport& transport) {
     const auto response = read_mode_page(0x08, transport);
     if (!response.error.empty() || response.page.size() < 3) {
         result.read_cache.detail = "MMC MODE SENSE(10) caching page: " +
@@ -319,7 +304,7 @@ DriveCapabilities probe_drive_capabilities(const std::string& device,
 DriveCapabilities probe_drive_capabilities(const std::string& device,
                                             const std::filesystem::path& sysfs_root,
                                             const DrivePacketTransport& packet_transport,
-                                            const DriveModeSenseTransport& mode_transport) {
+                                            const DriveReadPacketTransport& mode_transport) {
     auto result = identity_from_sysfs(device, sysfs_root);
     probe_c2_feature(result, packet_transport);
     probe_cd_audio_report(result, mode_transport);

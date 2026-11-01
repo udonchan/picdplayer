@@ -4,6 +4,51 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="c2-transfer-evidence-20261101"></a>
+## #264 READ CD実転送長の前提単位（2026-11-01）
+
+C2 trust評価の前に、READ CDのerrno0をfull replyとみなす境界を閉じる。
+MODE SENSEとREAD CDが具体的に共用するread-only SG_IO処理を内部headerへ分離し、実転送長付き型を共用した。
+既存GET CONFIGURATIONの非counted seamは変更しない。MODEの512/allocation・1500ms、READ CDのCD-DA+C2・
+1〜75sector/要求2646bytes単位・5000ms設定とstatus/residualを検査し、callerのfd所有を変えない。
+READ CD decoderは受信長が要求と完全一致する前にPCMをコピーせず、short/過大はEMSGSIZE/UNKNOWNにする。
+通常audio fallbackもUNKNOWNを維持し、未返却0からCLEANを作らない。
+LE16からhost-endianへ明示decodeするが、実driveのbyte orderは独立に確認したとはしない。
+
+編集後に限定Linux/aarch64・WPE無効のcdda_reader/drive_capabilitiesを再buildして通常2/2（0.01秒）、
+ASan/UBSan2/2（0.03秒）成功を確認した。要求1sectorに対する0/2352/2645/2647bytes、PCM無変更、
+UNKNOWN fallback、完全replyのC2有/無、negative LE sampleと76sectorの発行前拒否を確認した。
+独立reviewのsubchannel whitelist不足とconcrete READ CD経路のcoverage不足を1回のgrouped修復で解消した。
+byte10/11非0を拒否し、test-only ioctl wrapperでregular temp fileだけを使ってproduction factory→shared SG_IO→
+decoder→fallbackを10結果で実行した。完全CLEAN/REPORTED、short、status/driver/host/info/syscall、異常residual、
+不正layout/size/frameの発行前拒否、fd所有中/破棄後の解放を確認した。76frameは一致する大きさのbufferを渡し、
+size mismatchがframe上限試験をmaskしない。mockは実kernel ioctlへforwardしない。
+修復後に両対象を再buildして通常/ASan各2/2成功、follow-up reviewで両指摘解消・新blockerなしを確認した。
+このsourceはPi未配備で、実READ CD転送・reader解放・reference一致・C2 trustの成功ではない。
+pure consumerはsector C2を保持しないため、既存Captureを信頼性評価済みとして扱わない。
+
+<a id="combined-manual-acceptance"></a>
+## 後日のTV・物理リモコン・音声の共通試験（準備、未実施）
+
+利用者指示に従い現在は実施しない。次の人による確認時に同じrun IDで10分程度の代表確認を行い、
+#252の物理入力を#121/#184/#51から参照する。自動DOM/HTTPやprocess正常をTV/物理入力/聴感の代用にしない。
+
+| 順序 | 代表操作・見る点 | 所有/記録 |
+|---|---|---|
+| 1 | package/daemon/UI hashと開始状態を記録。TV/音量/出力、disc、policy、offset、背景状態、Inspector有無を固定 | 共通receipt、#184 |
+| 2 | TV全体の余白、前景metadata、drive label/単位/sourceが読める。reported速度/cacheを測定/独立性と誤解させない | #184/#51 |
+| 3 | 物理remoteでSettingsを開き、現行7 buttonを一巡しBack。focus/scroll/最下行理由/余白が一貫する | #252同run |
+| 4 | 実際に利用不能な取得buttonもfocusして理由を読む。決定でPOSTしないことをtraceと区別して確認 | #252、offset_unknownなら変更せず試す |
+| 5 | 通常play→pause/resume→代表的なtrack移動→STOP。TV状態と実音を確認し、音切れ/雑音/遅延を申告する | #121/#184、実音の人の観測 |
+| 6 | policyのSTOPPED適用と再生中pendingを各1代表操作。STOP後の適用を確認し元値へ戻す | #252/#184、全組合せmatrixは追加しない |
+| 7 | 背景ON/OFFと、取得できた実写真の前景可読性・切替を音と併せて確認。1枚しかなければ複数切替は未確認 | #51、remote結果は#252参照 |
+| 8 | 取消試験は対応実装/条件が揃った場合だけ短い有限取得→cancel→実reader解放→人が通常再操作。受理202を完了にしない | #238/#239、今回の初回10分へ無理に追加しない |
+| 9 | policy/背景/temporary Inspector等を復元し、終了状態と異常・未確認を記録。binaryは最新検証済みを残す | 共通receipt、旧binary rollback試験は不要 |
+
+設定をUI確認のためにoffset0へ変換せず、0を校正済みとしない。C2 trustは独立reference/challengeなしにYESを要求しない。
+長時間再生、hotplug/異常媒体、全背景/状態/font matrixは別枠で、#250/#254の延期を再開しない。
+異常時は通常STOP/cancelと有限の解放待ちを優先し、強制終了・電源断を正常復帰と記録しない。
+
 <a id="capability-hardware-20261101T0815"></a>
 ## #264 能力reportの実機反映確認（2026-11-01 08:15〜08:26 UTC）
 
