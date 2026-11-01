@@ -4,6 +4,21 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="raw-read-speed-20261101"></a>
+## #264 raw current-read-speed report単位（2026-11-01）
+
+基準はPR #273統合のmaster`c32c2aa`。既存MODE SENSE page0x2aの14-15をraw kB/sとして取得し、
+raw/source/detailをJSONへ追加した。legacy current_speed_xは維持し、max8-9/要求値/共通CDDVD倍率から合成しない。
+field欠損/失敗のnullと実zero reportを区別する。標準UIは正のDRIVE_REPORTED整数だけを表示する。
+layout/buttonは変更せず、obsolete fieldをlast reportとして扱い、回転/throughputや一次規格全適合を保証しない。
+
+編集後に限定Linux/aarch64 Debug・WPE無効のparser/JSON対象を再buildし、通常2/2（0.08秒）、
+ASan/UBSan2/2（0.27秒）、Nodeの既存UI試験成功を確認した。0/1/3528/65535、max非代用、short field、
+raw/source/detailとlegacy x null、reported/zero/source不明/legacy表示を検証した。
+独立read-only reviewに具体的findingなし。直接の異世代/失効raw assertion、JSON明示zero、UIの範囲外値の網羅は残カバレッジであり、
+標準WPE全体・実機query/画面/音声をこの限定runで確認したとはしない。
+cache policyとC2 trustは残実装。このsourceはPi未配備で、追加packet/stop/restart・権限/offset変更・PCM取得はしていない。
+
 <a id="cdda-mode-reports-20261101"></a>
 ## #264 DAE/accurate-stream reportの限定単位（2026-11-01）
 

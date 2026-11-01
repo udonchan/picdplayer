@@ -215,6 +215,16 @@ int main() {
         auto saved = valid;
         saved[8] |= 0x80; // PS does not change requested PC=current.
         check(reports(saved, saved.size()).accurate_stream.value == Knowledge::yes);
+        for (const unsigned rate : {0U, 1U, 3528U, 65535U}) {
+            auto speed = valid;
+            speed[16] = 0xff; speed[17] = 0xff; // Maximum field must never substitute for current.
+            speed[22] = static_cast<std::uint8_t>(rate >> 8);
+            speed[23] = static_cast<std::uint8_t>(rate);
+            const auto result = reports(speed, speed.size());
+            check(result.current_read_speed_kbytes_per_second == static_cast<int>(rate));
+            check(result.current_speed_source == CapabilityEvidenceSource::drive_reported);
+            check(!result.current_speed_x && !result.current_speed_detail.empty());
+        }
         auto missing = valid;
         missing[8] = 0; // A bounded vendor-specific page is not the requested page.
         unknown(missing, missing.size());
@@ -240,6 +250,10 @@ int main() {
         minimum_page[1] = 12;
         minimum_page[9] = 4;
         check(reports(minimum_page, minimum_page.size()).digital_audio_extraction.value == Knowledge::yes);
+        const auto missing_speed = reports(minimum_page, minimum_page.size());
+        check(!missing_speed.current_read_speed_kbytes_per_second);
+        check(missing_speed.current_speed_source == CapabilityEvidenceSource::none);
+        check(!missing_speed.current_speed_detail.empty());
         auto other_subpage = valid;
         other_subpage.insert(other_subpage.end(), {0x4c, 1, 0, 1, 0xaa});
         other_subpage[1] = static_cast<std::uint8_t>(other_subpage.size() - 2);

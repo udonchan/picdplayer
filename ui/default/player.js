@@ -1511,7 +1511,12 @@ function render(snapshot) {
     ? `NOT APPLIED · ${drive.speed_request_error}`
     : (Number.isInteger(drive.requested_speed_x) ? `${drive.requested_speed_x}x REQUEST ACCEPTED` : 'NOT REQUESTED'));
   set('drive-speed-current', Number.isInteger(drive.current_speed_x)
-    ? `${drive.current_speed_x}x OBSERVED` : 'NOT AVAILABLE');
+    ? `${drive.current_speed_x}x OBSERVED`
+    : (drive.current_speed_source === 'DRIVE_REPORTED'
+      && Number.isInteger(drive.current_read_speed_kbytes_per_second)
+      && drive.current_read_speed_kbytes_per_second > 0
+      && drive.current_read_speed_kbytes_per_second <= 65535
+      ? `${drive.current_read_speed_kbytes_per_second} kB/s REPORTED` : 'NOT AVAILABLE'));
   set('drive-offset', drive.read_offset_samples == null ? 'UNKNOWN' : `${drive.read_offset_samples} samples`);
   const deviceObservation = drive.observation;
   set('drive-observation', deviceObservation && Number.isSafeInteger(deviceObservation.generation)

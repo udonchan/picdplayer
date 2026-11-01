@@ -275,6 +275,34 @@ async function main(scenario = null) {
   assert.match(node('drive-observation').textContent, /NODE UNKNOWN · observed context 2/);
   assert.match(node('drive-observation').textContent, /revalidating · retiring old I\/O · physical identity unverified/);
 
+  const reportedSpeed = structuredClone(observing);
+  reportedSpeed.revision = 8;
+  reportedSpeed.drive.observation.presence = 'PRESENT';
+  reportedSpeed.drive.observation.error = '';
+  reportedSpeed.drive.observation.revalidating = false;
+  reportedSpeed.drive.observation.retiring_io = false;
+  for (const key of ['digital_audio_extraction', 'accurate_stream', 'c2_supported']) {
+    reportedSpeed.drive[key] = { value: 'YES', source: 'DRIVE_REPORTED', detail: 'reported capability' };
+  }
+  reportedSpeed.drive.speed_control = { value: 'YES', source: 'KERNEL_REPORTED', detail: 'kernel capability' };
+  Object.assign(reportedSpeed.drive, { current_read_speed_kbytes_per_second: 3528,
+    current_speed_source: 'DRIVE_REPORTED', current_speed_detail: 'last capability report, not throughput' });
+  sockets[0].onmessage({ data: JSON.stringify(reportedSpeed) });
+  assert.equal(node('drive-speed-current').textContent, '3528 kB/s REPORTED');
+  reportedSpeed.revision = 9;
+  reportedSpeed.drive.current_read_speed_kbytes_per_second = 0;
+  sockets[0].onmessage({ data: JSON.stringify(reportedSpeed) });
+  assert.equal(node('drive-speed-current').textContent, 'NOT AVAILABLE');
+  reportedSpeed.revision = 10;
+  reportedSpeed.drive.current_read_speed_kbytes_per_second = 3528;
+  reportedSpeed.drive.current_speed_source = 'NONE';
+  sockets[0].onmessage({ data: JSON.stringify(reportedSpeed) });
+  assert.equal(node('drive-speed-current').textContent, 'NOT AVAILABLE');
+  reportedSpeed.revision = 11;
+  reportedSpeed.drive.current_speed_x = 2;
+  sockets[0].onmessage({ data: JSON.stringify(reportedSpeed) });
+  assert.equal(node('drive-speed-current').textContent, '2x OBSERVED');
+
   const nextSession = structuredClone(snapshot);
   nextSession.revision = 1;
   nextSession.read.session_id = 'session-b';
