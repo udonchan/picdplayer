@@ -1,8 +1,31 @@
 # 検証状況と残課題
 
 最新追記: 2026-11-01。実装済み、hardware非依存試験済み、実機確認済みを区別する。
-今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
+最新の利用者操作報告は[曲頭欠け#279](#manual-track-start-20261101)、C2配備の実測は
+[2026-11-01実機run](#c2-live-20261101T2020)、次回作業は[開始計画/プロンプト](backlog.md#next-session-20261101)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
+
+<a id="manual-track-start-20261101"></a>
+## 共通操作確認の利用者報告と曲頭欠け（2026-11-01 21:06 UTC）
+
+利用者が[共通操作確認](#combined-manual-acceptance)の1〜7を実施したと報告した。
+別トラックへの移動（例2→3）で曲の冒頭が少し欠ける一方、3再生中に3の先頭へ戻すと発生しない。
+[不具合#279](https://github.com/udonchan/picdplayer/issues/279)として記録した。発生開始時期・欠落時間・
+入力種別・disc依存・再現率・自然な曲境界での発生は未確定で、直近変更のregressionとは断定しない。
+利用者の21:11 UTC指示により、v1リリースまでに修正し、別track移動の冒頭と同曲先頭戻し・通常再生を
+実機で再確認する必須項目とした。未修正でのv1リリースやv2への持ち越しはしない。
+項目5の実音/曲移動は不具合あり。その他項目は追加異常の申告なしだが、実施条件や各判定の詳細を
+収集していないため一括Passや#252/#184/#51のclose根拠にはしない。agentによる目視・聴感再現ではない。
+
+短いread-only調査ではpin/board identityを再確認し、STOPPED・capture IDLE/reader解放済み/media IDLE、
+SINGLE/read block15 frames/startup45 frames（0.6秒）・offset未指定を観測した。
+再生操作・設定変更・再配備・再起動は行っていない。journalの21:03:36 UTCに
+`failure_context tick_gap_us=10176 queued_blocks=0 pending_samples=0 submitted_stereo_frames=88200 last_read_us=723196 read_inflight_us=1296067`、
+続いて`underrun recovery=1 resume_lba=150 prebuffer_blocks=6 reason=ALSA delay: underrun`があった。
+読取待ち/queue枯渇を候補とするが、操作/track/世代との対応は未確認で、2→3の再現証拠ではない。
+nextと同曲先頭戻しは共通のselect_index→engine synchronize→ALSA drop/prepareを通り、
+別trackだけ意図的に冒頭を飛ばす処理は短いsource確認では見つからなかった。
+XRUN復帰・先頭PCM/LBA・HDMI側の再同期/無音化の切り分けと修正は#279で追跡する。
 
 <a id="c2-final-validation-20261101"></a>
 ## #264 C2評価の最終local検証（2026-11-01）
@@ -145,9 +168,10 @@ size mismatchがframe上限試験をmaskしない。mockは実kernel ioctlへfor
 pure consumerはsector C2を保持しないため、既存Captureを信頼性評価済みとして扱わない。
 
 <a id="combined-manual-acceptance"></a>
-## 後日のTV・物理リモコン・音声の共通試験（準備、未実施）
+## TV・物理リモコン・音声の共通試験項目
 
-利用者指示に従い現在は実施しない。次の人による確認時に同じrun IDで10分程度の代表確認を行い、
+以下は準備時点の試験項目で、以後の[利用者による1〜7の実施報告と曲頭欠け](#manual-track-start-20261101)は別記した。
+同じrun IDで10分程度の代表確認を行い、
 #252の物理入力を#121/#184/#51から参照する。自動DOM/HTTPやprocess正常をTV/物理入力/聴感の代用にしない。
 
 | 順序 | 代表操作・見る点 | 所有/記録 |
