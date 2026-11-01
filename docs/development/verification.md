@@ -4,6 +4,61 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="capability-hardware-20261101T0815"></a>
+## #264 能力reportの実機反映確認（2026-11-01 08:15〜08:26 UTC）
+
+利用者の実機確認指示と開発優先方針に従い、既存console pinと同じboard identityのPi 3 Model B Rev 1.2を再照合した。
+開始はdaemon PID51340/NRestarts0、STOPPED/track1/position0、AUDIO_READY、capture IDLE/job0・解放済み、
+media IDLE、offset未指定だった。Permission deniedは配備前から空で、今回の変更で修正したとは扱わない。
+既存sudoersのNOPASSWDは所定のdpkg installとdaemon/kiosk start/stop/restartに限定されており、実際の配備で使用できた。
+新しいsudoers/group/udev/daemon UID変更は行っていない。
+
+CI run41285546844の検証済みRelease candidateだけを取得し、archive profileとSHA-256をmanifestへ照合した。
+artifact約60 MBをignored package-containerへ保存し、SDK source再buildやPi上compileは実施していない。
+
+| identity | 値 |
+|---|---|
+| CI対象PR head | `c4f0344`（#275）、標準WPE Release/Debug各74/74・package/candidate検査成功 |
+| archive source | `0df3554061335092392486c5b67a7efc012fcbba`、`refs/pull/275/merge`。master merge hashと混同しない |
+| package | `picdplayer_0.1.0_Release_aarch64.deb`、arm64/Release/version0.1.0 |
+| package SHA-256 | `07f0fc92031ce14b2ed665ad7822863688cd6f57c4765ba1893514ed20c44b45` |
+| 配置daemon SHA-256 | `bbf09d1c74f7b0e34a6bc1e070a5555288cff1c81f849e579b7894ec77faba1f`、archive manifestと一致 |
+| 旧package SHA-256 | `c7e1e38b74b8ff9154c746557e6b71c9b3df494d04d3c2281e93e3e89cbb3a3a`、保全前に照合 |
+
+旧package・実際の7 custom UI・設定をtarget homeのprivateな`picdplayer-capability-backup-20261101T0815/`へ保全した。
+設定backupは0600、directory0700。rollback自体を試験したわけではない。privateな設定/identity/keyやpackage/SDKをGitへ含めない。
+同じarchive payload hashと一致する7 UIだけを既存snapshot directoryへrsyncし、deleteや旧upload元からの再コピーはしなかった。
+pin専用SSH wrapperをこの配備processだけに使い、repositoryのscripts/deploy.shで所定pathへinstallした。
+postinstの正常try-restart後、daemon/kioskはactive→active、daemon PID60450/kiosk60493、NRestarts0、Result=success。
+systemd journalで両serviceのDeactivated successfully/Stopped/Startedを確認し、強制killを正常解放としていない。
+
+08:24 UTCの新しいbackend APIでは次を観測した。これはdrive reportの取得であり、PCM読取や物理速度の実測ではない。
+
+| 項目 | 実機結果 |
+|---|---|
+| DAE | YES / DRIVE_REPORTED、CDDA_CS |
+| Accurate stream | YES / DRIVE_REPORTED、CDDA_SA。実測連続性ではない |
+| Read cache enabled | YES / DRIVE_REPORTED、RCD=0。物理cache量/再読独立性ではない |
+| Current read speed | raw1764 kB/s / DRIVE_REPORTED、legacy xはnull。倍率や回転/throughputへ換算しない |
+| C2 support / speed control | 従来どおりYES / DRIVE_REPORTED、YES / KERNEL_REPORTED |
+| C2 trust | UNKNOWN/NONE・detail空。評価経路未完了で、drive非対応とはしない |
+| device context | new daemon session generation1、PRESENT/INITIAL、revalidating/retiring false。旧session generation21との大小比較をしない |
+
+終了もSTOPPED/track1/position0・AUDIO_READY、capture IDLE/job0・busy/inflight/access待ちfalse・reader_released=true・media IDLE。
+REPEAT要求/実効75 frame・2一致・最大3回・10000ms・pendingなしとoffset未指定を維持し、取得開始不可はoffset_unknownのままだった。
+設定はbackupとのprivate SHA比較で完全一致。背景requested/effective/availableはtrueのまま復元した。
+稼働argvをprivate比較し、custom-ui一組と検証済みrootの一致、明示offset引数なしを確認した。全文は出力していない。
+通常起動に伴う既存metadata/画像のnetwork動作はこのrunでは計測しておらず、明示的な新provider照合は行っていない。
+
+7 UIは通常file/0644で、配置とHTTP応答のSHA-256全件がarchive payloadと一致した。
+player HTML `3b399ee5…`、JS `d93ae9c9…`、CSS `3d418784…`。
+Custom UI起動snapshotとHTTP反映、正常なWPE process起動は確認したが、TV目視・物理リモコン・音声・DOM/screenshotは未確認。
+running exeの/proc経由hash読取はPermissionErrorのままで、配置hash一致と別に記録する。終了温度は約58℃。
+
+現時点で追加能力reportの確認を止める権限不足はない。残る障害はC2 trustの未実装評価と独立reference/challenge未確認、
+READ CDの実転送長証拠の不足である。CLEAN/反復一致/local fingerprintからtrustを補完せず、PCM取得・offset変更はしていない。
+これはcapture取消/実reader解放/通常再生復帰の正例ではなく、serviceの正常保守とmetadata reportの確認として扱う。
+
 <a id="read-cache-policy-20261101"></a>
 ## #264 current read-cache policy単位（2026-11-01）
 

@@ -259,6 +259,9 @@ PR #273は`c32c2aa`で統合済み。次の[raw速度report単位](verification.
 次の[current cache policy単位](verification.md#read-cache-policy-20261101)はRCDのenabled/disabled reportを実装し、
 物理cache有無・CD-DA適用・独立性とは分離した。labelとAPI説明を明確にし、限定通常/ASan各2/2とUI試験成功。
 37 cacheケースと既存67 mode/8 SG_IO結果を保持し、C2 trustと実機確認は引き続き未完了である。
+2026-11-01の[08:15 UTC実機run](verification.md#capability-hardware-20261101T0815)で検証済みReleaseを配備し、
+DAE/accurate-stream/cache policyのYESとraw1764 kB/sを実機APIで確認した。7 UI配置/HTTP hash・設定保持・正常lifecycleも確認。
+TV/物理入力/音声とC2 trust/READ CD transfer evidenceは未確認/残実装で、#264全体を完成扱いにしない。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 
