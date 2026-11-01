@@ -44,7 +44,7 @@ std::vector<std::uint8_t> audio_page(std::uint8_t flags) {
     return response;
 }
 
-DriveModeSenseTransport mode_transport(std::vector<std::uint8_t> response,
+DriveReadPacketTransport mode_transport(std::vector<std::uint8_t> response,
                                        std::size_t transferred, int error = 0) {
     return [response = std::move(response), transferred, error](std::span<const std::uint8_t> command,
         std::span<std::uint8_t> data, std::span<std::uint8_t> sense, std::size_t& received) {
