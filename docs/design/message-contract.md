@@ -326,6 +326,41 @@ workerの[内部契約](integrity-design.md#acquisition-worker-implementation)�
 local試験だけで実drive/ALSA/物理release確認済みと描画しない。取消/期限もkernel I/Oを強制中断せず、
 destructorのjoinまで非blockingとする保証はない。
 
+<a id="c2-reference-api"></a>
+## 明示C2評価API
+
+`GET /api/c2-assessment`はmain ownerのmetadataだけを返し、device I/O、開始、poll/confirmを行わない。
+`POST /api/c2-assessment`は既存loopback peer判定を維持し、明示start/cancelだけを受ける。
+Originヘッダーによる追加拒否は実装していない。loopback判定をsame-origin/CSRF防御の保証としない。
+本文は4096 bytes以内、JSON深度6以内。未知/重複field（nestedを含む）、型/範囲違いは400、
+本文超過413、他method405。受理202は開始/取消の受理であってreader解放や評価成功ではない。
+
+startは正確に`action="start"`、`session_id`、`disc_generation`、`observation_generation`、
+`profile="c2-sector-reference-v1"`、`reference`の6 field。世代は正uint64。
+referenceは正確に`id`、`provenance`、`independent=true`、`alignment_verified=true`、
+`offset_samples=0`、`sectors`の6 field。idはASCII英数字/`-`/`_`の1〜64文字、
+provenanceはprintable ASCIIの1〜128文字でoperatorが独立性とalignmentを説明する。
+sectorsは1〜2要素で、各要素は`lba`（0以上2,147,483,647未満、昇順・重複不可）と`sha256`（小文字hex64桁）だけ。
+digestはraw-LBA 1sectorのcanonical S16LEを対象とする。`expected_toc`はserver-ownedで入力不可。
+cancelは正確に`action="cancel"`、`session_id`、`job_id`（正uint64）の3 field。
+
+STOPPED、output停止、queue取消、playback reader解放、audio_ready、current device/TOC/世代、
+direct backend、C2 support YES、capture/media idle、policy確定、明示offset0が必要。
+不成立/古いcontext/busy等は409と`executed:false,retry:"manual"`を返し、予約・自動retryしない。
+固有errorは`c2_busy`、`c2_releasing`、`c2_not_ready`、`c2_context_changed`、`c2_no_job`。
+不正referenceはshape違反等なら`invalid_body`/400、評価validatorの拒否なら`invalid_reference`/400。
+開始不能の詳細はGETの`start_rejection`を参照する。
+
+GETはprofile/session/job、state、busy/reader_released、disc/observation世代、current_context、
+reference_id/reference_lbas/reference_basis、start_rejection、value/source/detail/error、
+samples/unavailable/clean_equal/clean_different/flagged_equal/flagged_differentを返す。
+PCM、reference SHA、provenance本文、観測digest履歴は返さない。
+stateはIDLE/RUNNING/COMPLETE/CANCELLED/INVALIDATED/TIMED_OUT/FAILED。
+value/sourceは[条件付き評価](integrity-design.md#明示reference付きc2評価)に従い、
+reference未提供はUNKNOWNで理由を残す。cancel/context失効後も実解放までbusyを保つ。
+完了receiptは通常再生開始だけでは失効させず、cancelまたはdevice/media世代・policy・offset条件の
+変更で撤回する。captureの既存manifest/consumer契約にC2情報を追加しない。
+
 ## 保持窓と世代
 
 | object | fieldと型 | 意味 |

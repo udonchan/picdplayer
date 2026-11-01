@@ -265,6 +265,16 @@ TV/物理入力/音声とC2 trust/READ CD transfer evidenceは未確認/残実�
 利用者の08:48指示で旧binaryへ戻す試験は不要とし、最新検証済みをPiに残す。
 次の[READ CD転送長単位](verification.md#c2-transfer-evidence-20261101)とC2評価経路を優先し、
 TV/物理remote/音声は[共通代表試験](verification.md#combined-manual-acceptance)を準備して後日同runで確認する。
+READ CD転送長単位はPR #277（`3875d49`）で統合済み。次の
+[明示reference付きC2評価](verification.md#c2-reference-assessment-20261101)はproduction経路を実装した変更。
+[20:19〜20:28 UTC実機run](verification.md#c2-live-20261101T2020)でlocal WPE Release78/78とpackage lifecycleを検証して配備し、
+APIの拒否/未実行・設定保持と正常service復元を確認した。単発READ CDは全量2646 bytes/CLEAN/FD closeを観測したが、
+4秒予算超過で診断exit2、最終TOC比較はskip。実assessmentの成功/実行中取消やdeadline内完了には数えない。
+独立reference/challengeの実在・alignmentと実機positiveは未確認である。
+[最終local検証](verification.md#c2-final-validation-20261101)ではWPE Release/Debug各78/78とpackage lifecycle、
+最終独立reviewのblockerなしを確認した。標準CI/candidate/統合identityは対応PRと#264の最新記録で追跡する。
+既存HTTPはloopback peer判定だけでOrigin拒否はない。誤記を訂正し、追加CSRF防御を確認済みとしない。
+#264全体をcloseせず、C2 trust UNKNOWNの理由と条件付きTESTEDの範囲を保持する。
 
 ### 既存Issue一覧（下記は以前の整理時点を含む）
 

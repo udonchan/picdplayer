@@ -289,6 +289,7 @@ technical statusは`player.track_number/position_frames`、`disc.state/title/art
 | GET /api/disc-map | STREAM詳細履歴を含まないDISC集計。非同期capture時点を明示 |
 | GET /api/read-policy | requested/effective/pendingと、保存先指定の有無`persistence_configured`を即時取得。後者は書込成功や永続化完了の保証ではない |
 | POST /api/read-policy | 下記5 fieldのJSON、受理204。適用完了はpolicy状態で確認 |
+| GET/POST /api/c2-assessment | 明示reference付き条件付きC2評価。GETはmetadataのみ、start/cancel受理202。本文・失効・限界は[メッセージ契約](message-contract.md#c2-reference-api)参照。自動取得や標準UIの開始buttonは追加しない |
 | GET/POST /api/artist-background | 利用可否・要求値・実効値とsession限りの明示ON/OFF。画像到着・保存とは別。本文・公開field・statusは[メッセージ契約](message-contract.md#公開経路と生成元)参照 |
 | WS /api/events | 接続時と公開状態変化時に同じJSON。clientからの操作messageは不可 |
 | WS /api/navigation | CECの短命なsemantic navigation入力。接続前の入力は再送しない。clientからのmessageは不可 |

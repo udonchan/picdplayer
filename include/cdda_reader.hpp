@@ -113,6 +113,10 @@ struct DirectOptions {
     // drive from an unrequested or not-yet-known capability. Only these two
     // values are valid while request_c2_pointers is false.
     C2Status inactive_c2_status = C2Status::not_checked;
+    // Explicit diagnostics may require pointer data and must not fall back to
+    // ordinary audio (which could add I/O and cannot supply C2 evidence).
+    bool require_c2_pointers = false;
+    unsigned c2_timeout_ms = 5000;
 };
 std::unique_ptr<CddaReader> make_cdda_reader(CddaBackend backend,
     const std::string& device, DirectOptions options = {});

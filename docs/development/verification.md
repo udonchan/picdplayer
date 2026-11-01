@@ -4,6 +4,123 @@
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="c2-final-validation-20261101"></a>
+## #264 C2評価の最終local検証（2026-11-01）
+
+配備済みsourceについて最終独立reviewを実施し、tracked差分、新規10ファイル、変更6文書に
+修正必須blocker・追加の実コード不具合・仕様衝突なしを確認した。これは実assessment受入や#264完成の意味ではない。
+local WPE有効Release78/78・package lifecycleに続き、同SDKで標準build手順によるDebug78/78（60.80秒）・
+package upgrade/reinstall/purgeも成功した。初回Debugはcompile/link後のstage作成直後にinstallがdirectory作成失敗で停止したが、
+host所有者と同UIDのcontainerからの書込み可否を確認し、権限変更/root化なしの標準手順一度再実行で解消した。
+失敗の根本原因は未確定で、再現性や権限修正の成功とはしない。検証processの保持handleが失われたため、
+Debugの全CTestとlifecycleを改めて実行し、上記実出力を確認した。build済みsourceとprofileは同じである。
+Debug成果物・試験logは配備済みReleaseとは別にhostへ保全し、Piへ追加配備/再起動していない。
+
+正確なheadの標準CI・candidate検査・統合identityは対応PRのchecksと#264の最新記録で追跡する。
+local container、CI、実機を相互に代用しない。[実機run](#c2-live-20261101T2020)の単発診断exit2と
+実assessment/in-flight cancel/独立referenceの未確認は維持する。
+
+<a id="c2-live-20261101T2020"></a>
+## #264 C2評価経路の配備と有界実機確認（2026-11-01 20:19〜20:28 UTC）
+
+利用者の配備・自動実機確認指示に従い、既存host-key pinと保存したmachine/board identityが一致する
+開発Pi 3 Model B Rev 1.2、ASUS SDRW-08D2S-U F601を再確認した。開始はdaemon PID60450/NRestarts0、
+STOPPED/AUDIO_READY、capture IDLE/job0/reader解放済み、明示offsetなし。定期media observe中の瞬間があるため、
+12秒以内のread-only観測でmedia IDLEになったことを確認してからbackup/配備へ進んだ。
+
+既存`picdplayer-profile-review-build`にはNinjaがあり、既存SDK cacheのrecipe
+`96dd1b9a87830486378f9014388fb1004a2b53e4abce15a9b899cd75a758cdd8`は今回のbuild toolingと一致した。
+root checkoutを変更せずSDKをworktreeへcopyし、標準`build-container.sh`でLinux/aarch64・WPE有効Releaseをbuildした。
+追加download、SDK source rebuild、Pi上compileはしていない。全78 CTest成功（58.06秒）、package profileと
+`test-package-lifecycle.sh`のupgrade/reinstall/purge検査成功。前回Ninja不足だったbuild_profileも成功した。
+これはlocal containerのRelease検証で、GitHub CIやDebugの再検証ではない。
+
+| 配備identity | 値 |
+|---|---|
+| source | `feature/264-c2-reference-evaluator`、base `3875d49`上の未commit WIP。commit済みhead/CI candidateではない |
+| tracked source差分 | `git diff --binary HEAD -- CMakeLists.txt include src tests`のSHA-256 `e8548a5a81321471759e603ef1efec73725c868a2aaf9280fb0c5389609e2737`。新規10ファイルのhashはhost receiptで別保持 |
+| package | `picdplayer_0.1.0_Release_aarch64.deb`、arm64/Release/version0.1.0、60,365,096 bytes |
+| package SHA-256 | `8ec052db78294ff6d8795b7dbd833304e25e07e993997e926bb53fddee0f5611` |
+| stage/配置daemon SHA-256 | `8d77e3099bd17f53bad033aedbb98105128d475fc84ef38f0751b1841e385434` |
+
+Piの`~/picdplayer-c2-backup-20261101T2020/`へ直前packageと9個の設定/Custom UI fileをprivateに保全し、
+pin専用SSH wrapperを使う標準`deploy.sh`で配備した。daemon/kioskはactive→active、WPE実process確認成功。
+今回UI sourceは変えず、Custom UIの7ファイルを再uploadしていない。設定・UIの9 hashとrequested/effective policy保持を確認した。
+`/proc/<daemon>/exe`のhash取得は一般SSH accountからPermission deniedのため未確認で、配置fileのhashと混同しない。
+
+新APIの実HTTPでmethod405、空body400、4097 bytes413、存在しないjob取消409、古いsession取消409、
+独立性/alignmentをassertしないreference400、nested duplicate400を確認した。
+各拒否後もjob0/samples0、busy=false、reader_released=true、UNKNOWN/NONEで、SHA/provenance本文非公開だった。
+409はexecuted=false/retry=manual。GETでstart_rejection=offset_unknownを観測し、設定を0へ変換せず、
+実行可能なreference startは送らなかった。通常STOPも204で受理された。
+追加でPi自身のnon-loopback interface addressを送信元にbindしてloopback listenerへ接続し、POSTが
+403/commands_disabledとなりjob0/samples0のままなのを確認した。これは実HTTP peer判定の試験で、外部LAN経由の疎通試験ではない。
+
+初回検査は「既存Origin拒否」を期待して失敗したが、foreign Origin付きの空bodyは400/invalid_bodyだった。
+source照合で既存HTTP処理はloopback peer判定のみと確認し、誤って追加した契約文を訂正した。
+同caseの再検査でも400。Origin拒否/same-origin/CSRF防御の成功と数えず、今回その追加機能は実装していない。
+
+独立referenceなしでも実転送を確認するため、同build imageでproductionのcdda_reader/cd_device/disc_toc sourceに
+read-only ioctl観測wrapperをlinkした一時診断をcross-buildした。製品CLIにstrict one-sector単発診断がないための
+検証専用で、installed daemonの評価jobを通した試験ではない。初回compileはfile-local same_toc参照で失敗し、
+診断内に明示TOC比較を置いて再compile成功した。Pi上compileはしていない。
+kiosk→daemonの正常stop後、一般SSH accountで一度だけ実行した。最大1 READ CD/1sector、retry0、
+strict C2/ordinary fallback禁止、SG_IO timeout1000 ms。LBA0、要求/実転送2646 bytes、errno0、1frame、
+C2 CLEAN、reader破棄後のfcntl=EBADFを観測し、PCM/digestは保存していない。
+ただし事前TOCとread終了まで4,329 msで共通4秒予算超過となり、診断exit2。最終TOC比較は実行しなかった。
+raw receiptのtoc_unchanged=falseはこのskipであり、不一致の観測ではない。deadline内完了/評価成功とはせず、
+強制killや追加read/retryを行っていない。設定timeoutを厳密な実時間上限として主張しない。
+
+finallyでdaemon→kioskを再開し、20:28 UTCにdaemon PID62310/kiosk62324、両active/running、Result=success、
+NRestarts0、STOPPED/AUDIO_READY、capture IDLE/job0・reader解放済み/media IDLE、C2 job0/UNKNOWN/NONEを確認した。
+配備と診断の計4回のDeactivated successfullyをjournalで確認し、forced termination/timeout kill/failureは観測しなかった。
+policy/offset/設定/UIを保持し、最新検証済みbinaryを残した。再install復旧は不要。
+private backup・before/after/final JSON・単発probe receiptをhostの一時領域`picdplayer-c2-evidence-20261101T2020/`にも保全した。
+以前のbackupは削除していない。
+
+独立reference/challengeを使う実assessment、実行中job取消、API経由のdeadline/TOC失効publication、
+drive-wide精度・cache独立性・原盤一致・bit-perfect、TV/物理remote/聴感は未確認。
+単発CLEANと正常fd closeをC2 trust YESや未実行jobの正常取消の証拠にしない。#264全体は未完了のまま。
+
+<a id="c2-reference-assessment-20261101"></a>
+## #264 明示reference付きC2評価の実装・配備前検証（2026-11-01）
+
+base `3875d49`（PR #277）上に`c2-sector-reference-v1`のvalidator/分類core、strict direct runner、
+main-owned session、既存MediaWorker/coordinator、`/api/c2-assessment`とPlayerSessionのproduction配線を実装した。
+純coreだけの完成とは扱わず、受付・失効・reader retirementを分ける。契約は
+[明示reference評価](../design/integrity-design.md#明示reference付きc2評価)と
+[API](../design/message-contract.md#c2-reference-api)を正とする。以下は配備前の記録で、以後の配備と実機結果は
+[20:19 UTCのrun](#c2-live-20261101T2020)を参照する。新commit/PR、標準WPE CIは未実施。
+
+hardware非依存の観測結果（既存`picdplayer-build`、Linux/aarch64、Debug、WPE OFF、metadata/API ON、
+network none、2 CPU/2 GiB、Pi上compileやSDK追加取得なし）:
+
+- 最新sourceで`cmake --build build-49-fixtures --target cdplayerd c2_assessment_session_test c2_assessment_api_test -j2`成功。
+- 編集対象を再build後、`ctest --test-dir build-49-fixtures --output-on-failure`の限定regexで11/11成功（0.80秒）。
+  対象は新4件、cdda_reader/media_worker、api_server、complete_pcm_input/sha256/worker/session。
+- `build-49-png-sanitize`で新4件とcdda_reader/media_workerを再buildし、同じ6件がASan/UBSanで6/6成功（0.14秒）。
+  CXX flagsは`-fsanitize=address,undefined -fno-omit-frame-pointer`、linker flagsもaddress/undefined。
+- 全targetの`cmake --build build-49-fixtures -j2`は成功したが、全体CTestは76/77（57.91秒）、
+  `build_profile`だけ失敗した。既存containerにNinjaがなく、`Ninja Multi-Config` generatorを開始できず、
+  試験が期待する`PiCDPlayer requires a single-config generator`へ到達しなかった。
+  full commandはCTest失敗として終了し全体成功としない。環境要件は[Mac + Docker手順](../manual/mac-docker-development.md)に既記載。
+  今回追加downloadや試験弱化をせず、正しいbuild imageでの再実行/標準CIを残す。
+- foundation reviewのcancel後publication raceとMediaWorker coverage不足をgrouped修復した。
+  publicationをcancelと同mutexで確認し、access待ち取消/決定的publication race/実FD解放を追加、follow-upで残blockerなし。
+- production integrationの独立readonly reviewは修正必須の不具合なし。追加で17種類のstart前提拒否と、
+  実行中/完了/取消後にreference SHA・provenance本文を返さないことをテストし、上記再build後に成功した。
+
+API/session試験はcallbackを合成結果へ置換しており、PlayerSession内の実TOC前後照合・reader options・deadline配線を
+自動実行しない。raw runnerとstrict readerは別のfake/adapter試験で確認したが、production wiringの実行証拠と合算しない。
+既存API/CEC/stdin guardの全組合せ回帰、標準WPE Release/Debug/package、Piの有限READ CD・正常取消/解放は残受入。
+独立referenceの実在・alignmentと実機positiveは未確認で、synthetic fixtureをreference実証にしない。
+UNKNOWNを正直に維持し、drive-wide精度・cache独立性・bit-perfect・原盤一致を主張しない。
+TV/物理remote/聴感は後日の共通試験のままとし、今回Piや設定・UIを変更していない。
+
+今回のDGX委譲は停止した。executorはCPP/test作成とbuild成功を報告したが、親が指定worktreeで
+両ファイル不在と旧LastTest.logを確認し、成果物/実行証拠の不一致としてassignmentを取消した。
+それを成功試験に数えず、以降の実装・再build・上記試験はprimaryが実施した。
+
 <a id="c2-transfer-evidence-20261101"></a>
 ## #264 READ CD実転送長の前提単位（2026-11-01）
 

@@ -204,6 +204,94 @@ int main() {
             check(skipped.request(MediaWork::eject));wait_until([&]{return skipped.idle();});
             MediaWorkerResult phantom{};check(!skipped.pop(phantom)&&ejected==0);
         }
+        const C2Reference reference{"worker-ref", "independent synthetic worker fixture", true, true, 0,
+            {{0, std::string(64, 'a')}}};
+        check(!worker.request_c2(reference, 1)); // No callback installed.
+        {
+            Gate callback;
+            std::atomic<unsigned> calls{0};
+            std::atomic<bool> still_current{false};
+            MediaWorker assessed(std::make_shared<DriveAccessCoordinator>(), [] { return MediaObservation::audio_disc; },
+                [toc] { return toc; }, [] {}, {}, {}, {}, {}, {},
+                [&](const C2Reference& ref, const auto& current) {
+                    ++calls; check(ref.id == reference.id);
+                    callback.pass(); still_current = current();
+                    return C2AssessmentRunResult{C2AssessmentRunState::complete,
+                        {Knowledge::yes, CapabilityEvidenceSource::tested, "synthetic scope"}, {}, {}};
+                });
+            ReleaseGate release{callback};
+            assessed.invalidate(1);
+            check(!assessed.request(MediaWork::assess_c2));
+            check(!assessed.request_c2(reference, 0));
+            check(assessed.request_c2(reference, 11)); callback.reached();
+            check(!assessed.request_c2(reference, 12) && !assessed.request(MediaWork::observe));
+            callback.release();
+            wait_until([&] { return assessed.activity() == "RESULT_PENDING"; });
+            check(!assessed.request_c2(reference, 12));
+            const auto result = wait_for_result(assessed);
+            check(result.work == MediaWork::assess_c2 && result.c2_job_id == 11 && result.observation_generation == 1);
+            check(result.c2_assessment && still_current && calls == 1 && assessed.idle());
+            check(assessed.request_c2(reference, 12));
+            wait_until([&] { return assessed.activity() == "RESULT_PENDING"; });
+            assessed.cancel_c2();
+            MediaWorkerResult revoked{}; check(assessed.idle() && !assessed.pop(revoked));
+            check(assessed.request_c2(reference, 13));
+            check(wait_for_result(assessed).c2_job_id == 13 && still_current);
+        }
+        {
+            Gate callback;
+            std::atomic<bool> seen_current{true};
+            MediaWorker assessed(std::make_shared<DriveAccessCoordinator>(), [] { return MediaObservation::audio_disc; },
+                [toc] { return toc; }, [] {}, {}, {}, {}, {}, {},
+                [&](const C2Reference&, const auto& current) {
+                    callback.pass(); seen_current = current();
+                    // Deliberately return success despite cancellation; the owner must discard it.
+                    return C2AssessmentRunResult{C2AssessmentRunState::complete, {}, {}, {}};
+                });
+            ReleaseGate release{callback};
+            check(assessed.request_c2(reference, 21)); callback.reached();
+            assessed.cancel_c2(); check(!assessed.request_c2(reference, 22));
+            callback.release(); wait_until([&] { return assessed.idle(); });
+            MediaWorkerResult late{}; check(!seen_current && !assessed.pop(late));
+        }
+        {
+            Gate publication;
+            std::atomic<bool> callback_done{false};
+            MediaWorker assessed(std::make_shared<DriveAccessCoordinator>(), [] { return MediaObservation::audio_disc; },
+                [toc] { return toc; }, [] {}, {}, {}, {}, {},
+                [&](std::uint64_t) { if (callback_done) publication.pass(); return true; },
+                [&](const C2Reference&, const auto& current) {
+                    check(current()); callback_done = true;
+                    return C2AssessmentRunResult{C2AssessmentRunState::complete,
+                        {Knowledge::yes, CapabilityEvidenceSource::tested, "synthetic scope"}, {}, {}};
+                });
+            ReleaseGate release{publication};
+            check(assessed.request_c2(reference, 23)); publication.reached();
+            assessed.cancel_c2(); publication.release(); wait_until([&] { return assessed.idle(); });
+            MediaWorkerResult late{}; check(!assessed.pop(late));
+        }
+        for (const bool invalidate : {false, true}) {
+            Gate held;
+            auto access = std::make_shared<DriveAccessCoordinator>();
+            auto holder = std::async(std::launch::async, [&] { access->invoke([&] { held.pass(); }); });
+            held.reached();
+            std::atomic<unsigned> checked{0}, calls{0};
+            MediaWorker assessed(access, [] { return MediaObservation::audio_disc; }, [toc] { return toc; }, [] {},
+                {}, {}, {}, {}, [&](std::uint64_t) { ++checked; return true; },
+                [&](const C2Reference&, const auto&) { ++calls; return C2AssessmentRunResult{}; });
+            ReleaseGate release{held};
+            assessed.invalidate(1);
+            check(assessed.request_c2(reference, 31));
+            wait_until([&] { return checked.load() != 0; });
+            check(!assessed.request_c2(reference, 32));
+            if (invalidate) assessed.invalidate(2);
+            else assessed.cancel_c2();
+            held.release(); holder.get(); wait_until([&] { return assessed.idle(); });
+            MediaWorkerResult stale{}; check(calls == 0 && !assessed.pop(stale));
+            check(assessed.request_c2(reference, 33));
+            const auto fresh = wait_for_result(assessed);
+            check(fresh.c2_job_id == 33 && calls == 1 && fresh.observation_generation == (invalidate ? 2U : 1U));
+        }
         std::cout << "PASS: asynchronous media observation and TOC work\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

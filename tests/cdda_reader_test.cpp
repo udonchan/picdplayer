@@ -22,6 +22,7 @@ template<class F> void rejects(F action) {
 namespace {
 unsigned scenario = 0, packet_calls = 0, audio_calls = 0;
 int packet_fd = -1;
+unsigned expected_timeout = 5000;
 }
 // This executable never forwards ioctl to real hardware.
 extern "C" int __wrap_ioctl(int fd, unsigned long request, ...) {
@@ -36,7 +37,7 @@ extern "C" int __wrap_ioctl(int fd, unsigned long request, ...) {
         check(io->interface_id == 'S' && io->dxfer_direction == SG_DXFER_FROM_DEV);
         check(io->cmd_len == 12 && io->cmdp[0] == 0xbe && io->cmdp[1] == 4 && io->cmdp[8] == 1);
         check(io->cmdp[9] == 0x12 && io->cmdp[10] == 0 && io->cmdp[11] == 0);
-        check(io->dxfer_len == 2646 && io->timeout == 5000 && io->mx_sb_len > 0);
+        check(io->dxfer_len == 2646 && io->timeout == expected_timeout && io->mx_sb_len > 0);
         auto* data = static_cast<unsigned char*>(io->dxferp);
         std::fill_n(data, io->dxfer_len, 0);
         data[0] = 0x34; data[1] = 0x92;
@@ -240,6 +241,29 @@ int main() {
         check(picdplayer_detail::read_mmc_packet(fd, request, std::span(data).first(2645), sense, transferred, 5000) == EINVAL);
         check(packet_calls == issued);
         close(fd);
+        DirectOptions strict{0, true, C2Status::not_checked, true, 1000};
+        expected_timeout = 1000;
+        scenario = 2; // A successful syscall with one unreturned byte must not use normal audio.
+        const auto audio_before = audio_calls;
+        auto diagnostic = make_cdda_reader(CddaBackend::direct, node.string(), strict);
+        diagnostic->seek(0);
+        std::fill(pcm.begin(), pcm.end(), -1234);
+        const auto unavailable = diagnostic->read(std::span(pcm).first(cdda_samples_per_frame));
+        check(unavailable.status == ReadStatus::read_error && unavailable.frames_read == 0);
+        check(unavailable.native_error == EMSGSIZE && unavailable.c2_status == C2Status::unknown);
+        check(audio_calls == audio_before && pcm.front() == -1234);
+        diagnostic.reset();
+        check(fcntl(packet_fd, F_GETFD) == -1 && errno == EBADF);
+        scenario = 0;
+        diagnostic = make_cdda_reader(CddaBackend::direct, node.string(), strict);
+        diagnostic->seek(0);
+        check(diagnostic->read(std::span(pcm).first(cdda_samples_per_frame)).c2_status == C2Status::clean);
+        diagnostic.reset();
+        check(fcntl(packet_fd, F_GETFD) == -1 && errno == EBADF);
+        expected_timeout = 5000;
+        rejects([&] { LinuxIoctlReader invalid([](int, auto) { return 0; }, {0, false, C2Status::not_checked, true}); });
+        rejects([&] { make_cdda_reader(CddaBackend::direct, node.string(), {0, true, C2Status::not_checked, true, 0}); });
+        rejects([&] { make_cdda_reader(CddaBackend::direct, node.string(), {0, true, C2Status::not_checked, true, 5001}); });
         std::filesystem::remove(node);
         std::cout << "PASS: selection, cursor, chunks, partial failure, bounded retry\n";
     } catch (const std::exception& error) {

@@ -13,6 +13,7 @@
 #include <limits>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -34,7 +35,90 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
                               const ApiStateProvider& artist_background_provider,
                               const ApiBackgroundArtworkProvider& background_artwork_provider,
                               const ApiStateProvider& disc_map_provider,
-                              const ApiCompletePcmProvider& complete_pcm_provider) {
+                              const ApiCompletePcmProvider& complete_pcm_provider,
+                              const ApiC2AssessmentProvider& c2_assessment_provider) {
+    if (path == "/api/c2-assessment") {
+        if (method == "GET") {
+            if (!c2_assessment_provider) return {503, "application/json", R"({"error":"c2_assessment_unavailable"})"};
+            auto response = c2_assessment_provider();
+            if (response.body.size() > 4096) return {500, "application/json", R"({"error":"diagnostics_too_large"})"};
+            return response;
+        }
+        if (method != "POST") return {405, "application/json", R"({"error":"method_not_allowed"})"};
+        if (!command_handler) return {403, "application/json", R"({"error":"commands_disabled"})"};
+        if (body.size() > 4096) return {413, "application/json", R"({"error":"body_too_large"})"};
+        ApiCommand command{};
+        command.type = ApiCommandType::start_c2_assessment;
+        try {
+            bool duplicate = false;
+            std::vector<std::unordered_set<std::string>> keys;
+            const auto json = nlohmann::json::parse(body, [&](int depth, nlohmann::json::parse_event_t event, nlohmann::json& value) {
+                if (depth > 6) throw std::length_error("C2 request nesting");
+                if (event == nlohmann::json::parse_event_t::object_start) keys.emplace_back();
+                if (event == nlohmann::json::parse_event_t::key && !keys.empty() &&
+                    !keys.back().insert(value.get<std::string>()).second) duplicate = true;
+                if (event == nlohmann::json::parse_event_t::object_end && !keys.empty()) keys.pop_back();
+                return true;
+            });
+            if (duplicate || !json.is_object() || !json.contains("action") || !json["action"].is_string() ||
+                !json.contains("session_id") || !json["session_id"].is_string()) throw std::invalid_argument("body");
+            command.session_id = json["session_id"].get<std::string>();
+            if (command.session_id.empty() || command.session_id.size() > 64 || command.session_id.find_first_not_of(
+                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_") != std::string::npos)
+                throw std::invalid_argument("session");
+            if (json["action"] == "cancel") {
+                if (json.size() != 3 || !json.contains("job_id") || !json["job_id"].is_number_unsigned() ||
+                    json["job_id"] == 0) throw std::invalid_argument("job");
+                command.type = ApiCommandType::cancel_c2_assessment;
+                command.job_id = json["job_id"].get<std::uint64_t>();
+            } else if (json["action"] == "start") {
+                if (json.size() != 6 || !json.contains("disc_generation") || !json["disc_generation"].is_number_unsigned() ||
+                    json["disc_generation"] == 0 || !json.contains("observation_generation") ||
+                    !json["observation_generation"].is_number_unsigned() || json["observation_generation"] == 0 ||
+                    !json.contains("profile") || json["profile"] != c2_assessment_profile || !json.contains("reference"))
+                    throw std::invalid_argument("context");
+                command.disc_generation = json["disc_generation"].get<std::uint64_t>();
+                command.observation_generation = json["observation_generation"].get<std::uint64_t>();
+                const auto& ref = json["reference"];
+                if (!ref.is_object() || ref.size() != 6 || !ref.contains("id") || !ref["id"].is_string() ||
+                    !ref.contains("provenance") || !ref["provenance"].is_string() || !ref.contains("independent") ||
+                    !ref["independent"].is_boolean() || !ref["independent"].get<bool>() ||
+                    !ref.contains("alignment_verified") || !ref["alignment_verified"].is_boolean() ||
+                    !ref["alignment_verified"].get<bool>() || !ref.contains("offset_samples") ||
+                    !ref["offset_samples"].is_number_integer() || ref["offset_samples"] != 0 ||
+                    !ref.contains("sectors") || !ref["sectors"].is_array() || ref["sectors"].empty() ||
+                    ref["sectors"].size() > c2_assessment_max_sectors) throw std::invalid_argument("reference");
+                auto reference = std::make_shared<C2Reference>();
+                reference->id = ref["id"].get<std::string>();
+                reference->provenance = ref["provenance"].get<std::string>();
+                reference->independent = reference->alignment_verified = true;
+                reference->offset_samples = 0;
+                for (const auto& sector : ref["sectors"]) {
+                    if (!sector.is_object() || sector.size() != 2 || !sector.contains("lba") ||
+                        !sector["lba"].is_number_integer() || sector["lba"] < 0 ||
+                        sector["lba"] >= std::numeric_limits<std::int32_t>::max() ||
+                        !sector.contains("sha256") || !sector["sha256"].is_string()) throw std::invalid_argument("sector");
+                    reference->sectors.push_back({sector["lba"].get<std::int32_t>(), sector["sha256"].get<std::string>()});
+                }
+                command.c2_reference = std::move(reference);
+            } else throw std::invalid_argument("action");
+        } catch (const std::exception&) {
+            return {400, "application/json", R"({"error":"invalid_body"})"};
+        }
+        const auto result = command_handler(command);
+        if (result) return {202, "application/json", {}};
+        const char* error = "c2_assessment_rejected";
+        switch (result.failure) {
+        case ApiCommandFailure::c2_not_ready: error = "c2_not_ready"; break;
+        case ApiCommandFailure::c2_context_changed: error = "c2_context_changed"; break;
+        case ApiCommandFailure::c2_busy: error = "c2_busy"; break;
+        case ApiCommandFailure::c2_releasing: error = "c2_releasing"; break;
+        case ApiCommandFailure::c2_no_job: error = "c2_no_job"; break;
+        case ApiCommandFailure::c2_invalid_reference: return {400, "application/json", R"({"error":"invalid_reference"})"};
+        default: break;
+        }
+        return {409, "application/json", nlohmann::json{{"error", error}, {"executed", false}, {"retry", "manual"}}.dump()};
+    }
     if ((path == "/api/complete-pcm" && method == "GET") || path == "/api/complete-pcm/result") {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (!complete_pcm_provider)
@@ -315,6 +399,12 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
         case ApiCommandFailure::capture_context_changed: error = "capture_context_changed"; break;
         case ApiCommandFailure::capture_no_job: error = "capture_no_job"; break;
         case ApiCommandFailure::capture_busy: error = "capture_busy"; break;
+        case ApiCommandFailure::c2_not_ready: error = "c2_not_ready"; break;
+        case ApiCommandFailure::c2_context_changed: error = "c2_context_changed"; break;
+        case ApiCommandFailure::c2_busy: error = "c2_busy"; break;
+        case ApiCommandFailure::c2_releasing: error = "c2_releasing"; break;
+        case ApiCommandFailure::c2_no_job: error = "c2_no_job"; break;
+        case ApiCommandFailure::c2_invalid_reference: error = "invalid_reference"; break;
         }
         return {HTTP_STATUS_CONFLICT, "application/json",
             nlohmann::json{{"error", error}, {"executed", false}, {"retry", "manual"}}.dump()};
@@ -333,6 +423,7 @@ struct ApiServer::Implementation {
     ApiStateProvider read_history_provider;
     ApiStateProvider disc_map_provider;
     ApiCompletePcmProvider complete_pcm_provider;
+    ApiC2AssessmentProvider c2_assessment_provider;
     ApiStateProvider artist_background_provider;
     ApiBackgroundArtworkProvider background_artwork_provider;
     ApiCommandHandler command_handler;
@@ -381,7 +472,7 @@ struct ApiServer::Implementation {
         return route_api_request(method, path, state_provider,
             local ? command_handler : ApiCommandHandler{}, body, read_policy_provider, &ui, telemetry,
             artwork_provider, read_history_provider, artist_background_provider, background_artwork_provider, disc_map_provider,
-            complete_pcm_provider);
+            complete_pcm_provider, c2_assessment_provider);
     }
 
     static int send_response(lws* wsi, ApiResponse response, bool diagnostic = false) {
@@ -546,13 +637,15 @@ struct ApiServer::Implementation {
                    ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle bundle,
                    ApiArtworkProvider artwork, ApiStateProvider history_provider,
                    ApiStateProvider background_provider, ApiBackgroundArtworkProvider background_artwork,
-                   ApiStateProvider map_provider, ApiCompletePcmProvider capture_provider)
+                   ApiStateProvider map_provider, ApiCompletePcmProvider capture_provider,
+                   ApiC2AssessmentProvider assessment_provider)
         : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
           command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)),
           artwork_provider(std::move(artwork)) {
         read_history_provider = std::move(history_provider);
         disc_map_provider = std::move(map_provider);
         complete_pcm_provider = std::move(capture_provider);
+        c2_assessment_provider = std::move(assessment_provider);
         artist_background_provider = std::move(background_provider);
         background_artwork_provider = std::move(background_artwork);
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
@@ -582,13 +675,14 @@ ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
                      ApiCommandHandler handler, ApiReadPolicyProvider policy_provider, UiBundle ui,
                       ApiArtworkProvider artwork_provider, ApiStateProvider read_history_provider,
                       ApiStateProvider artist_background_provider, ApiBackgroundArtworkProvider background_artwork_provider,
-                      ApiStateProvider disc_map_provider, ApiCompletePcmProvider complete_pcm_provider)
+                       ApiStateProvider disc_map_provider, ApiCompletePcmProvider complete_pcm_provider,
+                       ApiC2AssessmentProvider c2_assessment_provider)
     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
                                                         std::move(handler), std::move(policy_provider), std::move(ui),
                                                         std::move(artwork_provider), std::move(read_history_provider),
                                                         std::move(artist_background_provider),
                                                         std::move(background_artwork_provider), std::move(disc_map_provider),
-                                                        std::move(complete_pcm_provider))) {}
+                                                        std::move(complete_pcm_provider), std::move(c2_assessment_provider))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;
