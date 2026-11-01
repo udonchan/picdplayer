@@ -239,7 +239,11 @@ block sizeとreaderを使う。この順序によりread途中の比較条件や
 CDROM_GET_CAPABILITY、およびMMC `GET CONFIGURATION`のfeature descriptor一覧にあるCD Read Feature（0x001e）を調べる。
 CD Read Featureが存在しC2 Flagsが返った場合、またはFeatureが不在の場合だけ、`c2_supported`を
 DRIVE_REPORTEDのYES/NOにする。これはC2 error pointerを報告できるというdrive宣言であり、read時にC2を取得したこと、reportが正しいこと、原PCMを検証したことを
-意味しない。DAE、C2 trust、cache、accurate streamはUNKNOWNを維持し、offset値もprobeでは取得しない。
+意味しない。DAE/accurate streamは追加のMODE SENSE(10) page 0x2aからDRIVE_REPORTEDとして取得する。
+このqueryはSG_IOの実転送長を使い、8-byte mode header、block descriptor長、一意の通常page境界を検査する。
+CDDA_CS/SAはbyte5 bit0/1で、byte4のanalog Audio playを代用しない。追加query失敗は両flag.detailへ理由を残し、
+C2/kernelの既存成功値やprobe_errorを上書きしない。追加commandはread-only/512 bytes/timeout1500ms設定である。
+C2 trust、cacheは残実装で、offset値もprobeでは取得しない。
 明示起動offsetはsession側で保持し、probe完了後の公開値にも再適用する。probeはMediaWorkerで
 非同期に実行し、probe失敗だけでは再生不可にしない。ただし同じMediaWorkerで逐次実行するため、
 probeの遅延は後続のmedia観測を遅らせ得る。#88ではread-only node/sysfs観測を別ownerへ置き、

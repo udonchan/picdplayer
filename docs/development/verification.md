@@ -1,8 +1,32 @@
 # 検証状況と残課題
 
-最新追記: 2026-10-31。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+最新追記: 2026-11-01。実装済み、hardware非依存試験済み、実機確認済みを区別する。
 今回のlive照合と休止点は[2026-10-31追記](#pr256-readonly-20261031)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
+
+<a id="cdda-mode-reports-20261101"></a>
+## #264 DAE/accurate-stream reportの限定単位（2026-11-01）
+
+基準は開発優先方針PR #272統合のmaster`83583aa`。read-only MODE SENSE(10) page 0x2aの
+CDDA_CS/SAを既存flagのvalue/source/detailへ投影する。C2 trust/cache/current speedの残実装を完成扱いにしない。
+既存C2のCDROM_SEND_PACKETと3引数test seamは維持し、追加MODE用に実転送長付き境界と4引数test seamを用意した。
+Linux SG_IOのstatus/residualを検査し、512-byte上限・1500ms設定と実転送範囲でpageを解析する。
+kernel初期段階で失敗した場合は追加queryを発行せず、両flagにNot queriedの理由を残す。
+追加queryだけの失敗はUNKNOWN+detailで、取得済みC2/kernel値や従来probe_errorを消さない。
+
+62 MODE reportケースと従来C2/speedのassertionを維持し、CDB、actual transfer長、header/descriptor/page境界、
+duplicate/subpage、analog bit区別、4通りのCDDA flags、失敗がNOを作らないことを検証した。
+最初の58ケースを通常/ASan/UBSanで00:21/00:24 UTCに各1/1確認した後、SPF・最小field境界を追加した。
+test executableだけのGNU ioctl wrapperでregular temp fileを使い、SG_IOのCDB/方向/timeout、status/residual/errno、
+FD解放を8結果で検証する。実deviceへはforwardしない。最終62ケース＋8 adapter結果を00:39 UTCに
+両構成で再buildして各1/1成功した。wrapper linkはtest targetだけに適用し、製品のioctlを差し替えない。
+LastTest.logとsanitizer flagsを親が照合した。これは登録73件のうち1件の限定Linux/aarch64・WPE無効構成で、
+標準WPE全体や実機SG_IO成功の証拠ではない。新しいCTest target/runtime依存/API field/UI layoutは追加していない。
+
+fresh Taskの限定command実行は実出力を取得できた。sanitizer最終reportのcommand再掲が不足したため、
+追加実行なしのreport補完でactual commandとexit0を取得し、モデル評価とsource/test結果を混同していない。
+根拠はlibrary sourceの定義と実装で、一次MMC規格の全適合・ASUS F601でのquery可用性は未確認である。
+この単位はまだPiへ配備しておらず、追加のdrive packet、service stop/restart、権限変更、PCM取得は実施していない。
 
 <a id="capability-live-20261031T2330"></a>
 ## #264 開発優先方針とread-only再照合（2026-10-31 23:30 UTC）

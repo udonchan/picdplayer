@@ -2,6 +2,7 @@
 #include "device_lifecycle.hpp"
 
 #include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -71,6 +72,11 @@ using DrivePacketTransport = std::function<int(std::span<const std::uint8_t>,
                                                 std::span<std::uint8_t>,
                                                 std::span<std::uint8_t>)>;
 
+// MODE SENSE also reports the actual transfer length; unreturned zero-filled
+// buffer bytes must not become negative capability reports.
+using DriveModeSenseTransport = std::function<int(std::span<const std::uint8_t>,
+    std::span<std::uint8_t>, std::span<std::uint8_t>, std::size_t& transferred)>;
+
 // Test seam for CDROM_SELECT_SPEED. The argument is a CD speed multiple and
 // the return value is zero on success or errno.
 // テスト用のCDROM_SELECT_SPEED境界。引数はCD倍速、成功時は0、失敗時はerrnoを返す。
@@ -91,6 +97,9 @@ DriveCapabilities probe_drive_capabilities(
 DriveCapabilities probe_drive_capabilities(
     const std::string& device, const std::filesystem::path& sysfs_root,
     const DrivePacketTransport& packet_transport);
+DriveCapabilities probe_drive_capabilities(
+    const std::string& device, const std::filesystem::path& sysfs_root,
+    const DrivePacketTransport& packet_transport, const DriveModeSenseTransport& mode_transport);
 
 // Requests a bounded CD speed multiple. A success means only that the ioctl
 // accepted the request; it is not a measurement of the applied drive speed.

@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <linux/cdrom.h>
+#include <scsi/sg.h>
 #include <sstream>
 #include <sys/ioctl.h>
 #include <system_error>
@@ -18,6 +19,8 @@ constexpr std::size_t configuration_response_bytes = 512;
 constexpr std::size_t configuration_header_bytes = 8;
 constexpr std::size_t feature_header_bytes = 4;
 constexpr unsigned maximum_requested_speed_x = 255;
+constexpr std::size_t mode_response_bytes = 512;
+constexpr unsigned mode_timeout_ms = 1500;
 
 std::string read_optional(const std::filesystem::path& path) {
     std::ifstream input(path);
@@ -69,6 +72,81 @@ DrivePacketTransport linux_packet_transport(const std::string& device) {
         close(fd);
         return error;
     };
+}
+
+DriveModeSenseTransport linux_mode_transport(const std::string& device) {
+    return [device](std::span<const std::uint8_t> command, std::span<std::uint8_t> data,
+                    std::span<std::uint8_t> sense, std::size_t& transferred) -> int {
+        transferred = 0;
+        if (command.size() != 10 || command[0] != 0x5a || data.empty() ||
+            data.size() > mode_response_bytes || sense.size() > 255) return EINVAL;
+        const int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0) return errno;
+        sg_io_hdr_t request{};
+        request.interface_id = 'S';
+        request.dxfer_direction = SG_DXFER_FROM_DEV;
+        request.cmd_len = static_cast<unsigned char>(command.size());
+        request.cmdp = const_cast<unsigned char*>(command.data());
+        request.dxfer_len = static_cast<unsigned>(data.size());
+        request.dxferp = data.data();
+        request.mx_sb_len = static_cast<unsigned char>(sense.size());
+        request.sbp = sense.data();
+        request.timeout = mode_timeout_ms;
+        const int result = ioctl(fd, SG_IO, &request);
+        const int error = result < 0 ? errno : 0;
+        close(fd);
+        if (error) return error;
+        if (request.status || request.host_status || request.driver_status ||
+            (request.info & SG_INFO_OK_MASK) != SG_INFO_OK) return EIO;
+        if (request.resid < 0 || static_cast<std::size_t>(request.resid) > data.size()) return EMSGSIZE;
+        transferred = data.size() - static_cast<std::size_t>(request.resid);
+        return 0;
+    };
+}
+
+void probe_cd_audio_report(DriveCapabilities& result, const DriveModeSenseTransport& transport) {
+    const auto unavailable = [&](const std::string& reason) {
+        const auto detail = "MMC MODE SENSE(10) CD/DVD page: " + reason;
+        result.digital_audio_extraction.detail = detail;
+        result.accurate_stream.detail = detail;
+    };
+    if (!transport) { unavailable("transport unavailable"); return; }
+    std::array<std::uint8_t, 10> command{};
+    command[0] = 0x5a;
+    command[1] = 0x08; // DBD, page control=current, subpage=0.
+    command[2] = 0x2a;
+    command[7] = static_cast<std::uint8_t>(mode_response_bytes >> 8);
+    command[8] = static_cast<std::uint8_t>(mode_response_bytes);
+    std::array<std::uint8_t, mode_response_bytes> data{};
+    std::array<std::uint8_t, sizeof(request_sense)> sense{};
+    std::size_t transferred = 0;
+    const auto error = transport(command, data, sense, transferred);
+    if (error) { unavailable(std::strerror(error)); return; }
+    if (transferred < 8 || transferred > data.size()) { unavailable("transfer length invalid"); return; }
+    const auto total = static_cast<std::size_t>(be16(data.data())) + 2;
+    if (total < 8 || total > transferred) { unavailable("response header is truncated"); return; }
+    const auto descriptors = static_cast<std::size_t>(be16(data.data() + 6));
+    if (descriptors > total - 8) { unavailable("block descriptors are truncated"); return; }
+    std::span<const std::uint8_t> page;
+    for (std::size_t offset = 8 + descriptors; offset < total;) {
+        if (total - offset < 2) { unavailable("page header is truncated"); return; }
+        const bool subpage = (data[offset] & 0x40) != 0;
+        const std::size_t header = subpage ? 4 : 2;
+        if (total - offset < header) { unavailable("subpage header is truncated"); return; }
+        const auto length = header + (subpage ? static_cast<std::size_t>(be16(data.data() + offset + 2))
+                                             : static_cast<std::size_t>(data[offset + 1]));
+        if (length > total - offset) { unavailable("page payload is truncated"); return; }
+        if ((data[offset] & 0x3f) == 0x2a) {
+            if (!page.empty() || subpage) { unavailable("ambiguous CD/DVD page layout"); return; }
+            page = std::span<const std::uint8_t>(data.data() + offset, length);
+        }
+        offset += length;
+    }
+    if (page.size() < 6) { unavailable(page.empty() ? "CD/DVD page not returned" : "CD/DVD flags not returned"); return; }
+    result.digital_audio_extraction = {page[5] & 1 ? Knowledge::yes : Knowledge::no,
+        CapabilityEvidenceSource::drive_reported, "MMC CD/DVD page CDDA_CS (digital commands, not Audio play)"};
+    result.accurate_stream = {page[5] & 2 ? Knowledge::yes : Knowledge::no,
+        CapabilityEvidenceSource::drive_reported, "MMC CD/DVD page CDDA_SA (drive report, not measured continuity)"};
 }
 
 void probe_c2_feature(DriveCapabilities& result, const DrivePacketTransport& transport) {
@@ -177,10 +255,13 @@ DriveSpeedRequestResult request_drive_speed(const std::string& device, unsigned 
 DriveCapabilities probe_drive_capabilities(const std::string& device,
                                             const std::filesystem::path& sysfs_root) {
     auto result = identity_from_sysfs(device, sysfs_root);
-    if (!probe_kernel_capabilities(result)) return result;
+    if (!probe_kernel_capabilities(result)) {
+        result.digital_audio_extraction.detail = "Not queried: " + result.probe_error;
+        result.accurate_stream.detail = result.digital_audio_extraction.detail;
+        return result;
+    }
     probe_c2_feature(result, linux_packet_transport(device));
-    // CDC_PLAY_AUDIO concerns the drive's analogue/play command interface and
-    // must not be presented as proof of digital audio extraction support.
+    probe_cd_audio_report(result, linux_mode_transport(device));
     return result;
 }
 
@@ -189,6 +270,16 @@ DriveCapabilities probe_drive_capabilities(const std::string& device,
                                             const DrivePacketTransport& packet_transport) {
     auto result = identity_from_sysfs(device, sysfs_root);
     probe_c2_feature(result, packet_transport);
+    return result;
+}
+
+DriveCapabilities probe_drive_capabilities(const std::string& device,
+                                            const std::filesystem::path& sysfs_root,
+                                            const DrivePacketTransport& packet_transport,
+                                            const DriveModeSenseTransport& mode_transport) {
+    auto result = identity_from_sysfs(device, sysfs_root);
+    probe_c2_feature(result, packet_transport);
+    probe_cd_audio_report(result, mode_transport);
     return result;
 }
 
