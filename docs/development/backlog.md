@@ -1,5 +1,75 @@
 # 残課題とIssue一覧
 
+## 実機操作確認で判明した再生不具合（2026-11-01）
+
+利用者が共通操作1〜7を実施し、別trackへの移動（例2→3）で冒頭が少し欠け、同曲の先頭戻しでは
+発生しないと報告した。[#279](https://github.com/udonchan/picdplayer/issues/279)で追跡する。
+利用者の21:11 UTC指示により、#279の修正と実機再確認はv1リリースまでの必須条件とする。
+未修正のままv1をリリースせず、v2延期や既知不具合としての持ち越しはしない。
+発生開始時期・原因は不明。read-only調査でPCM queue空/読取待ち約1.30秒のALSA underrunを観測したが、
+報告操作との時刻/世代対応は未確認で、原因確定や修正済みにはしない。
+[確認記録](verification.md#manual-track-start-20261101)を#252/#121/#184/#51の共通受入から参照する。
+1〜7の一括Pass/既存Issue closeにはせず、#264のC2評価とは別の再生不具合として扱う。
+
+<a id="next-session-20261101"></a>
+## 次回作業計画と開始プロンプト（2026-11-01終了時）
+
+現行Open Issueの本文/最新追記と利用者のv1必須指示から、次の順に進める。
+全Issueの優先順位変更や、未確認checkboxの一括完了ではない。
+
+| 順序 | Issue | 次の作業と区切り |
+|---|---|---|
+| 1 | #279 | v1必須修正。別track移動と同曲先頭戻しを同一disc/設定で比較し、操作時刻・入力・stream世代・開始LBA・最初のread/write・underrunを対応付ける。PCM先頭喪失/XRUN復帰/HDMI側の再同期を区別して最小修正・回帰試験・実機再確認まで進める。開始時期不明のまま、直近PRのregressionと決め付けない |
+| 2 | #264、#238/#239 | #264のreport/明示評価経路はPR #273〜278で実装済みとして再実装しない。残るproduction配線の実行検証、実assessmentの取消/退役/世代・TOC・deadline失効を既存契約内で補う。独立reference/challengeが未提供なら実機positiveはUNKNOWNのまま残し、CaptureのPCM-only契約へ架空C2 fieldを追加しない |
+| 3 | #252/#184/#51、関連#121 | #279修正後に同じ短いrunで曲頭と通常操作を再確認し、今回1〜7実施報告の不足条件を埋める。物理入力は#252、通常音声/lifecycleは#184、写真数/切替/可読性は#51、同時ログのstall分類は#121へ分担する。長期/全写真/全状態の合格へ拡張しない |
+| 4 | #49、#220、#66/#67/#68、#46/#47、#45 | 次のv1 gateとして、残画像資源境界、採用WPE供給/ABI・sandbox/更新、license・inventory、Raspberry Pi OS image/復旧、正式配布/保持/公開承認を整理する。画像3形式admissionや短期CI candidateは完成済みとして維持し、それだけで総資源保証や正式release承認にしない。次sessionで全件の実装/SDK buildを始める計画ではない |
+
+#250/#254およびBuildroot追加研究等のPendingは再開しない。
+人の目視/聴感が必要な結論をagentのAPI/ログだけで作らず、必要な人の確認は実施可能な時点へ分ける。
+今回の終了処理では新規実機操作、#279の修正、正式release、Issue close/reopenを行わない。
+
+### 次回開始プロンプト
+
+```text
+PiCDPlayerの次回作業を開始してください。AGENTS.md、docs/README.md、最新refs/remotes/origin/masterの
+docs/development/backlog.md#next-session-20261101 と
+docs/development/verification.md#manual-track-start-20261101、Issue #279の本文/最新追記を読んでください。
+既存worktree/保存branch/private backupを壊さず、masterへ直接編集せず、最新refs/remotes/origin/master基準の作業branchを使ってください。
+remote-tracking refと同名のlocal保存branchを混同しないでください。
+
+最優先は#279の曲頭欠けです。利用者は共通操作1〜7を実施し、別track移動（例2→3）では冒頭が少し欠け、
+3再生中に3の先頭へ戻す場合は発生しないと報告しました。発生開始時期・欠落量・入力種別・再現率は不明です。
+利用者指示によりv1リリースまでの修正と実機再確認が必須で、v2延期/既知不具合のままのv1公開は不可です。
+
+初期source確認では両操作は共通select_index→engine synchronize→ALSA drop/prepareを通っています。
+21:03:36 UTCのWARNはqueue0、last_read_us723196、read_inflight_us1296067、submitted_stereo_frames88200、
+underrun recovery1/resume_lba150でした。ただし報告された2→3との対応は不明で、原因やregressionを断定しないでください。
+同じdisc/設定の別track移動と同曲先頭戻しについて、操作時刻/入力/世代/開始LBA/最初のread・write/XRUNを
+対応付け、PCM先頭喪失・読取待ち/XRUN復帰・HDMI受信側の再同期を切り分けてください。
+根拠のないbuffer増量や無音追加だけで隠さず、必要最小限の診断/修正と、先頭PCM・部分write・旧世代排除等の回帰を行ってください。
+編集後は再build、適切な通常/sanitizer試験、独立review、正確headの標準WPE Release/Debug/package/candidate CIを確認してください。
+実機音声の解消はAPI/ALSA送信成功だけで判定せず、人の観測が未実施なら未確認として残してください。
+
+READ CD counted transferはPR277、明示reference付きC2評価production経路はPR278でmaster b8062c4へ統合済みです。
+CI41348286803はhead8765058/merge-ref6057a16でRelease/Debug各78/78・package/candidate成功です。再実装しないでください。
+Pi配置daemon SHAは8d77e3099bd17f53bad033aedbb98105128d475fc84ef38f0751b1841e385434、配備local Release package SHAは
+8ec052db78294ff6d8795b7dbd833304e25e07e993997e926bb53fddee0f5611です。CI candidate packageは別identityです。
+以前のSTOPPED/設定値を現在状態として使い回さないでください。#264はOpen、独立reference/challenge未提供です。
+単発READ CDの全量2646 bytes/CLEAN/FD closeは観測済みですが、4.329秒で予算超過exit2、最終TOCはskipでした。
+実assessment/in-flight cancel/精度/cache独立性/原盤一致/bit-perfectの成功には数えず、referenceなしはUNKNOWNを維持してください。
+
+指定開発Piは開発優先で操作ごとの承認待ちは不要ですが、毎回pin/board identityと再生/capture/I/Oを再確認し、
+有限予算・正常STOP/cancel・実reader解放・設定保持/復元を記録してください。Pi上compile、権限拡大/root化、
+forcekill/powercutを成功扱い、余分なSDK build/download、secret/PCM保存/provider照合の追加は禁止です。
+最新検証済みbinaryを残してよく、旧版rollback試験は不要、backupは保持してください。
+DGX executorは成果物/実出力の不一致で停止中です。委譲する場合もprimaryがscope/仕様/成果物/実出力を検証し、
+review済みやgreen CIだけで実機成功へ読み替えないでください。
+
+#279の修正自体に必要な実機再確認までを最初の単位とし、得られた観測は#252/#184/#51と共有し#121へ同時ログを返してください。
+その後は計画表どおり#264残受入、共通手動受入の不足条件、#49資源境界、供給/compliance/image/公開gateを順に扱い、#250/#254の全matrixや
+Buildroot研究を再開しないでください。今回の開始プロンプトだけで正式releaseやIssue close/reopenを行わないでください。
+```
+
 ## image検討の区切りと実機再開（2026-10-24）
 
 image検討は下記の方針・要件とB0静的検査までで区切り、文書と小さな[B0要約](reports/2026-10-22-raspios-image-v1/b0-summary.json)を
