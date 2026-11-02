@@ -43,6 +43,9 @@ void PlaybackEngine::synchronize() {
         start_ = *state.position_lba;
         generation_ = worker_.start(start_, end_);
         active_ = true;
+        log_notice("player") << "stream_start generation=" << generation_
+                             << " track=" << state.track.value_or(0)
+                             << " start_lba=" << start_ << " end_lba=" << end_;
     } else if (state.playback == PlaybackState::stopped) {
         worker_.discard_reader();
         quiescent_ = true;
@@ -91,6 +94,7 @@ void PlaybackEngine::tick() {
             last_prebuffer_wait_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now - prebuffer_started_at_).count();
             log_info("player") << "prebuffer_ready wait_ms=" << *last_prebuffer_wait_ms_
+                               << " generation=" << generation_ << " start_lba=" << start_
                                << " queued_blocks=" << status.queued
                                << " target_frames="
                                << prebuffer_blocks_ * worker_.read_block_cd_frames();
@@ -106,6 +110,12 @@ void PlaybackEngine::tick() {
             const auto accepted = output_.write(remaining);
             if (accepted > remaining.size() / 2) throw std::runtime_error("invalid audio write count");
             if (accepted) {
+                if (submitted_ == 0)
+                    log_notice("player") << "first_write generation=" << generation_
+                                         << " start_lba=" << start_ << " block_lba=" << block_.lba
+                                         << " sample_offset=" << offset_
+                                         << " accepted_stereo_frames=" << accepted
+                                         << " prebuffer_wait_ms=" << last_prebuffer_wait_ms_.value_or(0);
                 submitted_evidence_.push_back({submitted_, submitted_ + static_cast<std::int64_t>(accepted),
                                                block_.evidence});
             }
@@ -129,6 +139,7 @@ void PlaybackEngine::tick() {
     } catch (const AudioUnderrun& error) {
         const auto status = worker_.status();
         log_warning("player") << "failure_context tick_gap_us=" << gap_us
+                              << " generation=" << generation_ << " start_lba=" << start_
                               << " queued_blocks=" << status.queued
                               << " pending_samples=" << (block_.samples.size() - offset_)
                               << " submitted_stereo_frames=" << submitted_
@@ -164,6 +175,7 @@ void PlaybackEngine::tick() {
             active_ = true;
             last_tick_ = std::chrono::steady_clock::now();
             log_warning("player") << "underrun recovery=" << underrun_recoveries_
+                                  << " generation=" << generation_
                                   << " resume_lba=" << start_
                                   << " prebuffer_blocks=" << prebuffer_blocks_
                                   << " reason=" << error.what();
@@ -181,6 +193,7 @@ void PlaybackEngine::tick() {
     } catch (...) {
         const auto status = worker_.status();
         log_warning("player") << "failure_context tick_gap_us=" << gap_us
+                              << " generation=" << generation_ << " start_lba=" << start_
                               << " queued_blocks=" << status.queued
                               << " pending_samples=" << (block_.samples.size() - offset_)
                               << " submitted_stereo_frames=" << submitted_

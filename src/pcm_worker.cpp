@@ -1,4 +1,5 @@
 #include "pcm_worker.hpp"
+#include "logger.hpp"
 #include <algorithm>
 #include <stdexcept>
 #include <limits>
@@ -184,6 +185,7 @@ void PcmWorker::run() {
         const auto policy_revision = diagnostics_.policy_revision;
         const auto disc_generation = disc_generation_;
         auto position = begin_;
+        const auto stream_begin = position;
         const auto end = end_;
         // A configuration is immutable for the lifetime of this stream
         // generation.  reconfigure() is only used after the session has
@@ -243,8 +245,17 @@ void PcmWorker::run() {
                                std::vector<std::int16_t>(frames * cdda_samples_per_frame), {}};
                 const auto result = invoke_current([&] {
                     unobserved_read = true;
+                    if (position == stream_begin)
+                        log_notice("pcm") << "first_read_begin generation=" << generation
+                                          << " start_lba=" << position << " frames=" << frames;
                     return reader->read(block.samples);
                 });
+                if (position == stream_begin)
+                    log_notice("pcm") << "first_read_end generation=" << generation
+                                      << " start_lba=" << result.start_lba
+                                      << " frames_read=" << result.frames_read
+                                      << " elapsed_us=" << std::chrono::duration_cast<std::chrono::microseconds>(
+                                             std::chrono::steady_clock::now() - read_started_).count();
                 lock.lock();
                 last_read_us_ = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() - read_started_).count();
