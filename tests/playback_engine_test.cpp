@@ -71,6 +71,65 @@ public:
 
 int main() {
     try {
+        // Compare every sample, not only totals, across a partially written old stream.
+        {
+            struct PatternReader : CddaReader {
+                std::int32_t position = 0;
+                void seek(std::int32_t lba) override { position = lba; }
+                static std::int16_t sample(std::int64_t index) {
+                    return static_cast<std::int16_t>(index % 30001 - 15000);
+                }
+                ReadResult read(std::span<std::int16_t> pcm) override {
+                    for (std::size_t i = 0; i < pcm.size(); ++i)
+                        pcm[i] = sample(std::int64_t(position) * cdda_samples_per_frame + i);
+                    const auto frames = pcm.size() / cdda_samples_per_frame;
+                    ReadResult result{position, frames, frames, ReadStatus::ok, 0, 0};
+                    position += static_cast<std::int32_t>(frames);
+                    return result;
+                }
+            };
+            struct RecordingOutput : AudioOutput {
+                std::vector<std::int16_t> samples;
+                std::size_t call = 0;
+                void reset() override { samples.clear(); call = 0; }
+                std::size_t write(std::span<const std::int16_t> pcm) override {
+                    constexpr std::size_t counts[]{1, 0, 7, 587, 31};
+                    const auto count = std::min(counts[call++ % 5], pcm.size() / 2);
+                    samples.insert(samples.end(), pcm.begin(), pcm.begin() + count * 2);
+                    return count;
+                }
+                std::int64_t delay() override { return samples.size() / 2; }
+                bool drain() override { return false; }
+            } output;
+            PcmWorker worker([] { return std::make_unique<PatternReader>(); });
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0, 150, 300}, 600));
+            PlaybackEngine engine(controller, worker, output, 600);
+            controller.select_track(2); controller.play(); engine.synchronize();
+            wait_for([&] { return worker.status().queued >= worker.startup_buffer_blocks(); });
+            engine.tick();
+            check(output.samples.size() == 2); // One stereo pair then zero acceptance.
+            check(output.samples[0] == PatternReader::sample(150 * cdda_samples_per_frame));
+            check(controller.next()); engine.synchronize();
+            const auto next_generation = worker.status().diagnostics.stream_generation;
+            const std::size_t expected_samples = 300 * cdda_samples_per_frame;
+            const auto verify_track = [&] {
+                wait_for([&] { engine.tick(); return output.samples.size() == expected_samples; });
+                for (std::size_t i = 0; i < output.samples.size(); ++i)
+                    check(output.samples[i] == PatternReader::sample(300 * cdda_samples_per_frame + i));
+            };
+            verify_track();
+            const auto next_samples = output.samples;
+            controller.playback_position(530);
+            check(controller.previous() && controller.state().track == 3);
+            engine.synchronize();
+            check(worker.status().diagnostics.stream_generation > next_generation);
+            verify_track();
+            check(output.samples == next_samples);
+            controller.stop(); engine.synchronize();
+            wait_for([&] { return worker.device_released(); });
+            check(output.samples.empty() && engine.quiescent());
+        }
         // Quiescence requires a successful stopped reset, not just an idle engine.
         {
             std::atomic<int> created{0};

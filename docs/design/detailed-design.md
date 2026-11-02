@@ -142,6 +142,11 @@ playback_positionはPLAYING中の前進位置だけを受理し、finishedは停
 `tick()`は先読み閾値を満たすまで待ち、一回最大12回のnonblocking writeでmain loopを占有しない。
 部分writeの残りはblock内offsetで保持する。
 
+曲頭診断ではstream開始、最初のreader call開始/完了、最初の正のwrite受理をNOTICEで記録し、
+generationと開始LBA、最初のwriteのblock LBA/sample offset/受理stereo frame数を対応付ける。
+旧callの完了ログは旧世代を保持し、新世代の成功へ数えない。failure contextにも世代/開始LBAを付ける。
+PCM値は保存せず、ALSA受理をHDMI以降の可聴先頭の保証にしない。
+
 位置は `start_lba + (submitted_stereo_frames - ALSA_delay) / 588` から求める。
 reader終端後もALSA drainが完了するまでfinishedにしない。
 AudioUnderrunでは送信済み量から再開LBAを求め、readerを破棄して再bufferする。

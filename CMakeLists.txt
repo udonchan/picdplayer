@@ -203,7 +203,7 @@ if(BUILD_TESTING)
     add_test(NAME playback_engine COMMAND playback_engine_test)
     set_tests_properties(playback_engine PROPERTIES TIMEOUT 15)
     add_executable(integrity_fixture_test tests/integrity_fixture_test.cpp
-        src/pcm_worker.cpp src/integrity_state.cpp)
+        src/pcm_worker.cpp src/integrity_state.cpp src/logger.cpp)
     target_include_directories(integrity_fixture_test PRIVATE include tests)
     target_compile_features(integrity_fixture_test PRIVATE cxx_std_20)
     target_compile_options(integrity_fixture_test PRIVATE -Wall -Wextra -Wpedantic)

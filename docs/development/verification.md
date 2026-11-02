@@ -1,9 +1,93 @@
 # 検証状況と残課題
 
-最新追記: 2026-11-01。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+最新追記: 2026-11-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+最新の#279状態は[利用者による報告撤回と終了](#track-start-withdrawal-20261102)を参照する。
 最新の利用者操作報告は[曲頭欠け#279](#manual-track-start-20261101)、C2配備の実測は
 [2026-11-01実機run](#c2-live-20261101T2020)、次回作業は[開始計画/プロンプト](backlog.md#next-session-20261101)を参照する。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
+
+<a id="track-start-withdrawal-20261102"></a>
+## #279 利用者による報告撤回と終了（2026-11-02）
+
+利用者は曲頭欠けを自身の勘違いとして訂正し、元音源がそのような冒頭だった可能性が高いと報告した。
+利用者の明示指示により[#279](https://github.com/udonchan/picdplayer/issues/279)を報告撤回として終了し、
+修正・実機再確認というv1必須条件を取り消す。製品不具合の修正完了や、独立した原音照合による原因確定ではない。
+以下の「未修正・v1必須」や追加調査予定は当時の状態であり、本Issueの現行必須条件ではない。
+診断ログ/回帰試験の開発差分、過去測定、保存branch、private backupは保全する。
+今回の終了に伴うコード変更・Pi操作・再配備/rollbackは行わず、他Issueの未確認条件も成功に変更しない。
+
+<a id="track-start-diagnostics-20261101"></a>
+## #279 世代付き曲頭診断の配備と比較（2026-11-01 21:56 UTC）
+
+master `32c4d1c`基準の`fix/279-track-start`の未commit開発差分で、各streamの開始、最初のreader callの
+開始/完了、最初の正のwrite受理にgeneration/LBAを記録した。failure contextにも世代/開始LBAを追加した。
+PCM本体・sample値は記録しない。buffer/ALSA設定、読み取り方式、XRUN復帰方針は変更しておらず、
+これは曲頭欠けの修正ではない。ログは有界AsyncLoggerを使い、sink I/Oを待たないがhard real-time保証ではない。
+入力はloopback APIであり、物理リモコンやTV/聴感の再現確認ではない。
+
+既存pinとboard identity、STOPPED、capture/C2の非busy・解放済み、media IDLEを確認し、元package、設定、
+Custom UIをPiのprivate backup `picdplayer-279-backup-20261101T2150`へ10 file保全してから標準deployを実施した。
+Release daemon SHA-256は`908036180b04d2fe96f677c42858107e2b973777eb50196d527e89935c3ffc3f`、
+package SHA-256は`f8226df9b746b5bab0489011808047efdf0085af900992eb9b72ee1d9affc757`。
+既存WPE SDKを再利用し、Pi compile、権限追加、旧backup削除、PCM保存は行っていない。
+
+同じ14曲disc、SINGLE/read block15/startup45/capacity750 CD frames、offset未指定のまま、60秒全体上限の
+controllerでtrack2再生5秒、next後6秒、previous後6秒、pause/resume後2秒、正常STOPを行った。
+UTCはjournal本文のms精度。操作発行はnext `21:56:21.055803`、previous `21:56:27.242055`。
+previous前はtrack3の350 CD frames地点で、3秒閾値を超えており同曲先頭戻しだった。
+
+| 操作 | 世代 | 開始LBA | stream開始 UTC | first read開始 UTC | first read完了 UTC / 所要 | first write UTC | 先読み待ち |
+|---|---:|---:|---|---|---|---|---:|
+| 初回play/track2 | 8 | 17607 | 21:56:15.950 | 21:56:16.002 | 21:56:19.076 / 3074352 us | 21:56:19.228 | 3274 ms |
+| next/track2→3 | 10 | 34436 | 21:56:21.069 | 21:56:22.109 | 21:56:22.253 / 144315 us | 21:56:22.351 | 1277 ms |
+| previous/track3→3 | 12 | 34436 | 21:56:27.259 | 21:56:27.259 | 21:56:27.355 / 96579 us | 21:56:27.415 | 152 ms |
+| pause後resume | 15 | 34885 | 21:56:34.022 | 21:56:34.022 | 21:56:34.172 / 150480 us | 21:56:34.261 | 235 ms |
+
+所要はworkerの`read_started_`からの計測で、調停待ちやlog処理を含み得る。kernel ioctlだけの所要ではない。
+各first readは15 CD framesを全量返し、first writeは同じblock LBA・sample offset0から8820 stereo sample
+framesを受理した。resumeはtrack3先頭34436+pause位置449と一致した。この記録にXRUN、failure_context、
+main_loop_stallはなく、先頭LBA/offsetの飛ばしは観測しなかった。nextではfirst read発行前に約1040 msの
+待ちがある一方、同曲戻しではms精度で0だった。退役中read/調停/seek等の内訳はこのログだけでは確定せず、
+HDMI受信側の再同期も未観測。送信前待ちの差を可聴PCM欠落やその原因と同一視しない。
+従来21:03のunderrunは依然として利用者報告との対応不明で、今回の原因証拠へ変更しない。
+
+STOP発行`21:56:36.144060`後、snapshot反映を待ち、`21:56:36.553069`にSTOPPED/track1/position0、
+read IDLE/queue0/inflightなし、media IDLE、capture解放済みを観測した。ALSAはPREPARED、delay/hw_ptr/appl_ptrは0。
+最終独立read-only照会でも同じdaemon PID63478/kiosk PID63503・両active/NRestarts0、設定/Custom UI byte一致、
+SINGLE値維持、offset未指定を確認した。保存policyのsourceは通常再起動でsavedからrestoredへ変わるため値と分けた。
+daemonの`/proc/63478/fd`はpermission不足で検査できず、再生readerの実FD解放を独立確認したとはしない。
+captureのreader_releasedを再生readerの証明へ転用せず、権限を拡大していない。
+
+基線採取の最初のscriptはtransportへ不要な`{}`を送りHTTP400、次のscriptは非同期snapshot反映前のSTOPPED assertで
+失敗した。正常STOP要求後の独立照会でSTOPPED/ALSA送信量0を確認し、今回の比較では空bodyと有限の状態待ちへ修正した。
+これらを製品停止不良や合格runへ読み替えない。private host証跡はKilo tool output
+`tool_1990c76b0001yR6IHe9tp7Wx8k`（基線失敗）と`tool_1991d4dca001BHzkJ0GJdcDjbo`（診断比較）に保持する。
+
+### 自動検証と残条件
+
+`playback_engine_test`へ位置依存のstereo PCMと記録sinkを追加し、1/0/7/587/31 frameの部分/zero writeを
+繰り返して全sampleを照合した。旧blockを1 stereo pairだけ送信してnextし、track3先頭から全PCM一致、
+同曲previous後も同じ全PCM一致、世代増加、STOP後のfake reader解放を確認した。
+既存の旧世代inflight拒否・取消・XRUN上限試験は維持した。独立read-only reviewは修正必須指摘なし。
+
+- `PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build ./scripts/build-container.sh`で標準WPE Release build/package成功。
+  同imageの`ctest --test-dir build-container --output-on-failure`は78/78（57.33秒）、標準package lifecycleと
+  `scripts/prepare-release.sh`も成功。candidateはbase32c4d1cのdirty sourceを明示し、clean CI artifactではない。
+- `PICDPLAYER_BUILD_TYPE=Debug`と同imageで標準build/package、78/78（59.95秒）、package lifecycle成功。
+  DebugはPiへ配備せず、Piには上記Releaseを残した。
+- 別の使い捨てLinux/aarch64 container内でDebug、API/metadata ON、WPE OFF、
+  `-fsanitize=address,undefined -fno-omit-frame-pointer`によりplayback_engine/integrity_fixtureを再buildし2/2（1.72秒）成功。
+- 初回Releaseはstage作成で失敗したが、host所有/書込み可を確認し、権限変更なしの標準再実行で成功した。
+  根本原因は未確定。古い`picdplayer-build` imageではNinja不足で77/78だったため、既存Ninja入りimageへ切替えた。
+- sanitizerのAPI/metadata OFF構成は既存`c2_assessment_session_test`のnlohmann imported target不足でconfigure失敗。
+  当該構成を成功とせず、今回scope外の修正は追加しなかった。
+
+このrun時点ではGitHub上の正確な新head CIは未実施で、commit/push/PR前だった。
+上記はCIと同じ標準手順のlocal検証であり、その後の統合CIは対応PRのchecksで別に確認する。
+人の聴感観測がなく、報告症状の再現率/欠落量、ALSA受理後の可聴先頭、HDMI再同期は未確定。
+このrun終了時は#279を未修正・未解消・v1必須として、診断版での聴感対応付けと必要時のread前待ち内訳を次の調査にしていた。
+この追加調査とv1条件は[2026-11-02の報告撤回](#track-start-withdrawal-20261102)により取り消した。
+#252は今回API入力のみ、#184は短時間状態のみ、#51は写真/TV未確認、#121は同時runのstall非観測という限定情報を共有する。
 
 <a id="manual-track-start-20261101"></a>
 ## 共通操作確認の利用者報告と曲頭欠け（2026-11-01 21:06 UTC）
