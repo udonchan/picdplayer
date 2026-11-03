@@ -662,17 +662,23 @@ void run_player_session(const std::string& device, CddaBackend backend,
         else log_info("ui") << "source=" << (ui.custom() ? "custom" : "built-in");
         ApiArtworkProvider artwork_provider;
         ApiBackgroundArtworkProvider background_artwork_provider;
+        ApiArtworkValidator artwork_validator;
 #ifdef ENABLE_METADATA
         if (metadata_enabled) {
             background_artwork_provider = [&](std::string_view reference) -> std::optional<ApiResponse> {
-                const auto asset = enrichment.background_asset(reference);
+                auto asset = enrichment.background_asset(reference);
                 if (!asset) return std::nullopt;
-                return ApiResponse{200, asset->mime_type, asset->bytes};
+                return ApiResponse{200, std::move(asset->mime_type), std::move(asset->bytes)};
             };
             artwork_provider = [&]() -> std::optional<ApiResponse> {
-                const auto asset = enrichment.cover_asset();
+                auto asset = enrichment.cover_asset();
                 if (!asset) return std::nullopt;
-                return ApiResponse{200, asset->mime_type, asset->bytes};
+                return ApiResponse{200, std::move(asset->mime_type), std::move(asset->bytes)};
+            };
+            artwork_validator = [&](std::string_view reference) {
+                if (reference == "/api/presentation/artwork/cover") return enrichment.has_cover_asset();
+                const auto urls = enrichment.background_urls();
+                return std::find(urls.begin(), urls.end(), reference) != urls.end();
             };
         }
 #endif
@@ -689,7 +695,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
                     },
                                                   std::move(background_artwork_provider), [&] { return diagnostic_response(false); },
                                                   [&](bool result) { return capture->response(capture_context(), result); },
-                                                  [&] { return c2_assessment->response(c2_context()); });
+                                                  [&] { return c2_assessment->response(c2_context()); },
+                                                  std::move(artwork_validator));
         auto line = log_notice("api");
         line << "listening=http://";
         if (api_listen.find(':') != std::string::npos) line << '[' << api_listen << ']';

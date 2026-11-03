@@ -164,7 +164,8 @@ fixture生成・native decode・回帰/修復/mutationは[検証記録](verifica
 ### 実装済み境界と残る資源条件
 
 寸法admissionだけで#49全体をcloseせず、以下を分けて追跡する。
-この整理は静的source監査であり、PiのRSS・GPU・音声や異常入力耐性の実測ではない。
+元の整理は静的source監査である。11月3日のHTTP追加検証は[限定実装の記録](verification.md#image-http-20261103)を参照し、
+PiのRSS・GPU・音声や全層の異常入力耐性を実測したものとは扱わない。
 
 | 層 | 実装根拠のある境界 | 未保証・次の確認 |
 |---|---|---|
@@ -174,16 +175,27 @@ fixture生成・native decode・回帰/修復/mutationは[検証記録](verifica
 | worker | active1/pending最新1/result1、serial失効後の結果を不採用 | 協調取消。callbackやdecoderの即時終了、総CPU時間をworker自身は保証しない |
 | runtime cache | 候補/画像とも空cache path、画像disk cacheは未採用 | file-cache部品のpolicyをruntimeのdisk/RSS保証へ転用しない |
 | 未採用file cache | read前のsize検査・fresh/stale共通admission・30日fresh/64 MiB policy | 厳密quotaではない。削除失敗後write、tmp併存、列挙件数、size-check後に伸びるfileの読取、stale保持期限は採用前の残条件 |
-| HTTP配信 | 現行参照だけを値で返し、送信headerで`Cache-Control: no-store`を付与 | 通常画像はdiagnostic用8件guardの対象外。lws送信buffer・複数socketのinflight memory/即時回収は未評価 |
+| HTTP配信 | 背景/cover共通で同時2件・独立した本文予約16 MiB、本文取得前admission、4 KiB分割送信・30秒期限。no-store。Pi 3の隔離3試験Pass | main loop進行時に期限で終了処理へ進む。library/OS/peerへ渡ったbytesの撤回、全process memoryやRSS即時回収は保証しない。Zero 2 W/標準package統合は未検証 |
 | View | artist用img2個、次の1枚をload/decode、epoch/tokenで旧完了を不採用 | fade後previous srcは再利用/resetまで残る。browser cache/GPU copy/peakと即時解放は未確認 |
 
 根拠は`artist_background_image.cpp`、`http_client.cpp`、`artist_background_image_worker.cpp`、
 `enrichment_service.cpp`、`metadata_cache.cpp`、`api_server.cpp`、標準Playerの背景lifecycleを正とする。
 APIの`count_threads=1`/header pool4は画像応答memoryの上限ではなく、`no-store`も送信済みbytesを取り消さない。
-圧縮metadata・decoder/browserの残条件と計測は#49/#83、実写真・TV・音声は#51、
-継続運転は#184、正式供給/sandbox/security updateは#220へ分け、他Issueの完了を流用しない。
+圧縮metadata・decoder/browserの保証外範囲は下記#49 scopeに従い、具体的な不具合時は別Issueで扱う。
+比較計測は#83、実写真・TV・音声は#282、継続運転は#286、正式供給/sandbox/security updateは#220へ分け、
+他Issueの完了を流用しない。
 file cacheをruntimeへ採用する場合は別判断とし、先にhard boundaryを確定する。
 #250/#254の延期matrixを再開せず、具体的な新しい不具合や必要な資源条件を所有Issueで小単位に扱う。
+
+2026-11-03の利用者方針で、#49は保守的な境界を実装して動作する単位を終了目標とする。
+Pi Zero 2 Wの512 MBを設計基準に共通HTTP予算を採り、機種別profileや全層の新しいmemory保証を
+必須条件へ追加しない。既存geometry/公開保持/worker取消を維持し、runtime memory-onlyと未採用
+file-cache部品の限界は上表のとおり明示する。full decoder・圧縮metadataの包括的hardening・
+browser/GPUの即時解放は今回の実装scopeではなく、将来具体的な問題が判明した場合に別Issueで扱う。
+実写真/TV/通常運転の残受入は#282/#286、比較性能は#83で追跡し、過去の未確認をPassへ変更しない。
+[Pi 3の隔離試験](verification.md#image-http-pi3-20261103)は通常serviceを維持して実行し、
+試験clientの本文copyによる遅さを修復後、最大本文・超過・解放・期限を含む3/3を確認した。
+通常WPE配備や実写真/音声の受入ではなく、Zero 2 Wへ結果を一般化しない。
 
 公開modelは同一originの不透明URLだけを渡す。API契約は[メッセージ契約](../design/message-contract.md)を正とする。
 標準UIは1枚なら静止、複数ならshuffleで45秒滞在・4秒crossfadeする。

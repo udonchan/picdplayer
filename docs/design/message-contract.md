@@ -18,7 +18,13 @@
 | POST /api/metadata-selection | loopback限定。候補番号を選択、またはnullで全候補を明示的に採用しない。受理時204、古い世代・対象なしは409。表示反映は次のsnapshotで確認 |
 | GET /api/artist-background | main ownerのrequested/effective/available（bool）とunavailable_reason（stringまたはnull）。利用可能なら理由はnull、metadata無効・非compileはmetadata_disabled、key不在・不正はkey_missing、runtime非対応providerはruntime_unavailable。`persistence_configured`（bool）、`persistence_state`（session_only/saved/unsaved）、`requested_source`（startup/restored/saved/session）を追加。provider未提供の場合は503 |
 | POST /api/artist-background | loopback限定。512 bytes以下の`{"enabled":bool}`のみ。OFFは保存失敗でも取得・表示を止めて204、保存成否はGETで確認。ONは利用可能かつ保存先指定時は保存成功で204、利用不能・保存失敗なら状態を変えず409。No Discや画像の通信失敗は設定受理と区別する。型違い・未知field・不正JSONは400、上限超過413、他method405、外部mutation403 |
-| GET /api/presentation/artwork/background/{opaque-reference} | 現行の取得済み背景画像だけを最大8 MiBで配信。OFF・disc/artist変更・辞退・再取得による旧参照は404。他method405。no-storeで、provider URLや内部IDをpathへ埋め込まない |
+| GET /api/presentation/artwork/background/{opaque-reference} | 現行の取得済み背景画像だけを最大8 MiBで配信。OFF・disc/artist変更・辞退・再取得による旧参照は404。他method405。動的画像のHTTP予算不足は503/artwork_busy。no-storeで、provider URLや内部IDをpathへ埋め込まない |
+| GET /api/presentation/artwork/cover | 現行coverを最大4 MiBで配信。画像なし404、他method405。背景と共通のHTTP予算不足は503/artwork_busy。no-store |
+
+動的画像の503は待機queueや自動retryを作らず、取得済み画像や設定を破棄しない。
+本文providerが単体上限を超える内部契約違反は500/artwork_too_largeとし、画像を送らない。
+送信開始後の参照失効・期限・送信失敗は接続終了とし、200本文の途中へJSONエラーを挿入しない。
+HTTP予算と期限の正本は[機能設計](functional-design.md#dynamic-image-http)の動的画像HTTP契約を参照する。
 
 背景状態にはkey、内部path、provider URL、Artist MBIDや保存エラーの生文字列を含めない。
 背景の保存情報は自身の要求値に対応し、Read Policyのpending/source/保存情報を流用しない。

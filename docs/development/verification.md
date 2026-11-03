@@ -17,6 +17,141 @@ Pi確認は現worktreeの新配備品ではなく、配置SHA`90803618...`の範
 [不足条件表](#manual-acceptance-gaps-20261102)を参照する。旧開始プロンプトは失効した履歴である。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
 
+<a id="image-http-20261103"></a>
+## #49 動的画像HTTPの限定実装（2026-11-03）
+
+静的調査後の利用者指示により、Pi Zero 2 Wの512 MBを基準に保守的なHTTP予算を実装する。
+scopeは背景/cover共通の同時2応答・本文予約16 MiB、最大4 KiBの分割送信、予約から30秒の
+終了処理開始、超過503、失効/切断/完了時の回収である。取得geometry・worker取消は再実装しない。
+全process RSS、decoder/圧縮metadata/browser/GPU全域のhardening、機種別profile、未採用disk cacheを
+今回の終了gateへ追加しない。将来具体的な問題が判明した場合に別Issueで扱う。
+
+基準はmaster `d05b9ba91cc045464558b6b0c190e1a2c46367ee`、作業branchは
+`investigate/49-http-admission-20261103`。既存image `picdplayer-build`の
+`sha256:dfae362988cabb0a54428c44492eb574099b7798d5648b2619401762ade7025a`（Linux/arm64）、
+libwebsockets `4.3.5-unknown`を使う。`--pull never --network none`で追加downloadを禁止し、
+既存artifactを上書きしない専用build directoryを使用する。API/metadata有効・WPE launcher無効の
+Linux buildであり、標準WPE package/CI/Piの確認へ付け替えない。
+
+検証結果（すべてexit 0）:
+
+- `build-49-http-release`でAPI/metadata有効のdaemonと全試験targetを再buildし、全CTest **79/79**成功（53.06秒）。
+  WPE launcher無効構成の件数であり、過去の標準WPE構成79件とは同じ構成ではない。
+- 新しい`api_image_http`と既存`api_server`/`enrichment_background_gate`は限定run **3/3**成功。
+  最終全runの新HTTP試験は36.93秒。小さい実PNGの本文一致/no-store、8 MiB背景/4 MiB coverの
+  transport境界、keep-alive、同時2応答と503前のprovider未呼出、無効参照404/他method405、
+  state配信の継続、途中切断/参照失効/例外/超過/破棄後のslot回収を確認した。
+- 絶対期限試験はproviderを4秒遅らせ、その時間を含む開始から25秒時点の占有と31秒後の切断を
+  確認した。進捗やprovider完了から30秒を数え直す実装ではない。
+- `build-49-http-sanitize`はDebugに`-fsanitize=address,undefined -fno-omit-frame-pointer`を指定。
+  編集対象を再build後、上記3件と画像/worker/JPEG/WebPの既存4件を合わせて **7/7**成功（40.17秒）。
+- coverの実部品はmissing/正常PNG/ちょうど4 MiB/超過/空/不明MIMEを確認した。
+  大きなpadding/patternは配信bytesの試験であり、有効画像のgeometry/full decode試験へ流用しない。
+
+共通実行条件は`docker run --rm --pull never --network none --cpus 2 --memory 2g --user UID:GID
+-v "$PWD:/src" -w /src picdplayer-build`。configureは`cmake -S . -B build-49-http-release
+-DCMAKE_BUILD_TYPE=Release -DENABLE_API=ON -DENABLE_METADATA=ON -DENABLE_WPE_KIOSK=OFF -DBUILD_TESTING=ON`、
+最終buildは`cmake --build build-49-http-release --parallel 2`、全試験は
+`ctest --test-dir build-49-http-release --output-on-failure --parallel 2`を実行した。
+sanitizerは同じconfigure条件でDebug/上記flagsを使い、`api_image_http_test api_server_test
+enrichment_background_gate_test`と既存画像4 targetをbuildし、対応CTestを`-R`で実行した。
+
+初回委譲のsourceは型定義破損・未完成の送信/回収を含み不採用とし、Solが同scope内で修復した。
+初回syntax検査exit 1を成功扱いにしていない。独立reviewの絶対期限timerがprovider完了から
+再起算されるP2も、残時間timerと遅延provider試験で修復し、再build/全回帰/sanitizerをやり直した。
+修復確認reviewで追加の具体的findingはない。委譲成功や未実行のCI結果へ付け替えない。
+
+上記の実装単位完了時点ではPi接続/配備/設定変更、provider通信、SDK build/download、PCM保存、
+commit/push/PR/merge/Issue状態変更は行っていなかった。その後の利用者指示による
+[Pi 3の隔離試験](#image-http-pi3-20261103)は別記する。Pi Zero 2 Wの実機memory/表示/音声や標準WPE
+package/CIは未検証のままである。これらを今回の追加gateへ拡張せず、TV/写真の残受入は#282、
+通常運転は#286、比較性能は#83で追跡する。GitHub上の#49はOpenのまま、公開統合とは区別する。
+
+<a id="image-http-pi3-20261103"></a>
+## #49 Pi 3の隔離HTTP試験（2026-11-03）
+
+利用者の「保証しない範囲を明記して実機テストを進める」指示に従い、既存host-key pinと保存した
+machine/board identityを再照合したPi 3 Model B Rev 1.2（aarch64、RAM 926764 kB）で実施した。
+対象はLinux `6.18.50+rpt-rpi-v8`、glibc 2.41、libwebsockets `4.3.5-unknown`
+（installed package `4.3.5-1+deb13u2`）。上記Release buildのtest binaryをhash/ldd照合後に使い、
+標準WPE packageや既存daemonの置換はしなかった。
+
+最終runは09:37:35–09:38:29 UTC、以下の **3/3がexit 0で正常終了**した。
+
+| 試験 | Pi 3上の結果 |
+| --- | --- |
+| `api_server_test` | 0.507秒。HTTP state/WebSocketを含む既存API回帰Pass |
+| `enrichment_background_gate_test` | 0.893秒。fake取得を使う実Enrichment/worker/HTTP境界、OFF・世代失効・公開保持・cover読取境界の回帰Pass |
+| `api_image_http_test` | 35.310秒。正常PNG/keep-alive、最大本文、admission/503、切断/失効/例外後の回収、provider遅延込みの絶対30秒期限、server破棄をPass |
+
+最大本文は8 MiBが2.72388秒、4 MiBが1.34166秒で本文完全一致した。これはloopbackの合成payload試験であり、
+外部networkや実写真decodeの性能保証ではない。HTTP fixtureは実`ApiServer`とPiのlibwebsockets/socketを使い、
+fake provider・同一processのclientで動作する。取得providerへの通信や光学drive/ALSA出力を試したものではない。
+
+初回5秒guard失敗と、診断用に20秒へ広げても未完了だった試行は不合格として保存した。
+隔離processだけのsocket traceでは5/10/15/20秒に約2.77/4.28/5.51/6.48 MBと受信が進んでいた。
+原因は試験clientの`complete()`がContent-Lengthを読むたび、受信済み本文全体を`substr()`でcopyする
+累積copyが二次に増える試験側負荷だった。header行の値だけを読むよう修復し、**5秒guardとCTest timeout 60秒を元へ戻して**
+上記の最終Passを得た。HTTP予算・本番30秒期限・本文完全一致や拒否/解放のassertionは変更していない。
+独立reviewでも修復確認済み。途中の20秒guard診断結果を最終成果へ付け替えない。
+
+最終binaryのSHA-256は以下のとおり。新しいmaster/正式配備物のidentityではなく、このdirty worktreeの検証成果物である。
+
+| binary | SHA-256 |
+| --- | --- |
+| `api_image_http_test` | `054205c0cdd369c17ba97612053c0122ec6c790c53e8f09c8c7a9c02f1198d02` |
+| `api_server_test` | `adeda654f8649557b4afb047392ffd3892f5901f5b9b267761b88a8eefda3321` |
+| `enrichment_background_gate_test` | `dba8991952e55edc7cbcd8c9981138cbbdaf3937522c2d8fc38c482acbbd2cae` |
+
+修復後sourceを既存imageで再buildし、Linux/arm64/API+metadata/WPE launcher無効の全CTest
+**79/79（51.12秒）**、対象ASan/UBSan **7/7（37.85秒）**を再確認した。
+
+保全・終了の確認:
+
+- 各試験前後にidentityと状態を再照合。通常daemon/kioskはactive/runningのまま、MainPIDとNRestartsは不変。
+  STOPPED、capture/assessment非busy・reader解放済みを維持し、最終media activityはIDLE。
+  途中の一過性RUNNINGでは試験開始を延期し、有限回の再照合でIDLEになってから実行した。
+- 読める2設定file、配置daemon、既存package、Custom UI全7 fileのhashは開始時と一致。
+  settings.json本体は既存権限で読めずhash未検証。権限を拡張せず、Read Policy/背景の公開保存状態が不変であることを別途確認した。
+- 通常serviceのstop/restart、設定/Custom UI変更、package配備、provider要求、PCM保存、SDK build/downloadはなし。
+  取得fakeを使った隔離試験であり、実C2/reader取消の受入を再開していない。
+- 最終3試験はexit 0で正常終了し、不合格の診断runも強制終了していない。後続照合でも専用配置先の実行processは0件。
+  試験・診断binary/helper/traceだけを専用0700一時directoryへ追加し、約5.46 MBの証跡として保留した。
+  host側にも初回失敗・trace・最終run・保全baselineをprivateに保存した。既存backup/artifactは変更せず、復元操作や再installは不要。
+- 確認時温度は約58–63.4度、throttledは0。MemAvailableのsnapshotは記録したが、process peak/RSS budgetの測定ではない。
+
+保証しない範囲は、Zero 2 W実機/512 MBでの全体動作、全process RSS・allocator/kernel/browser/GPUの即時解放、
+全形式full decode/圧縮metadataの包括的hardening、実fanart.tv画像・TV表示/CEC/実音声・長期運転、
+新実装を標準WPE packageへ配備した統合挙動、外部client/network全条件である。
+HTTP予算はencoded本文の論理予約上限であり、これらの物理memory/性能保証へ拡張しない。
+利用者指定の保守的な#49 scopeは実装とPi 3の隔離確認まで完了として扱い、残受入#282/#286や比較性能#83は
+今回の終了gateへ追加しない。この試験終了時点ではIssue close・commit/push/PR/mergeを行っていなかった。
+後続指示による公開統合は[最終reviewの記録](#image-http-review-integration-20261103)と区別する。
+
+<a id="image-http-review-integration-20261103"></a>
+## #49 最終reviewとPR統合（2026-11-03）
+
+10:26 UTCに利用者は文書/実装の不整合・潜在バグ確認、必要な修復、コード修正時の再試験、
+commitとPR経由のmaster統合を指示した。利用制限による中断後、11:37 UTCの再開で差分・branch・
+process終了を照合し、基準`refs/remotes/origin/master`が引き続き`d05b9ba`であることを確認した。
+同名local保存branchの`origin/master`とは区別し、既存worktreeや保存branchを更新/削除しない。
+
+最終の独立source reviewではadmission/送信/例外/失効/keep-alive/cover読取に具体的な追加findingなし。
+文書reviewのP2（完了済み静的調査を現行の次作業とする記述、旧#49の残条件と公開操作禁止の現況扱い）は
+履歴と現在の契約を分けて修復した。開始プロンプト原文、過去の不合格、Piでの保証外範囲は保全した。
+この最終reviewではproduction/test sourceの追加修正はしていない。
+再開後も既存image・専用build directory・networkなしで再buildし、Release全CTest **79/79（50.89秒）**、
+対象ASan/UBSan **7/7（37.95秒）**がexit 0で成功した。Piの再配備/再操作は追加していない。
+
+上記のlocal WPE launcher無効79/79・限定sanitizer7/7・Pi 3隔離3/3はそれぞれの実行identityに限る。
+PR作成前に見込んだ標準WPE CIは新HTTP試験を含め80件であり、実際の件数・結果は対応PRのlogを正とする。
+local結果を標準CIやpackage lifecycle/candidate検査へ付け替えない。
+既存WPE SDKはlocal recipe hashとGitHubのmaster cacheを照合済みで、新たなWebKit/SDK buildは開始しない。
+公開統合のhead・CI・merge状態は対応PRを正とし、Zero 2 W/実WPE配備/実写真・音声の保証を追加しない。
+実装commitは`7feeffdf9fe6c843a8df4272026909ecdaa33185`、対応PRは
+[#288](https://github.com/udonchan/picdplayer/pull/288)である。最終headのchecks成功を照合してから
+PR経由で統合し、保存済みlocal masterや既存worktreeを直接更新しない。
+
 <a id="acceptance-handoff-20261103"></a>
 ## 統合とIssue追跡移管（2026-11-03）
 
@@ -47,8 +182,8 @@ localの標準WPE Release79/79・Debug79/79、通常11/11・ASan/UBSan9/9・TSan
 過去のdirty local候補やPi配備物を新CI候補へ付け替えない。今回の統合手順にPi再配備/rollbackは含めない。
 private key/設定/PCM/写真/raw evidence/SDK/packageはcommitへ含めない。
 
-次のsessionは[開始プロンプト](backlog.md#next-session-20261103)で#49の通常画像HTTP配信の所有/資源契約を調査する。
-当sessionで#49実装や追加SDK buildを始めず、数値未確定のHTTP予算を既存8MiB/16MiB/diagnostic8件から推定しない。
+引継ぎ時点では[開始プロンプト](backlog.md#next-session-20261103)で#49の通常画像HTTP配信を静的調査する方針だった。
+その後の利用者指示による限定実装と独立したHTTP予算は[今回の記録](#image-http-20261103)を参照する。
 
 <a id="manual-report-20261103T0118"></a>
 ## 利用者試験の受領と事後照合（2026-11-03）

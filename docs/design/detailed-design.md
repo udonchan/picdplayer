@@ -360,6 +360,24 @@ spdlog等の一般的なC++ logging libraryとの比較を行う。比較では�
 | [load_artist_background_image](../../src/artist_background_image.cpp) | 候補URLを再検証し、fanart.tv asset限定・redirect拒否・public peer検査のHTTPで1画像を最大8 MiB取得。runtimeは空cache pathを渡す。JPEG/PNG/WebPのMIMEと実構造/寸法を公開前に検査する。full decodeの保証は含まない |
 | [ArtistBackgroundImageWorker](../../src/artist_background_image_worker.cpp) | PR #223でruntime統合済み。実行中1件・最新pending1件・result1件を保持し、serialの変更で失効結果を格納しない。mainはeffective・世代・Artist MBID・候補ID/URLを再照合し、重複を除いて成功/失敗とも次候補を試す。画像8 MiB、保持最大3枚・合計16 MiBを上限とし、nonce+sequenceの参照を段階公開する。全参照をOFF/世代変更で失効する。Viewのfull decodeは代替しない |
 
+### 動的画像HTTPの所有と終了
+
+`ApiServer`は動的画像GETを本文取得前にadmitする。productionのvalidatorは現在の背景参照一覧または
+cover可用性だけを確認し、本文をcopyしない。無効参照は予算不足でも404、他methodは405のままとする。
+背景assetの公開保持からのsnapshot copyは1回に限定し、providerとrouteの返却は本文をmoveする。
+coverはfile size検査後も読取中4 MiBの境界を守り、検査後のfile伸長を無制限に読み込まない。
+
+HTTP ownerは予約・本文・path・offset・期限を接続ごとに保持する。headerと本文を別のwriteable
+callbackで送り、本文は`LWS_PRE`付きの最大4 KiB bufferへcopyする。libraryがpartial writeの残りを
+内部bufferへcopyした場合は再送せず、次のwriteable通知を待つ。最後の本文write後も次の通知まで
+予約を保持し、`lws_partial_buffered()`がfalseになってからtransaction完了へ進む。
+30秒期限はtimerと送信前のmonotonic判定で終了処理を開始する。失効・送信失敗も含め、abort後は
+追加本文を送らず、接続終了cleanupまで予約を保持する。keep-aliveの次transactionへ状態を残さない。
+30秒ちょうどのlibrary内部解放・peer受信・allocatorによるRSS返却は保証しない。
+diagnosticの分割送信と8件guard、画像workerのlatest-only/取消は独立した既存契約のままである。
+
+### 画像admissionとcache
+
 PNG検査はloader内の共通MIME判定から呼び、network応答・fresh cache・stale/offline fallbackで同じ条件を使う。
 file cacheの不適合entryは破棄し、staleを理由に再公開しない。既存の有効stale fallbackや取消経路は維持する。
 chunk境界とCRC、IHDR/PLTE/IDAT/IENDのcritical構造を走査し、pixel bufferを確保せず本体寸法を評価する。

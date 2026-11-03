@@ -131,7 +131,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
     if (path.starts_with("/api/presentation/artwork/background/")) {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (background_artwork_provider) {
-            if (auto asset = background_artwork_provider(path)) return *asset;
+            if (auto asset = background_artwork_provider(path)) return std::move(*asset);
         }
         return {404, "application/json", R"({"error":"not_found"})"};
     }
@@ -156,7 +156,7 @@ ApiResponse route_api_request(std::string_view method, std::string_view path,
     if (path == "/api/presentation/artwork/cover") {
         if (method != "GET") return {405, "application/json", R"({"error":"method_not_allowed"})"};
         if (!artwork_provider) return {404, "application/json", R"({"error":"not_found"})"};
-        if (const auto asset = artwork_provider()) return *asset;
+        if (auto asset = artwork_provider()) return std::move(*asset);
         return {404, "application/json", R"({"error":"not_found"})"};
     }
     if (path == "/api/ui-boot") {
@@ -429,6 +429,7 @@ struct ApiServer::Implementation {
     ApiCommandHandler command_handler;
     ApiReadPolicyProvider read_policy_provider;
     ApiArtworkProvider artwork_provider;
+    ApiArtworkValidator artwork_validator;
     std::string websocket_state;
     std::uint64_t websocket_generation = 0;
     std::unordered_map<lws*, std::uint64_t> websocket_clients;
@@ -439,6 +440,20 @@ struct ApiServer::Implementation {
     std::unordered_map<lws*, PendingRequest> pending_requests;
     struct DiagnosticBody { std::string bytes; std::size_t offset = 0; };
     std::unordered_map<lws*, DiagnosticBody> diagnostic_bodies;
+    std::size_t reserved_bytes = 0;
+    static constexpr std::size_t max_total_reservation = 16 * 1024 * 1024;
+    static constexpr std::size_t max_background_reservation = 8 * 1024 * 1024;
+    static constexpr std::size_t max_cover_reservation = 4 * 1024 * 1024;
+    struct ImageResponse {
+        ApiResponse response{200, {}, {}};
+        std::string path;
+        std::size_t reservation;
+        std::chrono::steady_clock::time_point deadline;
+        std::size_t offset = 0;
+        bool headers_sent = false;
+        bool closing = false;
+    };
+    std::unordered_map<lws*, ImageResponse> image_responses;
 
     static bool peer_is_loopback(lws* wsi) {
         std::array<char, 64> address{};
@@ -475,10 +490,7 @@ struct ApiServer::Implementation {
             complete_pcm_provider, c2_assessment_provider);
     }
 
-    static int send_response(lws* wsi, ApiResponse response, bool diagnostic = false) {
-        auto* self = static_cast<Implementation*>(lws_context_user(lws_get_context(wsi)));
-        if (diagnostic && response.status == 200 && self->diagnostic_bodies.size() >= 8)
-            response = {503, "application/json", R"({"error":"diagnostics_busy"})"};
+    static int write_headers(lws* wsi, const ApiResponse& response) {
         std::array<unsigned char, LWS_PRE + 1024> headers{};
         auto* start = headers.data() + LWS_PRE;
         auto* cursor = start;
@@ -496,7 +508,15 @@ struct ApiServer::Implementation {
             add_header("x-content-type-options:", "nosniff") ||
             add_header("referrer-policy:", "no-referrer") ||
             add_header("x-frame-options:", "DENY") ||
-            lws_finalize_write_http_header(wsi, start, &cursor, end)) return -1;
+             lws_finalize_write_http_header(wsi, start, &cursor, end)) return -1;
+        return 0;
+    }
+
+    static int send_response(lws* wsi, ApiResponse response, bool diagnostic = false) {
+        auto* self = static_cast<Implementation*>(lws_context_user(lws_get_context(wsi)));
+        if (diagnostic && response.status == 200 && self->diagnostic_bodies.size() >= 8)
+            response = {503, "application/json", R"({"error":"diagnostics_busy"})"};
+        if (write_headers(wsi, response) < 0) return -1;
         if (diagnostic && response.status == 200 && !response.body.empty()) {
             self->diagnostic_bodies[wsi] = {std::move(response.body), 0};
             lws_callback_on_writable(wsi);
@@ -507,11 +527,104 @@ struct ApiServer::Implementation {
         return lws_http_transaction_completed(wsi) ? -1 : 0;
     }
 
+    void release_image(lws* wsi) {
+        const auto found = image_responses.find(wsi);
+        if (found == image_responses.end()) return;
+        reserved_bytes -= found->second.reservation;
+        image_responses.erase(found);
+        lws_set_timer_usecs(wsi, LWS_SET_TIMER_USEC_CANCEL);
+    }
+
+    int abort_image(lws* wsi) {
+        if (auto found = image_responses.find(wsi); found != image_responses.end()) {
+            found->second.closing = true;
+            std::string{}.swap(found->second.response.body);
+        }
+        // LWS may still own a buffered suffix. Keep the reservation until close.
+        return -1;
+    }
+
+    int respond(lws* wsi, std::string_view method, std::string_view path, std::string_view body,
+                bool diagnostic = false) {
+        const bool background = path.starts_with("/api/presentation/artwork/background/");
+        const bool cover = path == "/api/presentation/artwork/cover";
+        if (method != "GET" || (!background && !cover))
+            return send_response(wsi, route(wsi, method, path, body), diagnostic);
+        if (artwork_validator && !artwork_validator(path))
+            return send_response(wsi, {404, "application/json", R"({"error":"not_found"})"});
+        const auto reservation = background ? max_background_reservation : max_cover_reservation;
+        if (image_responses.size() >= 2 || reservation > max_total_reservation - reserved_bytes)
+            return send_response(wsi, {503, "application/json", R"({"error":"artwork_busy"})"});
+        const auto [entry, inserted] = image_responses.emplace(wsi, ImageResponse{
+            {200, {}, {}}, std::string(path), reservation,
+            std::chrono::steady_clock::now() + std::chrono::seconds(30)});
+        if (!inserted) return abort_image(wsi);
+        reserved_bytes += reservation;
+        try {
+            entry->second.response = route(wsi, method, path, body);
+        } catch (...) {
+            release_image(wsi);
+            throw;
+        }
+        auto& response = entry->second.response;
+        if (response.status != 200) {
+            auto error = std::move(response);
+            release_image(wsi);
+            return send_response(wsi, std::move(error));
+        }
+        if (response.body.size() > reservation) {
+            release_image(wsi);
+            return send_response(wsi, {500, "application/json", R"({"error":"artwork_too_large"})"});
+        }
+        // Replace the generic request timeout with this response's absolute deadline.
+        lws_set_timeout(wsi, NO_PENDING_TIMEOUT, 0);
+        const auto remaining = std::chrono::duration_cast<std::chrono::microseconds>(
+            entry->second.deadline - std::chrono::steady_clock::now()).count();
+        if (remaining <= 0) return abort_image(wsi);
+        lws_set_timer_usecs(wsi, static_cast<lws_usec_t>(remaining));
+        lws_callback_on_writable(wsi);
+        return 0;
+    }
+
+    int write_image(lws* wsi) {
+        auto& image = image_responses.at(wsi);
+        if (image.closing || std::chrono::steady_clock::now() >= image.deadline ||
+            (artwork_validator && !artwork_validator(image.path))) return abort_image(wsi);
+        if (lws_partial_buffered(wsi)) {
+            lws_callback_on_writable(wsi);
+            return 0;
+        }
+        if (!image.headers_sent) {
+            if (write_headers(wsi, image.response) < 0) return abort_image(wsi);
+            image.headers_sent = true;
+        } else if (image.offset == image.response.body.size()) {
+            // A later writable notification confirms LWS drained the last suffix.
+            release_image(wsi);
+            return lws_http_transaction_completed(wsi) ? -1 : 0;
+        } else {
+            constexpr std::size_t chunk_bytes = 4096;
+            const auto count = std::min(chunk_bytes, image.response.body.size() - image.offset);
+            std::array<unsigned char, LWS_PRE + chunk_bytes> buffer{};
+            std::memcpy(buffer.data() + LWS_PRE, image.response.body.data() + image.offset, count);
+            const bool final = image.offset + count == image.response.body.size();
+            const auto written = lws_write(wsi, buffer.data() + LWS_PRE, count,
+                final ? LWS_WRITE_HTTP_FINAL : LWS_WRITE_HTTP);
+            if (written < 0 || static_cast<std::size_t>(written) < count) return abort_image(wsi);
+            image.offset += count;
+        }
+        lws_callback_on_writable(wsi);
+        return 0;
+    }
+
     static int callback(lws* wsi, lws_callback_reasons reason, void*, void* in, std::size_t length) noexcept {
         try {
             auto* self = static_cast<Implementation*>(lws_context_user(lws_get_context(wsi)));
             if (!self) return -1;
+            if (reason == LWS_CALLBACK_TIMER && self->image_responses.contains(wsi))
+                return self->abort_image(wsi);
+            if (reason == LWS_CALLBACK_HTTP_DROP_PROTOCOL) self->release_image(wsi);
             if (reason == LWS_CALLBACK_HTTP_WRITEABLE) {
+                if (self->image_responses.contains(wsi)) return self->write_image(wsi);
                 auto found = self->diagnostic_bodies.find(wsi);
                 if (found == self->diagnostic_bodies.end()) return 0;
                 auto& body = found->second;
@@ -595,9 +708,10 @@ struct ApiServer::Implementation {
                 if (found == self->pending_requests.end()) return -1;
                 auto request = std::move(found->second);
                 self->pending_requests.erase(found);
-                return send_response(wsi, self->route(wsi, request.method, request.path, request.body));
+                return self->respond(wsi, request.method, request.path, request.body);
             }
             if (reason == LWS_CALLBACK_CLOSED_HTTP) {
+                self->release_image(wsi);
                 self->pending_requests.erase(wsi);
                 self->diagnostic_bodies.erase(wsi);
                 return 0;
@@ -625,9 +739,11 @@ struct ApiServer::Implementation {
                 self->pending_requests[wsi] = {std::string(method_name), std::string(path), {}};
                 return 0;
             }
-            return send_response(wsi, self->route(wsi, method_name, path, {}),
+            return self->respond(wsi, method_name, path, {},
                 path == "/api/read-history" || path == "/api/disc-map" || path == "/api/complete-pcm/result");
         } catch (...) {
+            auto* self = static_cast<Implementation*>(lws_context_user(lws_get_context(wsi)));
+            if (self && self->image_responses.contains(wsi)) return self->abort_image(wsi);
             (void)lws_return_http_status(wsi, HTTP_STATUS_INTERNAL_SERVER_ERROR, nullptr);
             return -1;
         }
@@ -638,7 +754,7 @@ struct ApiServer::Implementation {
                    ApiArtworkProvider artwork, ApiStateProvider history_provider,
                    ApiStateProvider background_provider, ApiBackgroundArtworkProvider background_artwork,
                    ApiStateProvider map_provider, ApiCompletePcmProvider capture_provider,
-                   ApiC2AssessmentProvider assessment_provider)
+                    ApiC2AssessmentProvider assessment_provider, ApiArtworkValidator validator)
         : ui(std::move(bundle)), address(std::move(listen_address)), port(listen_port), state_provider(std::move(provider)),
           command_handler(std::move(handler)), read_policy_provider(std::move(policy_provider)),
           artwork_provider(std::move(artwork)) {
@@ -646,6 +762,7 @@ struct ApiServer::Implementation {
         disc_map_provider = std::move(map_provider);
         complete_pcm_provider = std::move(capture_provider);
         c2_assessment_provider = std::move(assessment_provider);
+        artwork_validator = std::move(validator);
         artist_background_provider = std::move(background_provider);
         background_artwork_provider = std::move(background_artwork);
         if (!state_provider) throw std::invalid_argument("API state provider is empty");
@@ -676,13 +793,15 @@ ApiServer::ApiServer(std::string address, int port, ApiStateProvider provider,
                       ApiArtworkProvider artwork_provider, ApiStateProvider read_history_provider,
                       ApiStateProvider artist_background_provider, ApiBackgroundArtworkProvider background_artwork_provider,
                        ApiStateProvider disc_map_provider, ApiCompletePcmProvider complete_pcm_provider,
-                       ApiC2AssessmentProvider c2_assessment_provider)
-    : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
-                                                        std::move(handler), std::move(policy_provider), std::move(ui),
-                                                        std::move(artwork_provider), std::move(read_history_provider),
-                                                        std::move(artist_background_provider),
-                                                        std::move(background_artwork_provider), std::move(disc_map_provider),
-                                                        std::move(complete_pcm_provider), std::move(c2_assessment_provider))) {}
+                       ApiC2AssessmentProvider c2_assessment_provider,
+                       ApiArtworkValidator artwork_validator)
+     : implementation_(std::make_unique<Implementation>(std::move(address), port, std::move(provider),
+                                                         std::move(handler), std::move(policy_provider), std::move(ui),
+                                                         std::move(artwork_provider), std::move(read_history_provider),
+                                                         std::move(artist_background_provider),
+                                                         std::move(background_artwork_provider), std::move(disc_map_provider),
+                                                         std::move(complete_pcm_provider), std::move(c2_assessment_provider),
+                                                         std::move(artwork_validator))) {}
 ApiServer::~ApiServer() = default;
 void ApiServer::publish_state(std::string_view state_json) {
     if (state_json == implementation_->websocket_state) return;
