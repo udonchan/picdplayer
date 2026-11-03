@@ -144,9 +144,13 @@ process終了を照合し、基準`refs/remotes/origin/master`が引き続き`d0
 対象ASan/UBSan **7/7（37.95秒）**がexit 0で成功した。Piの再配備/再操作は追加していない。
 
 上記のlocal WPE launcher無効79/79・限定sanitizer7/7・Pi 3隔離3/3はそれぞれの実行identityに限る。
-PRの標準WPE CI（新HTTP試験を含め80件の見込み）やpackage lifecycle/candidate検査とは付け替えない。
+PR作成前に見込んだ標準WPE CIは新HTTP試験を含め80件であり、実際の件数・結果は対応PRのlogを正とする。
+local結果を標準CIやpackage lifecycle/candidate検査へ付け替えない。
 既存WPE SDKはlocal recipe hashとGitHubのmaster cacheを照合済みで、新たなWebKit/SDK buildは開始しない。
 公開統合のhead・CI・merge状態は対応PRを正とし、Zero 2 W/実WPE配備/実写真・音声の保証を追加しない。
+実装commitは`7feeffdf9fe6c843a8df4272026909ecdaa33185`、対応PRは
+[#288](https://github.com/udonchan/picdplayer/pull/288)である。最終headのchecks成功を照合してから
+PR経由で統合し、保存済みlocal masterや既存worktreeを直接更新しない。
 
 <a id="acceptance-handoff-20261103"></a>
 ## 統合とIssue追跡移管（2026-11-03）
