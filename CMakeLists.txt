@@ -410,12 +410,12 @@ if(BUILD_TESTING)
     add_test(NAME c2_assessment_run COMMAND c2_assessment_run_test)
     set_tests_properties(c2_assessment_run PROPERTIES TIMEOUT 10)
     add_executable(c2_assessment_session_test tests/c2_assessment_session_test.cpp
-        src/c2_assessment_session.cpp src/c2_reference_assessment.cpp src/media_worker.cpp
+        src/c2_assessment_session.cpp src/c2_reference_assessment.cpp src/c2_assessment_run.cpp src/media_worker.cpp
         src/drive_capabilities.cpp src/disc_toc.cpp)
     target_include_directories(c2_assessment_session_test PRIVATE include)
     target_compile_features(c2_assessment_session_test PRIVATE cxx_std_20)
     target_compile_options(c2_assessment_session_test PRIVATE -Wall -Wextra -Wpedantic)
-    target_link_libraries(c2_assessment_session_test PRIVATE Threads::Threads nlohmann_json::nlohmann_json)
+    target_link_libraries(c2_assessment_session_test PRIVATE OpenSSL::Crypto Threads::Threads nlohmann_json::nlohmann_json)
     add_test(NAME c2_assessment_session COMMAND c2_assessment_session_test)
     set_tests_properties(c2_assessment_session PROPERTIES TIMEOUT 10)
     add_executable(drive_access_test tests/drive_access_test.cpp)
@@ -671,6 +671,17 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/release_artifact_test.py)
     endif()
     if(ENABLE_API)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            add_library(c2_assessment_ioctl_fixture SHARED tests/c2_assessment_ioctl_fixture.cpp)
+            target_compile_features(c2_assessment_ioctl_fixture PRIVATE cxx_std_20)
+            target_compile_options(c2_assessment_ioctl_fixture PRIVATE -Wall -Wextra -Wpedantic)
+            target_link_libraries(c2_assessment_ioctl_fixture PRIVATE ${CMAKE_DL_LIBS})
+            add_dependencies(cdplayerd c2_assessment_ioctl_fixture)
+            add_test(NAME c2_assessment_daemon COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/c2_assessment_daemon.py
+                $<TARGET_FILE:cdplayerd> $<TARGET_FILE:c2_assessment_ioctl_fixture>)
+            set_tests_properties(c2_assessment_daemon PROPERTIES TIMEOUT 35)
+        endif()
         add_test(NAME ui_startup COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/ui_startup.py $<TARGET_FILE:cdplayerd>)
         set_tests_properties(ui_startup PROPERTIES TIMEOUT 90)
