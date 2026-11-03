@@ -6,6 +6,18 @@
 #include <openssl/sha.h>
 
 namespace {
+bool same_toc(const DiscToc& left, const DiscToc& right) {
+    if (left.leadout_lba != right.leadout_lba || left.tracks.size() != right.tracks.size())
+        return false;
+    for (std::size_t i = 0; i < left.tracks.size(); ++i) {
+        const auto& a = left.tracks[i];
+        const auto& b = right.tracks[i];
+        if (a.number != b.number || a.start_lba != b.start_lba || a.length_frames != b.length_frames)
+            return false;
+    }
+    return true;
+}
+
 std::string sector_digest(std::span<const std::int16_t> pcm) {
     std::array<unsigned char, 2352> bytes{};
     if (pcm.size() != cdda_samples_per_frame) throw std::invalid_argument("C2 sample must contain one sector");
@@ -24,6 +36,33 @@ std::string sector_digest(std::span<const std::int16_t> pcm) {
     for (const auto byte : digest) { result += hex[byte >> 4]; result += hex[byte & 15]; }
     return result;
 }
+}
+
+C2AssessmentRunResult run_c2_assessment_with_toc(const C2Reference& reference,
+    const C2AssessmentReaderFactory& factory, const std::function<DiscToc()>& read_toc,
+    const std::function<bool()>& current, SteadyNow now) {
+    C2ReferenceAssessment validate(reference);
+    const auto deadline = now() + std::chrono::milliseconds(4000);
+    if (!reference.expected_toc || !current())
+        throw std::runtime_error("C2 reference context unavailable before TOC");
+    if (now() >= deadline) return C2AssessmentRunResult{C2AssessmentRunState::timed_out, {}, {}, {}};
+    if (!same_toc(*reference.expected_toc, read_toc()) || !current())
+        throw std::runtime_error("C2 reference TOC context changed before assessment");
+    auto result = run_c2_assessment_raw(reference, factory, current, now, deadline);
+    if (result.state == C2AssessmentRunState::complete && !current()) {
+        result.state = C2AssessmentRunState::cancelled; result.assessment = {}; return result;
+    }
+    if (result.state == C2AssessmentRunState::complete && now() >= deadline) {
+        result.state = C2AssessmentRunState::timed_out; result.assessment = {}; return result;
+    }
+    if (result.state == C2AssessmentRunState::complete &&
+        (!same_toc(*reference.expected_toc, read_toc()) || !current()))
+        throw std::runtime_error("C2 reference TOC context changed after assessment");
+    if (result.state == C2AssessmentRunState::complete && now() >= deadline) {
+        result.state = C2AssessmentRunState::timed_out;
+        result.assessment = {};
+    }
+    return result;
 }
 
 C2AssessmentRunResult run_c2_assessment_raw(const C2Reference& reference,

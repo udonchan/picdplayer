@@ -213,39 +213,18 @@ void run_player_session(const std::string& device, CddaBackend backend,
 #ifdef ENABLE_API
     assess_c2 = [device, device_observer, accepted_device_generation](const C2Reference& reference,
         const std::function<bool()>& current) {
-        C2ReferenceAssessment validate(reference);
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(4000);
         const auto generation = accepted_device_generation->load();
         const auto valid = [current, generation, device_observer, accepted_device_generation] {
             return current() && generation != 0 && generation == accepted_device_generation->load() &&
                 device_observer->permits(generation);
         };
-        if (!reference.expected_toc || !valid())
-            throw std::runtime_error("C2 reference context unavailable before TOC");
-        if (std::chrono::steady_clock::now() >= deadline) return C2AssessmentRunResult{C2AssessmentRunState::timed_out, {}, {}, {}};
-        if (!same_toc(*reference.expected_toc, read_cd_toc(device)) || !valid())
-            throw std::runtime_error("C2 reference TOC context changed before assessment");
-        auto result = run_c2_assessment_raw(reference, [device, valid] {
+        return run_c2_assessment_with_toc(reference, [device, valid] {
             if (!valid()) throw std::runtime_error("C2 assessment context changed before open");
             auto reader = make_device_epoch_reader(make_cdda_reader(CddaBackend::direct, device,
                 {0, true, C2Status::not_checked, true, 1000}), valid);
             if (!valid()) throw std::runtime_error("C2 assessment context changed during open");
             return reader;
-        }, valid, [] { return std::chrono::steady_clock::now(); }, deadline);
-        if (result.state == C2AssessmentRunState::complete && !valid()) {
-            result.state = C2AssessmentRunState::cancelled; result.assessment = {}; return result;
-        }
-        if (result.state == C2AssessmentRunState::complete && std::chrono::steady_clock::now() >= deadline) {
-            result.state = C2AssessmentRunState::timed_out; result.assessment = {}; return result;
-        }
-        if (result.state == C2AssessmentRunState::complete &&
-            (!same_toc(*reference.expected_toc, read_cd_toc(device)) || !valid()))
-            throw std::runtime_error("C2 reference TOC context changed after assessment");
-        if (result.state == C2AssessmentRunState::complete && std::chrono::steady_clock::now() >= deadline) {
-            result.state = C2AssessmentRunState::timed_out;
-            result.assessment = {};
-        }
-        return result;
+        }, [device] { return read_cd_toc(device); }, valid);
     };
 #endif
     MediaWorker media_worker(

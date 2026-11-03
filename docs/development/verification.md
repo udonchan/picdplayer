@@ -1,10 +1,574 @@
 # 検証状況と残課題
 
-最新追記: 2026-11-02。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+最新追記: 2026-11-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+利用者の新しい統合/close承認と残事項の現所有先は[追跡移管](#acceptance-handoff-20261103)を参照する。
+最新の[利用者試験報告](#manual-report-20261103T0118)では、現在のCustom UI/discでTV・物理remote・短い試聴・
+policy表示・1枚写真条件の背景ON/OFFをPassとして受領した。複数写真切替は未実施、開始設定への最終復元は未実施。
+01:20 UTCの事後照会はSTOPPED/SINGLE/背景OFF保存済みで、agentは設定を変更していない。
+最新の[非目視Pi検証](#pi-nonvisual-20261102T2348)では、配置済み診断版binaryの通常操作・実reader FD解放・
+30分の代表運転と正常復元を確認した。新fixtureを含むTSan4/4も追加した。
+Pi確認は現worktreeの新配備品ではなく、配置SHA`90803618...`の範囲である。
+独立reference待ちの実機C2 positiveはUNKNOWN。この非目視run単独から目視/聴感/物理remoteのPassは推定せず、
+後続の利用者報告を別の確認証拠として扱う。
+残る人の手順は[利用者確認](#user-acceptance-steps-20261102)へまとめた。
 最新の#279状態は[利用者による報告撤回と終了](#track-start-withdrawal-20261102)を参照する。
-最新の利用者操作報告は[曲頭欠け#279](#manual-track-start-20261101)、C2配備の実測は
-[2026-11-01実機run](#c2-live-20261101T2020)、次回作業は[開始計画/プロンプト](backlog.md#next-session-20261101)を参照する。
+過去の11月1日の利用者操作報告は[曲頭欠け#279](#manual-track-start-20261101)、C2配備の実測は
+[2026-11-01実機run](#c2-live-20261101T2020)、現在の再開点は[C2残受入](#c2-acceptance-20261102)と
+[不足条件表](#manual-acceptance-gaps-20261102)を参照する。旧開始プロンプトは失効した履歴である。
 以下の過去run記録は保持し、今回再検証した結果とは区別する。
+
+<a id="acceptance-handoff-20261103"></a>
+## 統合とIssue追跡移管（2026-11-03）
+
+06:31 UTCの利用者指示は、今回差分のmaster統合、対象Issue終了、未確認事項の新Issue引継ぎである。
+対象は確認のうえ#264/#238/#239/#252/#51/#184/#121の7件とした。
+後継を作成して所有先を分け、旧Issueの公開終了はmaster統合・後継リンク確認後に行う。
+以下は終了/追跡の区切りであり、過去のUNKNOWNや未実施checkboxをPassに変更しない。
+
+| 旧Issue | 終了の区切り | 残受入の所有先 |
+|---|---|---|
+| #264 | report/明示C2評価・本番配線と限定合成検証の実装単位 | #285: 独立reference/challenge・offset根拠が必要な実assessmentと能力実機受入 |
+| #238/#239 | local consumer・本番job/API/UI・過去全域指紋と限定検証の単位 | #283: 実capture取消/実退役/通常再生・実音の同run |
+| #252 | 利用者による代表physical remote/TV/短い試聴等の確認単位 | #282: 個別目視receipt/標準UI差分・写真の残受入 |
+| #51 | 既存の1枚条件Passを保全した追跡置換 | #282: 複数写真/時間条件・fallback/旧写真除去/reduced motion等 |
+| #184 | manual30分等の限定成功を保全した追跡置換 | #286: 標準/Custom UI全通常構成、cold boot、速度条件比較 |
+| #121 | 原因未確定を維持した追跡置換。修正完了ではない | #284: control/CEC等の未解明観測の分類 |
+
+#51/#184/#121はnot_planned/supersededの追跡置換として扱う。残条件をv2/任意へ移した意味ではない。
+各Issueの新本文へ未実施・中断条件・同run参照・安全境界を引き継ぎ、旧本文/comment/証拠は保存する。
+#279の撤回は変更せず、#250/#254全matrixとBuildroot追加研究は再開しない。
+旧Issueへ向くこの文書の過去記録は当時の証拠であり、新しい受入は後継へ記録する。
+
+今回commit対象のproduction差分は既存TOC/deadline処理の抽出で、report/consumer/schema/strict optionsを再実装していない。
+Linux/API-onlyの実daemon fixtureと合成失効/累積deadline/FD試験、実機/利用者の限定結果を併せて保存する。
+pre-publicationの独立read-only code reviewにも具体的findingはなかった。
+localの標準WPE Release79/79・Debug79/79、通常11/11・ASan/UBSan9/9・TSan4/4と、
+配置SHA90803618のPi/利用者確認は別identityのまま。新しい正確head CI・候補artifactは対応PRの実check/manifestを正とし、
+過去のdirty local候補やPi配備物を新CI候補へ付け替えない。今回の統合手順にPi再配備/rollbackは含めない。
+private key/設定/PCM/写真/raw evidence/SDK/packageはcommitへ含めない。
+
+次のsessionは[開始プロンプト](backlog.md#next-session-20261103)で#49の通常画像HTTP配信の所有/資源契約を調査する。
+当sessionで#49実装や追加SDK buildを始めず、数値未確定のHTTP予算を既存8MiB/16MiB/diagnostic8件から推定しない。
+
+<a id="manual-report-20261103T0118"></a>
+## 利用者試験の受領と事後照合（2026-11-03）
+
+利用者から01:18:04 UTCに共通手順1〜7の実施報告を受領した。receipt IDは`manual-report-20261103T0118`。
+これは報告受領時刻であり、試験そのものの開始/終了時刻・ON継続時間は未記録である。
+初期状態は利用者申告でREPEAT（原文`Repeate`）、Background ON、Fingerprint利用不可。
+今回の人の観測を、過去のAPI/合成試験から推定したPassとは区別する。
+
+| 利用者が実施した項目 | 受領した判定・範囲 |
+|---|---|
+| TVと通常UI | Pass。表示OK、欠けなし、UI不具合見当たらず。Player/Statusの文字・単位・理由表示・focus枠の依頼に対する報告。Disc Capability表示が充実していることも確認したが、各報告値の物理精度/C2 trustを検証した意味ではない |
+| 物理remote/音量 | Pass。矢印、各種再生/停止等button、音量操作を利用者が確認。Settings7 button、focus/scroll、画面Back/物理Back、戻り先は「問題なし」 |
+| 短い再生/試聴 | Pass。play/pause/resume/代表track移動/STOP、TVと実音の対応、音切れ・雑音・操作遅延の依頼に「問題なし」。音声の全条件保証や#279再調査ではない |
+| policyの画面確認 | Pass。pending表示とSTOP後反映を「確認済み問題なし」。設定の変更・往復操作はできたとの報告 |
+| 背景ON/OFF | Pass（写真1枚のdisc条件）。利用者はON/OFF変更OKと報告。複数枚の切替・45秒dwell/4秒fadeは未実施。0枚/画像失敗fallback・別disc旧写真除去・reduced motionの個別結果は未報告 |
+| 開始設定への最終復元 | 未実施。利用者は「復元はし忘れたが、一通りの変更および復帰は実施できた」と明記。変更往復のPassを、最終REPEAT/背景ONへ戻った証明にはしない |
+
+### 01:20 UTCのRead-Only照合
+
+利用者の「現在挿入中のdiscを確認」の依頼に対し、既存pinとboard identityを照合し、
+GET state/read-policy/artist-background/complete-pcm/c2-assessment、service情報と選択済み起動引数・hashだけを読んだ。
+transport/settings POST、追加provider照合、画像/PCM取得、直接drive probe、service停止/再配備は行っていない。
+観測scriptはhost一時領域`picdplayer-user-acceptance-observe-20261103.py`、実出力は当sessionに保持する。
+
+| 事後観測 | 結果 |
+|---|---|
+| 現在disc | daemonがAUDIO_READY/metadata AVAILABLEとして認識しているのは、大森靖子『魔法が使えないなら死にたい』、14曲、leadout242334 CD frames。既存metadata/validated TOCによる識別であり、独立した原盤照合ではない |
+| 配置/UI | daemon SHA `90803618...`、package SHA `f8226df9...`。実起動引数のCustom UIは`/srv/picdplayer-ui-dev-20261020-aria`で、UI7fileのhashは前回照合と一致。標準組込みUIを別に試験した結果へ拡張しない |
+| session/service | session `1bf98d3c52b549a368a47abb0c7daf63`、daemon67226/kiosk67244、active/running、NRestarts0。事後snapshotであり全操作中の連続観測ではない |
+| player/policy | STOPPED/track1/frame0。requested/effectiveともSINGLE、pending=false、保存済み |
+| 背景 | available=true、requested/effective=false、persistence_state=saved。現在OFFなのでsnapshot画像数0であり、利用者がON中に1枚を試したことと矛盾しない。OFF後の0参照から複数写真の可否を推定しない |
+| Fingerprint/C2 | offset null、capture IDLE/job0、start_rejection=offset_unknown。C2もIDLE/job0/UNKNOWN、同じ拒否理由。利用者のFingerprint利用不可報告と整合するが、実取得・実assessment成功へ変更しない |
+
+Issue #252本文の試験終了境界STOPPED/SINGLE/背景OFFには01:20の事後状態が一致する。
+一方、今回依頼した「開始時REPEAT/背景ONへの最終復元」は別条件であり、未実施のままである。
+利用者自身が保存したSINGLE/OFFをagentが勝手に上書きせず、今回は現在設定をそのまま保持した。
+
+#252/#51/#184/#121は照合時点で全てOpenで、GitHub本文・comment・状態は変更していない。
+物理入力の同じreceiptを#252の代表記録として参照し、#51の写真/可読性/音声、#184の短い通常操作、
+#121の短い試聴結果から相互参照する。複数Issue向けに同じ物理試験を再要求しない。
+背景の要求/実効/保存案内の**画面上の個別文言**や、利用不能理由の具体的文言/決定時の拒否操作receiptは未報告で、
+事後APIのsaved/offset_unknownをその目視Passへ付け替えない。TV機種・具体音量値・試験所要時間も未記録である。
+複数写真等の未実施、標準UIを別に通した受入、cold boot/速度比較/同時負荷継続運転、
+C2の独立reference/challenge/offset根拠の残条件は維持し、Issue全体の一括Pass/closeにはしない。
+
+<a id="c2-acceptance-20261102"></a>
+## #264/#238/#239 残受入の照合と現在のPi（2026-11-02）
+
+fetch後の`refs/remotes/origin/master`は`6915c2e511c4c7d81a7aebbd0449b7ff23bcd5c9`で、
+PR #281のmergeと一致した。PR head `c64ca819`のCI run `41460407847`はSUCCESSと照合したが、
+これは今回の未commit差分のCIではない。作業branchは`verify/264-c2-acceptance-20261102`。
+#264/#238/#239の本文・全comment・現在Open状態を再取得し、関連設計と過去runを照合した。
+DGX executorは成果物/実出力不一致による停止記録を確認し、再利用していない。
+
+### 不足証拠と最小単位
+
+| 境界 | 既存証拠 | 今回扱う不足・残条件 |
+|---|---|---|
+| READ CD全量判定/strict reader | PR #277のadapter/decoder試験、過去単発probe | 再実装しない。単発probeは4.329秒/exit2・最終TOC skipのまま |
+| reportと明示C2評価 | PR #273〜278、標準CI/当時のlocal WPE Release/Debug各78/78 | callbackを合成結果へ置換したAPI/session試験と、実TOC前後照合・共通deadline・raw runnerの実行証拠を分ける |
+| 取消/退役/失効 | runner/worker/session各層の既存fake試験 | 実runnerをworker/sessionへ接続し、取消中busy、退役後publication、世代/TOC/deadlineによる旧結果拒否を合成条件で実行する |
+| 実機reference評価 | API負例/未実行、単発2646 bytes/CLEAN/FD close | 独立reference/challenge・alignmentの提供を今回の入力/指定Issue最新情報から確認できない。実機positive・実assessment中取消/失効は未確認、UNKNOWNを維持 |
+| #238/#239 | 全域local指紋と取消/解放は過去runで確認済み | PCM-only consumerを維持。取消後の通常再生/実音声、TV/物理remote、物理世代失効は別の未確認条件。全域再取得を反復しない |
+
+### 実runnerを接続した合成検証
+
+既存production callbackのTOC前後照合と共通4秒deadlineを
+`run_c2_assessment_with_toc`へ抽出し、PlayerSessionは同じhelperを呼ぶ。
+既存分類core/raw runner、strict direct readerのoptions、世代guard、CaptureのPCM-only consumerは変更していない。
+runner単位では9条件、worker/session接続では通常stage→confirm、取消、TOC/deadline負例、
+stage済み/公開済みのobservation/disc/policy失効を実行した。結果callbackを完成済み合成値へ置換するのでなく、
+合成readerから既存SHA-256/分類と実worker/sessionを通す。
+
+| 合成条件 | 観測した境界 |
+|---|---|
+| 正例 | 2 LBA×3回、reader破棄と最終TOC照合後にstage、poll前UNKNOWN・poll後条件付きYES |
+| pre/post TOC不一致 | sessionはFAILED/UNKNOWN。前段はopen/read0、後段はopen1/read6/close1、再pollでもYESへ戻らない |
+| pre/post TOCで4秒消費 | 共通deadlineによってTIMED_OUT/UNKNOWN。前段はopen/read0、後段はread6/close1、成功を公開しない |
+| 実runner読取中の取消 | readerのreadとdestructorを別gateで停止し、cancel後も破棄完了まではbusy/未解放。正常gate解除後open1/read1/close1、UNKNOWN |
+| 世代/policy失効 | observation/disc/policyをstage済み・公開済み各結果へ適用し、INVALIDATED/UNKNOWNへ撤回 |
+| helper内context失効 | TOC前後、read中、destructorでvalidityを失い、成功を返さない |
+
+readerのregular tempfileは合成zero sampleと合成C2 flagだけで、実discのPCMを保存していない。
+close件数はdestructor/fclose実行の確認で、実光学reader FDや独立したEBADF検査ではない。
+初回の通常/sanitizer buildは抽出関数をanonymous namespace内へ置いたlink不良でexit2となり、
+一回のgrouped修復でpublic scopeへ移動した。その後と4負例追加後は再build成功（exit0）。
+親が最終source差分と両`Testing/Temporary/LastTest.log`の11月2日14:42 UTCの実出力を照合した。
+
+- 既存Linux/aarch64 image `picdplayer-profile-review-build`、Debug/API・metadata ON/WPE OFFで
+  編集対象を含む10 targetを再build後、`ctest --test-dir build-49-fixtures --output-on-failure -R 'c2_|cdda_reader|media_worker|complete_pcm'`は10/10、0.32秒、exit0。
+- `build-49-png-sanitize`の編集対象を再build後、ASan/UBSan・leak検出/halt有効でC2の4件と
+  cdda_reader/media_worker/complete_pcm_worker/complete_pcm_sessionは8/8、0.79秒、exit0。
+  flagsは`-fsanitize=address,undefined -fno-omit-frame-pointer`、linkもaddress/undefined。
+- WPE OFFの`cdplayerd`も編集後に再build成功。標準WPE構成・CI・Pi確認とは別である。
+- 別の使い捨てLinux/aarch64 container（network none、2 CPU/2 GiB、read-only source、512 MiB tmpfs）で
+  Debug/API・metadata ON/WPE OFF、`-fsanitize=thread -fno-omit-frame-pointer`で
+  c2_assessment_run/c2_assessment_session/media_workerを新規buildし、TSanは3/3、0.10秒、exit0。
+  新SDK取得/compileやPi上compileではない。
+- 独立read-only reviewは抽出コードと最終4負例を別途確認し、いずれも修正必須指摘なし。
+  親も実差分とlogを照合した。review結果を下記の未検証境界の解消にはしない。
+
+この時点で残るproduction境界は、具体的な`make_cdda_reader` options/device-observerを含むcallback全体と
+PlayerSessionのHTTP/CEC/stdin command ingressの実行E2Eだった。helper抽出試験をそれらの完了へ合算しない。
+後述の[goal続行](#c2-daemon-acceptance-20261102)で隔離fixture上のHTTP/stdinと具体的reader配線を追加実行し、
+物理CEC・Pi・実光学deviceとの境界は残した。
+14時台のobservation/disc/policy失効試験はstage後/公開後であり、実I/O中の各失効は未検証だった。
+deadlineも各TOC単独の4秒消費で、複数段の部分時間を積み上げる専用caseは当時未追加だった。
+22時台に追加した試験、環境不足・復元後の実行結果は[続行記録](#c2-acceptance-20261102T2250)で区別する。
+独立reference/challengeの実在、実assessmentのPi取消/退役/失効、drive-wide精度・cache独立性・原盤一致・
+bit-perfect・TV/物理remote/聴感は未確認を維持する。
+
+### 標準WPEとArtifactの区別
+
+同じ既存imageとrecipe一致のWPE SDK cacheを使い、`scripts/build-container.sh`による
+Linux/aarch64標準build・stage・package、`ctest --test-dir build-container --output-on-failure`、
+`scripts/test-package-lifecycle.sh`を実行した。`PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build`、
+Debug時はbuild/lifecycle両方へ`PICDPLAYER_BUILD_TYPE=Debug`を指定する。
+
+| 今回のlocal検証 | 結果 |
+|---|---|
+| WPE Release | build/package成功、78/78、59.54秒。upgrade/reinstall/purge成功 |
+| WPE Debug | build/package成功、78/78、60.85秒。正しいDebug profile指定でupgrade/reinstall/purge成功 |
+| local Release候補 | `PICDPLAYER_BUILD_IMAGE=picdplayer-profile-review-build bash scripts/prepare-release.sh`成功。stage/package payload・mode・profile一致検査を含む |
+| Release候補SHA-256 | `7c7b6f7bb9426655ba27238b99d87d41a47fbec769fff035c3e8ad508f4edc33`、`release-container/`に保持 |
+| Debug package SHA-256 | `d485eb39e5a00eff23c638385e8c9ec0b7c66e8fe43e346f8bbc64d46461a169`、`package-container/`に保持 |
+| 検証source識別 | base `6915c2e`上の未commit差分。`git diff --binary HEAD -- CMakeLists.txt include src tests`のSHA-256は`e8a772c3844add58fe3d6109fe1079a5d6e5155853c89b86214bb13f2cea2e0d` |
+
+Release初回はcompile/link後のstage directory作成に失敗した。host所有者と同UID501/GID20 containerの
+`test -w /src/stage`成功を確認し、権限変更なしで標準手順を再実行した。
+再実行のbackground handleを追跡できなくなったため、古いlog/成果物から成功を推定せず、
+標準build・全CTest・lifecycleをblocking commandで再実行して上表の実出力を確認した。
+stage失敗の根本原因は未確定で、権限問題の修正成功や再現性の保証とはしない。
+候補scriptの直接実行はtracked mode100644によりPermission denied、`bash`実行の初回は
+`/src/release-container`不在エラーとなった。権限変更せず同じ`bash`手順の再試行で成功したが、
+不在エラーの起因は未確定。Debug lifecycleの最初の要求はprofile指定漏れでRelease期待となり拒否され、
+Debug指定だけを補った再実行で成功した。これらの失敗を初回成功へ書き換えない。
+
+候補manifestは`source_commit=6915c2e...`、`source_dirty=true`、`hardware_verified=false`を明記する。
+基線PR #281のCI run `41460407847`の成功とartifact metadata ID `13149096734`の保持は照合したが、
+今回差分の正確head CIやCI candidateではなく、artifactを追加downloadして検証したものでもない。
+commit/push/PRを行っていないため、今回差分のGitHub CIは未実施。両local packageともPi未配備で、
+Piの配置daemon/packageや正式releaseとは別identityである。追加SDK build/downloadはしていない。
+
+### PiのRead-Only観測
+
+14:35:56 UTCと14:37:23 UTCに、既存ED25519 pinを強制し、machine/board identityの保存hashが一致した
+同じ開発Piへ接続した。観測scriptはAPI GET・選択service field・ALSA状態・file hashだけを読み、
+STOP/cancel/start、直接READ CD、service再起動、設定/UI変更、配備は発行していない。
+定期media observeがRUNNINGの標本を観測した後、12秒以内の有界GETでIDLEを確認した。
+
+| 観測対象 | 今回の結果 |
+|---|---|
+| daemon/kiosk | PID63478/63503、active/running、NRestarts0 |
+| playback/ALSA | STOPPED/track1/position0。ALSA PREPARED、delay/hw_ptr/appl_ptr=0。再生reader FDの独立確認ではない |
+| policy | requested/effective REPEAT、75 frames、2-of-3、10000 ms、pending=false、source saved。過去SINGLEへ自動復元しない |
+| capture/media | IDLE/job0、busy=false、reader_released=true、call_inflight=false、media IDLE、offset_unknown |
+| C2 | IDLE/job0/samples0、busy=false、reader_released=true、UNKNOWN/NONE、reference_id空・LBA空、offset_unknown |
+| offset | null。明示0へ変更していない |
+| 配置daemon/package | 引継ぎSHA `90803618…c3ffc3f` / `f8226df9…9affc757`と一致。CI candidate packageとは別identity |
+| 保全物 | 設定2file・Custom UI7fileのhashを観測、optional kiosk設定は不在。`picdplayer-279-backup-20261101T2150`の存在を確認し変更/削除なし |
+
+今回のhost証拠は当sessionのIssue/文書取得記録と14:35/14:37 UTC SSH実出力で保持する。
+観測scriptはhost一時領域の
+`picdplayer-c2-acceptance-observe-20261102.py`に保持し、targetへ配置していない。
+secret/設定本文/PCM/provider照合を追加保存・公開していない。API解放flagを実再生reader FDの証拠にしない。
+今回追加するsourceはPi未配備であり、この観測を変更後binaryの実機試験には数えない。
+14:45:29 UTCの独立した再照会でもpin/board identity一致、STOPPED・REPEAT/pendingなし・offset null、
+capture/C2 IDLE/job0/非busy・media IDLE、C2 UNKNOWN/NONEを再確認した。
+配置daemon/package、設定2file・UI7fileの全hashは14:37観測と一致し、backupも存在した。
+この再照会前の一回はhost側stdin pathのtypoで接続前に停止し、訂正後に上記read-only観測を実行した。
+
+<a id="c2-acceptance-20261102T2250"></a>
+### 22時台の続行と検証環境の復元
+
+利用者の続行指示後、fetchした`refs/remotes/origin/master`は引き続き`6915c2e`だった。
+既存の未commit差分を保持し、今回はproduction/CMakeを変更せず、既存test2fileへ次のassertionを追加した。
+以下は追加した試験の条件であり、22:50 UTC時点では実行できていなかった。復元後の結果は後段へ分けて記録する。
+
+| 追加試験 | 判定する内容 |
+|---|---|
+| 実runner読取中のcontext失効5条件 | observation/disc/policy世代、offset未指定、device_current=falseをmain側で変更しpoll。readとdestructorをgateで止め、失効後も破棄前busy/未解放、再start拒否、退役後の旧結果非queue・UNKNOWN/NONEを検査する |
+| 合成readerのFD | destruction gate中のF_GETFD成功と、fclose成功後のF_GETFD=-1/EBADFを検査する。光学readerのFD検査ではない |
+| 累積deadline4条件 | pre-TOC/read/close/post-TOCに各4秒未満のfake時間を配分。合計3999 msの成功、最終TOCで4000 ms、destructorで4000 ms、4回目read中の超過で追加read/成功公開をしないことを検査する |
+
+通常とASan/UBSanについて、既存imageを`--pull=never --network none`で使い、
+`cmake --build build-49-fixtures -j2 --target c2_assessment_run_test c2_assessment_session_test`と
+`build-49-png-sanitize`の同target再build後に前節の10件/8件を実行するcommandを要求した。
+両方ともcontainer開始前に`No such image: picdplayer-profile-review-build:latest`で失敗した。
+この時点ではbuild/CTestは一件も実行されておらず、14時台の10/10・8/8・3/3やWPE各78/78を今回追加分へ転用しない。
+
+当時のDocker contextは`desktop-linux`で、`docker image ls`には
+`picdplayer-wpe-source-probe:2.54.0-trixie`（`9b593daab298`）だけがあった。
+通常`picdplayer-build`と前回のNinja入り`picdplayer-profile-review-build`は存在しなかった。
+削除の起因は調査・断定しておらず、context/host設定変更、別imageへの無断代替、追加download・
+SDK build、古いbinaryでの試験代用はせず、通常build環境の復元が必要と判断した。
+標準手順は[Mac + Docker開発手順](../manual/mac-docker-development.md)を正とし、Ninjaを含む要件を満たすこと。
+
+追加した2fileは独立read-only reviewで具体的findingなし、`git diff --check`成功。
+このstatic review自体はcompile/sanitizer成功ではない。環境復元前の未検証追加分をtest2fileに限定して保存し、
+base`6915c2e`からの累積test差分（14時台の追加も含む）をhost一時領域の
+`picdplayer-c2-tests-unverified-20261102T2251.patch`へ別途保全した。
+同patchのSHA-256は`c79ec07f33016b0cd6a9b01b78d293b8d037739f5e89b055d79467de59f19393`。
+今回追加後の`git diff --binary HEAD -- CMakeLists.txt include src tests`はSHA-256
+`d2f02da61145181ec088a98083d9dda100027cbc0660b9f00455ba68b70b0978`で、前節の検証済みsource差分とは別identityである。
+
+利用者に環境不足とdownload境界を確認し、「標準imageを復元」が選択された。
+この個別承認に従い、既存`Dockerfile`の`docker build -t picdplayer-build .`によって
+通常application build環境だけを復元した。Debian base/build依存のdownloadはこの復元に限る。
+WPE SDKの追加build/download、Pi操作、host権限変更、別imageによる試験代用は承認範囲へ含めない。
+
+復元buildは成功し、image identityは
+`sha256:dfae362988cabb0a54428c44492eb574099b7798d5648b2619401762ade7025a`、`linux/arm64`。
+Debian trixie baseと既存Dockerfileの通常依存だけを取得した。以下はそのimageを
+`--pull=never --network none`で使った、今回の追加後source差分`d2f02da6...`に対する実測である。
+
+| 復元後の検証 | 実際のcommand/結果 |
+|---|---|
+| 通常回帰 | `cmake --build build-49-fixtures -j2 --target ...`で編集2targetと関連8targetを再build後、前節と同じregexによる10件のCTest選択は10/10、0.35秒、exit0 |
+| ASan/UBSan | `build-49-png-sanitize`の編集2targetと関連6target再build後、前節と同じ8件の選択・ASAN_OPTIONS/UBSAN_OPTIONSで8/8、0.86秒、exit0 |
+| TSan | read-only source/512 MiB tmpfs・2 CPU/2 GiBの使い捨てcontainerで`cmake -S /src -B /build -DCMAKE_BUILD_TYPE=Debug -DENABLE_API=ON -DENABLE_METADATA=ON -DENABLE_WPE_KIOSK=OFF -DCMAKE_CXX_FLAGS='-fsanitize=thread -fno-omit-frame-pointer' -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread`、c2_assessment_run/c2_assessment_session/media_workerを新規build後、3/3、0.11秒、exit0 |
+| 標準WPE Debug | 既存SDKをread-only mountし、`cmake --build build-container -j2`で全target再build確認（編集2testを再compile/link）後、`ctest --test-dir build-container --output-on-failure`は78/78、62.49秒、exit0 |
+
+読取中失効の5条件で、destructor gate中のFD有効/非解放busyと正常gate解除後のFD閉鎖・
+非busy・UNKNOWN/NONE・旧結果非queueのassertionが実際に通った。累積4条件も通り、
+各段階へ4秒未満を配分した合計3999 msで成功、最終TOC/破棄で4000 ms到達またはread中超過で
+成功を公開しない境界を確認した。光学FD・kernel I/O取消・実assessmentのPi成功への読み替えはしない。
+試験sourceの修復は不要だった。最初の2回のimage不存在失敗は環境復元前の履歴として保持する。
+
+今回の続行ではproduction変更がなく、標準WPE Release全件・package lifecycle・candidate生成は
+14時台の実績のまま再実施していない。それらを今回のtest追加後の実績へ付け替えず、
+今回は上表の通常回帰・sanitizer・標準Debug全件だけを追加確認とする。
+新しいcommitのCI、CI candidateや正式releaseの検証でもない。
+
+今回の続行ではPiへ接続せず、14:45 UTCの状態を現在状態へ使い回していない。
+終了前に#264/#238/#239のOpen状態・updatedAt・最新commentも再取得し、前回照合から新しい入力は確認されなかった。
+独立reference/challengeの新規提供もこの続行指示にはなく、実機positive・実assessment取消/退役/失効・
+実再生reader FD・TV/聴感は未確認を維持する。新しいpackage/CI候補は生成・配備しておらず、
+既存artifact・backup・設定・Custom UIを保持した。commit/push/PR・Issue状態変更は行っていない。
+
+<a id="c2-daemon-acceptance-20261102"></a>
+## goal続行：実daemonのC2配線とcommand ingress（2026-11-02）
+
+利用者の「目視が不要な残受入を可能な限り進め、最後に人の確認手順を示す」goalに従い、
+抽出helperだけでは未確認だったproduction callbackと実HTTP/stdin ingressの非目視単位を追加した。
+goal中のproduction source変更はなく、Linux/API有効時のtest登録と新規test2fileだけを追加した。
+`tests/c2_assessment_daemon.py`が実`cdplayerd`を起動し、
+`tests/c2_assessment_ioctl_fixture.cpp`のLD_PRELOADによってkernel境界の合成応答を供給する。
+既存report・評価core・Capture PCM-only契約を再実装/変更していない。
+
+### 隔離と受理境界
+
+通常fileのままではobserverがUNKNOWNとなり、`bind_drive_probe`のPRESENT条件によって
+C2 supportを受理せず、最初の試験は11件中10成功/1失敗（readiness）だった。
+これはproduction不具合ではなく受理条件の機能であり、実機の入力不足を回避する理由にしない。
+fixture限定で、正確に指定した一つのtempfile pathの`stat`と`/sys/dev/block/240:254`のcanonical lookupだけを
+合成PRESENT/private mock-sysfsへ対応付けた。実`/sys`への書込み/mount、device node作成、権限拡大はない。
+native `fstat`はそのままで、mock ioctlは実regular inode一致・O_RDONLYを必要とし、全ioctlを実kernelへforwardしない。
+regular-file UNKNOWN負例も別processで残し、PRESENT fixtureを実hardware identityの証拠にしない。
+
+### 実行した6条件
+
+| 条件 | 実daemonで確認した結果 |
+|---|---|
+| UNKNOWN device観測 | AUDIO_READY/STOPPEDへ進んでもC2 supportはUNKNOWNでstart409、READ CDなし |
+| 明示合成reference/challenge | 具体的direct factory/epoch readerからSG_IO READ CDをLBA10×3、20×3で発行。1sector/2646 bytes/1000 ms・strict flagsをfixture側で検査し、COMPLETE・条件付きYES、clean_equal3/flagged_different3/sample6 |
+| short transfer | SG残量1からFAILED/UNKNOWN、READ CD1回、CDROMREADAUDIOへのfallbackなし |
+| 最終TOC変更 | raw reader close後の最終TOCが有効な別leadout76になり、FAILED/UNKNOWN |
+| mock driver予算超過 | 4050 msの合成read後にTIMED_OUT/UNKNOWN。READ CD1回、raw close後にTOC/LEADOUTを追加しない。kernelのtimeout遵守やin-flight取消成功ではない |
+| 取消とcommand順序 | read gate中にHTTPcancel202、busy/未解放を保持。再start/capture409、HTTPplay/seekはc2_releasing、実stdinのplayもmanual retry警告で拒否。正常gate解除→CANCELLED/UNKNOWN・実fd close後も予約再生なし。明示playの再試行204で合成通常readerを使用し、明示STOP204で終了 |
+
+5つのraw実行は実READ CDに使ったregular fdとRAW_CLOSEのfd一致、READ_RETURN後のclose成功、
+terminal receipt前のcloseを検査した。成功時とTOC変更時はclose後の最終TOCも検査した。
+全成功processは正常SIGTERM/exit0で終了し、forcekillは失敗cleanup専用で成功判定へ含めない。
+fixtureのzero/challenge digest・independent/alignment assertionは合成試験専用であり、Pi用referenceを提供したことにはならない。
+PCMは生成応答bufferだけで、保存物は有界event metadata/失敗時logである。provider通信やsecretを追加していない。
+
+### 回帰・reviewと失敗の保全
+
+通常imageは復元済み`picdplayer-build`/`dfae362988ca`、Linux/aarch64、network none。
+編集後に実daemon/shimと関連targetを再buildした。初回commandの存在しないtarget名はexit2で修正し、
+UNKNOWN受理条件を調べた一回のgrouped fixture修復後、通常のC2/media/complete/reader選択は11/11、10.61秒、exit0。
+うち新規daemon testは6条件・10.25秒、CTest timeout35秒、内側budget33秒である。
+最初の失敗証拠は`build-49-fixtures/picdplayer-c2-3z6kwapg/`へ保存し、自動削除していない。
+
+独立reviewは2件のP2を検出した。子daemonへsanitizer optionが渡らない点と、late条件で
+最終TOCなしをprintだけにしていた点である。一回のbounded review修復で4 sanitizer optionをallowlistへ加え、
+late条件でTOC/LEADOUTを明示禁止した。follow-up reviewで両方解消・新findingなし。
+修復後の通常daemon testは1/1、10.25秒、exit0で再実行した。
+親もshimのfdチェック・exact path・正常close・全Python assertionとcompile flagsを確認した。
+
+ASan/UBSanは実daemonとshimの両方を`-fsanitize=address,undefined -fno-omit-frame-pointer`でcompile/linkし、
+linked binaryの実libasanをfixtureより前にpreloadした。親の`ASAN_OPTIONS=detect_leaks=1:halt_on_error=1`、
+`UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1`を子daemonへ保持して、関連9/9、11.46秒、exit0。
+新daemon testは10.64秒。最初のASan build commandはCMake自動再生成直後の新target解決で失敗し、
+CTestは未実行だった。再生成済みMakefileで同じtarget群を再buildしてから上記の試験を実行した。
+sanitizer設定を無効化して通したものではない。
+
+標準WPE Debugは79/79、72.97秒、exit0を確認した。その後のreview修復はPython assertion/envだけで、
+最終差分は上記通常/ASanの新test再実行へ反映した。最終差分で標準WPE Releaseを
+`cmake -S /src -B /src/build-container -DCMAKE_BUILD_TYPE=Release`→全target再build→全CTestとし、
+79/79、72.05秒、exit0を確認した。既存SDKのread-only mountと標準cacheのAPI/metadata/WPE設定を保持し、
+追加SDK buildはしていない。親がRelease cacheとLastTest.logの79件の`Test Passed.`・最終daemon6条件を照合した。
+未変更testのarray-bounds/missing-field-initializers warningは出たが、本goalで無関係なsource修正は行っていない。
+この時点では新fixtureに対するTSanは未実施だった。後述の[実機作業の続行](#pi-nonvisual-20261102T2348)で
+新fixtureを含むTSanを別に実行しており、22時台の既存3/3とは別の証拠である。
+
+source識別はbase`6915c2e`上の未commit差分である。tracked source diff
+（`git diff --binary HEAD -- CMakeLists.txt include src tests`）のSHA-256は
+`3c9704f38e95d1a15244b935ce10419f7045ee54b4e2d8e0ff617b606b9e5132`。
+このdiffへ含まれない新規fileは、Pythonが`74239ebf72099036d20c1400953577155654ab2277d411d40c06d90486f3a38e`、
+shim C++が`6f493fbdab60539c6d10c158f03f64300d5d2838d7e6c2d1eb7d4574fd06ad10`で識別する。
+Release用build/CTestは既存の標準WPE cacheを使い、stage/package/prepare-releaseは実行していない。
+保存済みRelease候補SHA `7c7b6f7b...`とDebug package SHA `d485eb39...`が14時台の値と一致することを
+終了前に再照合し、goalで上書きしていない。これらは今回のtest差分に対する新package/CI candidateではない。
+
+### 現在の限界と次の入口
+
+具体的reader options/transportとHTTP/stdin ingressの実行不足はこの合成境界で補った。
+native hardware/device観測、実drive/bridgeのREAD CD、物理CEC ingress、C2精度/cache独立性・原盤一致・
+bit-perfect、Piの実assessment取消/失効/退役は未確認を維持する。実再生reader FDはこの段階では未確認で、
+後述の[実機続行](#pi-nonvisual-20261102T2348)でmanual processの範囲を別途確認した。
+独立reference/challengeとoffset条件の正当な入力がないため、PiのpositiveはUNKNOWNのまま。
+23:10〜23:29 UTCのこの段階ではPi接続・配備・設定変更・SDK再build/download・commit/push/PR/Issue状態変更を行っていない。
+人が必要な残条件と具体的な手順は[利用者確認](#user-acceptance-steps-20261102)へまとめた。
+今回の機械試験や#279撤回を、#252/#184/#51/#121の目視/聴感受入のPassへ変換しない。
+
+<a id="pi-nonvisual-20261102T2348"></a>
+## 利用者操作なしのPi実機検証（2026-11-02 23時台）
+
+利用者が23:33 UTCに「Piは現在利用中ではない」「非目視の実機検証を行う」「既存daemon停止/置換を許容」と明示した。
+既存pin/board identity・現在のplayback/capture/C2/I/Oを各run前に再確認した。
+23:33の観測はSTOPPED、capture/C2非busy、REPEAT/pendingなし、offset nullで、保存SHAは引継ぎと一致した。
+配置binaryは`908036180b04d2fe96f677c42858107e2b973777eb50196d527e89935c3ffc3f`の診断版Releaseであり、
+本worktreeの再compile品/CI candidateとは別identityである。置換は不要と判断し、package/binaryを更新していない。
+
+### 先行するTSan追加検証
+
+同じsourceをread-only mountした使い捨てLinux/aarch64 container、2 CPU/2 GiB・512 MiB tmpfsに
+Debug/API・metadata ON/WPE OFFで新規configureし、C++/executable/shared linkerにthread sanitizerを指定した。
+実`cdplayerd`・ioctl shim・runner/session/media_workerを再build後、
+`TSAN_OPTIONS=halt_on_error=1 ctest --test-dir /build --output-on-failure -R '^(c2_assessment_daemon|c2_assessment_run|c2_assessment_session|media_worker)$'`
+に相当する4件を実行し、4/4、10.45秒、exit0。新daemon6条件は10.34秒で成功した。
+実機C2/optical FDを証明するものではなく、新fixtureのTSan未実施条件を解消した合成検証である。
+SDK取得/buildやPi上compileはしていない。
+
+### 正常停止とSSH利用者所有の実reader
+
+既存の限定NOPASSWD `systemctl start/stop`だけを利用し、kiosk→daemonの順で停止した。
+serviceはExecMainCode=1/ExecMainStatus=0・inactiveを確認してから、同じ配置binaryを
+SSH利用者所有の一時manual daemonとして起動した。これは`/proc/<pid>/fd`を正常な所有者権限で検査するためで、
+daemon UID/group/sudoers/proc権限を変更していない。標準daemonと同時にdriveを使用しない。
+実`/dev/sr0`、HDMI `plughw:CARD=vc4hdmi,DEV=0`、metadata off、no CEC、buffer750/startup45、
+offset未指定、settings-fileなし・policy保存なしで実行した。provider照合・PCM保存・直接READ CD probeは追加していない。
+
+操作scriptはhost一時領域`picdplayer-pi-nonvisual-20261102.py`で保全する。
+実行前の独立安全reviewでAPI shape/status/cleanup/計測を修復し、正常停止と復元を優先する有限手順にした。
+23:43の最初の実行は3秒のALSA観測budgetで失敗し、最初のread自体も3.169秒だった。
+23:46の再試行では実FD10を観測したが、ALSA statusの空白付きkeyを正規化しないscript側の不備で失敗した。
+ログにはfirst_write/prebuffer_wait3102 msがあり、これを音声正常/聴感成功にはしない。
+両失敗とも正常STOP→quit/exit0→daemon/kiosk再開を実行し、設定復元を確認した。失敗証拠は
+Piの`/tmp/picdplayer-nonvisual-7kkotio_/`と`/tmp/picdplayer-nonvisual-2szanhe6/`に保持した。
+
+### 23:48 UTCの有限操作run
+
+観測parserを修正した最終run（PID66552）は23:48:00〜23:48:14 UTC、exit0で終了した。
+開始時56.382 C、`get_throttled=0`。80 C/current制限を保守的中断条件としたが、製品合格閾値ではない。
+
+| 実機操作 | 今回の非目視証拠 |
+|---|---|
+| SINGLE play | 実reader FD10を観測。所有PID66552のHDMI ALSAはRUNNING、hw_ptr704→22968、appl_ptr8820→31320 |
+| pause/seek/resume/next | 各POST204と状態遷移・代表track移動を確認。seekはoffset_seconds=1。実音・TV・物理入力の判定ではない |
+| SINGLE STOP | STOP204後STOPPED、同じ生存processの`/proc/66552/fd`にsr0 FDなし。capture flagではなく実再生readerの独立観測 |
+| REPEAT play | 実reader FD9と所有ALSA RUNNING、hw_ptr1800→24128、appl_ptr8820→32160 |
+| 再生中policy変更 | requested SINGLE/effective REPEAT/pending=trueを確認。STOP後effective SINGLE/pending=false、実sr0 FDなし |
+| 正常終了/再開 | quitでmanual daemon exit0。daemon→kioskの順で再開し、WPE process名、active/running、NRestarts0、STOPPED/fresh sessionを確認 |
+
+実機の実再生reader FD解放はこの**SSH利用者所有manual process・既存配置binary**の範囲で確認した。
+systemdの`picdplayer` UID processの/proc FDを読めたことにはせず、capture/C2 reader_releasedから転用していない。
+normal restartと再接続の非目視部分であり、cold boot・TV表示・物理CEC・聴感の合格ではない。
+証拠はPi `/tmp/picdplayer-nonvisual-81_stmwu/daemon.log`とhost側の実行JSON出力に保持する。
+
+読み取れたdefault設定・Custom UI7file・binary/packageのhashは全run前後で不変だった。
+`/var/lib/picdplayer/settings.json`はpermission不足で内容hash未確認だが、manual側はsettings-fileなしで保存せず、
+systemd再開後のrequested/effective REPEAT、region75、2-of-3、10000 ms、pending=false、offset nullを確認した。
+settings fileのbyte一致まで確認したとはしない。private backupを変更/削除せず、旧版rollbackはしていない。
+23:48有限runの復元PIDはdaemon66563/kiosk66598、WPE process、session `c4018361c866e9eba9296ca1157e4059`。
+
+### 30分の代表観測（2026-11-02〜03）
+
+23:54:58 UTCに同じpreflightを取り直し、23:55:06 UTCから別の有限30分runを開始した。
+PID66805、実reader FD10、REPEAT、metadata off/no CEC、offset null、C2 UNKNOWNの条件である。
+約5秒ごとのprivate metadataにはAPI状態/capture/C2・実FD・所有ALSA pointer・CPU/RSS/thread・温度/電源を保存し、
+stdoutは約30秒ごとに報告する。device観測変化や現在制限等では通常停止し、unsafeな場合は再probeを伴うservice再開を抑止する。
+証拠write/SSH切断/重複signalでもcleanupを飛ばさないよう独立reviewの指摘を修復・再確認した。
+これは30分が製品閾値という定義でも長期耐久/聴感の合格でもない。
+
+30分runは2026-11-03 00:25:06 UTCに1800.0秒で完了した。private sample351件をhostへ回収し、
+独立read-only auditで件数・連続性・終了receiptを再集計した。
+begin/completion eventのUTC差は1799.965215秒で、collectorのmonotonic経過1800.0秒とは丸め/記録位置が異なる。
+最初〜最後のsample経過差1796.17秒、間隔5.09〜5.15秒を、連続全時点の観測と混同しない。
+
+| 30分runの実測 | 結果 |
+|---|---|
+| 対象/範囲 | 配置SHA90803618のmanual daemon PID66805、REPEAT、kiosk停止・metadata off・no CEC、offset null。標準service全構成の同時負荷試験ではない |
+| 再生状態/進行 | 全351 sampleがPLAYING、track1/frame37→track9/frame13739。隣接350組の(track,position)が厳密増加 |
+| device/stream | 全sampleでobservation generation1、stream generation16。物理同一性はUNVERIFIEDのまま |
+| 実reader/ALSA | 全sampleでsr0に対応するFD10をcollectorが観測。同一path/owner PID66805のHDMI ALSAがRUNNING、隣接350組のhw_ptrが増加。capture/C2は常にIDLE/nonbusy/解放済みだが、再生FDの証拠には使っていない |
+| RSS/thread | RSS13512〜15416 KiB、開始60秒以降15404〜15416 KiB、最後の256 sampleは15416 KiB。thread7。長期memory leakなしの証明にはしない |
+| CPU | sample区間で14410 tick/1796.17秒。00:28再照会とは別の後続read-only contractで、同じPiのSC_CLK_TCK=100を確認し、1core換算平均約8.02%。Pi全体のCPU率ではない |
+| 温度/電源 | 観測sample51.002〜53.154 C、preflight54.768 C。取得したget_throttledは全て0。sample間の一過性制限がなかった証明ではない |
+| log | 保存daemon.log20行にunderrun/read error/C2 probe error/main_loop_stall/WARN/ERROR/FATAL記録なし。未記録・sample間の現象や聴感をPassにしない |
+| 正常停止 | 00:25:06.823 STOP204→00:25:07.249に実sr0 FDなし/effective SINGLE/pendingなし→00:25:07.266 quit/exit0。forcekill/電源断なし |
+| service復元 | 00:25:11にdaemon67226/kiosk67244、active/running、NRestarts0、WPE process、STOPPED、REPEAT/region75/2-of-3/10000 ms/pendingなしへ復元 |
+
+00:28 UTCの独立したread-only再照会でもpin/board一致、STOPPED、capture/C2 IDLE/job0/nonbusy、
+media IDLE、offset null、同じ復元session `1bf98d3c52b549a368a47abb0c7daf63`を確認した。
+default設定2file・Custom UI7file・配置binary/packageのhashは引継ぎ値と一致し、private backupも存在した。
+settings.jsonは依然permission不足でbyte一致を未確認とし、APIでのpolicy復元と混同しない。
+00:28のC2 start_rejectionはoffset_unknownだった。別の後続read-only contract照会では、fresh systemd sessionの
+C2 support=DRIVE_REPORTED YES、trust=UNKNOWN、requested speed=2、current_speed_x=nullを確認した。
+この後続contractのpayloadにはUTCを保存していないため採取秒を特定せず、30分metadataや00:28照会へ付け替えない。
+これは新たな速度変更操作や実速度の確認ではなく、defaultとの速度/騒音A/Bも実施していない。
+
+host private証拠は一時領域`picdplayer-pi30m-20261102.GYt5oj/`へ回収し、Pi側の
+`/tmp/picdplayer-nonvisual-bdwfx1yu/`も保持する。hostにはpreflightを含むmonitor出力と実collector sourceも保全した。
+collectorのsr0判定は実`/proc/<pid>/fd`のreadlink一致による。metadataに保存したfd番号だけでは
+独立した第三者がdevice対応を復元できないため、source・配置SHA・preflightと一緒に扱う。
+
+- `events.jsonl` SHA-256: `d5fe994ce688703d47e706cd30cb45c59979caa021b5a00217a2ba12d698a428`（379 record、sample351件）
+- `daemon.log` SHA-256: `6c2487f9cd87695ed7be10baa993ef70492fe14d853df11d3c614ac792c790b9`
+- `collector.py` SHA-256: `2ba737a8b4808598791e1f008a4087fae09ea55dd4ff123616b9a372ecf29838`
+
+本runは#184/#121の非目視部分の補強であり、normal cold boot、実速度比較、kiosk/metadata/CEC込みの
+同時負荷継続運転、TV/実音、C2 accuracy/bit-perfect、実assessment取消/退役/失効は未確認を維持する。
+独立reference/challengeやoffsetの根拠を作らず、capture/C2の実jobは開始していない。
+旧#279診断差分・backupは保持し、rollback・再調査・Issue再openは行っていない。
+
+<a id="manual-acceptance-gaps-20261102"></a>
+## 共通手動受入の不足条件（2026-11-02）
+
+#252/#184/#51/#121の本文と全commentを再取得し、すべてOpenと確認した。
+以下は11月2日時点の不足条件の履歴である。11月3日の[利用者報告](#manual-report-20261103T0118)で
+確認できたTV/物理remote/短い試聴/policy/1枚背景のPassを優先し、同じ試験を全て再要求しない。
+11月1日の1〜7実施報告と11月2日の#279撤回を保全し、報告撤回を音声修正/原音照合成功や
+各checkboxの一括Passへ読み替えない。新たな曲頭調査・#279再open・rollbackを要求しない。
+
+| 所有先 | 既存報告で不足する証拠 | 次の最小単位 |
+|---|---|---|
+| 共通receipt | 実施package/UI、TV/音量/媒体、入力種別、観測者、時間、各判定、開始/終了・復元の対応 | [共通手順](#combined-manual-acceptance)の同runへ固定し、既存報告で補える項目は再試験せず追記する |
+| #252 物理remote | Settingsの方向/決定・画面Back/物理Back・戻りfocus、7button/focus/scroll、利用不能理由、policy pending→STOP適用、背景要求/実効/保存案内の個別判定 | 人が実機近くで確認できる時の基本10分、初回＋修正一組。背景ON各90秒以内。物理入力結果は一度だけ記録する |
+| #51 写真/TV/音声 | 実写真枚数、1枚静止/複数切替、45秒dwell/4秒fade、OFF/旧写真除去/fallback、reduced motionの実施有無、前景可読性と取得/切替中の実音 | 同runで到達した枚数/条件だけを記録し、単一写真を複数切替Passにしない。TV/聴感をAPI/PNGで代用しない |
+| #184 通常運転 | manual daemonの30分API/ALSA/FD・温度/電源/資源/logは今回確認済み。標準UIと代表Custom UIを含む同時運転、TV/実音、通常cold boot、速度要求あり/なし比較は残る | 機械部分を重複取得せず、残る同時構成/人の観測・別boot/比較を分ける。REPEATを勝手にSINGLEへ固定しない。試験区間のSTOPPED/SINGLE/背景OFFと、開始設定へ復元する区間を別記する |
+| #121 stall分類 | idle/API操作/起動再接続/CEC別の測定区間・時刻/世代・同時journalと実音/操作影響 | 同runのログを参照し、既存のcontrol/CEC未解明を残す。旧21:03 underrunは操作対応不明のまま、#279原因や全面解決へ変換しない |
+| #238/#239 取消後再操作 | 実capture取消→実解放後の通常再生・実音/TV | 既存早期cancel/全域指紋を再取得せず、条件が揃った別の短い有限単位。C2 jobの取消とは別結果として記録する |
+
+11月2日のこの整理時点では利用者の実機近接/観測可能性が未確認で、手動Passを追加しなかった。
+11月3日の手動Passは上記receiptへ別記し、この過去の未実施履歴を遡って変更しない。
+#49資源、#220供給、#66〜68 compliance、#46/#47 image、#45正式公開は独立残gateで、今回まとめて実装しない。
+#250/#254全matrixとBuildroot追加研究は再開しない。Git/GitHub公開やIssue状態変更の権限も追加されない。
+
+<a id="user-acceptance-steps-20261102"></a>
+### 利用者確認の具体的手順
+
+対象は#252/#184/#51/#121の残る人の観測であり、#279の追加調査ではない。
+11月1日の1〜7実施報告で下記の個別結果を既に確認できている場合は、その条件と結果を追記すればよく、
+同じ操作を全てやり直す必要はない。各行をPass/Fail/UNKNOWNとし、実施日時・入力種別・実機条件を対応付ける。
+11月3日に報告済みの結果は[受領receipt](#manual-report-20261103T0118)にまとめた。以下は必要な未確認分だけに使う。
+API/DOM/screenshotの自動試験を、TVの見え方・物理remote・耳で聞いた音の代用にはしない。
+API transport・policy pending/STOP適用・manual実reader FD解放・代表30分の非目視計測は今回確認済みである。
+利用者は下記のTV/実音/物理入力の差分を担当し、機械計測を全てやり直す必要はない。
+
+1. 共通run IDと開始時刻を記録する。TV/出力先・音量・disc・画面種別を固定する。
+   機械側のpackage/daemon/UI identity、policy、offset、背景requested/effectiveは同じrunの記録へ結び付ける。
+   過去のREPEATやSTOPPEDを現在値と仮定しない。評価/取得がbusyなら通常cancelと有界な解放待ちを先に行い、
+   解放できなければ以後の再生操作を中止して未解放として記録する。offsetは試験のためだけに変更しない。
+2. TVでPlayerとStatusの通常表示を見る。前景文字・drive label/単位・下端の理由表示が読め、
+   背景やfocus枠で隠れず、画面端から切れていないことを記録する。raw速度/cache報告を実測倍率/再読独立性と扱わない。
+3. **物理リモコン**でSettingsを開き、方向で現行7 buttonのfocusを一巡する。
+   対象はBack、Single read、Repeat verification、背景Off/On、Acquire (30 minute limit)、Cancel acquisitionである。
+   policy/背景の決定は後述の代表操作で行い、利用可能なAcquireはこの短いrunでは押さない。
+   画面内Backと物理Backを各一回使い、戻り先・focus位置・scroll・最下行までの到達を記録する。
+   現在利用不能な取得buttonをfocusし、理由が読め、決定しても取得が開始しないことを確認する。
+   利用不能条件を作るために架空のoffset/referenceを設定しない。
+4. 通常play→pause→resume→代表track移動→STOPを一組実施する。
+   TV状態と実際の音が対応するか、音切れ/雑音/操作不能/長い遅延がないかを人が記録する。
+   何かあれば操作と時刻・入力種別を残し、同時ログと照合する。#279を再調査するための曲頭比較は追加しない。
+5. Settingsでpolicyを代表一組だけ切り替える。STOPPEDで適用された表示と、再生中に変更した際のpending表示を見て、
+   STOP後に要求値が実効値へ反映されることを確認する。古い共通受入のSTOPPED/SINGLE/背景OFF境界が必要なら
+   その試験区間だけ別記し、その後に**開始時のpolicy/背景へ復元**する。REPEATだった開始値を勝手にSINGLEへ固定しない。
+6. 背景が利用可能な条件でのみ、ONとOFFを各一回実施する。ONの観察は各90秒以内、初回と必要な修正後の最大一組に限る。
+   得られた写真数、前景文字の読みやすさ、取得/切替時の実音、OFF時の除去、写真なし時のfallbackを記録する。
+   1枚静止を確認できても複数切替はUNKNOWNのままにする。複数枚が実際にあれば45秒dwell/4秒fadeを観察し、
+   reduced motionは設定が実施できた場合だけ別判定する。追加provider照合や全matrixの再開は不要。
+7. 終了時に通常STOPし、開始時のpolicy/背景/temporary Inspector等を復元した結果を記録する。
+   最新検証済みbinaryとprivate backupは保持し、旧版rollbackは行わない。
+   「確認できた項目」「不具合」「条件不足でUNKNOWN」を分ければ、上記同runを#252/#184/#51/#121から共通参照できる。
+
+上記の短いrunだけでは、#184の有限の継続運転、cold boot、速度要求あり/なし比較や、
+#121のidle/API操作/起動再接続/CEC別のstall分類は完了しない。これらは計測区間と通常停止/復元を固定した別runが必要で、
+人が実音・TV・物理remoteの結果を担当し、機械側ログ・資源/温度はその区間の証拠へ対応付ける。
+電源断/forcekillを正常解放や正常起動の成功に数えない。
+
+| 別run | 具体的な人の確認と準備 |
+|---|---|
+| 代表Custom UI/通常cold boot | 最新検証済みpackageと採用UIを固定し、STOP/cancel後の解放を確認して既存の正常shutdown手段で終了する。shutdown完了前に電源を抜かず、通常power-on後のTV表示・STOPPED・設定復元・再接続を確認する。標準UIと代表Custom UIの結果は別記し、旧版rollbackや異常電断を追加しない |
+| 有限継続運転 | 実施前に運転時間・操作列・成功/中断条件を固定する。例として30分の代表観察を選ぶ場合、開始・途中・終了のTV/実音/操作と同区間のAPI/journal/資源/温度・current power/thermal bitsを対応付ける。これは30分が製品の合格閾値という定義でも長期耐久の合格でもない。異常音・操作不能・current制限等なら通常STOPへ移り、未解放なら続行しない |
+| 速度要求あり/なし | 採用する要求値と通常起動手順、元設定、各run時間を事前に固定し、既定要求なしと`--drive-speed-x`ありを別runにする。人はdrive騒音・実音・TV・物理応答を記録する。要求解除後も設定残留/実速度不明を排除できなければ速度A/BはUNKNOWNとし、raw報告/ioctl受理から測定倍率を合成しない |
+
+これらの別runの採用条件/時間はまだ実測receiptとして確定していないため、goal中に人の観測を捏造して実施済みにしない。
+
+### 観測以外に不足する入力・権限
+
+| 不足 | 必要なもの・再開条件 |
+|---|---|
+| 実機C2 positive/精度 | 実discの最大2 LBAに対応する独立referenceのcanonical S16LE SHA-256、provenance、独立性とraw-LBA alignmentの根拠、referenceと異なるchallengeが必要。既存API shapeは[明示C2評価API](../design/message-contract.md#c2-reference-api)を参照。PCM自体の保存/提出を要求しない。local指紋やCLEANをreferenceへ流用しない |
+| 実機評価のoffset条件 | 現行profileはreference/実行側とも明示offset0が必要。offset未指定を自動的に0へ変更せず、その診断条件を採用する根拠と開始/復元条件を明記する。0をdriveの校正済みoffsetと呼ばない |
+| 実assessmentのPi取消/失効/退役 | 上記の有効入力と有限runの準備後、既存pin/board identityと現在playback/capture/C2/I/Oを再確認し、正常cancel→実reader退役→手動再操作を別々に記録する。合成ioctl・tempfile FD試験を代用しない |
+| 実再生reader FD | 過去のsystemd UIDの/proc検査はpermission不足。23:48の別runでは既存binaryをSSH利用者所有で起動し、実SINGLE/REPEAT readerのopenと正常STOP後FDなしを直接確認した。systemd UIDへ結果を拡張せず、必要なら適切な診断手段を使う。sudoers/group/daemon UIDやhost/target権限を拡大せず、capture flagは代用不可 |
+| 正確head CI/正式candidate | 現在は未commit差分のlocal検証。commit/push/PRの別途明示承認がないため新しいGitHub CIは開始しない。既存CIやlocal packageを今回差分のCIへ付け替えない |
 
 <a id="track-start-withdrawal-20261102"></a>
 ## #279 利用者による報告撤回と終了（2026-11-02）
