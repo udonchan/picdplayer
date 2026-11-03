@@ -429,6 +429,18 @@ WebPはRIFF/chunkとVP8/VP8Lの寸法、VP8X canvasとの一致を確認し、an
 JPEGは8-bit Huffman DCTのSOF0/1/2、8-bit quantizer、1/3/4 componentを対象とし、全scanのmarker構造を確認する。
 後続SOF・DNL・hierarchyや対応外profileを拒否するが、全形式のdecode資源やbrowser/GPU memoryは保証しない。
 候補JSONと画像は空cache pathで一時的に取得・保持し、ディスク保存の採否は別途設計する。
+
+<a id="dynamic-image-http"></a>
+
+動的画像HTTPは背景とcoverで共通の独立予算を持つ。Pi Zero 2 Wの512 MBを設計基準とし、
+全modelで同時2応答・本文予約合計16 MiB、待機queueなしとする。本文取得前に背景8 MiBまたは
+cover4 MiBを予約し、満杯なら503で拒否する。これは公開保持16 MiBとは別の予算である。
+本文はwriteable callbackで最大4 KiBずつ送り、予約開始から30秒で送信終了処理へ進む。
+期限はmain loopで処理し、blocking callbackを強制中断する厳密なwall-clock保証ではない。
+失効した参照の残りは中止し、送信開始後はstatusを変更せず接続を閉じる。既にlibrary/OS/peerへ
+渡したbytesは取り消せない。アプリ本文・予約の回収とlibrary排出・peer受信・RSS減少は区別し、
+OS/WPE/GPUを含む全memory上限やPi Zero 2 Wでの実機動作保証とはしない。
+機種別profile、動的な予算拡大、自動retryは追加しない。
 OFFではworkerを生成・要求せず、作成済みworkerは取消して保持結果を消す。CD再生と通常metadataは維持する。
 明示key fileを優先し、未指定時だけローカル開発用`FANART_TV_API_KEY`を読む。
 不正な明示fileから環境変数へのfallbackは行わない。project keyを`api-key`ヘッダーで送る設定であり、personal keyの`client-key`には

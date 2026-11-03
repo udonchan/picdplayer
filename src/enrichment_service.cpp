@@ -12,6 +12,7 @@
 #include <utility>
 #include <random>
 #include <algorithm>
+#include <array>
 #include <set>
 
 class EnrichmentService::Implementation {
@@ -302,7 +303,19 @@ std::optional<EnrichmentArtworkAsset> EnrichmentService::cover_asset() const {
     if (error || size == 0 || size > 4 * 1024 * 1024) return std::nullopt;
     std::ifstream input(*path, std::ios::binary);
     if (!input) return std::nullopt;
-    std::string bytes(std::istreambuf_iterator<char>(input), {});
+    constexpr std::size_t maximum_bytes = 4 * 1024 * 1024;
+    std::string bytes;
+    std::array<char, 4096> buffer{};
+    while (input) {
+        input.read(buffer.data(), static_cast<std::streamsize>(
+            std::min(buffer.size(), maximum_bytes - bytes.size())));
+        bytes.append(buffer.data(), static_cast<std::size_t>(input.gcount()));
+        if (bytes.size() == maximum_bytes) {
+            if (input.peek() != std::char_traits<char>::eof()) return std::nullopt;
+            break;
+        }
+    }
+    if (input.bad() || bytes.empty()) return std::nullopt;
     const auto mime = mime_for(bytes);
     if (!mime) return std::nullopt;
     return EnrichmentArtworkAsset{*mime, std::move(bytes)};

@@ -1,5 +1,22 @@
 # 残課題とIssue一覧
 
+<a id="image-http-implementation-20261103"></a>
+## #49のHTTP実装単位（2026-11-03）
+
+下記の開始プロンプトによる静的調査後、利用者はPi Zero 2 W基準の保守的な設計で実装し、
+まず動作する単位を完成させてIssue終了を優先する方針を指定した。未発生の全層資源問題を
+必須gateへ拡張せず、具体的な問題は後続Issueとする。開始プロンプトの「実装前で停止」は
+調査時点の履歴として保持する。
+今回の対象は通常の背景/cover HTTPだけで、同時2件・本文予約16 MiB・4 KiB送信・30秒期限、
+予算不足503・失効/切断/完了の回収を実装する。公開保持16 MiBやdiagnostic8件とは別契約である。
+実装時点では機種別profile、decoder/backend追加、runtime disk cache、Pi操作、provider通信を追加しなかった。
+その後の利用者指示で[Pi 3の隔離HTTP試験](verification.md#image-http-pi3-20261103)を実行し3/3成功。
+通常service・設定・Custom UIを維持し、provider通信や標準package配備は追加していない。
+完了と検証の記録は[HTTP検証](verification.md#image-http-20261103)を参照する。
+上記の実装/試験終了時点では公開操作を行わなかった。後続の10:26 UTCの利用者指示で
+不整合/潜在バグのreview・必要な修復と再試験・commit/PR/master統合が承認された。
+[最終reviewと統合の記録](verification.md#image-http-review-integration-20261103)を参照する。
+
 <a id="acceptance-handoff-20261103"></a>
 ## 統合と残受入の追跡先（2026-11-03）
 
@@ -24,15 +41,17 @@
 local build/正確headの標準CI/candidate/配置済みPiを区別する。統合のための追加Pi操作・配備・rollbackは不要である。
 
 <a id="next-session-20261103"></a>
-### 次の着手先と開始プロンプト
+### 完了した静的調査の開始プロンプト（履歴）
 
-次は **#49の画像HTTP配信の資源admission契約を確定する静的調査** を最初の単位にする。
+以下は実装前の引継ぎを保全した履歴であり、現在の作業指示ではない。
+調査・契約確定・実装・Pi 3隔離確認は[上記の実装単位](#image-http-implementation-20261103)まで進んだ。
+当時は **#49の画像HTTP配信の資源admission契約を確定する静的調査** を最初の単位とした。
 PNG/JPEG/WebPのgeometry admissionは実装済みで、再実装しない。HTTP通常画像の値copy・同時保持・
 library送信buffer/解放境界には独立した未確定部分があり、独立C2入力やTV目視なしで調査できる。
 新しい数値やdecoder方式を黙って採用せず、HTTP一層の契約案までを区切る。
 #285/#283は入力/実機条件待ち、#282は追加写真/目視待ちである。
 #220は再現性/ABI/sandbox/更新責任の判断、#66はlicense採用判断、image/releaseはそれらのgateを持つため先行させない。
-今回#49の実装・SDK buildや他Issueの一括着手は行わない。
+当時の指示単独では#49の実装・SDK buildや他Issueの一括着手を許可しなかった。
 
 ```text
 PiCDPlayerの#49を次の作業単位として開始してください。
@@ -328,14 +347,14 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 
 | 順位・区分 | Issueと所有範囲 |
 |---|---|
-| 直近1（admission後） | #49: JPEG/PNG/WebPの寸法/pixel数admissionはPR #268/#269/#270で統合済み。残るdecode/HTTP/総資源・実機条件を[資源境界表](fanart-tv-poc.md#resource-boundaries-49)で分離し、IssueはOpenを維持する |
+| 直近1（HTTP実装後） | #49: JPEG/PNG/WebP admissionを保全し、保守的なHTTP実装とPi 3隔離3/3まで完了。[最終review/PR統合](verification.md#image-http-review-integration-20261103)へ進む。全decoder/RSS/GPU・Zero 2 Wは保証外で、追加の終了gateとしない |
 | 入力待ちの実機受入 | #285（#264後継）: report/明示C2評価は実装済み。独立reference/challenge・offset根拠を必要とする実assessment/能力実機受入を残す。過去の権限エラーからroot化や非対応を推測しない |
 | 残観測の分類 | #284（#121後継）: PR #243の限定診断修正は統合済み。固定packageでのcontrol/CEC等の未解明観測を分類し、原因解決扱いしない |
 | 残通常受入 | #286（#184後継）: 固定構成・時間・操作列での全通常構成、cold boot、速度条件比較。manual30分や短い利用者試験を全条件成功にせず、#282の同runを参照する |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
 | 完了したv1表示 | #164: policy/strategy・長文表示と代表確認を完了してCompleted。追加hardeningは#250でv2以降へ延期 |
 | 実装済み・限定受入待ち | #10: 補正試聴/TV端表示、#88: 観測可能な物理hotplug、#282: 複数実写真/残目視。#252の代表物理操作Passを再要求しない |
-| 取得・資源安全性 | #49: encoded上限とdecoded寸法/memory、HTTP同時保持、memory-only/cache部品の保証範囲。TV表示は#282 |
+| 取得・資源安全性 | #49: encoded/geometryとHTTPの独立した予算、memory-only/未採用cache部品の保証範囲を文書化済み。実装/試験結果と統合状態は上記参照。TV表示は#282 |
 | 後順位の現行課題 | #3: WPE起動時間、#14: CEC消失/claim、#83: 性能。#124: scrollbarはv1向けUI改修後の確認までPending |
 | 完了したv1 cursor対応 | #28: WPE移行時に解消したという2026-10-19の利用者実機報告に基づき完了。Chromium/Cageはv1対象外 |
 | 必要な条件が揃うまで保留 | #146: 傷/別drive、#147: 専用安全環境のpackage中断試験。失敗未観測を異常系合格にしない |
@@ -586,7 +605,7 @@ REPEAT/背景ON・service稼働・専用helper/rule不在を確認した。
 | [#40 Define disc identity behavior for indistinguishable TOCs](https://github.com/udonchan/picdplayer/issues/40) | 設計Completed。詳細設計の同一TOC非識別/LOADING遷移時失効・反復では非増世代、MetadataSessionの世代拒否と同一TOC再要求fakeを受入条件へ対応付けた。識別不能な物理discを識別したと装わず、対象Piでの同一TOC試験は未実施。必要時の観測は#88、通常再挿入は#184を参照する。 |
 | [#25 Add artist backgrounds as progressive player enrichment](https://github.com/udonchan/picdplayer/issues/25) | Not planned/supersededで親tracking終了。#48/#50は完了。取得/資源安全性#49、写真受入#51、保存#177、Settings#178、Integrity表示#164、性能#83、通常継続#184へ一本化。機能全体完成ではなく未実施を保持。Custom UIへの自動注入・写真同梱は行わない。 |
 | [#229 Validate fanart.tv artist backgrounds with local developer keys](https://github.com/udonchan/picdplayer/issues/229) | Not planned/superseded。PR #230の実API認証/JPEG3枚/OFF失効/WPE写真snapshot/基本再生報告と制約を保全。未確認の実写真切替・TV可読性・音声/代表CECは#51、長期は#184、性能は#83、decoded安全性は#49へ移管。全PoC受入の合格ではない。[PoC記録と残所有先](fanart-tv-poc.md)参照。key/画像/private証跡を公開しない。 |
-| [#49 Finish artist background acquisition safety and bounded resource guarantees](https://github.com/udonchan/picdplayer/issues/49) | Open、取得/geometry admissionは実装済み。encoded/decoded境界、通常画像HTTPのcopy/同時保持/解放、memory-only/cache部品の保証範囲を仕上げる。最初は[HTTP契約の静的調査](#next-session-20261103)。TV/写真切替は#282。包括的許諾、runtime disk cache・Personal key・追加providerを必須化しない。 |
+| [#49 Finish artist background acquisition safety and bounded resource guarantees](https://github.com/udonchan/picdplayer/issues/49) | 保守的なHTTP実装と[Pi 3隔離3/3](verification.md#image-http-pi3-20261103)まで完了。取得/geometry admissionを保全し、背景/cover HTTP予算・copy削減・終了回収を実装。Linux/API+metadata構成79/79・限定ASan/UBSan7/7を確認。[最終reviewとPR統合の状態](verification.md#image-http-review-integration-20261103)を参照し、Issue状態はGitHubを正とする。Zero 2 W/標準WPE配備・全process/decoder/GPUは未保証で終了gateに追加しない。TV/写真切替は#282。runtime disk cache・Personal key・追加providerを必須化しない。 |
 | [#177 Persist user settings for read policy and artist backgrounds](https://github.com/udonchan/picdplayer/issues/177) | PR #253（`75df663`）でmaster統合済み、v1 Completed。一組保存・旧schema読込・利用不能時ON復元・OFF保存失敗でも停止を実装。当時の標準全CTest70/70、最小41/41、metadata非compile対象3/3、package lifecycle、Pi実serviceの一回再起動による両設定復元は[記録](verification.md#177178-背景選択の保存とoff未保存契約2026-10-19)参照。即時終了assert失敗と後続GETの復元確認を区別する。通常cold boot/継続運転は#184、物理リモコンは#252。電源断耐久性は未保証。 |
 | [#50 Support progressive delivery of visual enrichment](https://github.com/udonchan/picdplayer/issues/50) | Completed。PR #175/#223/#230のmetadata先行・artwork/背景の独立status・世代照合と1→2→3枚の実HTTP/WS回帰を根拠に限定配信scopeを終了。通常全network条件での音声無欠落や長期保証ではない。取得#49、写真受入#51、通常継続#184へ残す。 |
 | [#51 Complete real-photo acceptance of Player backgrounds and slideshow](https://github.com/udonchan/picdplayer/issues/51) | 1枚条件ON/OFF・短いTV/試聴Passを保全した旧記録。複数写真/時間条件、fallback/旧写真除去/reduced motion等の未確認は#282へ移管し、実装済みPR #223/#230を再実装しない。取得安全性#49、比較性能#83、通常継続#286とは分離する。 |

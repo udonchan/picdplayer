@@ -1,10 +1,13 @@
 #include "enrichment_service.hpp"
 #include "artist_background_provider.hpp"
 #include "artist_background_image.hpp"
+#include "artist_background_image_fixtures.hpp"
 #include "metadata_lookup.hpp"
 #include <atomic>
 #include <chrono>
 #include <iostream>
+#include <filesystem>
+#include <fstream>
 #include <stdexcept>
 #include <thread>
 #ifdef ENABLE_API
@@ -14,7 +17,6 @@
 #include "presentation_json.hpp"
 #include <nlohmann/json.hpp>
 #include <csignal>
-#include <fstream>
 #include <iterator>
 #include <poll.h>
 #include <unistd.h>
@@ -25,6 +27,7 @@ std::atomic<unsigned> background_calls{0};
 std::atomic<unsigned> cover_calls{0};
 std::atomic<unsigned> metadata_calls{0};
 std::atomic<unsigned> image_calls{0};
+std::atomic<bool> cover_available{false};
 std::atomic<bool> hold_images{false}, image_started{false}, offline{false};
 std::atomic<bool> hold_later_images{false};
 enum class ImageScenario { fallback, multiple, duplicates, aggregate, partial_aggregate, invalid, bounded, empty };
@@ -69,7 +72,7 @@ MetadataResult lookup_musicbrainz_disc(const DiscToc&, const MetadataOptions&) {
 ArtworkInfo lookup_cover_art_release(const std::string&, const MetadataOptions&) {
     ++cover_calls;
     ArtworkInfo result;
-    result.status = ArtworkStatus::unavailable;
+    result.status = cover_available ? ArtworkStatus::available : ArtworkStatus::unavailable;
     return result;
 }
 ArtistBackgroundLookup lookup_artist_backgrounds(std::string_view mbid, std::string_view key,
@@ -498,7 +501,47 @@ int main(int argc, char** argv) {
             check(!service.background_asset(first));
             check(service.background_url() != first);
         }
-        std::cout << "PASS: OFF zero requests; 0/1/multi delivery, deduplication, image/count/aggregate/candidate caps, all-reference revocation, cancellation and offline metadata independence\n";
+        {
+            const auto directory = std::filesystem::temp_directory_path() /
+                ("picdplayer-cover-http-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            struct Cleanup {
+                std::filesystem::path path;
+                ~Cleanup() { std::error_code error; std::filesystem::remove_all(path, error); }
+            } cleanup{directory};
+            std::filesystem::create_directories(directory / "cover-art");
+            const auto path = directory / "cover-art/fixture-release-0.image";
+            const auto write = [&](const std::string& bytes) {
+                std::ofstream output(path, std::ios::binary | std::ios::trunc);
+                output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+                check(output.good());
+            };
+            cover_available = true;
+            {
+                ArtistBackgroundPolicy policy;
+                EnrichmentService service(true, directory.string(), policy);
+                service.begin_if_needed(toc);
+                await(service, [&] { return service.snapshot().artwork.status == ArtworkStatus::available; });
+                check(!service.cover_asset());
+                write(artist_background_image_fixtures::png);
+                const auto image = service.cover_asset();
+                check(image && image->mime_type == "image/png" && image->bytes == artist_background_image_fixtures::png);
+                // Padding exercises the serving byte bound, not full image admission.
+                auto maximum = artist_background_image_fixtures::png;
+                maximum.resize(4 * 1024 * 1024, '\0');
+                write(maximum);
+                const auto bounded = service.cover_asset();
+                check(bounded && bounded->bytes == maximum);
+                maximum.push_back('\0');
+                write(maximum);
+                check(!service.cover_asset());
+                write({});
+                check(!service.cover_asset());
+                write("not an image");
+                check(!service.cover_asset());
+            }
+            cover_available = false;
+        }
+        std::cout << "PASS: OFF zero requests; 0/1/multi delivery, deduplication, image/count/aggregate/candidate caps, all-reference revocation, cancellation, offline metadata independence and cover serving bounds\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

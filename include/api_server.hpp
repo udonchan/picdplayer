@@ -43,6 +43,7 @@ struct ApiCommandResult {
 using ApiUiBootHandler = std::function<bool(std::string_view, std::string_view, double)>;
 using ApiStateProvider = std::function<std::string()>;
 using ApiReadPolicyProvider = std::function<std::string()>;
+using ApiArtworkValidator = std::function<bool(std::string_view)>;
 using ApiCommandHandler = std::function<ApiCommandResult(const ApiCommand&)>;
 using ApiCompletePcmProvider = std::function<ApiResponse(bool result)>;
 using ApiC2AssessmentProvider = std::function<ApiResponse()>;
@@ -72,7 +73,8 @@ public:
               ApiStateProvider read_history_provider = {}, ApiStateProvider artist_background_provider = {},
               ApiBackgroundArtworkProvider background_artwork_provider = {},
               ApiStateProvider disc_map_provider = {}, ApiCompletePcmProvider complete_pcm_provider = {},
-              ApiC2AssessmentProvider c2_assessment_provider = {});
+              ApiC2AssessmentProvider c2_assessment_provider = {},
+              ApiArtworkValidator artwork_validator = {});
     ~ApiServer();
     ApiServer(const ApiServer&) = delete;
     ApiServer& operator=(const ApiServer&) = delete;

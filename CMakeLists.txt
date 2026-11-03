@@ -311,6 +311,15 @@ if(BUILD_TESTING)
                                                       nlohmann_json::nlohmann_json)
         add_test(NAME api_server COMMAND api_server_test)
         set_tests_properties(api_server PROPERTIES TIMEOUT 10)
+        add_executable(api_image_http_test tests/api_image_http_test.cpp src/api_server.cpp src/logger.cpp
+            src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp src/repeated_read_verifier.cpp)
+        target_include_directories(api_image_http_test PRIVATE include ${CMAKE_CURRENT_BINARY_DIR})
+        target_compile_features(api_image_http_test PRIVATE cxx_std_20)
+        target_compile_options(api_image_http_test PRIVATE -Wall -Wextra -Wpedantic)
+        target_link_libraries(api_image_http_test PRIVATE PkgConfig::WEBSOCKETS Threads::Threads
+            nlohmann_json::nlohmann_json)
+        add_test(NAME api_image_http COMMAND api_image_http_test)
+        set_tests_properties(api_image_http PROPERTIES TIMEOUT 60)
         add_executable(c2_assessment_api_test tests/c2_assessment_api_test.cpp src/api_server.cpp src/logger.cpp
             src/ui_bundle.cpp src/cec_input.cpp src/repeated_read_policy.cpp src/repeated_read_verifier.cpp
             src/c2_assessment_session.cpp src/c2_reference_assessment.cpp src/media_worker.cpp
