@@ -1,5 +1,110 @@
 # 検証状況と残課題
 
+<a id="media-eject-20261104T1605"></a>
+## #293 通常ejectと再挿入の実機受入（2026-11-04）
+
+### 条件と開始前の区切り
+
+15:57 UTCの利用者指示により、#293の通常eject/再挿入・再生中eject・近接重複一組を実施した。
+最新remote master `e427eef`から専用branch `verify/293-eject-20261104`を作成し、
+元#284 worktreeの未commit3文書やprivate証拠は変更していない。
+設計/実装でeject202、EJECTING中の重複も202で別の操作を作らないこと、reader解放gate後の
+MediaWorker eject、正常再挿入後の自動再生を確認し、この契約を試験の正とした。
+
+pin/machine/boardは各commandで再照合した。既存Pi 3/Release/WPE/Custom UI、metadata有効、
+SINGLE、offset null/NONE、buffer750/startup45・ALSA200 ms、同じ通常14曲discを維持した。
+packageは`c9ff28e7c7a4f9b2663b97dac2cbaf31e7e5cb3c42d6c6286c6bc8ca38a13424`、
+配置daemon/WPE/wrapperのhashも前回基準と一致した。現在のmaster source/CI candidateを再配備した意味ではない。
+利用者はdrive独立給電、Pi→HDMI→TV→HDMI ARC→NR1200→パワードスピーカー、
+fan/ヒートシンクなしの構成変更なしと再確認した。今回室温は未測定で、前回20.1 Cは流用しない。
+
+15:57:47のsnapshotは背景OFFだったが、16:04:15にON/savedを確認した。
+切替の正確時刻/発行元は未計測。初回observer/actionはhelperのOFF仮定のguardで各exit1となり、
+eject POSTに到達していない。#293はOFFを要求しないため、helperのguardを現在の保存値保持へ訂正し、
+以後ON/savedを固定して試験した。製品不具合の修正や設定変更ではなく、失敗記録も保全した。
+また15:58:41.717 UTCの`main_loop_stall stage=api_service duration_us=111717`を開始前に観測し、
+[#289への別記録](https://github.com/udonchan/picdplayer/issues/289#issuecomment-6635751673)とした。
+今回のeject/背景変更を原因としたり、過去の別runのunderrunへ結合したりしない。
+
+### 有限手順と人のReceipt
+
+上限600秒。通常eject一回、同disc再挿入後の自動再生約10秒から再生中eject一回、
+再挿入と約30秒の再生/通常STOP後にEJECTING中の二要求一組、最後に同disc再挿入/約30秒/通常STOPとした。
+USB/給電/TV入力/設定/追加discは変えず、capture/assessmentは開始しない。
+各eject観測期限30秒は今回の中断判断であり、kernel ioctlの強制中断や製品の完了時間保証ではない。
+80 C/current制限・新read/USB異常・device世代変化等で通常中断し、POSTの自動再送はしない。
+
+| ケース（UTC） | 機械観測 | 人の観測 |
+|---|---|---|
+| STOPPED eject | 16:05:40.032708要求、202/15.109 ms、EJECTING→16:05:41.252800 NO_DISC、exit0 | 一回のトレイ開放・NO DISC表示が正常 |
+| 再挿入/再生中eject | 16:06:24頃PLAYING、16:06:34.313905要求、202/20.766 ms、16:06:37.609968 NO_DISC、exit0 | 自動再生/実音、排出時の音停止、一回開放と表示が正常 |
+| 重複一組 | 16:09:15.413373第一要求202/25.352 ms、EJECTING観測後15.598749第二要求202/20.713 ms、16:09:18.625479 NO_DISC、exit0 | 二重開閉なし、一回開放とNO DISC表示が正常 |
+| 最後の再挿入/STOP | 16:09:54頃PLAYING、16:10:24.650915 STOP204→STOPPED | 同disc認識・自動再生・実音・最後のSTOPPEDが正常 |
+
+利用者は一度「LOADINGは短くて未確認」と回答後、最終receiptで
+「Reading Discとして表示されていることは確認できた」と訂正した。
+TVの観測文言を保存し、APIのLOADINGから人の表示成功を推定しない。
+
+### 同時観測と終了状態
+
+observerは16:05:36〜16:10:25.222565 UTCの約4分49秒で予定したNO DISC三回と最後の再挿入/STOPPEDを
+検出して終了した。上限600秒まで無意味に延長せず、途中強制終了もしなかった。
+1033 record/966状態標本、標本間隔0.271〜0.505秒、56安全標本で52.616〜56.920 C/throttled全て0。
+ALSAはRUNNING207/PREPARED759、同streamの隣接RUNNING204組全てhw_ptr増加。
+PREPAREDを音出力やreader FDの解放証拠へ置換しない。CPU/RSSは今回は追加採取していない。
+区間service/kernel journalはexit0、stall/underrun/read error/USB異常/logger drop追加記録なし。
+標本間の全時点・50 ms未満・別条件まで保証しない。
+
+観測は同session/device1、disc世代1→2→3→4、stream16→44を保持/更新した。
+16:14:52.855795 UTCの最終snapshotは同disc AUDIO_READY/STOPPED/track1/frame0、
+SINGLE/restored/pendingなし、背景ON/saved、offset null/NONE、capture/assessment非busy、
+retiring_io=false、daemon569/WPE574 active/NRestarts0、55.306 C/throttled0だった。
+配置物/package/default1file/Custom UI7fileのhashはON確定後の開始前と一致した。
+settings.json本体と実行中exeの直接hashは既存権限制約のまま未確認。
+agentのtransport POSTはeject4件（全202）とSTOP2件（全204）、Play/設定POSTは0。
+service restart・cold boot・再配備やforcekillは行わず、最後も通常稼働へ保持した。
+
+reader解放gate後のeject完了、音停止、ALSA、状態と物理開放を対応付けた受入であり、
+実再生FDやCDROMEJECT ioctl発行回数そのものは直接検査していない。
+captureのreader_releasedや一回の目視開放を直接FD検査/一ioctlの証明へ流用しない。
+
+### 残条件とIssueの区切り
+
+既存文書/Issueのread-only調査で、#166の標準UIには実曖昧候補のTV/物理選択・実音receiptがあり、
+再選択も人が確認済みと分かった。None of these/DECLINEDはPi上CDP/API成功だけで、
+CEC辞退と実音は未確認だった。現在discは候補1件SELECTEDのため、その条件付き差分を新設
+[#296](https://github.com/udonchan/picdplayer/issues/296)へ移管した。過去標準UIを現在Custom UIの
+再試験結果にせず、未到達をPassにしない。追加disc探し/provider比較も行わない。
+通常ejectの確認済み代表単位として#293をClosed/Completedにし、旧本文を保存して移管先と限界を明記した。
+
+16:12:34 UTCに利用者は、disc挿入から自動再生の体験は良いが背景の出現が唐突なのでfade-inを望むと報告した。
+独立改善[#295](https://github.com/udonchan/picdplayer/issues/295)へ記録し、16:14:16 UTCの希望で
+初回fade時間を2秒とした。写真間の45秒dwell/4秒fadeとは別責務で、今回は実装・配備していない。
+この改善待ちで#293を引き延ばさず、背景ONの今回の正常操作を#282の写真切替Passにも転用しない。
+
+### 証拠とCommand
+
+host永続private領域`/Users/udonchan/.ssh/picdplayer-pins-20261104/`に以下を保全する。
+
+- `media293.py`: host/remote構文を検査した有限observer/action。最初のOFF仮定guardによる
+  `acceptance-293-observe-20261104T160340Z.jsonl`と`acceptance-293-stopped-20261104T160347Z.jsonl`は
+  各exit1・POST0であり、製品失敗や実eject caseに加算しない。
+- `acceptance-293-observe-20261104T160534Z.jsonl`: observer exit0。
+- `acceptance-293-stopped-20261104T160539Z.jsonl`: 通常eject exit0、16 record。
+- `acceptance-293-playing-20261104T160548Z.jsonl`: 再生中eject exit0、196 record。
+- `acceptance-293-duplicate-20261104T160914Z.jsonl`: 重複一組 exit0、32 record。
+- `acceptance-286-boot-20261104T155745Z.json`、`...T160413Z.json`、`...T161450Z.json`:
+  既存read-only snapshot helperを再利用した開始前/設定再確認/最終証拠、各exit0。
+  filenameにbootが含まれるが、今回cold bootを実施した意味ではない。
+
+全JSONを再集計し、状態遷移/件数/ALSA進行/温度・電源/POST数と最終journalを確認した。
+`verify_media293.py`でraw/有限時間/POST数/設定保持/Issue状態と2秒要望を40 assertionで再検証しexit0。
+文書差分全体を確認し、`git diff --check`も成功し、受入終了時点では専用branchで未commitのまま保持した。
+続く16:25:21 UTCの利用者指示で今回の2文書をcommit/PR経由のmaster統合対象とする。
+元#284の未commit文書やprivate証拠は公開しない。公開時の新しいCI結果と、今回の実機配備品/受入証拠は区別する。
+Issue本文更新は一度draft path誤記でexit1・変更前に停止し、訂正後に成功した。
+製品source/test変更・build/CTest・新packageはなく、過去CIを今回の試験件数へ加算しない。
+
 <a id="acceptance-issue-split-20261104"></a>
 ## 受入成果と独立障害の追跡整理（2026-11-04）
 
