@@ -1,5 +1,49 @@
 # 残課題とIssue一覧
 
+<a id="normal-kiosk-20261104T1326"></a>
+## #286通常構成・Cold Bootと#289有限窓（2026-11-04）
+
+下記のpin不在は物理consoleとのhost-key/machine/board identity照合で再確立して解消した。
+既存配備Release/SINGLE/背景OFF・metadata有効・Custom UIを維持し、通常service/WPEで
+13:26〜13:36 UTCの600秒機械観測を一回実施した。運転116標本、ALSA隣接同stream109組の進行、
+STOP204後STOPPED・設定保持を確認。区間stall/underrun/read/USB異常の追加記録なし。
+13:40:34 UTCに利用者が再生中のTVリモコン操作正常、13:42:38にTV/実音も問題なしと報告した。
+通常構成10分窓の限定Passとする。全体Pass/長期安定性へ拡張しない。
+運転後13:39:30 UTCの別USB disconnect/reconnectを観測し、通常STOPとservice正常終了0を確認した。
+一旦両serviceを安全停止し、人のreceipt受領後に正常cold bootへ進んだ。
+hotplug復旧試験や権限拡大へ迂回しない。
+利用者は物理操作なし・同時刻にNO DISC表示を見たと回答した。自発的USB切断の原因は未特定のまま。
+既存権限での通常poweroffはpassword要求で拒否されたため、認証付き通常shutdownと一回のcold bootは
+利用者のconsole操作で実施した。通常shutdown完了後の電源切入とkiosk起動目視を受領し、
+新boot/同disc認識/STOPPED/SINGLE・背景OFF復元/同package・Custom UIを照合した。
+起動後30秒の代表再生も機械exit0と利用者の表示・実音・停止正常を受領し、この最初の一単位を限定Passとする。
+前bootのOS shutdown journalは非永続で追認不能。実再生FDの直接検査・長期/標準UI/速度A/B/eject残条件は未確認。
+開始前のprobe権限エラーは新bootで出ていないが、USB原因解決や物理hotplug受入にはしない。
+詳細・command・証拠・限界は[有限窓の記録](verification.md#normal-kiosk-20261104T1326)を参照する。
+写真#282は2枚以上取得済みの開始条件を確認できず、設定を変えず今回未実施/UNKNOWN。
+#289はSTOPPED/Release/SINGLE/OFFで独立した60秒窓を上限2区間実施した。
+初回は受信4件/利用者の操作見失いで条件未達exit1、再試行は方向10件/60.060秒・異常なし報告・exit0。
+両区間stall/underrun/read/USB異常記録なしだが、原因は未再現/未特定のまま。
+詳細は[独立CEC区間](verification.md#cec-stopped-20261104)を参照し、追加matrixや架空の修正は加えない。
+最終14:01 UTCは両service active/NRestarts0・STOPPED/SINGLE/OFF・設定/UI/hash保持を確認した。
+受入作業終了時点ではproduction変更/build/再配備・commit/push/PR/Issue編集はなかった。
+その後14:10 UTCの利用者指示で今回の記録2文書をPR経由のmaster統合対象とした。
+元#284作業branchの未commit3文書とprivate証拠は統合対象に含めず、#286/#282/#289全体は完了扱いにしない。
+
+<a id="acceptance-preflight-blocked-20261104"></a>
+## #286の開始前制約（2026-11-04）
+
+最新`refs/remotes/origin/master`をfetchし、#286/#282/#289の最新本文・コメントと
+既存の未commit引継ぎを照合した。指定private一時領域が空で保存pinned SSH wrapper・
+machine/board identity・配備receiptを参照できず、利用者も保全先を確認できなかった。
+独立給電の利用者報告は受領したが、実機接続・通常10分運転・cold boot・写真/CEC試験は未実施。
+現在鍵の再採用や権限拡大で迂回せず、信頼済みidentityの所在回復と照合を再開条件とする。
+通常受入は#286、条件付き写真受入は#282、未解明stallは#289が所有する。
+旧#284の追跡置換を原因解決とせず、旧#279の再調査もしない。
+詳細と証拠の限界は[開始前照合](verification.md#acceptance-preflight-blocked-20261104)を参照する。
+当初は専用branchの未commit記録として保持した。今回の公開単位は上の受入記録と本開始制約であり、
+既存の#284未commit文書のmaster統合ではない。
+
 <a id="image-http-implementation-20261103"></a>
 ## #49のHTTP実装単位（2026-11-03）
 
@@ -349,8 +393,8 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 |---|---|
 | 直近1（HTTP実装後） | #49: JPEG/PNG/WebP admissionを保全し、保守的なHTTP実装とPi 3隔離3/3まで完了。[最終review/PR統合](verification.md#image-http-review-integration-20261103)へ進む。全decoder/RSS/GPU・Zero 2 Wは保証外で、追加の終了gateとしない |
 | 入力待ちの実機受入 | #285（#264後継）: report/明示C2評価は実装済み。独立reference/challenge・offset根拠を必要とする実assessment/能力実機受入を残す。過去の権限エラーからroot化や非対応を推測しない |
-| 残観測の分類 | #284（#121後継）: PR #243の限定診断修正は統合済み。固定packageでのcontrol/CEC等の未解明観測を分類し、原因解決扱いしない |
-| 残通常受入 | #286（#184後継）: 固定構成・時間・操作列での全通常構成、cold boot、速度条件比較。manual30分や短い利用者試験を全条件成功にせず、#282の同runを参照する |
+| 残観測の分類 | #289（#284/#121後継）: PR #243は統合済み。11月4日の[独立CEC区間](verification.md#cec-stopped-20261104)は条件未達1・有効10入力1run、stall未再現。未解明stageの原因帰属・必要な修正/再検証を残し、#284の追跡置換を原因解決としない |
+| 残通常受入 | #286（#184後継）: 11月4日の[既存Release/Custom UI・通常10分と正常cold boot一回](verification.md#normal-kiosk-20261104T1326)は限定Pass。運転後の自発USB切断は別記して未解明。標準UI/長期/速度比較/eject等は残し、短い成功を全条件成功にしない |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
 | 完了したv1表示 | #164: policy/strategy・長文表示と代表確認を完了してCompleted。追加hardeningは#250でv2以降へ延期 |
 | 実装済み・限定受入待ち | #10: 補正試聴/TV端表示、#88: 観測可能な物理hotplug、#282: 複数実写真/残目視。#252の代表物理操作Passを再要求しない |
