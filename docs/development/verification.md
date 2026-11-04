@@ -1,6 +1,254 @@
 # 検証状況と残課題
 
-最新追記: 2026-11-03。実装済み、hardware非依存試験済み、実機確認済みを区別する。
+<a id="normal-kiosk-20261104T1326"></a>
+## #286 Custom UI通常構成の10分機械観測（2026-11-04）
+
+### Identity再確立と開始条件
+
+実機の最終照合は14:01 UTC。途中時点の中断/未受領も時系列として残し、最終結果は
+下記のcold boot・#289・終了状態を参照する。
+14:10 UTCに利用者からmaster統合の指示を受けたため、独立audit済みの今回の受入記録2文書を
+専用branchからPR経由で公開する。元#284 worktreeの未commit3文書やprivate証拠は含めず、
+本節の「commit/push/PR操作なし」は受入作業終了時点の履歴として維持する。
+
+下記の開始前制約の後、利用者が識別したPiのローカルconsoleでED25519 host-key fingerprintを取得し、
+Macの候補鍵との一致を13:19:25 UTCに報告した。pinをhostの永続private領域へ確定し、
+StrictHostKeyChecking=yes / 専用UserKnownHostsFile / GlobalKnownHostsFile=/dev/null /
+HostKeyAlgorithms=ssh-ed25519 / UpdateHostKeys=noで接続した。
+取得したmachine-id hash・NUL除去board serial hash・modelも利用者がconsoleと一致したと
+13:22:30 UTCに報告した。これは今回の物理consoleから再確立したidentityであり、
+失われた過去のpin/hashとのbyte一致を確認した意味ではない。以後のrunでも同hashを照合する。
+pin/identity本体とraw証拠はGitへ含めない。
+
+13:23 UTCのpreflightはPi 3 Model B Rev 1.2、Linux 6.18.50+rpt-rpi-v8/aarch64、
+STOPPED/track1、capture/assessment非busy・解放済み、media IDLE、温度51.5 C・throttled0だった。
+配置daemon/WPE/wrapperのSHA-256とtargetに残るpackageのSHA-256は依頼の11月3日配備基準と一致した。
+packageは`c9ff28e7c7a4f9b2663b97dac2cbaf31e7e5cb3c42d6c6286c6bc8ca38a13424`、
+daemonは`a825a8eb6efdd4907919c91501d10b0fb60451a785fdf483d57b74ad0f5436c1`。
+起動journalはRelease/WPE primary/Inspector off、buffer750/startup45・ALSA200 ms、
+metadata有効、Custom UI `/srv/picdplayer-ui-dev-20261020-aria`を示した。
+現在の要求/実効SINGLE・pendingなし、背景要求/実効OFF・saved/restored、offset null/NONEを維持した。
+discは既存metadataで大森靖子『魔法が使えないなら死にたい』14曲、leadout242334。
+開始時のCustom UI7fileと読取可能なdefault設定1fileのhashをprivate preflightへ保存した。
+`/etc/default/picdplayer-kiosk`は存在しなかった。過去記録のdefault2file一致を今回へ流用しない。
+drive独立給電は今回利用者が確認済み。13:51:28 UTCに出力経路
+Pi→HDMI→TV→HDMI(ARC)→オーディオレシーバ(NR1200)→パワードスピーカー、
+fan/ヒートシンクなし、室温20.1 Cと報告を受領した。給電/冷却は人の申告、温度/制限値は機械標本である。
+
+開始時のdrive probeには`open /dev/sr0: Permission denied`が残っていた。
+現在のnodeはroot:cdrom/0660、daemonの実補助groupはcdrom/audio/videoで整合した。
+06:41:02のUSB disconnect、再接続時descriptor error -71、06:41:08の再出現/世代11を
+過去journalで別途確認した。これを今回のrun内異常や原因確定へ結合しない。
+速度起動要求は2xだが、現probeはspeed_control UNKNOWN・要求未適用、API requested_speed_x=null。
+過去の要求成功や実測速度を現在値に流用しない。再生は実際に成立したが、probe失敗原因は未確定。
+権限変更・service再起動・hotplug復旧試験は追加していない。
+
+### 有限手順と機械結果
+
+物理Playを180秒以内に待ち、最初のPLAYING観測から600秒を上限にするcollectorを使用した。
+事前案内はPlay、3分Pause、3分10秒Resume、5分Nextを各一回、最後はcollectorの通常STOP。
+設定/背景/TV入力/disc変更はせず、80 C/current制限・新USB/read異常・device世代変化・
+予期しない取得/設定変更/早期停止で中断する。音切れ等は人がSTOPして報告する手順とした。
+80 Cは今回の保守的中断条件であって製品保証値ではない。
+
+| 項目 | 観測した範囲 |
+|---|---|
+| 時間 | preflight/search開始13:26:27.495877 UTC、最初のPLAYING観測13:26:54.801872、最後のsample elapsed600.162秒、通常STOP13:36:55.102577、終了13:36:55.920783 |
+| 件数 | JSONL248 record、sample121件（待機5・運転116）、運転PLAYING113/PAUSED3。sample間隔0.668〜5.281秒。連続全時点の状態を証明しない |
+| 状態変化 | 最初track1/stream36、184.063秒sampleでPAUSED/stream37、199.724秒で再生/stream39、304.858秒でtrack3/stream41。自動曲移動を含み、Nextの押下数/正確時刻は人のreceiptと区別する |
+| ALSA | PID71418のHDMI statusでRUNNING112/PREPARED4。同streamかつ隣接RUNNING109組全てhw_ptr増加。初回prebuffer/PAUSEDを含むPREPAREDをunderrunへ読み替えない |
+| 初回read | journalのfirst_read3054.455 ms、別境界のprebuffer_wait3243 ms。main-loop stallや可聴欠落へ置換しない |
+| 温度/電源 | sample51.540〜57.996 C、throttled全て0。sample間の一過性制限の否定ではない |
+| RSS | 運転sampleのdaemon13596〜15688 KiB、launcher97156〜97176、network48440〜48652、WebProcess205320〜268836。増加を長期leakの確定/否定へ使わない |
+| 世代/service | session98ac95f1917799c1fce41389674bdb2c、device11/disc16を保持。終了時daemon71418/WPE71433 active・NRestarts0 |
+| 区間log | 13:26:27.495877〜13:36:55.920279採取のservice/kernel journalはexit0。main_loop_stall/underrun/read error/USB異常/logger drop記録なし、kernel追加entryなし。Releaseで抑制された入力INFOや50 ms未満を観測した意味ではない |
+| 終了 | STOP204後STOPPED/track1/frame0、SINGLE/pendingなし・背景OFF/saved/restoredを確認。capture/assessment解放flagを実再生reader FDの証拠に転用しない。systemd UIDの再生FDは未検査 |
+
+機械collectorはexit0で有限窓を完了した。13:40:34 UTCに利用者から
+「再生中にTVリモコンの操作をし、これは正常でした」と受領し、今回の物理入力の限定Passとする。
+この受領時点では個々の押下数/正確時刻、TV表示・実音/音切れ有無の個別結果は未報告だった。
+API状態変化から聴感/TV/押下のPassを推定しない。正常shutdown/cold bootの後続結果は下記に分ける。
+今回の10分を長期安定性・標準UI受入・#286全体の完了としない。背景OFFであり#282の切替成功でもない。
+
+続く13:42:38 UTCの利用者回答で、今回運転中のTV表示・実音/音切れ/雑音について「問題なし」と
+受領した。従って今回の10分窓は、通常構成での人のTV/実音/物理入力の限定Passと機械結果を
+同runへ対応付ける。接続/冷却詳細は後の報告を上記に追記し、個々の押下正確時刻の未報告は維持する。
+
+### 運転後の別USBイベントと正常停止
+
+正常shutdown準備のためのidentity/STOPPED/nonbusy guardはAssertionError/exit1で拒否し、
+そのcommandはservice停止に到達しなかった。合成条件のどの状態が拒否時点で不一致だったかは
+採取しておらず断定しない。直後の13:39:41照会はSTOPPED/nonbusy、media RUNNING、
+device世代13/disc19であり、13:39:30.146 UTCのUSB disconnectと13:39:31の再出現を別途確認した。
+これは10分run終了の約2分35秒後で、run内異常と結合しない。この調査時点では物理操作の有無が未報告だった。
+新規USBイベントを通常受入中の中断条件として扱い、hotplug/復旧matrixや原因不明の修正へ進まなかった。
+13:42:38 UTCの利用者回答は、同時刻にdrive/ケーブル/電源を「触っていません」、
+「画面上で１度NO DISCになったのを確認しています」だった。物理操作なしの自発的USB切断と
+TV状態変化の対応を保全する。供給電源・USB接触・drive/bridge・OS等の原因は未特定で、
+アプリのSTOPや今回のstallがUSBを切断したと断定しない。cold boot成功で解消済みにもしない。
+
+13:39:56にpin/machine/boardを再照合し、通常STOP、kiosk→daemonの通常service stopを行った。
+13:39:57.443にSIGTERM受領、output stopped/waiting for outstanding drive I/Oの後、
+13:39:57.461にdaemon正常終了。両serviceはMainPID0・inactive/dead・Result=success・
+ExecMainCode1/ExecMainStatus0を確認し、commandはexit0だった。強制終了や電源断は使用していない。
+processの通常終了までを確認した範囲であり、STOP直後の再生FDを直接検査した証拠ではない。
+13:40:28の再照会も両service停止・pin/identity/hash一致、温度52.6 C/throttled0だった。
+この時点ではserviceを安全停止のまま保持し、人のreceipt受領後に下記の正常cold bootへ進んだ。
+これは利用者在席の包括的再承認ではなく、人の観測をAPIで代替しないための受入境界である。
+
+### Cold Bootの準備と権限制約
+
+13:43:57 UTCにpin/identity・両serviceの正常停止とboot時enabledを再照合した。
+温度53.154 C・throttled0。`sudo -n /usr/bin/systemctl poweroff`は
+`sudo: a password is required`でexit1となり、OS shutdownは実行されなかった。
+sudoers追加や別経路の迂回はしない。利用者が既存consoleで通常の認証付きpoweroffを行い、
+正常shutdownの完了を確認してからPi電源を一回切り入れする手順を案内する。
+drive独立給電・ケーブル・discは変更せず、起動後はPlayせずPlayer到達/STOPPEDを確認する。
+shutdown指示の受理と物理電源断可能な状態を混同せず、起動後の機械/人の結果は別途受領する。
+この追記時点ではshutdown/cold boot未確認であり、通常service stopをcold bootと扱わない。
+private command証拠は`acceptance-286-poweroff-20261104T134357Z.log`、実行scriptは`poweroff_once.py`。
+
+### Cold Bootと代表再生の結果
+
+13:47:09 UTCに利用者からcold boot後のkiosk起動目視を受領した。
+後続の確認回答で、通常poweroffのshutdown完了を確認してから電源を一回切り入れしたことも受領した。
+agentのpoweroff失敗を成功へ書き換えず、正常OS shutdownと物理切入の証拠はこの利用者報告とする。
+前bootのjournalは非永続で`no persistent journal was found`だったため、OS shutdown全経路を
+機械logから追認したとはしない。変更前にhostへ保全したservice正常終了記録とは区別する。
+
+13:47:18 UTCのpin/identity照合後snapshotは新boot ID・fresh session
+`071a518153be5b0e1e881c054e08e064`、daemon569/WPE574 active・NRestarts0、
+同disc AUDIO_READY/STOPPED/track1/frame0、要求/実効SINGLE/pendingなし・背景OFF/saved/restored、
+offset null/NONE、capture/assessment IDLE/非busy/解放済みだった。
+package/配置3file/default1file/Custom UI7fileのhashは開始前と一致した。
+settings.json本体hashはPermissionErrorで未確認のまま、権限を広げずAPI復元と区別する。
+実行中exeの直接hashも今回未取得で、配置pathのhashとの一致を直接観測したとはしない。
+起動journalはRelease/WPE primary/Inspector off、buffer750/startup45/ALSA200 msを示した。
+CECは13:45:39の新規claimと13:45:40の確認、13:45:45の待機と13:45:46の再確認を記録した。
+これらはcold boot区間の記録であり、後の#289へ混ぜない。TV first pixelや起動高速化は評価していない。
+新bootのdrive probeは成功し要求2xのreceiptも得たが、実回転/throughputやUSB障害の解消を保証しない。
+既存のdirect-c2-pointers opt-inを変更せず、SINGLEの実効strategyはcapability判明後の
+`direct-c2-pointers-single-read`へ変わった。C2 trustはUNKNOWN、実assessmentは開始していない。
+
+独立した起動後代表再生は、物理Play後13:49:18.959721〜13:49:49頃の30秒窓、
+13:49:50.035210 UTCに終了した。collector exit0、32 record/13 sample（待機含む）、
+sample温度53.154〜56.382 C・throttled0、区間stall/underrun/read/USB異常の追加記録なし。
+通常STOP204後STOPPEDと同service生存を確認し、利用者は表示・実音・最後の停止すべて正常と回答した。
+この一回の正常cold boot/代表操作を限定Passとし、反復boot・電源断耐久性・USB原因解決へ拡張しない。
+
+<a id="cec-stopped-20261104"></a>
+### #289 独立したSTOPPEDのCEC入力区間
+
+同じ既存Release/SINGLE/背景OFF・metadata有効・Custom UI、STOPPEDを毎回直前照合した。
+各runでpin/machine/boardとpackageを照合し、stream8/device1/disc1を固定した。
+入力は右/左を交互に5秒おき、10 press/releaseを最初の入力から60秒内に行う手順とした。
+collectorはread-only APIと追加の一時loopback `WS /api/navigation`を使用し、
+semantic actionの受信時刻を保存した。raw CEC press/release packet時刻を直接測定したわけではない。
+設定変更/TV入力切替/claim操作はなく、起動時の新規claimは上の別区間に属する。
+両runともcollectorのtransport/設定POST0、emergency STOP0。未再現時の追加診断や閾値変更はしない。
+
+| 区間（UTC） | 入力・結果と限界 |
+|---|---|
+| 13:57:05.348657〜13:58:05.543297 | 60.060秒、受信4件、38 record/15 sample（待機含む）、52.078〜55.306 C/throttled0。利用者が操作を見失ったと申告し、10回条件未達でexit1。アプリ障害や10回試験Passではない |
+| 13:59:12.779890〜14:00:12.980171 | 60.060秒、右/左交互10件、受信elapsed0.001/5.534/10.145/15.194/20.264/25.185/30.366/35.837/40.027/45.680秒。44 record/15 sample（待機含む）、52.078〜55.844 C/throttled0、exit0。利用者も10回実施・異常なしと報告 |
+
+両runの全sampleはSTOPPED、同stream/deviceを保持し、区間service/kernel journalはexit0・追加entryなし。
+従ってこの区間に記録されたmain_loop_stall/underrun/read/USB異常はなく、原因帰属に必要なstallは未再現。
+50 ms未満や全loopの無遅延、他stage/操作/長期条件まで保証しない。初回条件未達を含め上限2区間で終了した。
+有効な10回条件は一runだけであり、「2run全合格」としない。新規claim条件や性能matrixは追加しない。
+#289の根本原因は未特定のままで、production修正・追加worker・診断追加/50 ms緩和は行わなかった。
+
+### #282と最終状態
+
+現在discで2枚以上の実写真が取得済みという条件を確認できず、背景OFFを維持した。
+過去の同disc1枚PassやOFF時の画像参照0から現在のprovider写真数上限を推定しない。
+ON要求・追加provider/key・別disc探索・Custom UIへの注入は行わず、複数切替/dwell/fade/可読性/音声、
+fallback/reduced motion/保存案内等の残項目は今回未実施/UNKNOWN。#286の背景OFF成功を写真試験へ流用しない。
+
+14:01:34 UTCの最終read-only照合はpin/identity一致、STOPPED/track1/frame0、
+SINGLE/restored/pendingなし、背景OFF/saved/restored、offset null/NONE、同session/stream8/device1、
+capture/assessment非busy・解放済み、daemon569/WPE574 active・NRestarts0だった。
+package/配置3file/default1file/Custom UI7fileは開始前と一致し、温度54.768 C/throttled0。
+新bootからこの照合までの保存service journalにstall/underrun/read error/logger drop、
+kernelに新しいUSB disconnect/error -/under-voltage/over-current記録なし。
+通常設定を書き換えておらず保存値の復元操作は不要で、両serviceは通常bootで稼働へ戻った。
+未解明の自発USB切断と過去stallは解決済みではない。#286全体/#282/#289の終了判断・Issue操作は行わない。
+
+### 証拠とCommand
+
+永続host private領域`/Users/udonchan/.ssh/picdplayer-pins-20261104/`に
+`collect_acceptance.py`と`acceptance-286-20261104T132627Z.jsonl`（mode0600）を保持する。
+JSONL SHA-256は`78f325058b493870d471155855aae6e7695621daa88f256d97b8fb74804bdb7e`。
+sourceはhost側からpinned SSH経由でremote Pythonを実行し、約5秒ごとのAPI/ALSA/resource/温度/電源、
+区間journalと正常STOP/postcheckをhostへ保存する。PCM/写真は取得保存していない。
+host/remote Python構文検査は成功、`python3 .../collect_acceptance.py`はexit0。
+別のJSON集計で件数・状態遷移・ALSA進行・温度/RSS・最終journalを再確認した。
+正常停止後のraw記録は同directoryの`acceptance-286-post-stop-20261104T134028Z.log`へ
+`save_post_stop.py`で保存し、exit0。開始前の`getfacl`はtargetにcommandがなく未実行で、
+ACL検査成功とはしていない。sudoers/proc/device権限は拡大していない。
+追加private証拠は`acceptance-286-boot-20261104T134715Z.json`、
+`acceptance-286-postboot-20261104T134844Z.jsonl`、
+`acceptance-289-20261104T135647Z.jsonl`、`acceptance-289-20261104T135856Z.jsonl`、
+`acceptance-286-boot-20261104T140132Z.json`。各runを混ぜず保持する。
+`collect_boot_once.py`は初回/最終各exit0、`collect_acceptance.py postboot`はexit0、
+`collect_cec_once.py`は初回exit1（4件/条件未達）・再試行exit0（10件）。各scriptのhost/remote構文も検査した。
+通常の製品source/test変更・build/CTest・新package生成/配備はない。過去の80/80を再実行件数へ加算しない。
+最後の独立read-only文書auditは、今回の差分・許可したprivate artifact・供給した人のreceiptを照合し、
+数値/時刻/状態/受入境界に具体的な不整合を認めなかった。ALSA進行・温度/RSS・件数/hashも再集計した。
+実機の独立再試験や全履歴commandの検証ではなく、人の観測は供給receiptに依存する。
+host側exit表示はsessionのtool出力に保持し、JSONL内の結果とscriptの終了条件も照合した。
+最終`git diff --check`はexit0。既存#284 worktreeの未commit3文書は変更せず、今回もcommit/push/PR/Issue操作なし。
+
+<a id="acceptance-preflight-blocked-20261104"></a>
+## #286実機受入の開始前照合と中断（2026-11-04）
+
+以下は13:13 UTC時点の中断記録であり、後のconsole照合による再開と実機観測は上の節を正とする。
+
+13:07:51 UTCの依頼で#286の通常構成10分運転と正常cold boot一回を先行し、
+条件が揃えば#282、独立した60秒の#289へ進む作業を開始した。
+13:13:57 UTCまでの開始前照合で、保存済み実機identityを確認できず、実機run開始前に中断した。
+単なる計画提示による終了ではなく、指定された信頼済み接続証拠の不在が開始制約である。
+
+`git fetch origin`はexit 0。正本`refs/remotes/origin/master`は
+`829bbfb259accff3ce1c3cdeceebb80f3c218e3d`だった。同名local保存branchは使用していない。
+`gh issue view 286/282/289 --json number,title,state,body,comments`は各exit 0、
+全てOpen・コメント0件と照合した。古い本文の#284/#184参照は現所有先の根拠にしない。
+#284は追跡置換であり、未解明stallは#289、通常継続は#286が所有する。
+
+AGENTS.md、文書index、操作・systemd・Mac/Docker build/deploy・Custom UI手順、
+[非目視run](#pi-nonvisual-20261102T2348)、[利用者報告](#manual-report-20261103T0118)、
+[HTTP統合](#image-http-review-integration-20261103)を読んだ。
+既存branch `issue/284-main-loop-stalls-20261103`の未commit文書3ファイルと
+`stall-classification-20261103` / `stall-handoff-20261104`追記も参照したが、
+本branchやmasterへ取り込んだことにはしない。既存差分は変更していない。
+
+### 開始制約と観測境界
+
+- 指定されたhost private一時領域をReadすると0件だった。指定のpinned SSH wrapperと
+  配備receipt.jsonもFile not foundだった。削除時期・原因、他の保全先の存在は未確認である。
+- 利用者に所在を確認し「保全先を確認できない」と回答を受領した。
+  現在取得したhost keyをpinへ置換せず、network addressだけで同じPiと判断しなかった。
+- 利用者は今回「独立給電を確認」と報告した。TV/音声経路・冷却・現在画面の詳細は未報告。
+  この物理構成報告を温度/current制限・実音・正常運転の機械計測へ代用しない。
+- SSH接続、API照会/POST、service操作、再配備、shutdown/電源操作は全て未実施。
+  現在package/profile/UI/設定/disc/OS・playback/capture/assessment/media I/Oは未確認。
+  過去の配備hash・idle・SINGLE/OFFを今回の現在値として採用していない。
+- #286の10分運転/cold boot、#282の写真条件、#289のCEC区間は全て未実施/UNKNOWN。
+  run開始/終了時刻、標本数、stall/underrun/read/USBの検索区間、温度/電源値はない。
+  正常STOP・reader退役・shutdown・復元成功も確認していない。
+
+### 保存と再開境界
+
+この時点の新規文書は最新remote master基準の専用branch `verify/286-hardware-acceptance-20261104`、
+別worktree `acceptance-286-20261104`へ未commitで保持した。元worktree・保存branchは保全する。
+今回の証拠はsession内のRead結果・command出力・利用者回答であり、新しい実機raw証拠はない。
+production/test source変更、build/CTest/sanitizer、package生成、commit/push/PR/Issue変更はない。
+過去の80/80やpackage lifecycle成功を今回の実行件数へ加算しない。
+信頼済みhost-key pinと保存machine/board identityの所在回復・照合後に、現在状態を採り直す。
+その前に受入操作を開始せず、#286全体や他Issueを完了扱いにしない。
+
+以下は2026-11-03までの要約。11月4日の最新状況は上の受入記録を参照する。
+実装済み、hardware非依存試験済み、実機確認済みを区別する。
 利用者の新しい統合/close承認と残事項の現所有先は[追跡移管](#acceptance-handoff-20261103)を参照する。
 最新の[利用者試験報告](#manual-report-20261103T0118)では、現在のCustom UI/discでTV・物理remote・短い試聴・
 policy表示・1枚写真条件の背景ON/OFFをPassとして受領した。複数写真切替は未実施、開始設定への最終復元は未実施。
