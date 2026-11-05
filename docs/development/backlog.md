@@ -1,5 +1,64 @@
 # 残課題とIssue一覧
 
+<a id="v1-scope-20261105"></a>
+## v1の対象範囲（2026-11-05）
+
+目的はIssueの強制終了ではなく、v1 releaseまでの採用作業・残受入と、対象外/条件待ちを見通せるようにすること。
+既存`Pending`付き10件を除くOpen22件について一問一答で判定し、00:54:47 UTCの利用者指示で
+本文・label・本一覧へ反映した。以下を現在のv1対象判断の正とし、後続の過去時点の優先順や
+v1/v2記述は履歴として読む。確認済み結果・未実施・未解明の事実は書き換えない。
+
+### v1対象（15件）
+
+| Issue | 採用した作業・残受入の範囲 |
+|---|---|
+| [#10](https://github.com/udonchan/picdplayer/issues/10) | 明示offset条件の試聴とTVの端除外/入力根拠表示。通常CDの短い診断用正負条件と正常復元を対象とし、物理校正・傷媒体・別driveは#146の別範囲 |
+| [#45](https://github.com/udonchan/picdplayer/issues/45) | 正式配布artifactと公開条件/手順。配布先・保持・署名等は全候補を実施せず、採否判断と採用範囲/見送り理由を記録 |
+| [#46](https://github.com/udonchan/picdplayer/issues/46) | 主目標をTVリモコンだけでの初回セットアップとし、対象設定・初期account/権限/network/serviceと#47との要件/実装分担を再整理 |
+| [#47](https://github.com/udonchan/picdplayer/issues/47) | bootable製品imageの生成・Imager導入・Pi起動・Player到達・基本操作/実音。#46と再整理し、#3の未実施起動項目を集約して必要な計測/短縮の採否を決める |
+| [#66](https://github.com/udonchan/picdplayer/issues/66) | v1で実際に採用/同梱する構成に絞った本体license確定・直接依存監査 |
+| [#67](https://github.com/udonchan/picdplayer/issues/67) | 実packageのfile/依存/copyright等を追跡し、#66と既存manifestへ接続 |
+| [#68](https://github.com/udonchan/picdplayer/issues/68) | 実imageに対応したinventory・必要な配布資料。SBOM等の成果物/形式を採否判断し全候補を義務化しない |
+| [#88](https://github.com/udonchan/picdplayer/issues/88) | 統合済みsoftwareを保全し、有限の物理hotplug/resetと正常退役・世代/旧結果拒否・復帰を実機受入。安全条件と観測可能なeventを先に固定 |
+| [#220](https://github.com/udonchan/picdplayer/issues/220) | 成立済みWPE供給を作り直さず、製品image適合・構成/供給記録・必要な権限/sandbox・保守/復旧を具体化。#46/#47と同じrunを再利用 |
+| [#282](https://github.com/udonchan/picdplayer/issues/282) | 既存写真/基本操作Passを保全し、必要な複数写真・残目視を選定。短く補完可能な表示と条件待ちを別チェックにし、未達/除外理由を残す |
+| [#283](https://github.com/udonchan/picdplayer/issues/283) | 適合offset/profileを確定し、実capture取消→実reader退役→通常再生/実音を同runで受入。C2独立referenceは必須入力にしない |
+| [#285](https://github.com/udonchan/picdplayer/issues/285) | 通常の能力応答/UNKNOWN等の確認と、独立reference/challenge・alignment/offset根拠を要する実assessmentを分けて残受入 |
+| [#291](https://github.com/udonchan/picdplayer/issues/291) | 現Custom UIを最終的に通常UIへ統合し、統合後UIで通常運転・正常再接続を受入。採用source/asset・既存標準機能/API継承と実装/受入を先に再整理 |
+| [#295](https://github.com/udonchan/picdplayer/issues/295) | #291のUI統合と整合した初回2秒fade-in実装/回帰/短い実表示確認。写真間4秒fadeとは別遷移 |
+| [#296](https://github.com/udonchan/picdplayer/issues/296) | 既知の曖昧候補discと対象UIを準備し、物理None of these・TV復帰・実音継続を基本5分以内/辞退一回で受入 |
+
+#46/#47のTVリモコンのみの初回setupと#291の通常UI統合は新しい採用方針であり、
+今回実装した意味ではない。対象設定や機能継承を先に設計/分解し、一般利用者のSSH/keyboard操作や
+過去の技術PoCで製品UXを代用しない。private UIのsource/assetの公開可能性を確認し、写真・秘密・設定を同梱しない。
+v1対象も全旧checkbox/全matrixを一律実施する意味ではなく、採用範囲・見送り理由・合格条件を明記する。
+
+### 対象外・未確定
+
+| Issue | 現判定・扱い |
+|---|---|
+| #83 | v1対象外、`Pending`を追加。比較需要と同条件の項目/回数/有限予算が決まった時に再開 |
+| #146 | v1対象外。追加媒体/別drive等の条件待ち検証の集約先をOpenで維持。`Pending`追加の指示はない |
+| #147 | v1対象外、`Pending`を追加。専用/同等隔離環境と限定故障・復旧条件が揃った時に再開 |
+| #289 | v1対象外。観測済みstall・原因/可聴影響未確定・証拠を保持。解決済み/無影響とはせず、`Pending`は追加しない |
+| #292 | v1対象外。物理操作なしUSB切断/NO DISCと原因未特定を保持。解決済みとはせず、`Pending`は追加しない |
+| #14 | v1未確定。本日実機を確認できる時間にCEC消失の再現可否を有限枠で確認する候補。設計/未完実装と物理検証を分け、今回は試験しない |
+| #3 | 未実施起動項目を#47へ集約。独立したv1 labelは付けず、旧構成値/未実施を保全。今回はcloseせずOpenの参照を残す |
+
+### Labelの意味と保全
+
+- `v1`: 上表15件の採用作業範囲。完了/全旧条件必須の意味ではない。
+- `verification-condition-waiting`: 特定検証に媒体・機器・reference/offset入力・安全環境等の開始条件待ちがある印。
+  #146/#147/#282/#283/#285/#296へ付与し、各本文で範囲を限定した。v1対象外やIssue全体停止を意味せず、`v1`と併用する。
+- 既存`hardware-test-deferred`は物理未受入/実装と検証の区別を示す既存情報として維持し、v1除外へ自動変換しない。
+  現在の機材可用性を新規確認した意味でもなく、#10/#14の通常受入/未完実装を一括停止しない。
+- 既存`Pending`付き#19/#20/#42/#69/#124/#198/#199/#200/#250/#254は今回の質問・変更対象から除外した。
+  その本文/label/状態/コメントを保持し、通常未検証の総称にPendingを拡張しない。
+
+22件の本文先頭を更新し、更新前本文を原文で保存した。全32件のOpen状態・title・コメントと既存label定義は維持し、
+Issue close/reopen・新Issue・実機操作・実装/build/配備は行っていない。
+詳細と照合は[判定反映の記録](verification.md#v1-scope-20261105)を参照する。
+
 <a id="media-eject-20261104T1605"></a>
 ## 通常eject受入の完了と独立UI残項目（2026-11-04）
 
