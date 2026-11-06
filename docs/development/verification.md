@@ -1,5 +1,92 @@
 # 検証状況と残課題
 
+<a id="metadata-decline-20261105T2338"></a>
+## #296 物理リモコンによるmetadata辞退の実機受入（2026-11-05 UTC）
+
+### 開始条件と対象
+
+最新Issue #296本文・コメント（コメント0件）と、`refs/remotes/origin/master`の
+`a23ac5ab56589efa3a343d658aaf7de9f18fa6c0`をremote headと照合した。
+本書の[v1判断](#v1-scope-20261105)・[過去eject受入](#media-eject-20261104T1605)、
+metadata選択/辞退の設計・message契約、Custom UIの任意picker・built-in経路・設定保持を確認した。
+元#284 worktreeの未commit3文書は変更せず、既存のcleanな受入worktreeを確認した上で、
+同master基準の専用branch `verify/296-physical-decline-20261105`へ今回の文書だけを未commitで保存した。
+Agent Manager session/worktreeの追加はない。
+
+開始前はpin付きSSHとprivate保存済みhelperのmachine/board hashで同一実験Piを照合し、
+GET/read-onlyだけで現在状態を採取した。23:33:35 UTC時点のdiscはThe Slipの実候補2件（US/JP）、
+10曲・TOC先頭0/leadout197367、`AMBIGUOUS`、disc世代5/metadata世代404、track4再生中だった。
+11月4日の候補1件discや利用者の挿入報告を現在値に流用していない。eject/再挿入や候補の捏造は行わなかった。
+
+Pi 3 Model B Rev 1.2、ASUS SDRW-08D2S-U/F601、installed package 0.1.0、WPE、
+既存Custom UI `/srv/picdplayer-ui-dev-20261020-aria`を維持した。package SHA-256は
+`c9ff28e7c7a4f9b2663b97dac2cbaf31e7e5cb3c42d6c6286c6bc8ca38a13424`で、
+配置daemon/WPE/wrapperのhashも過去Release受入基準と同じ。最新masterの再build/再配備ではない。
+実配信HTML/JSを保全し、既存picker/None of these/世代付きnull POSTの実装を確認した。
+Custom UIのJSは同Piのbuilt-in JSとhash一致。利用者もTV上の候補一覧とNone of these・正常な実音を確認した。
+表示先変更、`/builtin/player`への一時移動、UI注入/改変は不要だった。
+
+設定はSINGLE/restored/pendingなし、背景ON/saved、offset null/NONE、要求速度2x、buffer750/startup45、
+ALSA200 msを保持した。要求速度を実測速度としない。capture/assessmentはIDLE/非busy/reader_released、
+media activityはIDLE、device retiring_io=false。開始前60.686 C/throttled0、直近3分のservice/kernel journalに
+追加記録なし。利用者はdrive独立給電、Pi→HDMI→TV→HDMI ARC→NR1200→パワードスピーカー、
+fan/ヒートシンクなしのままと再確認した。室温は未測定。
+
+### 有限手順と人の確認
+
+上限5分・辞退一回、辞退前5秒/辞退後10秒の試聴、最後に物理リモコンの通常STOPと固定した。
+read/USB異常、音切れ、current制限、80 C、予期しない取得/identity変化等では通常STOPを優先し再試行しない。
+API/CDPによる辞退や候補選択は行わず、通常候補選択/再選択の既存Passも取り直していない。
+
+利用者は対話で「一回辞退・表示復帰・音継続・STOP正常」と回答した。これは物理リモコンの決定一回、
+TVのpicker閉鎖とAudio CD/Track表示、前5秒/後10秒の実音継続、通常STOP後の音停止/STOPPED表示を
+確認したreceiptであり、APIからTV・可聴性を推定したものではない。
+
+| 観測時刻（UTC） | 同時API/ALSA証拠 |
+|---|---|
+| 23:38:01.650270 開始 | track5再生中、残233.227秒。実候補2件AMBIGUOUS、disc5/metadata404/stream50 |
+| 23:39:52.663591 最初のDECLINED標本 | track5/frame12229、PLAYING/stream50、selected_index null、Audio CD fallback。曲長21383 framesで自然終端まで約122秒あり |
+| 23:40:05.399073 最後の辞退後PLAYING標本 | 同track/streamの再生進行。辞退後PLAYINGを約12.735秒観測 |
+| 23:40:05.942557 STOP標本 | DECLINEDのままSTOPPED/track1/frame0、stream52 |
+| 23:40:06.194351 observer終了 | 通常STOPを検出して終了。自動STOP/中断経路の実行なし |
+
+時刻はAPI標本時刻であり、物理押下の正確な時刻やHDMI可聴位置の直接計測ではない。
+同daemon session、disc5/metadata404とdevice観測世代1を維持した。PLAYING中stream50は辞退でも変わらず、
+通常STOPでstream52へ更新した。206 RUNNING標本の隣接205組すべてでALSA hw_ptrが増加した。
+ALSA進行そのものを人の試聴証拠へ代用していない。
+
+### 終了・保全と限界
+
+runは約124.5秒、245 record/207状態標本/35安全標本。59.072〜61.224 C、throttled全0、
+区間service/kernel journalはexit0で追加記録なし。新たな音切れ/read/USB異常の報告・記録なし。
+これは標本間の全時点や他条件の保証ではなく、未解明の#289/#292を解消済みに変更しない。
+
+23:40:20開始の最終read-only採取でSTOPPED/track1/frame0、AUDIO_READY、DECLINED、retiring_io=false、
+capture/assessment非busy/reader_released、59.072 C/throttled0、daemon569/WPE574 active/running、
+NRestarts0を確認した。SINGLE・背景ON/savedと取得可能な設定file/Custom UI7file・実配信HTML/JS・
+package/配置binaryのhash/bytes、boot ID、service PIDは開始前と一致し、表示先を変えていないため復元操作は不要。
+settings.json本体は既存権限でPermissionErrorのためbyte一致UNKNOWN、保存契約はAPIの要求/実効/保存状態で照合した。
+実行中exeの直接hash、再生reader FDの直接解放、別UI/全disc/全matrixは今回確認していない。
+serviceを終了せず、通常STOP後の正常稼働へ保持した。強制終了・電断・restartは行っていない。
+
+永続host private領域 `/Users/udonchan/.ssh/picdplayer-pins-20261104/`へrun固有名で保全した。
+
+- `acceptance-296-inspect-20261105T233333Z.json`: 開始前read-only、identity/API/TOC/設定/配信UIとhash。exit0。
+- `acceptance-296-observe-20261105T233759Z.jsonl`: 有限観測、API/世代/ALSA/温度/current/journal。exit0。
+- `acceptance-296-inspect-20261105T234020Z.json`: 終了後の同じread-only採取。exit0。
+- `acceptance-296-human-receipt-20261105T2338.json`: 今回の対話で受け取った開始条件と物理操作/TV/実音の回答。正確な押下時刻は未測定。
+- `inspect296.py`、`observe296.py`、`verify296.py`: 内容を確認した今回専用helper。inspect/observerは保存fileをmode0600で作成。
+
+`verify296.py`で時間上限、AMBIGUOUS→DECLINED→通常STOP、辞退中の同世代/同stream、fallback、
+ALSA進行、温度/current、設定/UI/hash/service/boot保持と非busyを再集計しexit0。
+受入終了時点の限定受入はPassで、Issue更新・commit/push/PR/mergeは未実施だった。
+続く23:46:27 UTCの利用者指示により、受入結果と確認限界をIssueへ反映し、条件待ちlabelを解除して、
+この2文書をPR経由でmasterへ統合し#296をCompletedとして終了する。元のIssue本文と過去の条件待ちは履歴として保全する。
+settings.json本体のbyte一致UNKNOWNは終了を阻む条件とせず、権限変更や追加実機試験は行わない。
+公開PRの新しいCIと今回の既存配備品による実機受入は別の証拠として扱う。
+#291の統合、#295のfade-in、#282の写真受入は実施せず、source/test変更・Piでのbuild/配備もない。
+raw/設定/identity/写真をGit/GitHubへ添付しない。
+
 <a id="v1-scope-20261105"></a>
 ## v1判定の本文・label反映（2026-11-05）
 

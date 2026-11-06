@@ -1,5 +1,17 @@
 # 残課題とIssue一覧
 
+<a id="metadata-decline-20261105T2338"></a>
+## #296の限定実機受入（2026-11-05 UTC）
+
+挿入済みThe Slipの実候補2件/AMBIGUOUSと既存Custom UIのpickerを現在値で確認し、
+物理リモコンのNone of these一回・TVのpicker閉鎖/Audio CD復帰・実音継続・通常STOPを
+利用者の対話receiptと同時API/世代/ALSAで対応付けた。約124.5秒の限定受入はPass。
+SINGLE/背景ON/offset未指定、設定API・取得可能file/UI/package・表示先とservice稼働を保持した。
+settings.json本体のbyte一致は既存権限でUNKNOWN。詳細は[検証記録](verification.md#metadata-decline-20261105T2338)。
+23:46:27 UTCの利用者指示により、この限定受入の記録をPR経由でmasterへ統合し、#296をCompletedとして終了する。
+条件待ちlabelを解除し、v1の採用範囲は維持する。追加実機試験・権限変更は終了条件にしない。
+#291/#295/#282の実装・全matrixや#289/#292の障害解明へ拡張せず、過去の確認済み候補選択は取り直さない。
+
 <a id="v1-scope-20261105"></a>
 ## v1の対象範囲（2026-11-05）
 
@@ -26,7 +38,7 @@ v1/v2記述は履歴として読む。確認済み結果・未実施・未解明
 | [#285](https://github.com/udonchan/picdplayer/issues/285) | 通常の能力応答/UNKNOWN等の確認と、独立reference/challenge・alignment/offset根拠を要する実assessmentを分けて残受入 |
 | [#291](https://github.com/udonchan/picdplayer/issues/291) | 現Custom UIを最終的に通常UIへ統合し、統合後UIで通常運転・正常再接続を受入。採用source/asset・既存標準機能/API継承と実装/受入を先に再整理 |
 | [#295](https://github.com/udonchan/picdplayer/issues/295) | #291のUI統合と整合した初回2秒fade-in実装/回帰/短い実表示確認。写真間4秒fadeとは別遷移 |
-| [#296](https://github.com/udonchan/picdplayer/issues/296) | 既知の曖昧候補discと対象UIを準備し、物理None of these・TV復帰・実音継続を基本5分以内/辞退一回で受入 |
+| [#296](https://github.com/udonchan/picdplayer/issues/296) | Completed（v1の限定受入）。物理None of these・TV復帰・実音継続・通常STOPの[限定受入Pass](verification.md#metadata-decline-20261105T2338)。全UI/全discの保証や#291の統合完了ではない |
 
 #46/#47のTVリモコンのみの初回setupと#291の通常UI統合は新しい採用方針であり、
 今回実装した意味ではない。対象設定や機能継承を先に設計/分解し、一般利用者のSSH/keyboard操作や
@@ -50,6 +62,7 @@ v1対象も全旧checkbox/全matrixを一律実施する意味ではなく、採
 - `v1`: 上表15件の採用作業範囲。完了/全旧条件必須の意味ではない。
 - `verification-condition-waiting`: 特定検証に媒体・機器・reference/offset入力・安全環境等の開始条件待ちがある印。
   #146/#147/#282/#283/#285/#296へ付与し、各本文で範囲を限定した。v1対象外やIssue全体停止を意味せず、`v1`と併用する。
+  #296はその後の[限定受入完了](#metadata-decline-20261105T2338)により解除する。
 - 既存`hardware-test-deferred`は物理未受入/実装と検証の区別を示す既存情報として維持し、v1除外へ自動変換しない。
   現在の機材可用性を新規確認した意味でもなく、#10/#14の通常受入/未完実装を一括停止しない。
 - 既存`Pending`付き#19/#20/#42/#69/#124/#198/#199/#200/#250/#254は今回の質問・変更対象から除外した。
@@ -69,7 +82,7 @@ Issue close/reopen・新Issue・実機操作・実装/build/配備は行って�
 
 | 現所有先 | 責務 |
 |---|---|
-| [#296](https://github.com/udonchan/picdplayer/issues/296) Open | 既知の曖昧候補discでNone of these/DECLINEDの物理操作・TV・実音を確認する残受入。現在discは候補1件のため未到達。過去CDP/API成功を人のPassにしない |
+| [#296](https://github.com/udonchan/picdplayer/issues/296) Completed | 11月4日当時のdiscは候補1件のため未到達。11月5日に実候補2件discで[物理辞退の限定受入Pass](verification.md#metadata-decline-20261105T2338)。過去CDP/API成功による代用ではない |
 | [#295](https://github.com/udonchan/picdplayer/issues/295) Open | 現Custom UIで背景初回出現が唐突との利用者報告。希望の初回2秒fade-inを記録した独立改善で、写真間4秒fadeと区別。実装/配備未着手 |
 | #289 Open | 開始前15:58:41 UTCのapi_service 111717 usを別記録として追加。実eject区間にはstall追加記録なし。原因や可聴影響を結合しない |
 
@@ -180,7 +193,7 @@ machine/board identity・配備receiptを参照できず、利用者も保全先
 | #238/#239 | local SHA-256と本番job/API/UI、過去の全域指紋、今回の限定検証 | [#283](https://github.com/udonchan/picdplayer/issues/283): 実capture取消→実退役→通常再生/実音の同run受入 |
 | #252 | 利用者による物理remote/TV/短い試聴/policy/1枚背景の代表Pass | [#282](https://github.com/udonchan/picdplayer/issues/282): 個別目視receipt・標準UI差分と写真の残受入 |
 | #51 | 1枚写真条件のON/OFF・TV/短い実音の報告を保全 | #282: 複数写真/時間条件、fallback/旧写真除去/reduced motion等の未確認 |
-| #184 | manual30分と正常操作・実FD解放/復元、短い利用者試験。その後#286の通常10分/cold bootと#293の通常ejectを限定完了 | 残る#291（標準UI/正常再接続）、#296（metadata辞退）、#83（速度比較）、#292（自発USB障害）へ[分離](#acceptance-issue-split-20261104) |
+| #184 | manual30分と正常操作・実FD解放/復元、短い利用者試験。その後#286の通常10分/cold bootと#293の通常ejectを限定完了 | #291（標準UI/正常再接続）、#296（metadata辞退）、#83（速度比較）、#292（自発USB障害）へ[分離](#acceptance-issue-split-20261104)。その後#296は[限定受入完了](#metadata-decline-20261105T2338) |
 | #121 | 統合済み限定修正、未再現条件/短い試聴の記録。#284は追跡置換で終了 | [#289](https://github.com/udonchan/picdplayer/issues/289): control/CEC等の未解明stall。原因解決ではない |
 
 終了はmaster統合と後継リンク確認後に行う。#264/#238/#239/#252は実装/代表確認単位の区切り、
@@ -500,7 +513,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | 直近1（HTTP実装後） | #49: JPEG/PNG/WebP admissionを保全し、保守的なHTTP実装とPi 3隔離3/3まで完了。[最終review/PR統合](verification.md#image-http-review-integration-20261103)へ進む。全decoder/RSS/GPU・Zero 2 Wは保証外で、追加の終了gateとしない |
 | 入力待ちの実機受入 | #285（#264後継）: report/明示C2評価は実装済み。独立reference/challenge・offset根拠を必要とする実assessment/能力実機受入を残す。過去の権限エラーからroot化や非対応を推測しない |
 | 残観測の分類 | #289（#284/#121後継）: PR #243は統合済み。11月4日の[独立CEC区間](verification.md#cec-stopped-20261104)は条件未達1・有効10入力1run、stall未再現。未解明stageの原因帰属・必要な修正/再検証を残し、#284の追跡置換を原因解決としない |
-| 残通常受入 | #286の通常10分/cold bootと#293の[通常eject代表条件](verification.md#media-eject-20261104T1605)をCompleted。残差分は#291（標準UI/正常再接続）・#296（metadata辞退）、速度比較#83、自発USB障害#292へ分離し、長期/全構成合格とはしない |
+| 残通常受入 | #286の通常10分/cold boot、#293の[通常eject代表条件](verification.md#media-eject-20261104T1605)、#296の[物理metadata辞退](verification.md#metadata-decline-20261105T2338)を限定Completed。残る#291（標準UI/正常再接続）、速度比較#83、自発USB障害#292と分離し、長期/全構成合格とはしない |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
 | 完了したv1表示 | #164: policy/strategy・長文表示と代表確認を完了してCompleted。追加hardeningは#250でv2以降へ延期 |
 | 実装済み・限定受入待ち | #10: 補正試聴/TV端表示、#88: 観測可能な物理hotplug、#282: 複数実写真/残目視。#252の代表物理操作Passを再要求しない |
