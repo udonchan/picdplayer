@@ -210,10 +210,16 @@ readerがこの時間を超えてもmain loopはioctlを待たず、controller�
 workerのcancel/discardはreader所有threadへ依頼され、実際のcloseはblocking callが戻った後になる。retry、古いPCM、
 無音の代替は行わない。これはrepeat verifierの候補試行予算とは別に、single/direct/paranoiaを含む一回の
 uninterruptible callに対するmain-loop上の停止境界である。
-PcmWorkerはsingleで15 frame、repeatでpolicyのregion_frames（既定75）を要求する。
+PcmWorkerへのread量はread_policy_block_framesで起動時/停止境界のpolicy適用時に同じ規則から選ぶ。
+singleは通常15 frame、directかつ端数sample offset（offset % 588 != 0）は最大45 frameとし、
+buffer容量に収まる15 frame刻みへ縮める。guard sector込み46 frame/C2 response121716 bytesで、
+direct C2 packet上限75に加え120 KiB adapterの転送上限以内に収め、
+短い論理readごとの重複sector取得に伴うcommand overheadを償却する。offset wrapperのPCM/evidence契約は変えない。
+offset未指定/明示0/整数sector offset、paranoiaは従来どおり。repeatはpolicyのregion_frames（既定75）を要求する。
 queue容量はCD frame設定をregionで割って切り捨て、開始閾値は切り上げる。
 切り上げ結果がqueue容量を超える場合は容量へ丸め、待機条件が達成不能にならないようにする。
-既定設定ではsingleは10秒/0.6秒、repeatは10秒/1秒（75 frame blockへの切り上げ）となる。
+既定設定では通常singleは10秒/0.6秒、directの端数offset singleは9.6秒/0.6秒（45 frame blockへの丸め）、
+repeatは10秒/1秒（75 frame blockへの切り上げ）となる。設定された容量/開始閾値そのものを増量するものではない。
 候補数は最大8、overlapは最大75 CD frameであり、候補PCM量は要求範囲とこの上限で有界である。
 反復readはcacheを無効化しないため、採用結果を`CACHE_POSSIBLE`として公開する。これはPCM一致やoverlap一致が
 物理的に独立した再読を保証しないことを示す。現行実装は`CACHE_MITIGATED`を発行しない。

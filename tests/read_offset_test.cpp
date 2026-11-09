@@ -1,4 +1,5 @@
 #include "read_offset.hpp"
+#include "read_policy.hpp"
 #include "integrity_state.hpp"
 #include "playback_engine.hpp"
 #include <chrono>
@@ -38,13 +39,14 @@ public:
 };
 int main() {
     try {
-        for (int begin : {0, 150}) for (int offset : {-5000, -589, -588, -587, -1, 0, 1, 587, 588, 589, 5000}) {
+        for (int block_frames : {15, 45, 60}) for (int begin : {0, 150})
+        for (int offset : {-5000, -589, -588, -587, -1, 0, 1, 587, 588, 589, 5000}) {
             auto state = std::make_shared<RawState>(); state->begin = begin; state->end = begin + 300;
             const auto window = make_read_offset_window(begin, begin + 300, offset);
             auto reader = make_offset_reader(std::make_unique<SampleReader>(state), window);
             reader->seek(window.playable_begin_lba);
             for (auto p = window.playable_begin_lba; p < window.playable_end_lba;) {
-                const auto n = std::min(15, window.playable_end_lba - p);
+                const auto n = std::min(block_frames, window.playable_end_lba - p);
                 std::vector<std::int16_t> pcm(n * cdda_samples_per_frame);
                 const auto result = reader->read(pcm);
                 check(result.status == ReadStatus::ok && result.start_lba == p && result.frames_read == std::size_t(n));
@@ -67,12 +69,12 @@ int main() {
         const auto positive = make_read_offset_window(0, 10, 1);
         check(positive.correctable_end_sample == 5879 && positive.playable_end_lba == 9);
         check(make_read_offset_window(150, 160, -1).playable_begin_lba == 151);
-        for (bool wrong_start : {false, true}) {
+        for (int block_frames : {15, 45, 60}) for (bool wrong_start : {false, true}) {
             auto state = std::make_shared<RawState>();
             state->partial = !wrong_start; state->wrong_start = wrong_start;
             auto reader = make_offset_reader(std::make_unique<SampleReader>(state), make_read_offset_window(0, 300, 1));
             reader->seek(0);
-            std::vector<std::int16_t> pcm(15 * cdda_samples_per_frame, 1234);
+            std::vector<std::int16_t> pcm(block_frames * cdda_samples_per_frame, 1234);
             const auto result = reader->read(pcm);
             check(result.status == ReadStatus::read_error && result.frames_read == 0);
             check(make_read_evidence(result).offset_status == OffsetStatus::uncorrected);
@@ -106,12 +108,16 @@ int main() {
             }
         }
         // A corrected terminal window must drain accepted PCM, not fail and clear its queue.
-        for (int offset : {-1, 1}) {
-            auto state = std::make_shared<RawState>(); state->end = 32;
-            const auto window = make_read_offset_window(0, 32, offset);
-            PcmWorker worker([=] { return make_offset_reader(std::make_unique<SampleReader>(state), window); });
+        for (int block_frames : {15, 45, 60}) for (int end : {32, 137}) for (int offset : {-1, 1}) {
+            auto state = std::make_shared<RawState>(); state->end = end;
+            const auto window = make_read_offset_window(0, end, offset);
+            PcmWorker worker([=] { return make_offset_reader(std::make_unique<SampleReader>(state), window); },
+                             "offset-test", {}, {}, "LEGACY", block_frames);
+            check(worker.read_block_cd_frames() == std::size_t(block_frames));
+            check(worker.buffer_capacity_blocks() == std::size_t(750 / block_frames));
+            check(worker.startup_buffer_blocks() == std::size_t((45 + block_frames - 1) / block_frames));
             PlayerController controller;
-            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0, 16}, 32));
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0, 16}, end));
             controller.set_playback_range(window.playable_begin_lba, window.playable_end_lba);
             struct Output final : AudioOutput {
                 std::size_t total = 0;
@@ -135,6 +141,39 @@ int main() {
             output.allow_drain = true; engine.tick();
             check(controller.state().playback == PlaybackState::stopped);
             check(!engine.read_diagnostics().current_playback);
+        }
+        for (std::size_t capacity : {15, 30, 45}) for (int offset : {-1, 1}) {
+            auto state = std::make_shared<RawState>(); state->end = 137;
+            const auto window = make_read_offset_window(0, state->end, offset);
+            ReadPolicy policy;
+            policy.region_frames = 15;
+            const auto block_frames = read_policy_block_frames(policy, CddaBackend::direct, offset, capacity);
+            PcmWorker worker([=] { return make_offset_reader(std::make_unique<SampleReader>(state), window); },
+                             "offset-small-buffer", {capacity, capacity}, {}, "LEGACY", block_frames);
+            check(worker.buffer_capacity_blocks() == 1 && worker.startup_buffer_blocks() == 1);
+            PlayerController controller;
+            controller.load_disc(make_audio_toc(1, std::vector<std::int32_t>{0}, state->end));
+            controller.set_playback_range(window.playable_begin_lba, window.playable_end_lba);
+            struct Output final : AudioOutput {
+                std::size_t total = 0;
+                bool allow_drain = false;
+                void reset() override {}
+                std::size_t write(std::span<const std::int16_t> pcm) override { total += pcm.size()/2; return pcm.size()/2; }
+                std::int64_t delay() override { return total; }
+                bool drain() override { return allow_drain; }
+            } output;
+            PlaybackEngine engine(controller, worker, output, window.playable_end_lba);
+            check(controller.play()); engine.synchronize();
+            const auto expected = std::size_t(window.playable_end_lba - window.playable_begin_lba) * 588;
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            while (output.total < expected && std::chrono::steady_clock::now() < deadline) {
+                engine.tick();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            check(output.total == expected && worker.status().done && worker.status().error.empty());
+            check(controller.state().playback == PlaybackState::playing);
+            output.allow_drain = true; engine.tick();
+            check(controller.state().playback == PlaybackState::stopped);
         }
         std::cout << "PASS: offset PCM, sector boundaries, failures, repeat and terminal drain\n";
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

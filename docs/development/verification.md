@@ -1,5 +1,363 @@
 # 検証状況と残課題
 
+<a id="offset-acceptance-pass-20261109"></a>
+## #10 正負offsetのTV・試聴限定受入Pass（2026-11-09 UTC）
+
+最新Issue #10のv1範囲である、診断用+1/-1の補正条件の人の試聴・TVの端除外/入力根拠表示を確認した。
+対象は下記45 frame版Release候補。利用者が構成変更なし、正負それぞれの先頭/seek後/末尾の実音、
+TV表示/進行/自然STOP、最後の旧package/元Custom UIへの復元を端末と対話で明示確認した。
+同時API/ALSA/journalと対応付けた結果、この限定受入はPass。APIから人の聴感を推定していない。
+#10は受入終了時点ではOpen/未commitだった。続く00:44:28 UTCの利用者指示で、この45 frame対処と試験・仕様・
+受入記録をPR経由でmasterへ統合し、Issueへ結果/限界を反映してCompletedで終了する。
+本Issueの`hardware-test-deferred`は解除し、v1/integrity/enhancementを保持する。別範囲の#146等は変更しない。
+下記の過去runのunderrun・C2 fallback・未確認結果を、この成功で消したり同一原因として閉じたりしない。
+
+### 60 frame版のC2中断と転送予算の修正
+
+中断後に11月6日run `picdplayer-offset10-v2-20261106T1257`の原記録を回収した。
+標準deploy.shによるRelease候補`931e792d...`の配備は成功したが、+1の最初の論理60/物理61 frameで
+`status=CLEAN`/`offset_status=CORRECTED`と同時に`c2_status=UNKNOWN`となり、13:16:58.805 UTCに中断した。
+strategyは`direct-c2-pointers-single-read`でも、実際のC2成功を意味しない。
+公開契約上はpacket failure/malformed response後の通常audio read fallbackであり、物理readのnative_error0は
+fallback後のaudio成功を示すだけで、元のC2 errnoは保存されていない。全区間の試聴Passにはしていない。
+旧package/settings15ファイル一致、13:18:44 UTCの最終復元receiptと`accepted=false`を独立に照合した。
+
+11月8日23:46:39のpin/保存済みmachine・board hash付きread-only採取は旧package/旧daemon、同TOC、STOPPED、
+offset未指定/SINGLE/背景ON、capture/assessment/media IDLE、54.230 C/throttled0だった。
+eject/再挿入や新しい媒体探索はせず、現在値を過去の挿入報告から推定しなかった。
+続くsysfsのread-only採取でASUS SDRW-08D2S-U/F601の
+`/sys/block/sr0/queue/max_hw_sectors_kb`と`max_sectors_kb`が各120と確認できた。
+
+旧候補のC2 responseは61×(2352+294)=161406 bytesで、75-sectorというsoftware上限内でも
+このadapterの120 KiB=122880 bytesを超えていた。この上限違反はUNKNOWN/fallbackと整合するが、
+native C2 errnoを記録していないため、他の要因を排除した原因確定とはしない。
+対処候補を最大45 logical CD frameへ修正し、guard込み46×2646=121716 bytesへ収めた。
+一回の取得音声は600 ms、有効queue720/開始45となる。容量750/startup45・速度要求2x・ALSA200 msは増やさず、
+C2検査を無効化せず、単一物理read evidence・PCM値・repeat独立性を維持した。
+他のdrive/adapterでの上限や実効速度を保証せず、physical calibrationの代用にしない。
+
+### Buildと実施条件
+
+- 最初の標準buildはC++ compilation成功後にstage作成エラー。host空き容量・image user・stage metadataを確認し、権限変更なしで同一標準commandを一回再実行してstage/CPack成功。初回を成功に数えない。
+- 45 frame版は標準Linux/aarch64 Release CTest80/80（96.87秒）とpackage lifecycle成功。45 frameの全sample/境界/失敗/terminal drain、46-sector response、single→repeat→single（45→75→45）を検証した。
+- 独立静的レビューに重大指摘なし。当該ローカル検証時点で45 frame版Debugは未再実行で、先の60 frame版Debug80/80を流用しない。公開PRでの新しいCI結果は別の証拠として記録する。
+- helperはTTY必須・明示pass・新streamと実出力進行後の計時・全6区間のC2/補正evidence検査を維持した。復元dpkgを別process group/非TTY入力で保護し、最終logのflush/fsync/close後だけ成功を表示する。wrapper/同期/実process group対照/host orchestrationのLinux非実機試験38/38成功。
+- host orchestrationは元packageのroot保全後に標準deploy.shをpin強制で使い、配備失敗/取消では試聴せず復元専用経路へ進む。観測予算超過時も生きたdpkgをforcekillせず、Passにしない。
+
+| 対象 | identity/条件 |
+|---|---|
+| 受入Release package 0.1.0 | SHA-256 `0439551692040ab985b7826f302f1ad5a2fb136265e5a6310f8f57222117be40` |
+| 受入daemon | SHA-256 `f744ce0ab13fb840f45a0503066771707a5264aff2f635a22a0cc506b46f7ef7`、build_type/profile Release |
+| base/source | 受入時は`c1a24e3453e62acccb6c0ba516bf25148f27b8f5`基準の専用branch `verify/10-offset-acceptance-20261106`の未commit45 frame差分。本PRで統合するsourceであり、後の公開CI artifactを実機試験したという意味ではない |
+| 実機/経路 | Pi 3 Model B Rev 1.2/ASUS SDRW-08D2S-U F601、drive独立給電、Pi→HDMI→TV→HDMI ARC→NR1200→パワードスピーカー、fan/ヒートシンクなし。利用者が構成変更なしと確認 |
+| disc | 挿入済みThe Slip、10曲、TOC `[0,197367)`。物理媒体の同一性をTOC一致だけで暗号学的に保証しない |
+| policy/出力 | direct SINGLE、C2 ON、要求速度2x（実測速度ではない）、容量750/startup45、実read45、有効queue720/開始45、ALSA200 ms |
+| 一時表示 | 既存Custom UIを変更/注入せず、run固有`/run` EnvironmentFile/drop-inで`--custom-ui`を一時除外して標準Playerを表示。pickerは必要ならBackのみ |
+
+### 時刻・人の観測と同時証拠
+
+run IDは`picdplayer-offset10-v2-20261109T0000`。predeploy保全は00:05:07、trial記録は
+00:06:09〜00:10:52（約283秒）、旧package復元と最後の人の確認まで00:12:11 UTC。
+PLAY/seek/trackは有限helperのAPI操作で、人のTV/試聴は端末上の明示pass9件と最後の旧package復元pass1件、
+対話回答「全区間正常・FINAL成功・exit0」を照合した。最初の準備・結果回答中はSTOPPEDで、
+準備ができる前に再生や次条件を進めていない。自然曲終了まで余裕のあるtrack1の先頭/seekと、
+意図して最後のtrack10の末尾へ移動する区間を区別した。
+
+| offset/区間 | 出力進行確認〜区間終了 UTC | 秒 | stream | 人の確認 |
+|---|---|---:|---:|---|
+| +1/先頭 | 00:06:38.175〜00:06:50.279 | 12.103 | 7 | 異常な音切れ/異音なし、TV進行正常 |
+| +1/seek後 | 00:06:51.586〜00:07:04.097 | 12.511 | 9 | 意図した+10秒移動後、実音/TV正常 |
+| +1/末尾 | 00:08:21.451〜00:08:36.484 | 15.033 | 17 | 実音/TV正常、自然STOPPED |
+| -1/先頭 | 00:09:01.376〜00:09:13.966 | 12.590 | 7 | 異常な音切れ/異音なし、TV進行正常 |
+| -1/seek後 | 00:09:15.014〜00:09:27.564 | 12.550 | 9 | 意図した+10秒移動後、実音/TV正常 |
+| -1/末尾 | 00:09:52.139〜00:10:07.609 | 15.469 | 17 | 実音/TV正常、自然STOPPED |
+
+各符号のservice起動ごとにdaemon sessionは別で、stream番号の7/9/17の再出現を同じsessionとしない。
+各case内は同session/TOCを保持し、disc generation1/policy revision3。
+read evidenceのdevice_generationは先頭/seekが1、通常STOP後にreaderを開き直す末尾が2で、
+`PcmWorker`のreader open時に増える世代である。drive.observation generation1の物理観測と混同しない。
++1はplayable `[0,197366)`、-1は`[1,197367)`、それぞれ不能1/整列除外587 stereo sample framesをAPIとTVで確認した。
+TVはoffset値・端除外・no substitute PCM・calibration unverifiedを確認し、APIの根拠はUSER_CONFIGURED/CORRECTED。
+
+640 record/515状態標本/71安全標本、52.616〜61.762 C/throttled全0。
+6区間の出力進行確認後のcurrent PCM標本142件はすべてC2 CLEAN、物理read要求は最大46 sector。
+これは全readの独立性や原盤一致を意味しない。139 RUNNING ALSA標本のcase内隣接133組すべてでhw_ptrが増加した。
+区間journalにunderrun/read_stall/read error/forced shutdownの記録なし、kernel journalは追加記録なし。
+標本間の全時点を保証せず、実音は人のreceiptを根拠とする。
+
+### 正常終了・元package復元・確認限界
+
+末尾の自然STOPと最後の通常STOP後、一時offset/表示先overrideを撤去し、元のCustom UIへ復帰。
+成否によらず旧packageへ戻す手順どおり、`c9ff28e7c7a4f9b2663b97dac2cbaf31e7e5cb3c42d6c6286c6bc8ca38a13424`
+の旧archiveを標準upload先へ戻して通常dpkg installを完了した。新候補をPiへ常設していない。
+settings.jsonを含む15ファイルのhash/size/mode/uid/gid、policy、背景の要求/実効/保存状態をpredeployと照合した。
+00:12:11に最後の元Custom UI/STOPPEDを人が確認し、FINAL成功/WORKFLOW_EXIT0とrawのaccepted=trueを確認した。
+正常SIGTERM/終了を記録し、SIGKILL・電断や取消試験を実Piへ適用していない。sudoers/設定読取権限も拡張していない。
+
+独立した00:12:33のread-onlyで旧daemon `a825a8eb...`/旧package `c9ff28e7...`、offset null/NONE/window null、
+STOPPED/track1/frame0、SINGLE、背景ON/saved、capture/assessment/media IDLE、retiring_io=false、
+daemon48569/WPE48595 active/running・NRestarts0、56.920 C/throttled0を確認した。
+物理校正・原盤とのbit一致・C2精度assessment・独立reference・別drive/傷媒体・全disc/全matrixは未実施で、
+#146/#285や#289/#292の未解明事項をこの限定Passで解消済みにしない。reader FDの直接検査や室温計測も未実施。
+
+### private保全と再集計
+
+永続host private領域 `/Users/udonchan/.ssh/picdplayer-pins-20261104/`にmode0600で保存し、Git/GitHubへ添付しない。
+
+- `acceptance-10-candidate-20261106T1257-recovered-20261108T234740Z-*`: 60 frame版の失敗/正常復元と実行helperの原記録。`recover_offset10_candidate.py`で15ファイル/設定/人の復元receipt一致を確認してexit0。
+- `acceptance-10-transfer-limits-20261108T234919Z.json`: 新たなmedia readなしで採取したkernel/adapter属性。前のC2 errnoの代用にはしない。
+- `offset10-batching-release-20261108T235603Z.*`: 45 frame版Releaseの実CTest80件Pass log、CMake cache、source diff、artifact identity。`record_offset_build.py`でexit0。
+- `acceptance-10-candidate-20261109T0000-collected-20261109T001234Z-*`: predeploy、全640 record、package復元記録、最後の人のreceipt、dpkg復元log、実行helper3件の完全copy。remote run固有領域にも原記録を保持。
+- `acceptance-10-deploy-picdplayer-offset10-v2-20261109T0000.log`: 標準deploy.shの今回の出力。
+- `acceptance-10-human-pass-20261109.json`、`acceptance-296-inspect-20261109T001231Z.json`: 対話の確認と独立した終了状態。APIから音を推定していない。
+- `offset10-passed-candidate-04395516.deb`、`offset10-failed-candidate-931e792d.deb`、`acceptance-10-before-batching-c9ff28e7.deb`: 受入成功候補・前の失敗候補・旧packageの実archiveをprivateに保全。正式公開artifactとはしない。
+
+`collect_offset10_candidate.py`でhelper一致、両符号/全6区間、C2/補正/物理read量、12秒以上の実進行枠、
+自然STOP2件、端末receipt10件、温度/current、journal、旧package/15ファイル復元を検査してexit0。
+`summarize_offset10_pass.py`で世代・時刻・ALSA隣接133組の増加を再集計してexit0。
+受入時点では未commitの実装/仕様/検証記録だった。続く利用者指示による公開対象は専用branchの13ファイルのみで、
+元#284の未commit3文書とprivate helper/設定/写真/raw/archiveを含めない。
+integrity-designの古いclose保留文と明示0の表現を、承認済みv1範囲/USER_CONFIGURED契約へ整合させた。
+公開CIと既存配備品/受入候補の実機証拠を区別し、この公開・終了作業では追加Pi操作・再配備を行わない。
+
+<a id="offset-batched-read-20261106"></a>
+## #10 direct端数offsetのread粒度対処候補（2026-11-06）
+
+01:34:30 UTCの利用者指示で、[C2なしでも中断した診断](#offset-diagnostic-20261106T0124)を受け、
+製品側の小さなreadに伴うcommand costを償却する対処候補を実装した。drive側の長時間readの原因確定や
+過去runの受入Passへの変更ではない。Piへの配備・正負試聴結果は、下記container検証とは別に確認する。
+
+`read_policy_block_frames`で起動時/停止境界のpolicy適用時に同じ規則を使い、direct SINGLEかつ
+明示offsetが588 stereo sample frameの整数倍でない場合だけ、論理readを15→最大60 CD frameへ変更した。
+一回の取得音声を200→800 msとし、guard sector込み61でC2の75-sector packet上限以内とする。
+小容量bufferでは容量に収まる15 frame刻みへ縮める。offset未指定/明示0/整数sector offset、
+paranoiaのSINGLE、REPEATのregion_frames、capture/assessmentの入力構成は変更していない。
+容量750/startup45という設定は増量せず、既存の丸めにより有効queue720/開始60となり、既存APIへ実read量を公開する。
+offset wrapperの単一物理read・sample値・C2/verification evidence・repeat独立性は維持し、PCM cacheは追加していない。
+functional-design/detailed-designの15 frame固定記述を、この限定条件と丸めに合わせて更新した。
+
+### Linux/aarch64検証
+
+開始時はDocker daemonが停止していたため、製品編集前に利用者へ起動を依頼し、復旧を確認した。
+既存のexport済みWPE SDK/同recipeを専用worktreeへ非破壊copyして標準scriptから再利用し、
+元worktreeの未commit文書やSDKを編集せず、WebKitのsource再buildも行っていない。
+
+- `./scripts/build-container.sh`: Releaseのbuild/stage/CPack成功。編集したC++を再buildしてから試験した。
+- 関連6件（playback_engine/read_offset/cdda_reader/repeated_read_verifier/read_policy/read_policy_persistence）は6/6成功。
+- 新しいAPI切替試験の初回はpolicy更新直後のstate snapshot未反映で5/6だったため、modeとread量の両方を2秒以内に照合する待機へ修正した。assertionや既存試験を削除せず、再実行6/6を確認した。
+- Release CTest全体80/80（98.49秒）、続くDebug全体80/80（101.08秒）、両profileのpackage lifecycle成功。
+- 標準scriptは出力先固定なので、Debug後にReleaseを再生成し、その最終artifactでも全体80/80（100.30秒）とpackage lifecycle成功を再確認した。DebugをPiへ配備する手順にはしない。
+- 追加assertionは正負/未指定/0/整数sector offsetとbackend・policy選択、小容量15/30/45、全sample照合、60 frameの部分/開始位置不正、短い末尾/terminal drain、61/75 sector各1 C2 packet、実daemonのsingle→repeat→single（60→75→60）を含む。
+- boundedな独立静的レビューは重大指摘なし。残った統合coverageのうち小容量worker/drain、60 frame失敗、session切替と61-sector packetを補完した。実機の速度改善は自動試験から推定しない。
+- `git diff --check`成功。未変更fixture等の既存compiler warningは残り、warning-freeと報告しない。
+
+| artifact | identity |
+|---|---|
+| 最終Release package 0.1.0 | SHA-256 `931e792d25fd1d88cf97a66c9d2830a46484a3fe0832bbda7ca1eacaa6d1a93a` |
+| 最終Release daemon | SHA-256 `a115c06e29fe195691472709d5e3b79706324d43acf1ecd2323258fe8c932cc0`、profile Release |
+| Debug package（非配備） | SHA-256 `5ed4a43e8c9bf9556d76d8939a63ab9f318c2f8776ae6fc9a1e337572ce98f4c` |
+| 旧Release/rollback package | SHA-256 `c9ff28e7c7a4f9b2663b97dac2cbaf31e7e5cb3c42d6c6286c6bc8ca38a13424`。Piからhost private領域へ退避し一致確認 |
+
+host private領域の`offset10-batching-debug-20261106T014952Z.*`と
+`offset10-batching-release-20261106T015257Z.*`へ、実際のCTest80件Pass log・CMake cache・差分・artifact hashをmode0600で保存した。
+`record_offset_build.py`でprofileと80件のTest Passedを照合してexit0。
+01:47:01の独立Pi read-onlyは同identity/同disc、STOPPED、58.534 C/throttled0、capture/assessment/media IDLE、
+offset未指定/SINGLE/背景ON、元Custom UI、両service稼働だった。次の操作の現在値に流用せず再確認する。
+
+実機確認では元のC2 ON、同disc/buffer/速度要求を維持し、正負の先頭/seek後/末尾とTV表示を各一回だけ対象とする。
+標準deploy.shのpin強制、旧package/settings保全、成否によらない旧packageへの正常復元を準備する。
+sudoersや設定の読み取り権限は拡張せず、既存の利用者認証を使う。人の確認とrawをAPIから推定せず、
+異常では通常STOP・復元を優先する。配備後の受入が成立するまでは#10はOpenである。
+
+### 配備前の復元helperレビューで停止
+
+privateのpredeploy/candidate helperを追加し、通常deploy.shの前後で旧package/settingsを保全して、
+成否にかかわらず旧packageへ戻す手順をレビューした。Piへこれらを配備・実行していない。
+最初のレビューで取消・ログ失敗・一時override残留・dpkg timeout・TTY/C2前提の不足を検出し、
+一回のbounded修正で、親の取消遅延、ログ失敗時の復元継続、独立したoverride撤去、
+dpkgをkillせず通常完了待ち、TTY必須と元C2 ON条件の検査を追加した。
+privateの非実機試験は入力/出力同期16件、wrapperの取消/ログ失敗/残留設定/timeout等9件が成功した。
+
+ただし再レビューで次が残り、約束した修正レビュー一回の上限で実機配備を停止した。
+
+- 親のsignal遅延だけでは、同じterminal foreground process groupのdpkg子へ届くCtrl+Cを防げない。既存の取消試験は親handlerの直接呼出しで、この実process groupを検証していなかった。
+- 最終成功表示が最後の証拠書込み/closeより先で、最後のI/O失敗や取消と表示が食い違い得る。
+- 元C2 ON条件のactive evidenceは先頭/seekで検査するが、別の末尾loopではまだ同じ検査がない。
+
+したがってprivate helperを安全な配備/復元手順として採用しない。25件のmock試験が実際の取消保証や
+全条件の受入成功を示すものではない。dpkgの観測予算超過時にforcekillせず正常完了を待つ設計は、
+異常kernel I/Oを含む復元時間のhard boundを保証するものでもない。
+残課題はhelperに分離し、製品側の60 frame対処候補や自動試験の失敗と混同しない。
+この段階でPiのpackage/config/serviceに新たな変更はなく、試聴/正負/末尾/速度改善は未検証である。
+02:08:06のpin/identity付きread-onlyで旧package `c9ff28e7...`/旧daemon `a825a8eb...`を再照合し、
+STOPPED・offset未指定・SINGLE/背景ON・同PIDの両service・56.920 C/throttled0を確認した。
+capture/assessmentは非busyだがmedia activity標本はRUNNINGであり、次回開始時のidleを保証しない。
+rawは`acceptance-296-inspect-20261106T020804Z.json`へprivate保存した。
+製品source・仕様・backlog/verificationは専用branchへ未commit保存し、Issue更新・commit/push/PR/mergeは行っていない。
+
+<a id="offset-diagnostic-20261106T0124"></a>
+## #10中断後のread供給解析とC2なし診断（2026-11-06 UTC）
+
+00:57:54 UTCの利用者指示で[先の中断run](#offset-acceptance-interrupted-20261106)の保存データを解析し、
+helperを修正して、一変数だけの有限診断を行った。製品source・binary・packageは変更していない。
+
+### 非実機の解析とhelper修正
+
+先の先頭区間ではqueueが1→24 blocksへ増加しており、331 msという一つの値だけから常時供給不足とはいえない。
+seek後は00:21:56.359/56.925/57.491のlatest seq26/LBA1835が不変で、inflight486/996/1499 ms、
+queue7→4→2。その後seq27が現れた時点でqueue0となり、00:21:58.745のunderrunへ至っていた。
+少なくとも約1.5秒のread未完了が貯まったPCMを消費した観測であり、device command単体の所要時間や原因確定ではない。
+
+`src/read_offset.cpp`は+1の論理15 frameに物理16 sectorを要求し、次の要求は1 sector重複する。
+`src/cdda_reader.cpp`のseekはsoftware cursor設定であり、seek呼出し自体がhardware commandを出すわけではない。
+C2 READ CDは16 sectorを1 packetで読み、成功時に通常audio readを追加する処理はない。
+先のevidenceはC2 CLEANで、failed C2後のfallbackが今回の原因だった根拠はない。
+single-modeのworker blockは15 frame固定で、buffer容量を増やしても一回のread量は増えない。
+重複sectorの保持最適化はphysical-read/C2 evidenceとrepeat独立性の契約へ影響するため、推測だけで実装しなかった。
+read経路の別の失敗時retry重複も静的調査で候補となったが、今回の成功readを説明する修正として採用していない。
+
+privateの`offset10_v2.py`では背景の再起動由来と設定意味を分け、PLAY受理だけでは試聴を開始せず、
+新streamのcurrent PCM evidence・位置進行・ALSA RUNNING/hw_ptr増加を照合してから12秒を数えるよう変更した。
+端末上で利用者の準備/表示確認、実際の試聴、最後の復元表示を明示的な`pass`入力として時刻付きで保存する。
+`unknown`/`abort`/EOFは成功にせず、正常STOPと復元を行う。復元は元の異常やrun期限から独立して確認する。
+最初の空入力中断を受け、空行は確認として扱わず再入力待ち、EOFは中断とする修正も行った。
+`test_offset10_v2.py`の非実機試験は最終15件成功、構文検証も成功。これを製品実機Passと混同しない。
+
+### 一変数の有限診断と結果
+
+01:03:09のread-only時点は同identity/同TOCでtrack3再生中、62.300 C/throttled0だったため、
+停止を過去値から推定せず、利用者へ通常STOPしてからhelperを開始するよう案内した。
+同じRelease binary、SINGLE、buffer750/startup45、ALSA200 ms、速度要求2x、offset+1を維持し、
+任意の`--direct-c2-pointers`だけを一時的に外した。標準Playerへの一時切替/復元は先のrunと同じ。
+試験は先頭とseek後の各12秒だけで、末尾/-1へ進まない診断modeとして受入とは区別した。
+
+| run/UTC | 実際の結果 |
+|---|---|
+| `picdplayer-offset10-v2-20261106T0108` / 01:19:25〜01:20:19 | 最初の端末確認が空入力で、再生前に中断。PLAY/seek/track発行0、105 record/82状態標本/6安全標本、57.458〜61.224 C/throttled0。設定/表示を正常復元 |
+| 同runの人の結果照合 | 当初の成功選択に対しログ不一致を照合し、利用者は「空入力またはEnter・FAILEDだった」と訂正。試聴成功に加算しない |
+| `picdplayer-offset10-v2-20261106T0124` / 01:23:56〜01:24:59 | 入力修正後の一回。01:24:27.230に先頭の出力進行を確認して12秒、seek後の出力進行は01:24:41.412に確認したが、下記underrunで01:24:42.119に中断。139 record/104状態標本/14安全標本、57.996〜62.838 C/throttled0 |
+| 同run / 01:24:41.960 | C2 NOT_CHECKEDの補正PCMでもALSA write underrun。stream9→11/resume LBA1812、queue0/pending168 stereo samples、tick gap10272 us、last read331820 us、inflight14014 us |
+
+後者のseekはLBA1723から始まり、最初のread330466 us、prebuffer1105 ms。
+seq1/2/3は物理16 sector/論理15 frameで、先頭区間のようにqueueが増えず、出力再開後約1秒でunderflowした。
+C2を要求しない経路でも不足したため、C2だけをOFFにする対処では解消しないことが確認できた。
+最初のC2 ON runとはseek位置/時点が違うため速度比較やC2の無影響の証明ではなく、共通の原因確定でもない。
+kernel journalは両runとも追加記録なし。USB/current異常や#289/#292との同一原因を推定しない。
+
+後者にもチャット上は診断完了/両区間試聴済みという選択があったが、原記録は`END: FAILED`で、
+HEAD/SEEKの聴取結果を答える端末promptより前に中断していた。seek後12秒は完了していないため、
+選択だけで全区間の試聴Passとはしない。実際の音切れの人の認識はUNKNOWNとする。
+端末の`pass`記録は+1のTV/準備と復元表示についてのみ存在する。
+
+### 正常復元・保全・残条件
+
+両runで通常STOP、一時EnvironmentFile/drop-in撤去、daemon/kioskの通常restartを行い、
+settings.jsonを含む15ファイルの内容/権限/所有者、policy、背景の要求/実効/保存状態を照合して復元を確認した。
+復元後のCustom UI/STOPPEDは利用者の端末`pass`にも記録されている。forcekill/異常電断なし。
+独立した01:25:20のread-only採取はoffset null/NONE/window null、STOPPED、SINGLE、背景ON/saved、
+capture/assessment非busy、media IDLE、60.686 C/throttled0、daemon7040/WPE7066 active/running・NRestarts0だった。
+通常起動のC2 opt-in設定も元のままで、C2 OFFを永続採用していない。
+
+永続host private領域 `/Users/udonchan/.ssh/picdplayer-pins-20261104/`へ次をmode0600で保存した。
+
+- `acceptance-10-v2-20261106T0108-collected-20261106T012116Z.jsonl`、`acceptance-10-v2-20261106T0124-collected-20261106T012520Z.jsonl`: 原runの完全記録。
+- `acceptance-296-inspect-20261106T010307Z.json`、`...T012114Z.json`、`...T012518Z.json`: 独立read-only状態採取。
+- `offset10_v2_executed_20261106T0108.py`: 空入力で中断した実行版。SHA-256 `3fa2fb7fbbe1668078ad16c9e5058cf2bb0a17964cd99e229590d6fdbd980136`。
+- `offset10_v2.py`: 入力修正後の実行版。SHA-256 `531d9566f3026734c509f833aed4fb8344405b11b1cf0395cd2e16a055df4148`。各原runのremote helperと一致を照合した。
+- `acceptance-10-v2-human-receipts-20261106.json`: チャットの回答と原記録の不一致、最初の訂正、実際に成立した復元確認を分離した記録。
+
+`verify10_diagnostics.py`は、前者の再生発行0、後者のC2非要求/NOT_CHECKED・補正PCMとunderrun1回、
+未完了の試聴枠、両runの通常復元/ファイル一致と安全条件を再集計してexit0。
+成功検証ではなく中断結果の検証であり、旧runの結果も書き換えていない。
+#10はOpenで、末尾/-1/人の全区間試聴は引き続き未完了。今回の一変数診断はここで終了し、追加の実機試行は行わない。
+次はread要求の粒度・重複・seek後供給の製品側対処を、証拠契約を保った試験とともに検討する必要がある。
+buffer増量だけでPassへ置換せず、新たな設定採用や修正後の実機受入は別のrunとして条件を固定する。
+GitHub本文/label/状態、commit/push/PRは変更せず、文書2件を専用branchに未commitで保持する。
+raw/設定/identity/写真は公開しない。
+
+<a id="offset-acceptance-interrupted-20261106"></a>
+## #10 offset残受入の中断と正常復元（2026-11-06 UTC）
+
+### 対象と有限手順
+
+00:09:43 UTCの利用者指示で、#10の診断用+1/-1条件の試聴・TV表示という残受入を開始した。
+最新Issue本文/コメント、設計・message契約、[過去の限定試験](#10-read-offsetの実装と限定実機確認2026-10-16)を照合し、
+remote master `c1a24e3453e62acccb6c0ba516bf25148f27b8f5`基準の専用branch
+`verify/10-offset-acceptance-20261106`を既存受入worktreeに作成した。元#284の未commit3文書は変更していない。
+
+pin付きSSHと保存済みmachine/board hashで同一Piを再照合した。00:10のread-only採取はThe Slip、
+10曲/TOC `[0,197367)`、STOPPED、SINGLE、背景ON/saved、offset null/NONE、56.382 C/throttled0。
+capture/assessmentはIDLE/非busy/reader_released。media activityはRUNNING標本もあり、恒常的idleとはしていない。
+既存Release package 0.1.0のSHA-256は`c9ff28e7c7a4f9b2663b97dac2cbaf31e7e5cb3c42d6c6286c6bc8ca38a13424`、
+daemonは`a825a8eb6efdd4907919c91501d10b0fb60451a785fdf483d57b74ad0f5436c1`。
+Pi 3/ASUS SDRW-08D2S-U/F601、HDMI/TV/ARC/NR1200/スピーカー、drive独立給電、fan/ヒートシンクなしを保持し、
+利用者も構成変更なしと回答した。室温は未測定。新build/配備・媒体探索は行っていない。
+
+無認証sudoは既存のservice操作だけに限定され、`sudo -n -v`はpassword requiredだった。
+利用者が端末から今回専用helperを一回sudo実行する方法を選び、パスワードはチャットへ受け取っていない。
+sudoers/アクセス権を拡張せず、既存serviceを使用した。永続EnvironmentFileとsettings.jsonは書き換えず、
+`/run`のrun固有EnvironmentFileと一時drop-inだけでoffsetを指定し、試験中だけ`--custom-ui`を外して
+標準Playerを表示する。各条件/復元でdaemonとkioskを通常restartする手順とした。
+metadata辞退はsession限りなので再起動で失効することを説明し、pickerは必要ならBackだけで閉じる。
+
+最大12分、+1と-1各一回、各条件は先頭12秒・意図したseek +10秒後12秒・末尾約15秒/自然STOPを計画した。
+開始前のTV確認と条件間の回答待ちは各120秒。音/read/USB異常・80 C/current制限・予期しない取得等で
+通常STOP・一時設定撤去・元service/Custom UI復元を優先し、試行を増やさない。
+再生/seekはAPIで行うが、人の試聴・TV確認の代用にはしない。試験値を物理校正値とは扱わない。
+
+### 実施結果と異常
+
+| UTC | 実施・観測 |
+|---|---|
+| 00:19:35.017699 | helper開始。rootで設定/配置物/Custom UI計15ファイルの内容・権限・所有者を保全 |
+| 00:19:40.494417 | +1の標準UIとAPIが準備完了。USER_CONFIGURED、window `[0,197366)`、末尾不能1/整列除外587 stereo sample frames |
+| TVの開始確認 | 利用者が「+1表示正常・構成変更なし」と回答。Read offset 1 samples、端除外1/587、no substitute PCM、calibration unverifiedを目視確認 |
+| 00:21:39.374412 | PLAY204。最初の出力は00:21:42.724、prebuffer3349 ms。先頭12秒はhelperの観測枠であり12秒すべての実音を保証しない |
+| 00:21:52.199757 | seek +10秒204。stream9/start LBA1460、prebuffer526 msで出力再開 |
+| 00:21:58.745 | ALSA underrun recovery=1、stream9→11/resume LBA1910。failure contextはqueue0/pending0、tick gap10496 us、last read331233 us、read inflight254194 us |
+| 00:22:01.596840 | 安全観測で異常を検出し中断。00:22:01.624589 STOP204、STOPPEDを確認して復元へ |
+| 00:22:05〜07 | 一時設定を撤去し、daemon/kioskを通常restart。offset未指定と元Custom UIへ復帰したが、helperの最終assertが停止 |
+
+今回のunderrunは実際の異常であり、試聴結果は利用者回答「試聴は未確認」によりUNKNOWN。
+音切れを人が認識したとも、音は正常だったとも推定しない。先頭/seek後の試聴Pass、末尾再生、自然STOP、-1条件は成立していない。
+生データは319 record/259状態標本/44安全標本、53.692〜60.148 C/throttled全0。
+区間kernel journalは追加記録なし。read/USB異常のない別runや過去の成功へ置換せず、
+今回のqueue空/読み取り所要時間という観測からoffset実装・drive・別の#289/#292と同一原因とは断定しない。
+自動復旧ログを正常試聴や受入成功へ読み替えず、追加条件/再試行は行わなかった。
+
+### helperの誤判定と復元の再確認
+
+helperは背景API全体の完全一致を要求し、正常な再起動で`requested_source`が`saved → restored`へ変わることを
+不一致とした。これが空のassert messageと`RESTORATION_UNCONFIRMED`の原因だった。
+製品の保存失敗と混同しない。ただしその時点の結果は保全し、後から成功runへ書き換えない。
+
+00:42頃に利用者が同じコマンドを再実行したが、既存`evidence.jsonl`のO_EXCL保護による
+FileExistsErrorで設定操作前に停止した。既存runの証拠は上書きされておらず、新しい受入条件として加算しない。
+
+00:42:52の独立read-only採取でoffset null/NONE/window null、STOPPED/track1/frame0、SINGLE、背景ON/saved、
+capture/assessment非busy/reader_released、56.920 C/throttled0、daemon5188/WPE5215 active/running・NRestarts0を確認。
+さらに00:44:15のread-only root照合で、settings.jsonを含む全15ファイルのhash/size/mode/uid/gid一致、
+一時EnvironmentFile/drop-in不在、policy一致、背景の要求/実効/保存状態一致を確認した。
+由来の`saved → restored`だけを正常な再起動結果として明示した。sudoers/永続設定の変更はない。
+利用者も「現在表示は復元済み」と回答し、元Custom UI/STOPPEDを目視確認した。
+通常SIGTERMとservice deactivated successfullyを記録し、forcekill/異常電断を復元成功としていない。
+
+### 保全と残条件
+
+host永続private領域 `/Users/udonchan/.ssh/picdplayer-pins-20261104/`に次を保全した。
+
+- `acceptance-296-inspect-20261106T001002Z.json`、`acceptance-10-preparation-20261106T001047Z.json`: 現在状態/既存権限/unitsの開始前read-only記録。
+- `offset10_acceptance.py`、`offset10ctl.py`: 実行した有限helperと操作/回収helper。remote runは`/home/udonchan/picdplayer-offset10-20261106T0017/`で原記録を保持。
+- `acceptance-10-status-20261106T004252Z.jsonl`: 中断から復元誤判定までを含む319 recordの完全な回収記録。中間のstatus/play-plus回収も別名で保持。
+- `acceptance-296-inspect-20261106T004250Z.json`、`acceptance-10-restoration-confirmation-20261106T004411Z.json`: 独立した現在状態と15ファイル/設定意味/撤去の復元照合、各exit0。
+- `acceptance-10-human-receipt-20261106T0019.json`: +1表示確認、試聴UNKNOWN、現在TV復元の人の回答。
+- `verify10_interrupted.py`: +1のwindow/除外、中断・POST数・未実施条件、underrun1回、正常停止/復元、ファイル保持を再集計してexit0。受入成功の検証ではない。
+
+今回は+1のTV表示のみ確認済み。先頭/seek後/末尾の人の試聴と-1表示/試聴は未完了で、#10はOpenを維持する。
+次の受入前に今回のunderrunを切り分け、観測枠と実出力時間の違い・背景由来の再起動境界を踏まえてhelperを見直す必要がある。
+原因未特定のままbuffer変更や追加試行でPassへ置換しない。GitHubの本文/label/状態、commit/push/PRは変更せず、
+専用branchの文書2件を未commitで保持した。raw・設定・identityを公開しない。
+
 <a id="metadata-decline-20261105T2338"></a>
 ## #296 物理リモコンによるmetadata辞退の実機受入（2026-11-05 UTC）
 

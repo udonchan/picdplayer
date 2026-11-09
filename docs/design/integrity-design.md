@@ -498,7 +498,7 @@ read errorの再試行方針や未解決PCMの扱いを変更しない。
 任意の上限値を黙って丸めない。現行入力はdaemon再起動でだけ変更でき、stream途中やruntime Settingsでは適用しない。
 
 未指定は`read_offset_samples=null`、`offset_status=UNKNOWN`であり、0へ読み替えない。明示した0も
-校正値として公開する。値を実際に適用したreadは`CORRECTED`、値が判明しても適用されないreadは
+明示入力値として公開するが、物理校正済みを意味しない。値を実際に適用したreadは`CORRECTED`、値が判明しても適用されないreadは
 `UNCORRECTED`とする。公開値にはUSER_CONFIGUREDの根拠と物理校正未検証のdetailを伴わせる。
 TESTED / DATABASE由来の値を取得する機能は未実装である。明示ユーザー値は将来の
 校正・database値より優先し、利用条件・機種/firmware一致・符号規約を検証できないdatabase値は
@@ -514,8 +514,9 @@ seek、disc generation変更、read error、代替PCMも同様にcoverageを途�
 
 2026-10-16、Dと追加wire契約の仕様採用、実装・自動試験、Debug配備・限定実機試験を順に承認して進めた。
 以下は今回実装した契約であり、A/B/Cは比較の記録として残す。未指定は従来どおりnull/UNKNOWNである。
-自動試験と限定的なPi確認は[検証記録](../development/verification.md#10-read-offsetの実装と限定実機確認2026-10-16)を参照し、
-物理校正・原盤一致・試聴・全disc完走まで確認済みとは扱わない。
+当時の自動試験と限定的なPi確認は[検証記録](../development/verification.md#10-read-offsetの実装と限定実機確認2026-10-16)を参照し、
+その確認だけで物理校正・原盤一致・試聴・全disc完走まで確認済みとは扱わない。
+後続のv1残受入と11月9日の限定試聴/TV結果は、下記「受入条件と検証境界」を参照する。
 
 #### 入力と適用
 
@@ -555,7 +556,7 @@ sizeの積算とLBA変換時にもoverflowを拒否する。実際のI/Oは既�
 | A: 要求全量を作れなければ非採用・STOP | 負offsetで先頭再生不可、正offsetで末尾前STOPになり得る。1 sample不足でもblock・先読みqueue・出力待ちPCMへ影響する | 初期仕様には非採用。最初に提示した最小変更案として記録を保持 |
 | B: 補正可能なsample範囲だけを再生 | 先頭/末尾が短くなる。sample単位の開始・終端・進捗・drain契約が必要 | 初期仕様には非採用。必要になれば追加設計と承認を要する |
 | C: 端だけ未補正または代替PCMで継続 | 補正条件やsample originが区間で変わる。無音等は#156の採否にも関係する | 今回は採用を提案しない。自動fallbackを実装しない |
-| D: 補正可能な完全CD frameだけを再生 | Bを内側のCD frame境界へ丸める。物理的な不足に加えて最大587 sample frameを除外するが、既存の整数CD frame契約を維持できる | 採用・実装、fake PCM成功。USB異常等による停止履歴を残し、利用者確認後に最終packageのPi 6条件成功。校正・試聴は未確認 |
+| D: 補正可能な完全CD frameだけを再生 | Bを内側のCD frame境界へ丸める。物理的な不足に加えて最大587 sample frameを除外するが、既存の整数CD frame契約を維持できる | 採用・実装、fake PCM成功。USB異常等による停止履歴と当時のPi 6条件成功を保持。11月9日に正負条件の限定試聴/TV受入Pass、物理校正は未検証 |
 
 Aでは、範囲外I/Oを発行せず、当該要求を失敗としてPCMをqueueへ入れない。
 既存read failureと同じ停止経路を使う案であり、block途中までを必ず聴ける、または不足sampleの直前で
@@ -650,7 +651,12 @@ sample位置とchannelを識別できるfake PCMを`read_offset_test`で全sampl
 ScriptedCddaReaderでは遅延旧readと世代失効を検証する。通常のscenario harnessも回帰対象だが、
 物理校正・drive cache・試聴・TV表示の確認には使わない。
 今回のPi試験は通常CDの短時間single/repeat、pause/seek、端151 CD frameの再生と正常停止に限定した。
-試験値0/±1は校正値ではない。物理校正・別driveは#146と連携し、未確認条件を残したまま#10をcloseしない。
+試験値0/±1は校正値ではない。2026-10-16時点では未確認条件を残して#10のcloseを保留した。
+後続の[2026-11-05承認済みv1範囲](../development/backlog.md#v1-scope-20261105)は、補正条件の人の試聴と
+TVの端除外/入力根拠表示を#10の残受入とし、物理校正・傷媒体・別driveを#146の別範囲に分けた。
+2026-11-09の[正負offset限定受入](../development/verification.md#offset-acceptance-pass-20261109)で残受入をPassとし、
+45 frame対処・仕様・記録の統合で#10をCompletedとして終了する。#146等の未確認条件を実施済みにしたり、
+offset値だけで物理校正・原盤一致・全disc完走を主張したりしない。
 
 ## 9. provenance・統計の上限
 

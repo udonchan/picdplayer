@@ -228,7 +228,12 @@ keyだけでONにはせず、復元した利用者選択を使う。起動中の
 user設定をresetする操作、機器設定の
 上書きや再起動後のrollback操作は、必要な項目ごとに別途契約を定める。
 
-single modeのPCMは15 CD frame（200 ms）単位、repeat modeはseek overheadを抑えるため75 frame単位。
+single modeのPCMは通常15 CD frame（200 ms）単位。ただしdirectで明示offsetが588 stereo sample frameの
+整数倍でない場合は、guard sectorを伴うreadのcommand overheadを償却するため45 CD frame（600 ms）単位とする。
+bufferが小さい場合は容量に収まる15 frame刻みへ縮める。補正の各readは従来どおり単一物理区間で、
+PCMの再利用cacheや追加の読み取り根拠を導入しない。45 frameなら追加sector込み46でC2 responseは121716 bytesとなり、
+75-sector packet上限と120 KiB adapterの転送上限内に収まる。他のdrive/adapterの制限や実効速度を保証する値ではない。
+offset未指定/明示0/整数sector offset、paranoiaは15 frameのまま、repeat modeは既定75 frame単位。
 既定はqueue上限750 frame（10秒、PCM約1.68 MiB）、
 開始閾値45 frame（0.6秒）。容量と開始閾値は15 frame刻みで最大2250 frame（30秒）まで
 起動optionで設定できる。read policyはAPIで起動中に変更できるが、先読みqueueの容量・開始閾値は
@@ -324,7 +329,8 @@ read-policyのbodyはmode、region_frames、required_matches、maximum_attempts�
 region_framesは15以上・15の倍数・設定buffer容量以下、required_matchesは2以上、
 maximum_attemptsはrequired_matches以上8以下、time_budget_msは1〜60000。
 singleでも保持する検証設定を検査する。共通入力不正は400、現在のbuffer容量に収まらなければ409。
-single時の実read量はregion_framesによらず15 frame。repeat時にregion_framesを用いる。
+single時の実read量はregion_framesによらず通常15 frame、directの端数sample offsetでは上記の最大45 frame。
+repeat時にregion_framesを用いる。実際のread量と丸めた開始閾値はread_block_frames/prebuffer_target_framesで公開する。
 technical statusはeffective strategyとReadPolicyを別々に表示し、未適用の要求は
 `effective → requested (pending)`として示す。初回にGET stateを読み、以後WebSocketで更新する。接続断ではstateを再取得してから
 再接続するため、eventを一件ずつ完全に受信したことを状態復元の前提にしない。metadata文字列は

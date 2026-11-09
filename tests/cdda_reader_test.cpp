@@ -202,6 +202,19 @@ int main() {
         check(pcm.front() == std::bit_cast<std::int16_t>(std::uint16_t{0x9234}));
         const auto before = packets;
         check(full_packet(0, pcm).error == EINVAL && packets == before); // 76 sectors exceeds the per-command bound.
+        for (std::size_t frames : {46, 61, 75}) {
+            unsigned issued = 0;
+            auto packet = make_mmc_c2_audio_read([&](auto command, auto data, auto, std::size_t& received) {
+                ++issued;
+                check(command[8] == frames && data.size() == frames * (2352 + 294));
+                if (frames == 46) check(data.size() == 121716 && data.size() <= 120 * 1024);
+                std::fill(data.begin(), data.end(), 0);
+                received = data.size();
+                return 0;
+            });
+            const auto read = packet(1723, std::span(pcm).first(frames * cdda_samples_per_frame));
+            check(read.error == 0 && read.c2_status == C2Status::clean && issued == 1);
+        }
         const auto node = std::filesystem::temp_directory_path() /
             ("picdplayer-c2-packet-" + std::to_string(::getpid()));
         { std::ofstream out(node); check(static_cast<bool>(out)); }

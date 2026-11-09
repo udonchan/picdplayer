@@ -203,8 +203,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
         return policy.mode == ReadVerificationMode::repeat
             ? make_repeated_read_verifier(std::move(reader), repeated_read_policy(policy)) : std::move(reader);
     };
-    const auto initial_block_frames = initial_read_policy.mode == ReadVerificationMode::repeat
-        ? initial_read_policy.region_frames : pcm_block_cd_frames;
+    const auto initial_block_frames = read_policy_block_frames(initial_read_policy, backend,
+        configured_read_offset, buffer_config.capacity_cd_frames);
     PcmWorker worker(std::move(reader_factory), applied_strategy.effective,
                      buffer_config, drive_access,
                      initial_read_policy.mode == ReadVerificationMode::repeat ? "REPEATED" : "LEGACY",
@@ -269,8 +269,8 @@ void run_player_session(const std::string& device, CddaBackend backend,
     std::uint64_t policy_revision = 0;
     const auto apply_read_policy = [&](const ReadPolicy& policy) {
         validate_read_policy(policy, buffer_config.capacity_cd_frames);
-        const auto block_frames = policy.mode == ReadVerificationMode::repeat
-            ? policy.region_frames : pcm_block_cd_frames;
+        const auto block_frames = read_policy_block_frames(policy, backend,
+            configured_read_offset, buffer_config.capacity_cd_frames);
         {
             std::lock_guard lock(*reader_policy_mutex);
             *reader_policy = policy;

@@ -155,6 +155,30 @@ with tempfile.TemporaryDirectory(prefix="picdplayer-policy-persistence-") as tmp
 
     run_daemon(None, session_only)
 
+    def fractional_offset_reconfigures_blocks(port, policy):
+        def read_frames():
+            with opener.open(f"http://127.0.0.1:{port}/api/state", timeout=1) as response:
+                return json.load(response)["read"]["read_block_frames"]
+
+        def expect(mode, frames):
+            deadline = time.monotonic() + 2
+            while True:
+                effective = get_policy(port)["effective"]["mode"]
+                actual_frames = read_frames()
+                if effective == mode and actual_frames == frames:
+                    return
+                assert time.monotonic() < deadline, (effective, actual_frames, mode, frames)
+                time.sleep(0.01)
+
+        assert policy["effective"]["mode"] == "SINGLE"
+        expect("SINGLE", 45)
+        assert post_policy(port, repeat) == 204
+        expect("REPEAT", 75)
+        assert post_policy(port, dict(repeat, mode="single")) == 204
+        expect("SINGLE", 45)
+
+    run_daemon(None, fractional_offset_reconfigures_blocks, ("--read-offset-samples", "1"))
+
     def get_background(port):
         with opener.open(f"http://127.0.0.1:{port}/api/artist-background", timeout=1) as response:
             assert response.status == 200

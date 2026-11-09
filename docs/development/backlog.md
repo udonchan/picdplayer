@@ -1,5 +1,55 @@
 # 残課題とIssue一覧
 
+<a id="offset-acceptance-pass-20261109"></a>
+## #10の正負offset限定受入Pass（2026-11-09 UTC）
+
+45 frame版Release候補で、診断用+1/-1のTV端除外/根拠表示、先頭・seek後各12秒以上、末尾約15秒/自然STOPを
+利用者が確認し、同時API/補正PCM/C2/ALSA/journalと照合して限定受入Pass。
+前の60 frame版はC2 UNKNOWN/fallbackで中断しており、adapterの120 KiB上限に対しC2 response161406 bytesだった。
+最新の対処は最大45 logical/46 physical frame、response121716 bytesで上限内とし、buffer設定/PCM/evidence契約は維持した。
+45 frame版はLinux/aarch64 Release80/80・package lifecycle、helper38/38も成功。前候補のDebug結果を新候補へ流用しない。
+最後は旧package・設定15ファイル・offset未指定/SINGLE/背景ON・元Custom UI/STOPPEDへ正常復元し、修正版は常設していない。
+#10は受入終了時点では統合/Issue更新待ちのOpenだった。00:44:28 UTCの利用者指示に基づき、
+45 frame対処・試験・仕様・記録をPR経由でmasterへ統合し、v1の限定受入完了としてCompletedで終了する。
+`hardware-test-deferred`は本Issueの残条件ではなくなったため解除し、別責務の#146等の状態は変更しない。
+物理校正・別drive/傷媒体・全disc・C2精度assessmentは今回へ追加せず、過去の失敗や#289/#292の未解明事項も保持する。
+詳細は[検証記録](verification.md#offset-acceptance-pass-20261109)。原記録は永続host privateに保持し、公開対象は専用branchの13ファイルだけ。
+元#284の未commit3文書・private helper/設定/写真/raw/archiveは統合に含めず、追加Pi操作・再配備も行わない。
+
+<a id="offset-batched-read-20261106"></a>
+## #10端数offsetのread粒度対処候補（2026-11-06）
+
+direct SINGLEの端数sample offsetだけread量を最大60 frameへまとめ、小容量では15 frame刻みへ縮める対処候補を実装した。
+未補正/整数sector offset/paranoia/repeat、PCM/evidence契約は維持し、buffer設定の増量やPCM cacheは追加していない。
+Linux/aarch64 Release・Debug各80/80と両package lifecycle、最終Release再生成後の80/80を確認した。
+旧packageはprivateに退避済み。配備前helperの再レビューでdpkg子へのCtrl+C・最終証拠/表示順序・末尾C2確認が残り、
+修正レビュー一回の上限で配備を停止した。Piは旧packageのままで、helperの残課題を解消してから同disc・C2 ONの正負試聴/TVと正常復元へ進む。
+自動試験から速度改善や実機Passを推定せず、#10はOpen。詳細は[検証記録](verification.md#offset-batched-read-20261106)。
+元#284の未commit差分は保全し、この専用branchの製品変更・仕様・検証記録も未commitである。
+
+<a id="offset-diagnostic-20261106T0124"></a>
+## #10 read供給解析とC2なし診断（2026-11-06 UTC）
+
+保存runではseek後に少なくとも約1.5秒readが完了せず、queueが枯渇していた。常時速度不足とは断定しない。
+helperの背景復元判定・実出力開始同期・端末での明示確認を修正し、非実機試験15件を通した。
+C2取得だけを一時OFFにする有限診断では、空入力で再生前中断したrunを加算せず、入力修正後に一回だけ再生した。
+そのrunもseek後のALSA write underrunで中断し、C2 OFFだけでは解消しないと確認した。
+人の成功選択と原記録に不一致があり、完了していないseek後12秒を試聴Passにはしない。
+両runは設定15ファイル/一時override撤去/元Custom UI/offset未指定/SINGLE/背景ON/STOPPEDへ正常復元済み。
+#10はOpen/v1、末尾・-1・人の全区間試聴は未完了。read粒度/重複/seek後供給の対処が必要かを次の検討とし、
+今回の実機診断は終了した。詳細は[検証記録](verification.md#offset-diagnostic-20261106T0124)。製品source/配備変更やGitHub更新はなく、文書は未commit。
+
+<a id="offset-acceptance-interrupted-20261106"></a>
+## #10残受入の中断と復元（2026-11-06 UTC）
+
+診断用+1の標準Playerでoffset値・端除外1/587・校正未検証のTV表示を利用者が確認した。
+その後のseek区間で00:21:58 UTCにALSA underrunを観測し、通常STOP・一時設定撤去・元設定/Custom UIへ復元した。
+試聴は利用者がUNKNOWNと回答し、末尾と-1は未実施。#10はOpen/v1の残受入として維持する。
+helperの復元判定は背景由来の`saved → restored`を誤検出したが、独立read-only照合でsettings.jsonを含む
+15ファイルの内容/権限/所有者一致、一時override不在、SINGLE/背景ON/offset未指定/STOPPED、元TV表示を確認した。
+今回の異常を#289/#292や過去のUSB事象と同一原因へ結合せず、追加試行せず原因切り分けを残す。
+詳細は[中断runの検証記録](verification.md#offset-acceptance-interrupted-20261106)。rawはprivateに保全し、文書は未commit。
+
 <a id="metadata-decline-20261105T2338"></a>
 ## #296の限定実機受入（2026-11-05 UTC）
 
@@ -24,7 +74,7 @@ v1/v2記述は履歴として読む。確認済み結果・未実施・未解明
 
 | Issue | 採用した作業・残受入の範囲 |
 |---|---|
-| [#10](https://github.com/udonchan/picdplayer/issues/10) | 明示offset条件の試聴とTVの端除外/入力根拠表示。通常CDの短い診断用正負条件と正常復元を対象とし、物理校正・傷媒体・別driveは#146の別範囲 |
+| [#10](https://github.com/udonchan/picdplayer/issues/10) | Completed（v1の限定受入）。45 frame版で正負の補正試聴・TV端除外/根拠表示の[限定受入Pass](verification.md#offset-acceptance-pass-20261109)。物理校正・傷媒体・別driveは#146の別範囲 |
 | [#45](https://github.com/udonchan/picdplayer/issues/45) | 正式配布artifactと公開条件/手順。配布先・保持・署名等は全候補を実施せず、採否判断と採用範囲/見送り理由を記録 |
 | [#46](https://github.com/udonchan/picdplayer/issues/46) | 主目標をTVリモコンだけでの初回セットアップとし、対象設定・初期account/権限/network/serviceと#47との要件/実装分担を再整理 |
 | [#47](https://github.com/udonchan/picdplayer/issues/47) | bootable製品imageの生成・Imager導入・Pi起動・Player到達・基本操作/実音。#46と再整理し、#3の未実施起動項目を集約して必要な計測/短縮の採否を決める |
@@ -64,6 +114,7 @@ v1対象も全旧checkbox/全matrixを一律実施する意味ではなく、採
   #146/#147/#282/#283/#285/#296へ付与し、各本文で範囲を限定した。v1対象外やIssue全体停止を意味せず、`v1`と併用する。
   #296はその後の[限定受入完了](#metadata-decline-20261105T2338)により解除する。
 - 既存`hardware-test-deferred`は物理未受入/実装と検証の区別を示す既存情報として維持し、v1除外へ自動変換しない。
+  #10はその後の[正負offset限定受入完了](#offset-acceptance-pass-20261109)により本Issueから解除する。#146等の別範囲は維持する。
   現在の機材可用性を新規確認した意味でもなく、#10/#14の通常受入/未完実装を一括停止しない。
 - 既存`Pending`付き#19/#20/#42/#69/#124/#198/#199/#200/#250/#254は今回の質問・変更対象から除外した。
   その本文/label/状態/コメントを保持し、通常未検証の総称にPendingを拡張しない。
@@ -516,7 +567,7 @@ Issue整理とコードのcommitを別単位にした。これらは作業時点
 | 残通常受入 | #286の通常10分/cold boot、#293の[通常eject代表条件](verification.md#media-eject-20261104T1605)、#296の[物理metadata辞退](verification.md#metadata-decline-20261105T2338)を限定Completed。残る#291（標準UI/正常再接続）、速度比較#83、自発USB障害#292と分離し、長期/全構成合格とはしない |
 | 独立した小修正の対応記録 | [#226](https://github.com/udonchan/picdplayer/issues/226): wrapper正本の待機契約を修正し、Linux Debug/Release各70/70・通常Debug配備・実待機45.840秒・設定復元を確認。統合/closeの現在状態はIssueと対応PRを参照 |
 | 完了したv1表示 | #164: policy/strategy・長文表示と代表確認を完了してCompleted。追加hardeningは#250でv2以降へ延期 |
-| 実装済み・限定受入待ち | #10: 補正試聴/TV端表示、#88: 観測可能な物理hotplug、#282: 複数実写真/残目視。#252の代表物理操作Passを再要求しない |
+| 実装済み・限定受入待ち | #88: 観測可能な物理hotplug、#282: 複数実写真/残目視。#10は11月9日の[限定受入Pass](verification.md#offset-acceptance-pass-20261109)によりCompleted。#252の代表物理操作Passを再要求しない |
 | 取得・資源安全性 | #49: encoded/geometryとHTTPの独立した予算、memory-only/未採用cache部品の保証範囲を文書化済み。実装/試験結果と統合状態は上記参照。TV表示は#282 |
 | 後順位の現行課題 | #3: WPE起動時間、#14: CEC消失/claim、#83: 性能。#124: scrollbarはv1向けUI改修後の確認までPending |
 | 完了したv1 cursor対応 | #28: WPE移行時に解消したという2026-10-19の利用者実機報告に基づき完了。Chromium/Cageはv1対象外 |
@@ -592,7 +643,7 @@ Issue本文・comments、関連PRの統合状態と同commitの文書/sourceを�
 |---|---|
 | [#49](https://github.com/udonchan/picdplayer/issues/49) | 最初の技術的優先。取得経路は実装済みだが、画像本体の寸法/pixel数とdecode資源の受入境界が不足する。圧縮byte数やprovider申告寸法だけではWPEの展開memoryを制限できない。狭い安全性修正をCapability拡張より先に扱う |
 | [#238](https://github.com/udonchan/picdplayer/issues/238)、[#239](https://github.com/udonchan/picdplayer/issues/239) | 本文の未commit/未push/未統合は現況として古い。PR #256は`a17e6e0`、後続記録PR #262は`6c871f6`で統合済み。local consumerの実装完了とruntime実機受入を分離して本文を更新する候補。音声/取消後再生復帰等は未確認で、closeは別指示待ち |
-| [#10](https://github.com/udonchan/picdplayer/issues/10) | 明示offset補正はPR #233で統合済み。残る補正条件の試聴・TV端除外表示は固有の受入として維持。未設定を0にする実装や物理校正済みという主張を追加しない |
+| [#10](https://github.com/udonchan/picdplayer/issues/10) | 明示offset補正はPR #233で統合済み。11月9日に補正条件の試聴・TV端除外表示を[限定Pass](verification.md#offset-acceptance-pass-20261109)、45 frame対処と記録を統合してCompleted。未設定を0にする実装や物理校正済みという主張を追加しない |
 | [#88](https://github.com/udonchan/picdplayer/issues/88)、[#146](https://github.com/udonchan/picdplayer/issues/146) | 観測softwareと物理受入を分離した現scopeを維持。#88本文の「#239は未実装」は更新候補。消失/再接続/異常媒体/別driveは別承認・安全条件が必要で、通常CDや後続の正常flagを過去の異常受入へ代用しない |
 | [#121](https://github.com/udonchan/picdplayer/issues/121)、[#184](https://github.com/udonchan/picdplayer/issues/184) | 診断修正はPR #243、保存はPR #253で統合済み。未統合/背景保存未実装という現況文は訂正候補。残る固定packageの音声・通常運転受入を維持し、実際の音声異常が再現した場合はCapabilityより優先する |
 | [#252](https://github.com/udonchan/picdplayer/issues/252)、[#51](https://github.com/udonchan/picdplayer/issues/51) | 部分的なfocus/写真確認はあるが全受入未完了。物理リモコンは#252の同runへ集約し、#51の実写真切替/TV可読性/音声と重複試験しない。写真取得の安全性は#49が所有する |
@@ -698,7 +749,7 @@ APIの拒否/未実行・設定保持と正常service復元を確認した。単
 | [#8 Add bounded drive speed control with fallback](https://github.com/udonchan/picdplayer/issues/8) | Close済み。`--drive-speed-x 1..255`の有界な要求経路、失敗記録、API/UI投影を実装・Docker確認済み。Piでは1x要求のioctl受理と20秒API再生を確認したが、実速度・騒音・効果は未確認。通常CDの継続運転・聴感・CECは#184、同条件throughput・CPU等の比較は#83、非対応drive/ioctl失敗は#146へ移管した。 |
 | [#144 Stop optical drive spin after a bounded stopped idle period](https://github.com/udonchan/picdplayer/issues/144) | STOPPED/PAUSED中の15秒ごとの`CDROMSTART`回転維持要求を廃止し、TOC取得後にSTOPPEDが5分続いた時だけ`CDROMSTOP`を一回要求する。Docker回帰とPiでのrequest受理、TVでの自然停止、API再生復帰を確認済み。当時はeject・再挿入後のAUDIO_READY/STOPPED復帰も確認したが、現行の自動再生仕様は[#172](https://github.com/udonchan/picdplayer/issues/172)を参照。物理回転は観測しない。通常経路の完了によりCloseし、傷・劣化媒体、pause、unsupported/error、別USB drive/bridgeは [#146](https://github.com/udonchan/picdplayer/issues/146) へ集約する。 |
 | [#9 Add overlap verification and cache independence evidence](https://github.com/udonchan/picdplayer/issues/9) | repeat verifierは直前に採用した15 CD frameの先行overlapを再読してPCM連続性を確認し、overlapを出力から除いて重複再生を防ぐ。不一致はfail-closed。反復・overlap一致でもdrive cacheを排除できないため`CACHE_POSSIBLE`を公開する。Docker自動試験と通常CDのPi repeat再生を確認し、[実機記録](reports/2026-09-28-repeat-overlap-normal-cd/README.md)を保存した。cache軽減手順、物理再読込の保証、傷discを含む異常媒体での検証は本Issueの保証に含めず、#146で追跡する。 |
-| [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | Open、実装済み・限定受入待ち。PR #233で明示CLI・根拠・正負補正・D window/端coverageを統合。[採用仕様](../design/integrity-design.md#10の採用仕様と実装)、[wire契約](../design/message-contract.md#read-offset)、[当時の検証](verification.md#10-read-offsetの実装と限定実機確認2026-10-16)参照。Linux標準66/66・最小38/38、最終同package/開始buffer45のPi6条件成功。途中underrun/USB異常も保持。本Issueは補正条件での試聴/TV端表示を残す。物理校正/別driveは#146の将来別承認枠、通常完走/継続は#184、stallは#121。一般再生報告を補正受入へ代用しない。 |
+| [#10 Track and apply CD read offsets with explicit coverage](https://github.com/udonchan/picdplayer/issues/10) | Completed（v1の限定受入）。PR #233で明示CLI・根拠・正負補正・D window/端coverageを統合。[採用仕様](../design/integrity-design.md#10の採用仕様と実装)、[wire契約](../design/message-contract.md#read-offset)、[当時の検証](verification.md#10-read-offsetの実装と限定実機確認2026-10-16)参照。当時のLinux標準66/66・最小38/38、最終同package/開始buffer45のPi6条件成功は保持し、途中underrun/USB異常も消さない。11月9日に正負補正条件の試聴/TV端表示を[限定Pass](verification.md#offset-acceptance-pass-20261109)、45 frame対処と記録を統合。物理校正/別driveは#146の将来別承認枠、通常完走/継続は#184、stallは#121。一般再生報告を補正受入へ代用しない。 |
 | [#162 Define explicit CD read-offset calibration inputs](https://github.com/udonchan/picdplayer/issues/162) | PR #161で設計完了・Closed。`logical p ← physical p + o`のstereo sample frame符号規約、明示入力、根拠、将来校正の境界を定義した。CLIと補正コードは含まない。MMC probeはoffset値を取得せず、vendor/model推定や無許可databaseを使わない。#41をHard dependencyにせず、実装・試験は#10、物理校正は#146へ分ける。 |
 | [#11 Implement capability-aware read modes and fallback policies](https://github.com/udonchan/picdplayer/issues/11) | Close済み。single/repeatの未解決PCMはqueueへ入れずSTOPする初期方針を確定した。capability-based strategy選択・降格理由の公開は[#155](https://github.com/udonchan/picdplayer/issues/155)、任意fallbackの採否は[#156](https://github.com/udonchan/picdplayer/issues/156)へ移管した。#156ではSTOPを継続し、追加3候補を現時点では採用しない設計判断を記録した。read stall復旧は#34、物理異常試験は#146。 |
 | [#156 Define optional fallback handling for unresolved PCM](https://github.com/udonchan/picdplayer/issues/156) | 設計完了・Closed。PR #234でSTOP継続とBEST_AVAILABLE/SILENCE/WAIT_WITH_BUDGETの現時点での不採用、由来・有限予算・最終STOP・再検討条件を統合済み。[設計判断](../design/integrity-design.md#unresolved-pcm-policy)と[公開契約との境界](../design/message-contract.md#unresolved-pcm-policy)、[当時の検証](verification.md#156-unresolved-pcmの設計判断2026-10-16)を根拠に、2026-10-17の承認済み整理で終了した。採用候補がないため追加実装Issueは作らず、代替PCM機能の実装・実機確認完了とは扱わない。 |

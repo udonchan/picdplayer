@@ -1,6 +1,7 @@
 #include "read_policy.hpp"
 
 #include "pcm_worker.hpp"
+#include <algorithm>
 #include <chrono>
 #include <stdexcept>
 #include <string>
@@ -33,6 +34,20 @@ RepeatedReadPolicy repeated_read_policy(const ReadPolicy& policy) {
         throw std::invalid_argument("single policy has no repeated read policy");
     return {policy.required_matches, policy.maximum_attempts,
             std::chrono::milliseconds(policy.time_budget_ms)};
+}
+
+std::size_t read_policy_block_frames(const ReadPolicy& policy, CddaBackend backend,
+                                     std::optional<std::int32_t> offset_samples,
+                                     std::size_t buffer_capacity_frames) {
+    validate_read_policy(policy, buffer_capacity_frames);
+    if (policy.mode == ReadVerificationMode::repeat) return policy.region_frames;
+    if (backend != CddaBackend::direct || !offset_samples || *offset_samples % 588 == 0)
+        return pcm_block_cd_frames;
+    // Amortize fractional-offset guard-sector reads while keeping each full
+    // request (45 + 1 sectors, 121716 bytes with C2) inside a 120 KiB
+    // adapter transfer budget as well as the 75-sector packet limit.
+    return std::min(3 * pcm_block_cd_frames,
+                    buffer_capacity_frames / pcm_block_cd_frames * pcm_block_cd_frames);
 }
 
 std::string read_policy_strategy(const ReadPolicy& policy, CddaBackend backend) {

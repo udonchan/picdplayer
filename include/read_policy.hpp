@@ -3,6 +3,7 @@
 #include "cdda_reader.hpp"
 #include "drive_capabilities.hpp"
 #include <cstddef>
+#include <optional>
 #include <string_view>
 
 enum class ReadVerificationMode { single, repeat };
@@ -40,6 +41,9 @@ const char* read_verification_mode_name(ReadVerificationMode mode);
 ReadVerificationMode parse_read_verification_mode(std::string_view value);
 void validate_read_policy(const ReadPolicy& policy, std::size_t buffer_capacity_frames);
 RepeatedReadPolicy repeated_read_policy(const ReadPolicy& policy);
+std::size_t read_policy_block_frames(const ReadPolicy& policy, CddaBackend backend,
+                                     std::optional<std::int32_t> offset_samples,
+                                     std::size_t buffer_capacity_frames);
 std::string read_policy_strategy(const ReadPolicy& policy, CddaBackend backend);
 ReadStrategySelection select_read_strategy(const ReadPolicy& policy, CddaBackend backend,
                                            bool request_c2_pointers, bool probe_complete,
