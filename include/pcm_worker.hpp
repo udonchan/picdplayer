@@ -27,8 +27,8 @@ struct WorkerStatus {
     ReadDiagnostics diagnostics;
 };
 
-// Each block is 15 CD frames (200 ms).  The queue can retain ten seconds of
-// PCM (about 1.8 MiB), while playback starts after three blocks (0.6 seconds).
+// Buffer settings use 15-CD-frame units. The default read block is one unit;
+// policy-selected larger blocks round capacity down and startup up.
 inline constexpr std::size_t pcm_block_cd_frames = 15;
 inline constexpr std::size_t pcm_queue_capacity_blocks = 50;
 inline constexpr std::size_t pcm_prebuffer_blocks = 3;

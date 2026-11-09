@@ -1,4 +1,5 @@
 #include "read_policy.hpp"
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
@@ -22,6 +23,26 @@ int main() {
         const auto repeated = repeated_read_policy(repeat);
         check(repeated.required_matches == 2 && repeated.maximum_attempts == 3);
         check(read_policy_strategy(repeat, CddaBackend::direct) == "direct+repeat-2of3");
+        for (auto offset : {std::optional<std::int32_t>{}, std::optional<std::int32_t>{0},
+                            std::optional<std::int32_t>{588}, std::optional<std::int32_t>{-588}})
+            check(read_policy_block_frames(single, CddaBackend::direct, offset, 750) == 15);
+        for (int offset : {-589, -587, -1, 1, 587, 589}) {
+            check(read_policy_block_frames(single, CddaBackend::direct, offset, 750) == 45);
+            check(read_policy_block_frames(single, CddaBackend::paranoia, offset, 750) == 15);
+            check(read_policy_block_frames(repeat, CddaBackend::direct, offset, 750) == 75);
+            check(read_policy_block_frames(repeat, CddaBackend::paranoia, offset, 750) == 75);
+        }
+        ReadPolicy small = single;
+        small.region_frames = 15;
+        for (std::size_t capacity : {15, 30, 45, 60, 75})
+            check(read_policy_block_frames(small, CddaBackend::direct, 1, capacity) ==
+                  std::min<std::size_t>(45, capacity));
+        small.region_frames = 150;
+        check(read_policy_block_frames(small, CddaBackend::direct, 1, 750) == 45);
+        check(read_policy_block_frames(small, CddaBackend::direct, std::nullopt, 750) == 15);
+        small.mode = ReadVerificationMode::repeat;
+        check(read_policy_block_frames(small, CddaBackend::direct, 1, 750) == 150);
+        rejects([&] { read_policy_block_frames(single, CddaBackend::direct, 1, 30); });
         const auto c2_pending = select_read_strategy(single, CddaBackend::direct, true, false,
                                                      Knowledge::unknown);
         check(c2_pending.requested == "direct-c2-pointers-single-read" &&
